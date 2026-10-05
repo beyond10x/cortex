@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:run-gate
 kind: story
-status: draft
+status: active
 title: A run that fails its checks is undone
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -19,7 +19,10 @@ scope:
   path: src/run.rs
 - confidence: inferred
   path: tests/run_gate.rs
-revision: 7
+revision: 9
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T23:46:20Z", actor: "agent:claude", revision: 8, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-10-05T23:46:20Z", actor: "agent:claude", revision: 9, decided_on: {"recorded":{"review_outcome":3}}}
 ---
 ## Outcome
 

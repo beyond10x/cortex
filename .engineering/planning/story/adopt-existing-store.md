@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:adopt-existing-store
 kind: story
-status: draft
+status: active
 title: An existing EKR store becomes an instance without reseeding
 relations:
 - decomposes: epic:standalone-1-0
@@ -27,7 +27,10 @@ scope:
   path: tests/adopt.rs
 - confidence: cited
   path: tests/conformance.rs
-revision: 14
+revision: 16
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T23:46:20Z", actor: "agent:claude", revision: 15, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-05T23:46:20Z", actor: "agent:claude", revision: 16, decided_on: {"recorded":{"review_outcome":1}}}
 ---
 ## Outcome
 
