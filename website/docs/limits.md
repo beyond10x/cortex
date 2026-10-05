@@ -49,7 +49,9 @@ stand; [Status](./status.mdx) lists what is planned.
   has a lower-case letter in it, and appears at most `rare_limit` times (default 1) in the batch's
   document texts. Only text the model is shown counts: a word inside an address, a link, a known
   name or a credential another class hides is not counted, and neither are the known entity
-  names. A known entity name the batch's documents do not hold counts as seen 0 times, so a
+  names. For a record of a `files` source read as records, only the record's own text counts,
+  not its thread context, key or title, which repeat other records' text and the file's name. A
+  known entity name the batch's documents do not hold counts as seen 0 times, so a
   person the store already knows is hidden in the prompt's known entities too. Common sentence
   openers (`The`, `This`, `We` and the like) are never taken. A rare product or place name, and
   a capitalised word such as `Thanks` or `Subject`, is hidden from the model too, and restored; a

@@ -2,7 +2,8 @@
 //! `spec/domains/instance.yaml`, held in one state file per source, and the `UNMAPPED:` rule of
 //! `RunSource`'s `ran` that writes and reads them. A document is new when its key was never
 //! applied, changed when its text hash differs, and skipped while its last application is younger
-//! than the policy's `refresh_after_days`.
+//! than the policy's `refresh_after_days`, unless it is a record read from a file
+//! ([`Origin::FileRecord`]), which is delivered again as soon as it changed.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -11,7 +12,7 @@ use cortex_model::instance as m;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::sources::Document;
+use crate::sources::{Document, Origin};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Seen {
@@ -61,6 +62,12 @@ pub fn hex(bytes: &[u8]) -> String {
 
 const DAY_MS: i64 = 86_400_000;
 
+/// Whether a change to `doc` waits for the refresh window: every document but a record read from
+/// a file, whose edit is delivered on the next run.
+fn waits(doc: &Document) -> bool {
+    doc.origin != Origin::FileRecord
+}
+
 impl SeenState {
     pub fn load(path: &Path) -> Result<Self, String> {
         match std::fs::read(path) {
@@ -92,8 +99,8 @@ impl SeenState {
         crate::home::write_atomic(path, text.as_bytes())
     }
 
-    /// The documents a run should extract: new keys, and changed text past the refresh window,
-    /// at most `max` of them, in fetch order.
+    /// The documents a run should extract: new keys, and changed text past the refresh window (or
+    /// at once, for a record read from a file), at most `max` of them, in fetch order.
     pub fn select(
         &self,
         docs: Vec<Document>,
@@ -108,23 +115,24 @@ impl SeenState {
     }
 
     /// Whether a run should extract `doc`: its key is new, or its text changed past the refresh
-    /// window.
+    /// window, or changed at all for a record read from a file.
     pub fn wants(&self, doc: &Document, now_ms: i64, refresh_after_days: i64) -> bool {
         match self.documents.get(&doc.key) {
             None => true,
             Some(seen) => {
-                now_ms - seen.applied_at >= refresh_after_days * DAY_MS
+                (!waits(doc) || now_ms - seen.applied_at >= refresh_after_days * DAY_MS)
                     && seen.hash != doc_hash(doc)
             }
         }
     }
 
     /// Whether `doc` changed but is held back: its key was applied less than `refresh_after_days`
-    /// ago, with other text.
+    /// ago, with other text, and it is not a record read from a file.
     pub fn holds(&self, doc: &Document, now_ms: i64, refresh_after_days: i64) -> bool {
-        self.documents.get(&doc.key).is_some_and(|seen| {
-            now_ms - seen.applied_at < refresh_after_days * DAY_MS && seen.hash != doc_hash(doc)
-        })
+        waits(doc)
+            && self.documents.get(&doc.key).is_some_and(|seen| {
+                now_ms - seen.applied_at < refresh_after_days * DAY_MS && seen.hash != doc_hash(doc)
+            })
     }
 
     /// The seen documents of `source`, as `cortex.instance.SeenDocument` declares them, in key
@@ -221,6 +229,38 @@ mod tests {
             ["b", "c"]
         );
         assert_eq!(state.select(fetched(), 8 * DAY_MS, 7, 1).len(), 1);
+    }
+
+    /// A record read from a file is delivered again as soon as its text changes; the refresh
+    /// window holds back only the other kinds.
+    #[test]
+    fn a_changed_file_record_is_selected_inside_the_refresh_window_and_never_held() {
+        let record = |key: &str, text: &str| Document {
+            origin: Origin::FileRecord,
+            ..doc(key, text)
+        };
+        let mut state = SeenState::default();
+        state.record(&record("a", "one"), 0);
+        state.record(&record("b", "two"), 0);
+        state.record(&doc("c", "three"), 0);
+        let fetched = || {
+            vec![
+                record("a", "one"),
+                record("b", "changed"),
+                doc("c", "changed"),
+            ]
+        };
+        let within = state.select(fetched(), DAY_MS, 7, 10);
+        assert_eq!(
+            within.iter().map(|d| d.key.as_str()).collect::<Vec<_>>(),
+            ["b"]
+        );
+        let held: Vec<_> = fetched()
+            .into_iter()
+            .filter(|d| state.holds(d, DAY_MS, 7))
+            .map(|d| d.key)
+            .collect();
+        assert_eq!(held, ["c"]);
     }
 
     #[test]

@@ -1,7 +1,8 @@
 //! Fetching one source's documents: web pages through the Connectors `tavily` provider, records of
-//! any Connectors operation (as text, or as records a `structured` source maps), or local files.
+//! any Connectors operation (as text, or as records a `structured` source maps), or local files,
+//! whole or as records (JSON lines or markdown sections).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use cortex_model::instance as m;
@@ -15,13 +16,16 @@ use crate::model_map::to_serde;
 pub enum Origin {
     Url,
     File,
+    /// A record of a `files` source read as records: cited as `file:<path>#<id>`. Its changed
+    /// text is delivered again whatever the refresh window (`SeenState::wants`).
+    FileRecord,
     Record,
 }
 
 /// One fetched document, before filtering.
 #[derive(Debug, Clone)]
 pub struct Document {
-    /// Stable across runs: the URL, the file path, or `<operation>:<id>`.
+    /// Stable across runs: the URL, the file path, `<file path>#<id>`, or `<operation>:<id>`.
     pub key: String,
     pub origin: Origin,
     pub title: Option<String>,
@@ -292,13 +296,15 @@ pub const CHILD_FAILURE_LIMIT: u32 = 3;
 
 /// The documents of one source. `window` fills `{since}` and `{until}` in a `connectors`
 /// source's inputs, and `child_failures` counts the consecutive runs each parent's child call
-/// failed in; the other kinds use neither.
+/// failed in; the other kinds use neither. `max_context` caps the characters of thread context a
+/// record of a `files` source carries (the policy's `max_chars_per_document`).
 pub fn fetch(
     settings: &m::SourceSettings,
     connectors: &Connectors,
     base: &Path,
     window: &Window,
     child_failures: &BTreeMap<String, u32>,
+    max_context: usize,
 ) -> Result<Fetched, FetchError> {
     let documents = |documents| Fetched {
         documents,
@@ -309,7 +315,12 @@ pub fn fetch(
     match settings {
         m::SourceSettings::Web(web) => fetch_web(web, connectors).map(documents),
         m::SourceSettings::Connectors(c) => fetch_records(c, connectors, window, child_failures),
-        m::SourceSettings::Files(f) => fetch_files(f, base).map(documents),
+        m::SourceSettings::Files(f) => {
+            fetch_files(f, base, max_context).map(|(docs, skipped)| Fetched {
+                skipped,
+                ..documents(docs)
+            })
+        }
         m::SourceSettings::Structured(st) => match &st.input {
             m::StructuredInput::Connectors(c) => {
                 fetch_structured(st, c, connectors, window).map(|mut fetched| {
@@ -665,11 +676,20 @@ fn fetch_records(
     })
 }
 
-fn fetch_files(f: &m::FilesSource, base: &Path) -> Result<Vec<Document>, FetchError> {
+/// The files of a `files` source: one document per file, or with `records`, one per record of
+/// each file ([`file_records`]), and what was left out as `skipped`. A record's thread context
+/// holds at most `max_context` characters.
+fn fetch_files(
+    f: &m::FilesSource,
+    base: &Path,
+    max_context: usize,
+) -> Result<(Vec<Document>, Vec<String>), FetchError> {
     let glob = globset::Glob::new(&f.glob)
         .map_err(|e| FetchError::Failed(format!("glob {:?}: {e}", f.glob)))?
         .compile_matcher();
     let mut docs = Vec::new();
+    let mut read = RecordsRead::default();
+    let mut skipped = Vec::new();
     for root in &f.paths {
         let root = crate::ekr::expand(root);
         let root = if root.is_absolute() {
@@ -687,24 +707,340 @@ fn fetch_files(f: &m::FilesSource, base: &Path) -> Result<Vec<Document>, FetchEr
             if !glob.is_match(rel) {
                 continue;
             }
-            let Ok(text) = std::fs::read_to_string(entry.path()) else {
+            let Ok(bytes) = std::fs::read(entry.path()) else {
                 continue;
             };
-            if text.trim().is_empty() {
-                continue;
+            let path = entry.path().display().to_string();
+            let title = entry.file_name().to_str();
+            match &f.records {
+                Some(r) => docs.extend(file_records(
+                    r,
+                    &path,
+                    title,
+                    &bytes,
+                    max_context,
+                    &mut read,
+                    &mut skipped,
+                )),
+                None => docs.extend(whole_file(path, title, bytes)),
             }
-            docs.push(Document {
-                key: entry.path().display().to_string(),
-                origin: Origin::File,
-                title: entry.file_name().to_str().map(str::to_string),
-                description: None,
-                published: None,
-                text,
-                hash: None,
-            });
         }
     }
-    Ok(docs)
+    Ok((docs, skipped))
+}
+
+/// A file as one document, keyed by its path; none when it is not UTF-8 text or is blank.
+fn whole_file(path: String, title: Option<&str>, bytes: Vec<u8>) -> Option<Document> {
+    let text = String::from_utf8(bytes).ok()?;
+    if text.trim().is_empty() {
+        return None;
+    }
+    Some(Document {
+        key: path,
+        origin: Origin::File,
+        title: title.map(str::to_string),
+        description: None,
+        published: None,
+        text,
+        hash: None,
+    })
+}
+
+/// What reading records carries from one file of a source to the next.
+#[derive(Debug, Default)]
+struct RecordsRead {
+    /// The keys read so far: a key read twice counts once.
+    keys: BTreeSet<String>,
+    /// The texts of the records read so far, per thread, oldest first.
+    threads: BTreeMap<String, Vec<String>>,
+}
+
+/// Where a record's thread context starts in its text: the first paragraph that opens with
+/// `[context` (a `[context] ` record or the `[context cut]` mark).
+const CONTEXT: &str = "\n\n[context";
+
+/// A record's own text and its thread context, the latter empty when there is none. Redaction
+/// counts how often a name occurs over a record's own text only, so a message repeated as context
+/// does not make a name look frequent. A record whose own text holds `\n\n[context` is split
+/// there; the words after it are then not counted, which only makes a name rarer.
+pub fn split_context(text: &str) -> (&str, &str) {
+    match text.find(CONTEXT) {
+        Some(at) => text.split_at(at),
+        None => (text, ""),
+    }
+}
+
+/// The documents of one file read as `r` says, `path` being the file's path and `content` its
+/// bytes. A leading byte-order mark is ignored. A record a filter leaves out, without an id, with
+/// empty text or with a key already read is skipped; a JSON line that is not UTF-8 or not JSON, a
+/// markdown file that is not UTF-8 or has no section, is named in `skipped`.
+///
+/// A document's key is `<path>#<id>`; in a markdown file, the second section whose key is taken
+/// gets `<path>#<id>-2`, the third `-3`, counted in file order. Its text is `<author>: <text>`
+/// when the record has an author. When `r` names a `thread` field and the record has it, the text
+/// is followed by the earlier records of that thread, nearest first, as `[context]` paragraphs
+/// ([`context`]); a record without the field carries no context and starts the thread named by
+/// its own id. `WholeFile` is the file as one document, as without `records`.
+fn file_records(
+    r: &m::FileRecords,
+    path: &str,
+    title: Option<&str>,
+    content: &[u8],
+    max_context: usize,
+    read: &mut RecordsRead,
+    skipped: &mut Vec<String>,
+) -> Vec<Document> {
+    if content.iter().all(u8::is_ascii_whitespace) {
+        return Vec::new();
+    }
+    let unmarked = content.strip_prefix(b"\xef\xbb\xbf").unwrap_or(content);
+    let records = match r.format {
+        m::RecordFormat::WholeFile => {
+            return whole_file(path.into(), title, content.to_vec())
+                .into_iter()
+                .collect();
+        }
+        m::RecordFormat::JsonLines => json_lines(path, unmarked, skipped),
+        m::RecordFormat::MarkdownSections => {
+            let Ok(text) = std::str::from_utf8(unmarked) else {
+                note(skipped, format!("{path}: not UTF-8 text; skipped"));
+                return Vec::new();
+            };
+            let sections = markdown_sections(text);
+            if sections.is_empty() {
+                note(skipped, format!("{path}: no ## section; skipped"));
+            }
+            sections
+        }
+    };
+    let mut docs = Vec::new();
+    let mut in_file = BTreeSet::new();
+    for record in &records {
+        let Some(id) = scalar(record, &r.id) else {
+            continue;
+        };
+        let mut key = format!("{path}#{id}");
+        if r.format == m::RecordFormat::MarkdownSections {
+            let first = key.clone();
+            let mut n = 1;
+            while in_file.contains(&key) {
+                n += 1;
+                key = format!("{first}-{n}");
+            }
+            in_file.insert(key.clone());
+        }
+        if !r.filters.iter().all(|f| passes(f, record)) {
+            continue;
+        }
+        let mut text = r
+            .text
+            .iter()
+            .map(|t| render(t, record))
+            .filter(|t| !t.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        if text.trim().is_empty() {
+            continue;
+        }
+        if !read.keys.insert(key.clone()) {
+            continue;
+        }
+        if let Some(author) = r.author.as_deref().and_then(|a| scalar(record, a)) {
+            text = format!("{author}: {text}");
+        }
+        let mut full = text.clone();
+        if let Some(field) = &r.thread {
+            match scalar(record, field) {
+                Some(thread) => {
+                    let earlier = read.threads.entry(thread).or_default();
+                    full.push_str(&context(earlier, max_context));
+                    earlier.push(text);
+                }
+                None => {
+                    read.threads.insert(id, vec![text]);
+                }
+            }
+        }
+        docs.push(Document {
+            key,
+            origin: Origin::FileRecord,
+            title: title.map(str::to_string),
+            description: None,
+            published: r.time.as_deref().and_then(|t| scalar(record, t)),
+            text: full,
+            hash: None,
+        });
+    }
+    docs
+}
+
+/// The `[context]` paragraphs of a record whose thread holds `earlier` (oldest first): nearest
+/// first, at most `max` characters of their text, the last one cut there, then a `[context cut]`
+/// paragraph when anything was left out. Each starts with `\n\n`.
+fn context(earlier: &[String], max: usize) -> String {
+    let mut out = String::new();
+    let mut left = max;
+    for text in earlier.iter().rev() {
+        if left == 0 {
+            out.push_str("\n\n[context cut]");
+            break;
+        }
+        out.push_str("\n\n[context] ");
+        let n = text.chars().count();
+        if n <= left {
+            out.push_str(text);
+            left -= n;
+        } else {
+            out.extend(text.chars().take(left));
+            out.push_str("\n\n[context cut]");
+            break;
+        }
+    }
+    out
+}
+
+/// Whether `record` passes `f`: its field equals one of the values when `f` includes them, and
+/// equals none of them when it excludes them. An absent field equals no value.
+fn passes(f: &m::RecordFilter, record: &Value) -> bool {
+    let hit = scalar(record, &f.field).is_some_and(|v| f.values.contains(&v));
+    hit == f.include
+}
+
+/// The text, number or boolean at `path` of `record`, as text; `None` for anything else or blank
+/// text.
+fn scalar(record: &Value, path: &str) -> Option<String> {
+    match at(record, path)? {
+        Value::String(t) if !t.trim().is_empty() => Some(t.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        Value::Bool(b) => Some(b.to_string()),
+        _ => None,
+    }
+}
+
+/// Every non-blank line of a JSON-lines file as a record, line by line. A line that is not UTF-8
+/// or not JSON is left out and named in `skipped`; the other lines are still read.
+fn json_lines(path: &str, content: &[u8], skipped: &mut Vec<String>) -> Vec<Value> {
+    let mut records = Vec::new();
+    for (n, line) in content.split(|b| *b == b'\n').enumerate() {
+        let Ok(line) = std::str::from_utf8(line) else {
+            note(
+                skipped,
+                format!("{path}: line {} is not UTF-8; skipped", n + 1),
+            );
+            continue;
+        };
+        if line.trim().is_empty() {
+            continue;
+        }
+        match serde_json::from_str(line) {
+            Ok(record) => records.push(record),
+            Err(_) => note(
+                skipped,
+                format!("{path}: line {} is not JSON; skipped", n + 1),
+            ),
+        }
+    }
+    records
+}
+
+/// The opening code fence `line` is, as CommonMark has it: at most three spaces, then three or
+/// more backticks or tildes (a backtick fence's info string holds no backtick). Its character and
+/// length.
+fn fence_opens(line: &str) -> Option<(char, usize)> {
+    let t = line.trim_start_matches(' ');
+    if line.len() - t.len() > 3 {
+        return None;
+    }
+    let c = t.chars().next().filter(|c| matches!(c, '`' | '~'))?;
+    let n = t.chars().take_while(|&x| x == c).count();
+    (n >= 3 && !(c == '`' && t[n..].contains('`'))).then_some((c, n))
+}
+
+/// Whether `line` closes a fence opened with `n` of `c`: at most three spaces, at least `n` of
+/// `c`, then only spaces.
+fn fence_closes(line: &str, c: char, n: usize) -> bool {
+    let t = line.trim_start_matches(' ');
+    let m = t.chars().take_while(|&x| x == c).count();
+    line.len() - t.len() <= 3 && m >= n && t[m..].trim().is_empty()
+}
+
+/// Whether `line` underlines a setext level-two heading: at most three spaces, then only `-`.
+fn setext_underline(line: &str) -> bool {
+    let t = line.trim_start_matches(' ');
+    let t2 = t.trim_end();
+    line.len() - t.len() <= 3 && !t2.is_empty() && t2.chars().all(|c| c == '-')
+}
+
+/// Whether `line` can be a one-line paragraph a setext underline turns into a heading: not blank,
+/// not indented code, not a heading, quote, list item, fence or thematic break.
+fn paragraph_line(line: &str) -> bool {
+    let t = line.trim_start();
+    let digits = t.chars().take_while(char::is_ascii_digit).count();
+    let ordered = digits > 0 && (t[digits..].starts_with(". ") || t[digits..].starts_with(") "));
+    line.len() - t.len() < 4
+        && !t.is_empty()
+        && !t.starts_with('#')
+        && !t.starts_with('>')
+        && !["- ", "* ", "+ "].iter().any(|p| t.starts_with(p))
+        && !ordered
+        && fence_opens(line).is_none()
+        && !t.chars().all(|c| matches!(c, '-' | '*' | '_' | ' '))
+}
+
+/// Every level-two section of a markdown file as a record `{"heading", "body"}`: the heading's
+/// text, and the lines up to the next level-two heading, trimmed. A level-two heading is a
+/// `## ` line, or a one-line paragraph underlined by `-` (setext). Neither counts inside a fenced
+/// code block, which closes only on its own character, at least as long as it opened (CommonMark).
+/// A leading `---` front matter block, and text before the first heading, are not sections.
+fn markdown_sections(content: &str) -> Vec<Value> {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut start = 0;
+    if lines.first().map(|l| l.trim_end()) == Some("---") {
+        if let Some(end) = lines[1..]
+            .iter()
+            .position(|l| matches!(l.trim_end(), "---" | "..."))
+        {
+            start = end + 2;
+        }
+    }
+    let mut preamble: Vec<&str> = Vec::new();
+    let mut sections: Vec<(String, Vec<&str>)> = Vec::new();
+    let mut fence: Option<(char, usize)> = None;
+    for &line in &lines[start..] {
+        if let Some((c, n)) = fence {
+            if fence_closes(line, c, n) {
+                fence = None;
+            }
+        } else if let Some(open) = fence_opens(line) {
+            fence = Some(open);
+        } else if let Some(heading) = line.strip_prefix("## ") {
+            sections.push((heading.trim().to_string(), Vec::new()));
+            continue;
+        } else if setext_underline(line) {
+            let body = match sections.last_mut() {
+                Some((_, body)) => body,
+                None => &mut preamble,
+            };
+            let n = body.len();
+            let heading = (n >= 1
+                && (n == 1 || body[n - 2].trim().is_empty())
+                && paragraph_line(body[n - 1]))
+            .then(|| body.pop())
+            .flatten();
+            if let Some(heading) = heading {
+                sections.push((heading.trim().to_string(), Vec::new()));
+                continue;
+            }
+        }
+        match sections.last_mut() {
+            Some((_, body)) => body.push(line),
+            None => preamble.push(line),
+        }
+    }
+    sections
+        .into_iter()
+        .map(|(heading, body)| json!({"heading": heading, "body": body.join("\n").trim()}))
+        .collect()
 }
 
 #[cfg(test)]
@@ -825,6 +1161,294 @@ mod tests {
         assert_eq!((held.since_ms, held.until_ms), (100, 1_000_000));
         let pending = Window::of_run(1_000_000, None, Some(500), Some(200), 0);
         assert_eq!(pending.since_ms, 200);
+    }
+}
+
+#[cfg(test)]
+mod file_records_tests {
+    use super::*;
+
+    fn chat(filters: Vec<m::RecordFilter>) -> m::FileRecords {
+        m::FileRecords {
+            format: m::RecordFormat::JsonLines,
+            id: "ts".into(),
+            time: Some("time".into()),
+            author: Some("user".into()),
+            text: vec!["{text}".into()],
+            thread: Some("thread".into()),
+            filters,
+        }
+    }
+
+    fn read(r: &m::FileRecords, content: &str) -> (Vec<Document>, Vec<String>) {
+        let mut skipped = Vec::new();
+        let docs = file_records(
+            r,
+            "/x/chat.jsonl",
+            Some("chat.jsonl"),
+            content.as_bytes(),
+            5000,
+            &mut RecordsRead::default(),
+            &mut skipped,
+        );
+        (docs, skipped)
+    }
+
+    fn keys(docs: &[Document]) -> Vec<&str> {
+        docs.iter().map(|d| d.key.as_str()).collect()
+    }
+
+    const THREAD: &str = concat!(
+        r#"{"ts":"1","user":"a","text":"one"}"#,
+        "\n",
+        r#"{"ts":"2","user":"b","text":"two","thread":"1"}"#,
+        "\n",
+        r#"{"ts":"3","user":"c","text":"three","thread":"1"}"#,
+        "\n",
+    );
+
+    /// The record replied to comes first, then the older ones; the context holds at most
+    /// `max_context` characters of their text, and a cut says so.
+    #[test]
+    fn context_is_nearest_first_and_capped_with_the_cut_marked() {
+        let (docs, _) = read(&chat(Vec::new()), THREAD);
+        assert_eq!(
+            docs[2].text,
+            "c: three\n\n[context] b: two\n\n[context] a: one"
+        );
+        let mut skipped = Vec::new();
+        let capped = file_records(
+            &chat(Vec::new()),
+            "/x/chat.jsonl",
+            None,
+            THREAD.as_bytes(),
+            8,
+            &mut RecordsRead::default(),
+            &mut skipped,
+        );
+        assert_eq!(capped[1].text, "b: two\n\n[context] a: one");
+        assert_eq!(
+            capped[2].text,
+            "c: three\n\n[context] b: two\n\n[context] a:\n\n[context cut]"
+        );
+        let none = file_records(
+            &chat(Vec::new()),
+            "/x/chat.jsonl",
+            None,
+            THREAD.as_bytes(),
+            0,
+            &mut RecordsRead::default(),
+            &mut skipped,
+        );
+        assert_eq!(none[2].text, "c: three\n\n[context cut]");
+        assert_eq!(
+            split_context(&capped[2].text),
+            ("c: three", &capped[2].text[8..])
+        );
+        assert_eq!(split_context(&none[2].text).0, "c: three");
+        assert_eq!(split_context("no context").1, "");
+    }
+
+    /// A record without the thread field starts its own thread: it carries nothing, and later
+    /// replies to its id see it, not an earlier file's thread of the same id.
+    #[test]
+    fn a_record_without_the_thread_field_starts_its_own_thread() {
+        let mut read = RecordsRead::default();
+        let mut skipped = Vec::new();
+        let r = chat(Vec::new());
+        let a = file_records(
+            &r,
+            "/x/a.jsonl",
+            None,
+            THREAD.as_bytes(),
+            5000,
+            &mut read,
+            &mut skipped,
+        );
+        assert_eq!(a.len(), 3);
+        let b = file_records(
+            &r,
+            "/x/b.jsonl",
+            None,
+            concat!(
+                r#"{"ts":"1","user":"d","text":"fresh"}"#,
+                "\n",
+                r#"{"ts":"2","user":"e","text":"reply","thread":"1"}"#,
+                "\n",
+            )
+            .as_bytes(),
+            5000,
+            &mut read,
+            &mut skipped,
+        );
+        assert_eq!(b[0].text, "d: fresh");
+        assert_eq!(b[1].text, "e: reply\n\n[context] d: fresh");
+    }
+
+    fn sections(content: &str) -> (Vec<Document>, Vec<String>) {
+        let r = m::FileRecords {
+            format: m::RecordFormat::MarkdownSections,
+            id: "heading".into(),
+            time: None,
+            author: None,
+            text: vec!["{body}".into()],
+            thread: None,
+            filters: Vec::new(),
+        };
+        let mut skipped = Vec::new();
+        let docs = file_records(
+            &r,
+            "/x/n.md",
+            None,
+            content.as_bytes(),
+            5000,
+            &mut RecordsRead::default(),
+            &mut skipped,
+        );
+        (docs, skipped)
+    }
+
+    #[test]
+    fn front_matter_is_not_a_setext_heading_and_setext_headings_open_sections() {
+        let (docs, skipped) = sections(
+            "---\ntitle: Guide\n---\n\nIntro.\n\nSetup\n-----\n\nInstall.\n\n- item\n---\n\nUsage\n---\nRun.\n",
+        );
+        assert!(skipped.is_empty(), "{skipped:?}");
+        assert_eq!(keys(&docs), ["/x/n.md#Setup", "/x/n.md#Usage"]);
+        assert_eq!(docs[0].text, "Install.\n\n- item\n---");
+        assert_eq!(docs[1].text, "Run.");
+    }
+
+    #[test]
+    fn a_fence_closes_only_on_its_own_character_at_least_as_long() {
+        let (docs, _) = sections(
+            "## One\n\n````\n```\n## inside\n```\n~~~\n## still inside\n````\n\n## Two\n\nx\n",
+        );
+        assert_eq!(keys(&docs), ["/x/n.md#One", "/x/n.md#Two"]);
+        assert!(docs[0].text.contains("## still inside"), "{}", docs[0].text);
+    }
+
+    #[test]
+    fn a_repeated_heading_is_numbered_past_a_heading_that_already_has_the_number() {
+        let (docs, _) = sections("## Notes\na\n## Notes-2\nb\n## Notes\nc\n");
+        assert_eq!(
+            keys(&docs),
+            ["/x/n.md#Notes", "/x/n.md#Notes-2", "/x/n.md#Notes-3"]
+        );
+        assert_eq!(docs[2].text, "c");
+    }
+
+    #[test]
+    fn a_byte_order_mark_is_ignored_and_a_file_without_sections_is_named() {
+        let (docs, _) = sections("\u{feff}## First\nx\n");
+        assert_eq!(keys(&docs), ["/x/n.md#First"]);
+        let (docs, skipped) = sections("# Title\n\nNo level-two heading.\n");
+        assert!(docs.is_empty());
+        assert_eq!(skipped, ["/x/n.md: no ## section; skipped"]);
+        let (docs, skipped) = read(&chat(Vec::new()), "\u{feff}{\"ts\":\"1\",\"text\":\"x\"}\n");
+        assert_eq!(keys(&docs), ["/x/chat.jsonl#1"]);
+        assert!(skipped.is_empty(), "{skipped:?}");
+    }
+
+    #[test]
+    fn the_second_record_of_a_thread_carries_the_first_as_context() {
+        let (docs, skipped) = read(
+            &chat(Vec::new()),
+            concat!(
+                r#"{"ts":"1","user":"ana","time":"t1","text":"Shall we ship on Friday?"}"#,
+                "\n",
+                r#"{"ts":"2","user":"ben","time":"t2","text":"Yes.","thread":"1"}"#,
+                "\n",
+                r#"{"ts":"3","user":"cem","text":"Unrelated.","thread":"9"}"#,
+                "\n",
+            ),
+        );
+        assert!(skipped.is_empty(), "{skipped:?}");
+        assert_eq!(
+            docs.iter().map(|d| d.key.as_str()).collect::<Vec<_>>(),
+            ["/x/chat.jsonl#1", "/x/chat.jsonl#2", "/x/chat.jsonl#3"]
+        );
+        assert_eq!(docs[0].text, "ana: Shall we ship on Friday?");
+        assert_eq!(
+            docs[1].text,
+            "ben: Yes.\n\n[context] ana: Shall we ship on Friday?"
+        );
+        assert_eq!(docs[2].text, "cem: Unrelated.");
+        assert_eq!(docs[0].published.as_deref(), Some("t1"));
+        assert_eq!(docs[2].published, None);
+        assert!(docs.iter().all(|d| d.origin == Origin::FileRecord));
+        assert_eq!(docs[0].title.as_deref(), Some("chat.jsonl"));
+    }
+
+    #[test]
+    fn filters_include_or_exclude_records_and_a_line_that_is_not_json_is_skipped_and_named() {
+        let only_eng = m::RecordFilter {
+            field: "channel".into(),
+            values: vec!["eng".into(), "ops".into()],
+            include: true,
+        };
+        let no_bots = m::RecordFilter {
+            field: "user".into(),
+            values: vec!["bot".into()],
+            include: false,
+        };
+        let (docs, skipped) = read(
+            &chat(vec![only_eng, no_bots]),
+            concat!(
+                r#"{"ts":"1","channel":"eng","user":"ana","text":"a"}"#,
+                "\n",
+                r#"{"ts":"2","channel":"dm","user":"ana","text":"b"}"#,
+                "\n",
+                "not json\n",
+                r#"{"ts":"3","channel":"ops","user":"bot","text":"c"}"#,
+                "\n",
+                r#"{"ts":"4","user":"ana","text":"no channel"}"#,
+                "\n",
+                r#"{"ts":"5","channel":"ops","user":"ben","text":"e"}"#,
+                "\n",
+            ),
+        );
+        assert_eq!(
+            docs.iter().map(|d| d.key.as_str()).collect::<Vec<_>>(),
+            ["/x/chat.jsonl#1", "/x/chat.jsonl#5"]
+        );
+        assert_eq!(skipped, ["/x/chat.jsonl: line 3 is not JSON; skipped"]);
+    }
+
+    #[test]
+    fn a_markdown_file_is_one_record_per_level_two_section() {
+        let r = m::FileRecords {
+            format: m::RecordFormat::MarkdownSections,
+            id: "heading".into(),
+            time: None,
+            author: None,
+            text: vec!["{heading}".into(), "{body}".into()],
+            thread: None,
+            filters: Vec::new(),
+        };
+        let mut skipped = Vec::new();
+        let docs = file_records(
+            &r,
+            "/x/notes.md",
+            None,
+            "# Title\n\nIntro.\n\n## One\n\nFirst.\n\n### Deeper\n\nStill one.\n\n~~~\n## fenced\n~~~\n\n## Two\nSecond.\n"
+                .as_bytes(),
+            5000,
+            &mut RecordsRead::default(),
+            &mut skipped,
+        );
+        assert_eq!(
+            docs.iter()
+                .map(|d| (d.key.as_str(), d.text.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                (
+                    "/x/notes.md#One",
+                    "One\n\nFirst.\n\n### Deeper\n\nStill one.\n\n~~~\n## fenced\n~~~"
+                ),
+                ("/x/notes.md#Two", "Two\n\nSecond."),
+            ]
+        );
     }
 }
 

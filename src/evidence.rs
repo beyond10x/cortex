@@ -26,7 +26,7 @@ pub struct Issued {
 pub fn identity(doc: &Document) -> String {
     match doc.origin {
         Origin::Url => doc.key.clone(),
-        Origin::File => format!("file:{}", doc.key),
+        Origin::File | Origin::FileRecord => format!("file:{}", doc.key),
         Origin::Record => format!("record:{}", doc.key),
     }
 }
