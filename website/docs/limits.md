@@ -21,9 +21,15 @@ stand; [Status](./status.mdx) lists what is planned.
 
 - **Credentials are masked; personal data is kept from the model, not from the store.** Fetched
   text is masked for credential shapes on every run: private keys, cloud, forge, chat and API
-  token shapes, JSON Web Tokens and `password=`-style assignments. Masking is irreversible, so a
-  credential in a document's text is never stored. A document's title, description and URL are
-  not masked yet (`story:credential-mask-covers-titles`). An instance's `redaction` policy then
+  token shapes, JSON Web Tokens, the password in a URL such as `https://user:password@host`, and
+  `password=`-style assignments, also with a prefix (`DB_PASSWORD=`, `client_secret=`) or
+  percent-encoded (`access_token%3D`). That covers a document's text, title, description and URL,
+  and a URL or record key wherever cortex writes it: the run's `stopped` and `skipped` messages,
+  its log and its state file. Masking is irreversible, so a credential in a listed shape is never
+  stored. A URL that held one is stored and cited in its masked form, with the rest of its query
+  kept, and two URLs that differ only in a credential are one document. Masking is by shape: a
+  token of no listed shape with no name before it, or an assigned value shorter than six
+  characters, is not masked. An instance's `redaction` policy then
   replaces email addresses (also percent-encoded in a URL), phone numbers, IP addresses and
   payment card numbers (the classes `Email`, `Phone`, `IpAddress` and `PaymentCard`), and
   whatever its own regular-expression `rules` match, with placeholders such as `[Email-1]` in what

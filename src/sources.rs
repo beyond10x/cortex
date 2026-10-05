@@ -542,11 +542,11 @@ fn fetch_records(
                     &mut unread,
                 ) {
                     Ok(children) => {
-                        failures.remove(&key);
+                        failures.remove(&crate::mask::mask_key(&key).0);
                         children
                     }
                     Err(e) => {
-                        let runs = failures.entry(key.clone()).or_insert(0);
+                        let runs = failures.entry(crate::mask::mask_key(&key).0).or_insert(0);
                         *runs += 1;
                         let op = &child.operation;
                         if *runs >= CHILD_FAILURE_LIMIT {

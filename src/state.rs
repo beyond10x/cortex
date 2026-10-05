@@ -65,7 +65,15 @@ impl SeenState {
     pub fn load(path: &Path) -> Result<Self, String> {
         match std::fs::read(path) {
             Ok(bytes) => {
-                serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", path.display()))
+                let mut state: Self = serde_json::from_slice(&bytes)
+                    .map_err(|e| format!("{}: {e}", path.display()))?;
+                // Every key is masked before it is recorded, so a key that still holds a
+                // credential was written before that and is never matched again: dropped, so the
+                // next save leaves the credential out.
+                let clean = |k: &String| crate::mask::mask_key(k).1 == 0;
+                state.documents.retain(|k, _| clean(k));
+                state.child_failures.retain(|k, _| clean(k));
+                Ok(state)
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self {
                 format: "cortex.seen/1".into(),
@@ -160,6 +168,40 @@ mod tests {
             text: text.into(),
             hash: None,
         }
+    }
+
+    /// A state file written before keys were masked can hold a credential in a document key or a
+    /// child-failure key. Such an entry is never matched again, since every key is now masked, so
+    /// loading drops it and the next save leaves it out.
+    #[test]
+    fn loading_drops_entries_whose_keys_hold_a_credential() {
+        let token = format!("Zr4{}", "p0".repeat(8));
+        let raw = format!("https://example.org/a?access_token={token}");
+        let masked = "https://example.org/a?access_token=[masked:secret-assignment]";
+        let mut state = SeenState::default();
+        state.record(&doc(&raw, "one"), 1);
+        state.record(&doc(masked, "one"), 2);
+        state.record(&doc("https://example.org/b", "two"), 3);
+        state.child_failures.insert(format!("t:op:{raw}"), 2);
+        state.child_failures.insert(format!("t:op:{masked}"), 1);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("news.json");
+        state.save(&path).unwrap();
+
+        let loaded = SeenState::load(&path).unwrap();
+        assert_eq!(
+            loaded.documents.keys().collect::<Vec<_>>(),
+            [
+                "https://example.org/a?access_token=[masked:secret-assignment]",
+                "https://example.org/b"
+            ]
+        );
+        assert_eq!(
+            loaded.child_failures,
+            BTreeMap::from([(format!("t:op:{masked}"), 1)])
+        );
+        loaded.save(&path).unwrap();
+        assert!(!std::fs::read_to_string(&path).unwrap().contains(&token));
     }
 
     #[test]
