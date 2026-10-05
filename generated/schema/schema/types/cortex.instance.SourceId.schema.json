@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.SourceId",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:305a93b0650e2c132afda2facf118b9641e34ba7f4774da768a2fb37b31ac0fb",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.SourceId": {
+      "title": "SourceId",
+      "x-ess-name": "cortex.instance.SourceId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

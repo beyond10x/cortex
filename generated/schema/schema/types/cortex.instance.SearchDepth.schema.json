@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.SearchDepth",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:448e7cc2b797566e17838c70bca19166ee1db55fa25a30111421ab44b1a38c2d",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.SearchDepth": {
+      "title": "SearchDepth",
+      "x-ess-name": "cortex.instance.SearchDepth",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "basic",
+        "advanced"
+      ]
+    }
+  }
+}

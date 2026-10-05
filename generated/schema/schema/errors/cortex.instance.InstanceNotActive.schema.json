@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InstanceNotActive payload",
+  "description": "The instance is removed, so nothing changed.",
+  "x-ess-name": "cortex.instance.InstanceNotActive",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "state": {
+      "$ref": "#/$defs/cortex.instance.Instance.State"
+    }
+  },
+  "required": [
+    "state"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:ba208aa7b670c9255dfc1920724e1dfaef772ddc9aa14900b5371f2fbf5272ec",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.Instance.State": {
+      "title": "State",
+      "x-ess-name": "cortex.instance.Instance.State",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Active",
+        "Removed"
+      ]
+    }
+  }
+}

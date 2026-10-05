@@ -1,0 +1,581 @@
+{
+  "$defs": {
+    "cortex.instance.ChangeDetection": {
+      "enum": [
+        "ContentHash"
+      ],
+      "title": "ChangeDetection",
+      "type": "string",
+      "x-ess-kind": "enum",
+      "x-ess-name": "cortex.instance.ChangeDetection"
+    },
+    "cortex.instance.ConnectorsSource": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "inputs": {
+          "items": {},
+          "type": "array"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "records": {
+          "type": "string"
+        },
+        "text": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "time": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "adapter",
+        "connection",
+        "operation",
+        "inputs",
+        "records",
+        "id",
+        "text"
+      ],
+      "title": "ConnectorsSource",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.ConnectorsSource"
+    },
+    "cortex.instance.CrawlPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_external": {
+          "type": "boolean"
+        },
+        "exclude_paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "max_breadth": {
+          "type": "integer"
+        },
+        "max_depth": {
+          "type": "integer"
+        },
+        "select_paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "max_depth",
+        "max_breadth",
+        "limit",
+        "select_paths",
+        "exclude_paths",
+        "allow_external"
+      ],
+      "title": "CrawlPolicy",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.CrawlPolicy"
+    },
+    "cortex.instance.EkrPin": {
+      "additionalProperties": false,
+      "properties": {
+        "bin": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "title": "EkrPin",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.EkrPin"
+    },
+    "cortex.instance.FetchPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "change": {
+          "$ref": "#/$defs/cortex.instance.ChangeDetection"
+        },
+        "max_chars_per_document": {
+          "type": "integer"
+        },
+        "max_documents_per_run": {
+          "type": "integer"
+        },
+        "refresh_after_days": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "refresh_after_days",
+        "change",
+        "max_documents_per_run",
+        "max_chars_per_document"
+      ],
+      "title": "FetchPolicy",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.FetchPolicy"
+    },
+    "cortex.instance.FilesSource": {
+      "additionalProperties": false,
+      "properties": {
+        "glob": {
+          "type": "string"
+        },
+        "paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "paths",
+        "glob"
+      ],
+      "title": "FilesSource",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.FilesSource"
+    },
+    "cortex.instance.InstanceName": {
+      "title": "InstanceName",
+      "type": "string",
+      "x-ess-kind": "newtype",
+      "x-ess-name": "cortex.instance.InstanceName"
+    },
+    "cortex.instance.InstanceSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "ekr": {
+          "$ref": "#/$defs/cortex.instance.EkrPin"
+        },
+        "format": {
+          "type": "string"
+        },
+        "model": {
+          "$ref": "#/$defs/cortex.instance.ModelSpec"
+        },
+        "name": {
+          "$ref": "#/$defs/cortex.instance.InstanceName"
+        },
+        "seed": {
+          "$ref": "#/$defs/cortex.instance.SeedSpec"
+        },
+        "serve": {
+          "$ref": "#/$defs/cortex.instance.ServeSpec"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/cortex.instance.SourceSpec"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "format",
+        "name",
+        "description",
+        "ekr",
+        "seed",
+        "model",
+        "sources",
+        "serve"
+      ],
+      "title": "InstanceSpec",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.InstanceSpec"
+    },
+    "cortex.instance.ModelSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "budget_usd": {
+          "format": "decimal",
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+          "type": "string"
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "timeout_s": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "model",
+        "budget_usd",
+        "timeout_s"
+      ],
+      "title": "ModelSpec",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.ModelSpec"
+    },
+    "cortex.instance.SearchDepth": {
+      "enum": [
+        "basic",
+        "advanced"
+      ],
+      "title": "SearchDepth",
+      "type": "string",
+      "x-ess-kind": "enum",
+      "x-ess-name": "cortex.instance.SearchDepth"
+    },
+    "cortex.instance.SearchInput": {
+      "additionalProperties": false,
+      "properties": {
+        "policy": {
+          "$ref": "#/$defs/cortex.instance.SearchPolicy"
+        },
+        "queries": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "queries",
+        "policy"
+      ],
+      "title": "SearchInput",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.SearchInput"
+    },
+    "cortex.instance.SearchPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "country": {
+          "type": "string"
+        },
+        "exclude_domains": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "include_domains": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "language": {
+          "type": "string"
+        },
+        "max_results": {
+          "type": "integer"
+        },
+        "search_depth": {
+          "$ref": "#/$defs/cortex.instance.SearchDepth"
+        },
+        "time_range": {
+          "$ref": "#/$defs/cortex.instance.TimeRange"
+        },
+        "topic": {
+          "$ref": "#/$defs/cortex.instance.SearchTopic"
+        }
+      },
+      "required": [
+        "topic",
+        "max_results",
+        "search_depth",
+        "include_domains",
+        "exclude_domains"
+      ],
+      "title": "SearchPolicy",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.SearchPolicy"
+    },
+    "cortex.instance.SearchTopic": {
+      "enum": [
+        "general",
+        "news",
+        "finance"
+      ],
+      "title": "SearchTopic",
+      "type": "string",
+      "x-ess-kind": "enum",
+      "x-ess-name": "cortex.instance.SearchTopic"
+    },
+    "cortex.instance.SeedSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "documents": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ekr_seed": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "documents"
+      ],
+      "title": "SeedSpec",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.SeedSpec"
+    },
+    "cortex.instance.ServeSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "view_port": {
+          "type": "integer"
+        }
+      },
+      "title": "ServeSpec",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.ServeSpec"
+    },
+    "cortex.instance.SitesInput": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/cortex.instance.WebMode"
+        },
+        "policy": {
+          "$ref": "#/$defs/cortex.instance.CrawlPolicy"
+        },
+        "urls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "urls",
+        "mode"
+      ],
+      "title": "SitesInput",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.SitesInput"
+    },
+    "cortex.instance.SourceSettings": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "connectors",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.ConnectorsSource"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "title": "connectors",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "files",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.FilesSource"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "title": "files",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "web",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.WebSource"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "title": "web",
+          "type": "object"
+        }
+      ],
+      "title": "SourceSettings",
+      "x-ess-kind": "union",
+      "x-ess-name": "cortex.instance.SourceSettings",
+      "x-ess-union-tag": "kind"
+    },
+    "cortex.instance.SourceSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/$defs/cortex.instance.FetchPolicy"
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/cortex.instance.SourceSettings"
+        }
+      },
+      "required": [
+        "name",
+        "schedule",
+        "settings",
+        "policy"
+      ],
+      "title": "SourceSpec",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.SourceSpec"
+    },
+    "cortex.instance.TimeRange": {
+      "enum": [
+        "day",
+        "week",
+        "month",
+        "year"
+      ],
+      "title": "TimeRange",
+      "type": "string",
+      "x-ess-kind": "enum",
+      "x-ess-name": "cortex.instance.TimeRange"
+    },
+    "cortex.instance.WebInput": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "input": {
+              "const": "search",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.SearchInput"
+            }
+          },
+          "required": [
+            "input",
+            "value"
+          ],
+          "title": "search",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "input": {
+              "const": "sites",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.SitesInput"
+            }
+          },
+          "required": [
+            "input",
+            "value"
+          ],
+          "title": "sites",
+          "type": "object"
+        }
+      ],
+      "title": "WebInput",
+      "x-ess-kind": "union",
+      "x-ess-name": "cortex.instance.WebInput",
+      "x-ess-union-tag": "input"
+    },
+    "cortex.instance.WebMode": {
+      "enum": [
+        "Pages",
+        "Crawl"
+      ],
+      "title": "WebMode",
+      "type": "string",
+      "x-ess-kind": "enum",
+      "x-ess-name": "cortex.instance.WebMode"
+    },
+    "cortex.instance.WebSource": {
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "input": {
+          "$ref": "#/$defs/cortex.instance.WebInput"
+        }
+      },
+      "required": [
+        "connection",
+        "input"
+      ],
+      "title": "WebSource",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.WebSource"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "x-ess-provenance": {
+    "contract_digest": "slice-sha256/2:eebf4a402acacb5fd0e55ce2677f0b81a9a2b458fd7a8d7c996d7b6dd2b56cee",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "specification_version": "v1",
+    "system": "cortex"
+  }
+}

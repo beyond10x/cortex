@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApplyRefused payload",
+  "description": "EKR refused the merged extraction document; nothing was applied.",
+  "x-ess-name": "cortex.instance.ApplyRefused",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:c559a68c3917195743ddb738d49129c453396c2e0fe9e71b62436bf423c0b052",
+    "regenerate": "ess generate"
+  }
+}

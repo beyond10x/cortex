@@ -1,0 +1,4 @@
+/target/
+/.engineering/drafts/
+*.sqlite
+*.sqlite-*

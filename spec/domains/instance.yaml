@@ -1,0 +1,693 @@
+domain: cortex.instance
+
+summary: >-
+  Instances of a knowledge brain and the data sources that feed them. An instance owns one EKR
+  store, created from the instance spec's seed. A source fetches documents on its own schedule,
+  keeps those that are new or changed, has a model extract them into an EKR extraction document
+  and applies it to the instance's store.
+
+naming:
+  wire: instance
+  display: Instances
+
+types:
+  - name: cortex.instance.InstanceName
+    kind: newtype
+    of: String
+
+  - name: cortex.instance.SourceId
+    kind: newtype
+    of: String
+
+  - name: cortex.instance.SourceKind
+    kind: enum
+    variants: [Web, Connectors, Files]
+
+  - name: cortex.instance.WebMode
+    kind: enum
+    variants: [Pages, Crawl]
+
+  - name: cortex.instance.SearchTopic
+    kind: enum
+    variants: [general, news, finance]
+
+  - name: cortex.instance.TimeRange
+    kind: enum
+    variants: [day, week, month, year]
+
+  - name: cortex.instance.SearchDepth
+    kind: enum
+    variants: [basic, advanced]
+
+  - name: cortex.instance.ChangeDetection
+    kind: enum
+    variants: [ContentHash]
+
+  - name: cortex.instance.SearchPolicy
+    kind: struct
+    fields:
+      - {name: topic, type: cortex.instance.SearchTopic}
+      - {name: time_range, type: Optional<cortex.instance.TimeRange>}
+      - {name: max_results, type: Integer}
+      - {name: search_depth, type: cortex.instance.SearchDepth}
+      - {name: include_domains, type: List<String>}
+      - {name: exclude_domains, type: List<String>}
+      - {name: country, type: Optional<String>}
+      - {name: language, type: Optional<String>}
+
+  - name: cortex.instance.SearchInput
+    kind: struct
+    fields:
+      - {name: queries, type: List<String>}
+      - {name: policy, type: cortex.instance.SearchPolicy}
+
+  - name: cortex.instance.CrawlPolicy
+    kind: struct
+    fields:
+      - {name: max_depth, type: Integer}
+      - {name: max_breadth, type: Integer}
+      - {name: limit, type: Integer}
+      - {name: select_paths, type: List<String>}
+      - {name: exclude_paths, type: List<String>}
+      - {name: instructions, type: Optional<String>}
+      - {name: allow_external, type: Boolean}
+
+  - name: cortex.instance.SitesInput
+    kind: struct
+    fields:
+      - {name: urls, type: List<String>}
+      - {name: mode, type: cortex.instance.WebMode}
+      - {name: policy, type: Optional<cortex.instance.CrawlPolicy>}
+
+  - name: cortex.instance.WebInput
+    kind: union
+    tag: input
+    variants:
+      sites: cortex.instance.SitesInput
+      search: cortex.instance.SearchInput
+
+  - name: cortex.instance.FetchPolicy
+    kind: struct
+    fields:
+      - {name: refresh_after_days, type: Integer}
+      - {name: change, type: cortex.instance.ChangeDetection}
+      - {name: max_documents_per_run, type: Integer}
+      - {name: max_chars_per_document, type: Integer}
+
+  - name: cortex.instance.WebSource
+    kind: struct
+    fields:
+      - {name: connection, type: String}
+      - {name: input, type: cortex.instance.WebInput}
+
+  - name: cortex.instance.ConnectorsSource
+    kind: struct
+    fields:
+      - {name: adapter, type: String}
+      - {name: connection, type: String}
+      - {name: operation, type: String}
+      - {name: inputs, type: List<Json>}
+      - {name: records, type: String}
+      - {name: id, type: String}
+      - {name: time, type: Optional<String>}
+      - {name: text, type: List<String>}
+
+  - name: cortex.instance.FilesSource
+    kind: struct
+    fields:
+      - {name: paths, type: List<String>}
+      - {name: glob, type: String}
+
+  - name: cortex.instance.SourceSettings
+    kind: union
+    tag: kind
+    variants:
+      web: cortex.instance.WebSource
+      connectors: cortex.instance.ConnectorsSource
+      files: cortex.instance.FilesSource
+
+  - name: cortex.instance.SourceSpec
+    kind: struct
+    fields:
+      - {name: name, type: String}
+      - {name: schedule, type: String}
+      - {name: settings, type: cortex.instance.SourceSettings}
+      - {name: policy, type: cortex.instance.FetchPolicy}
+
+  - name: cortex.instance.SeedSpec
+    kind: struct
+    fields:
+      - {name: schema, type: Optional<String>}
+      - {name: ekr_seed, type: Optional<String>}
+      - {name: documents, type: List<String>}
+
+  - name: cortex.instance.ModelSpec
+    kind: struct
+    fields:
+      - {name: model, type: String}
+      - {name: budget_usd, type: Decimal}
+      - {name: timeout_s, type: Integer}
+      - {name: instructions, type: Optional<String>}
+
+  - name: cortex.instance.EkrPin
+    kind: struct
+    fields:
+      - {name: version, type: String}
+      - {name: bin, type: Optional<String>}
+
+  - name: cortex.instance.ServeSpec
+    kind: struct
+    fields:
+      - {name: view_port, type: Optional<Integer>}
+
+  - name: cortex.instance.InstanceSpec
+    kind: struct
+    fields:
+      - {name: format, type: String}
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: description, type: String}
+      - {name: ekr, type: cortex.instance.EkrPin}
+      - {name: seed, type: cortex.instance.SeedSpec}
+      - {name: model, type: cortex.instance.ModelSpec}
+      - {name: sources, type: List<cortex.instance.SourceSpec>}
+      - {name: serve, type: cortex.instance.ServeSpec}
+
+entities:
+  - name: cortex.instance.Instance
+    identity:
+      name: name
+      type: cortex.instance.InstanceName
+    fields:
+      - {name: description, type: String}
+      - {name: model, type: String}
+      - {name: ekr_version, type: String}
+    relations:
+      # A source has no meaning without the instance whose store it feeds.
+      - name: sources
+        kind: owns
+        target: cortex.instance.Source
+        cardinality: many
+        via: instance_name
+    lifecycle:
+      initial: Active
+      # Removed keeps the instance directory and its store; only the timers and the viewer go.
+      states: [Active, Removed]
+      terminal: [Removed]
+      transitions:
+        - name: remove
+          from: [Active]
+          to: Removed
+
+  - name: cortex.instance.Source
+    identity:
+      name: source_id
+      type: cortex.instance.SourceId
+    fields:
+      - {name: instance_name, type: cortex.instance.InstanceName}
+      - {name: name, type: String}
+      - {name: kind, type: cortex.instance.SourceKind}
+      - {name: schedule, type: String}
+      - {name: runs, type: Integer}
+      - {name: consecutive_failures, type: Integer}
+    invariants:
+      - runs >= 0
+      - consecutive_failures >= 0
+    # UNMAPPED: which documents a source has already seen (document id, content hash, last fetch)
+    # decides whether a run applies anything. One outcome changes one record, and one run sees many
+    # documents, so the seen set is not modelled here; it is the implementation's per-source state
+    # file, checked by the Rust tests (a second run over unchanged input applies nothing).
+    lifecycle:
+      initial: Enabled
+      states: [Enabled, Disabled]
+      terminal: []
+      transitions:
+        - name: disable
+          from: [Enabled]
+          to: Disabled
+        - name: enable
+          from: [Disabled]
+          to: Enabled
+
+actors:
+  - name: cortex.instance.Operator
+    may:
+      - cortex.instance.CreateInstance
+      - cortex.instance.UpdateInstance
+      - cortex.instance.RemoveInstance
+      - cortex.instance.AddSource
+      - cortex.instance.EnableSource
+    naming:
+      display: Operator
+
+  - name: cortex.instance.Scheduler
+    may:
+      - cortex.instance.RunSource
+      - cortex.instance.RecordFailure
+    naming:
+      display: Scheduler
+
+errors:
+  - name: cortex.instance.ConnectionMissing
+    summary: >-
+      Connectors lists no live connection with the id a source names. Run
+      `connectors connections connect` for it, then try again.
+    fields:
+      - {name: connection, type: String}
+
+  - name: cortex.instance.SeedRefused
+    summary: EKR refused the seed or the seed schema; no store was kept.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.SeedChangeRefused
+    summary: >-
+      An update may change sources, model and serve settings only; the seed of an existing store
+      cannot change.
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+
+  - name: cortex.instance.InstanceNotActive
+    summary: The instance is removed, so nothing changed.
+    fields:
+      - {name: state, type: cortex.instance.Instance.State}
+
+  - name: cortex.instance.SourceDisabledError
+    summary: The source is disabled after repeated failures; enable it first.
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+
+  - name: cortex.instance.SourceNotDisabled
+    summary: The source is already enabled, so nothing changed.
+    fields:
+      - {name: state, type: cortex.instance.Source.State}
+
+  - name: cortex.instance.InstanceNotFound
+    summary: No instance has this name.
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+
+  - name: cortex.instance.SourceNotFound
+    summary: No source has this id.
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+
+  - name: cortex.instance.FetchFailed
+    summary: >-
+      Connectors or the filesystem could not deliver the source's documents (an outage, a refused
+      operation). Nothing was applied and the source's seen state did not move.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.ExtractionFailed
+    summary: The model call failed or returned no valid extraction document; nothing was applied.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.ApplyRefused
+    summary: EKR refused the merged extraction document; nothing was applied.
+    fields:
+      - {name: reason, type: String}
+
+commands:
+  - name: cortex.instance.CreateInstance
+    naming:
+      wire: create
+      display: Create an instance
+    # The command line reads the spec file; `name`, `description`, `model` and `ekr_version` are its
+    # values, carried as top-level inputs because an outcome reads only top-level input fields.
+    input:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: description, type: String}
+      - {name: model, type: String}
+      - {name: ekr_version, type: String}
+      - {name: spec, type: cortex.instance.InstanceSpec}
+    outcomes:
+      - name: connection-missing
+        external: Connectors lists no live connection for a connection id a source of the spec names
+        error: cortex.instance.ConnectionMissing
+        payload:
+          cortex.instance.ConnectionMissing:
+            connection: {generated: true}
+        summary: Nothing was created.
+
+      - name: seed-refused
+        external: EKR refuses the minimal seed, the ekr-seed/2 file or the seed schema document
+        error: cortex.instance.SeedRefused
+        payload:
+          cortex.instance.SeedRefused:
+            reason: {generated: true}
+        summary: Nothing was created.
+
+      - name: created
+        creates: cortex.instance.Instance
+        instance: name
+        sets:
+          description: input.description
+          model: input.model
+          ekr_version: input.ekr_version
+        emits:
+          - cortex.instance.InstanceCreated
+        payload:
+          cortex.instance.InstanceCreated:
+            name: input.name
+            view_port: {generated: true}
+        summary: >-
+          The store is seeded, the seed schema applied and the seed documents extracted into it.
+          The viewer runs on its port. The sources are added by AddSource, one per source in the spec.
+
+  - name: cortex.instance.UpdateInstance
+    naming:
+      wire: update
+      display: Update an instance
+    input:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: description, type: String}
+      - {name: model, type: String}
+      - {name: spec, type: cortex.instance.InstanceSpec}
+      - {name: seed_changed, type: Boolean}
+    # UNMAPPED: whether the seed changed is a comparison between the new spec and the frozen copy
+    # in the instance directory. A `when_subject` can compare a stored field with an input field,
+    # but the seed is not stored as a field. The implementation computes `seed_changed` from the
+    # two files and passes it; a caller cannot set it by hand from the command line.
+    outcomes:
+      - name: seed-change-refused
+        when: seed_changed == true
+        error: cortex.instance.SeedChangeRefused
+        payload:
+          cortex.instance.SeedChangeRefused:
+            name: input.name
+        summary: Nothing changed.
+
+      - name: updated
+        when_subject_state: Active
+        updates: cortex.instance.Instance
+        instance: name
+        sets:
+          description: input.description
+          model: input.model
+        emits:
+          - cortex.instance.InstanceUpdated
+        payload:
+          cortex.instance.InstanceUpdated:
+            name: input.name
+        summary: The frozen spec is replaced; sources, model and serve settings take effect on the next run.
+
+      - name: not-active
+        error: cortex.instance.InstanceNotActive
+        payload:
+          cortex.instance.InstanceNotActive:
+            state: {generated: true}
+        summary: The instance is removed; nothing changed.
+
+      - name: no-such-instance
+        unknown_instance: true
+        error: cortex.instance.InstanceNotFound
+        payload:
+          cortex.instance.InstanceNotFound:
+            name: input.name
+        summary: Nothing changed.
+
+  - name: cortex.instance.RemoveInstance
+    naming:
+      wire: remove
+      display: Remove an instance
+    input:
+      - {name: name, type: cortex.instance.InstanceName}
+    outcomes:
+      - name: removed
+        moves: cortex.instance.Instance.remove
+        instance: name
+        emits:
+          - cortex.instance.InstanceRemoved
+        payload:
+          cortex.instance.InstanceRemoved:
+            name: input.name
+        summary: The timers and the viewer are gone; the directory and the store stay.
+
+      - name: wrong-state
+        wrong_state: true
+        error: cortex.instance.InstanceNotActive
+        payload:
+          cortex.instance.InstanceNotActive:
+            state: {generated: true}
+        summary: The instance was already removed.
+
+      - name: no-such-instance
+        unknown_instance: true
+        error: cortex.instance.InstanceNotFound
+        payload:
+          cortex.instance.InstanceNotFound:
+            name: input.name
+        summary: Nothing changed.
+
+  - name: cortex.instance.AddSource
+    naming:
+      wire: add
+      display: Add a source
+    input:
+      - {name: instance_name, type: cortex.instance.InstanceName}
+      - {name: source_id, type: cortex.instance.SourceId}
+      - {name: name, type: String}
+      - {name: kind, type: cortex.instance.SourceKind}
+      - {name: schedule, type: String}
+    outcomes:
+      - name: added
+        creates: cortex.instance.Source
+        instance: source_id
+        sets:
+          instance_name: input.instance_name
+          name: input.name
+          kind: input.kind
+          schedule: input.schedule
+          runs: 0
+          consecutive_failures: 0
+        emits:
+          - cortex.instance.SourceAdded
+        payload:
+          cortex.instance.SourceAdded:
+            source_id: input.source_id
+            instance_name: input.instance_name
+        summary: The source's timer is installed and enabled.
+
+  - name: cortex.instance.RunSource
+    naming:
+      wire: run
+      display: Run a source once
+    input:
+      - {name: source_id, type: cortex.instance.SourceId}
+    outcomes:
+      - name: fetch-failed
+        external: Connectors or the filesystem fails to deliver the source's documents
+        error: cortex.instance.FetchFailed
+        payload:
+          cortex.instance.FetchFailed:
+            reason: {generated: true}
+        summary: Nothing was applied; the scheduler then sends RecordFailure.
+
+      - name: extraction-failed
+        external: The model call fails, times out, exceeds the run budget before any batch, or returns no valid document
+        error: cortex.instance.ExtractionFailed
+        payload:
+          cortex.instance.ExtractionFailed:
+            reason: {generated: true}
+        summary: Nothing was applied; the scheduler then sends RecordFailure.
+
+      - name: apply-refused
+        external: EKR refuses the merged extraction document
+        error: cortex.instance.ApplyRefused
+        payload:
+          cortex.instance.ApplyRefused:
+            reason: {generated: true}
+        summary: Nothing was applied; the scheduler then sends RecordFailure.
+
+      - name: ran
+        when_subject_state: Enabled
+        updates: cortex.instance.Source
+        instance: source_id
+        sets:
+          runs: {increment: 1}
+          consecutive_failures: 0
+        emits:
+          - cortex.instance.SourceRan
+        payload:
+          cortex.instance.SourceRan:
+            source_id: input.source_id
+            documents_new: {generated: true}
+            documents_applied: {generated: true}
+            cost_usd: {generated: true}
+        summary: >-
+          Every new or changed document within the policy's limits was extracted and applied, in
+          batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no
+          model was called.
+
+      - name: disabled
+        error: cortex.instance.SourceDisabledError
+        payload:
+          cortex.instance.SourceDisabledError:
+            source_id: input.source_id
+        summary: The source is disabled; nothing ran.
+
+      - name: no-such-source
+        unknown_instance: true
+        error: cortex.instance.SourceNotFound
+        payload:
+          cortex.instance.SourceNotFound:
+            source_id: input.source_id
+        summary: Nothing ran.
+
+  - name: cortex.instance.RecordFailure
+    naming:
+      wire: record-failure
+      display: Record a failed run
+    input:
+      - {name: source_id, type: cortex.instance.SourceId}
+      - {name: reason, type: String}
+    outcomes:
+      - name: disabled
+        when_subject:
+          predicate: consecutive_failures >= 1
+        moves: cortex.instance.Source.disable
+        instance: source_id
+        sets:
+          consecutive_failures: {increment: 1}
+        emits:
+          - cortex.instance.SourceDisabled
+        payload:
+          cortex.instance.SourceDisabled:
+            source_id: input.source_id
+            reason: input.reason
+        summary: The second failure in a row disables the source's timer.
+
+      - name: counted
+        updates: cortex.instance.Source
+        instance: source_id
+        sets:
+          consecutive_failures: {increment: 1}
+        emits:
+          - cortex.instance.RunFailed
+        payload:
+          cortex.instance.RunFailed:
+            source_id: input.source_id
+            reason: input.reason
+        summary: The failure is counted; the timer stays enabled.
+
+      - name: already-disabled
+        wrong_state: true
+        error: cortex.instance.SourceDisabledError
+        payload:
+          cortex.instance.SourceDisabledError:
+            source_id: input.source_id
+        summary: The source was already disabled; nothing was counted.
+
+      - name: no-such-source
+        unknown_instance: true
+        error: cortex.instance.SourceNotFound
+        payload:
+          cortex.instance.SourceNotFound:
+            source_id: input.source_id
+        summary: Nothing was counted.
+
+  - name: cortex.instance.EnableSource
+    naming:
+      wire: enable
+      display: Enable a source
+    input:
+      - {name: source_id, type: cortex.instance.SourceId}
+    outcomes:
+      - name: enabled
+        moves: cortex.instance.Source.enable
+        instance: source_id
+        sets:
+          consecutive_failures: 0
+        emits:
+          - cortex.instance.SourceEnabled
+        payload:
+          cortex.instance.SourceEnabled:
+            source_id: input.source_id
+        summary: The failure count is reset and the timer is enabled again.
+
+      - name: wrong-state
+        wrong_state: true
+        error: cortex.instance.SourceNotDisabled
+        payload:
+          cortex.instance.SourceNotDisabled:
+            state: {generated: true}
+        summary: The source was not disabled.
+
+      - name: no-such-source
+        unknown_instance: true
+        error: cortex.instance.SourceNotFound
+        payload:
+          cortex.instance.SourceNotFound:
+            source_id: input.source_id
+        summary: Nothing changed.
+
+events:
+  - name: cortex.instance.InstanceCreated
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: view_port, type: Integer}
+
+  - name: cortex.instance.InstanceUpdated
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+
+  - name: cortex.instance.InstanceRemoved
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+
+  - name: cortex.instance.SourceAdded
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+      - {name: instance_name, type: cortex.instance.InstanceName}
+
+  - name: cortex.instance.SourceRan
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+      - {name: documents_new, type: Integer}
+      - {name: documents_applied, type: Integer}
+      - {name: cost_usd, type: Decimal}
+
+  - name: cortex.instance.RunFailed
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+      - {name: reason, type: String}
+
+  - name: cortex.instance.SourceDisabled
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+      - {name: reason, type: String}
+
+  - name: cortex.instance.SourceEnabled
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+
+views:
+  - name: cortex.instance.Instances
+    source: cortex.instance.Instance
+    consistency: read_your_writes
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: description, type: String}
+      - {name: model, type: String}
+      - {name: ekr_version, type: String}
+      - {name: state, type: cortex.instance.Instance.State}
+    naming:
+      wire: list
+      display: Instances
+
+  - name: cortex.instance.Sources
+    source: cortex.instance.Source
+    consistency: read_your_writes
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+      - {name: instance_name, type: cortex.instance.InstanceName}
+      - {name: name, type: String}
+      - {name: kind, type: cortex.instance.SourceKind}
+      - {name: schedule, type: String}
+      - {name: runs, type: Integer}
+      - {name: consecutive_failures, type: Integer}
+      - {name: state, type: cortex.instance.Source.State}
+    naming:
+      wire: sources
+      display: Sources

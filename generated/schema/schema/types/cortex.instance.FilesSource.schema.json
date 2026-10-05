@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.FilesSource",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:399e4b9f1f754c83334915d6bd70aab4238d0c9ec6734419dbb7afcebf3b8186",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.FilesSource": {
+      "title": "FilesSource",
+      "x-ess-name": "cortex.instance.FilesSource",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "glob": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "paths",
+        "glob"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

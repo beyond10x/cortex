@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.CrawlPolicy",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:f71d20714a321074f5057693a99d747be58dcbd4e585fe4424f681e6618ebf9a",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.CrawlPolicy": {
+      "title": "CrawlPolicy",
+      "x-ess-name": "cortex.instance.CrawlPolicy",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "max_depth": {
+          "type": "integer"
+        },
+        "max_breadth": {
+          "type": "integer"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "select_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "allow_external": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "max_depth",
+        "max_breadth",
+        "limit",
+        "select_paths",
+        "exclude_paths",
+        "allow_external"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

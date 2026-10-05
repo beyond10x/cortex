@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExtractionFailed payload",
+  "description": "The model call failed or returned no valid extraction document; nothing was applied.",
+  "x-ess-name": "cortex.instance.ExtractionFailed",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:abc479c3a9cd6cc664f7d9982d6687abfc9961562b6b3c4266bdaaee58f5a825",
+    "regenerate": "ess generate"
+  }
+}

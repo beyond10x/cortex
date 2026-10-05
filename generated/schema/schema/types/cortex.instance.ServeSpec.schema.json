@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.ServeSpec",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:6b9397d9e2127d57e16dee759cc91723960289b210fad9f6d1735bb260883ec0",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.ServeSpec": {
+      "title": "ServeSpec",
+      "x-ess-name": "cortex.instance.ServeSpec",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "view_port": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

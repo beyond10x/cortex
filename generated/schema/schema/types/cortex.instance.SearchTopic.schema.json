@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.SearchTopic",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:279190e6b2cf82cdeac57f5ec9c340d3c9d1c03b6fee2c90bb412f971a4a12d6",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.SearchTopic": {
+      "title": "SearchTopic",
+      "x-ess-name": "cortex.instance.SearchTopic",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "general",
+        "news",
+        "finance"
+      ]
+    }
+  }
+}

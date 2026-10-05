@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.ConnectorsSource",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:815c74226fccc1fef8e850f76e902e3a6b3df1d119144565066d0acf35c4b2be",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.ConnectorsSource": {
+      "title": "ConnectorsSource",
+      "x-ess-name": "cortex.instance.ConnectorsSource",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {}
+        },
+        "records": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        },
+        "text": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "adapter",
+        "connection",
+        "operation",
+        "inputs",
+        "records",
+        "id",
+        "text"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

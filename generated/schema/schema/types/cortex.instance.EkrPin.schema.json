@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.EkrPin",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:32a581abbaf796c4dd855414e33a6d7c75a680442d0d3c7a21d1432b0a9831eb",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.EkrPin": {
+      "title": "EkrPin",
+      "x-ess-name": "cortex.instance.EkrPin",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "bin": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

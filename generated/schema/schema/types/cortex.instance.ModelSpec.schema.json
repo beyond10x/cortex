@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.ModelSpec",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:eef8c627c25b807013a4bc726175dce8693688268d09f00313241044efb39859",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.ModelSpec": {
+      "title": "ModelSpec",
+      "x-ess-name": "cortex.instance.ModelSpec",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "budget_usd": {
+          "type": "string",
+          "format": "decimal",
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "timeout_s": {
+          "type": "integer"
+        },
+        "instructions": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "model",
+        "budget_usd",
+        "timeout_s"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.WebSource",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:01c09bb9c6e283d2e5bf2e8dfb62f113c03aab428b3a10a457ccd97970b8003e",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.CrawlPolicy": {
+      "title": "CrawlPolicy",
+      "x-ess-name": "cortex.instance.CrawlPolicy",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "max_depth": {
+          "type": "integer"
+        },
+        "max_breadth": {
+          "type": "integer"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "select_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "allow_external": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "max_depth",
+        "max_breadth",
+        "limit",
+        "select_paths",
+        "exclude_paths",
+        "allow_external"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.SearchDepth": {
+      "title": "SearchDepth",
+      "x-ess-name": "cortex.instance.SearchDepth",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "basic",
+        "advanced"
+      ]
+    },
+    "cortex.instance.SearchInput": {
+      "title": "SearchInput",
+      "x-ess-name": "cortex.instance.SearchInput",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "queries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "policy": {
+          "$ref": "#/$defs/cortex.instance.SearchPolicy"
+        }
+      },
+      "required": [
+        "queries",
+        "policy"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.SearchPolicy": {
+      "title": "SearchPolicy",
+      "x-ess-name": "cortex.instance.SearchPolicy",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "topic": {
+          "$ref": "#/$defs/cortex.instance.SearchTopic"
+        },
+        "time_range": {
+          "$ref": "#/$defs/cortex.instance.TimeRange"
+        },
+        "max_results": {
+          "type": "integer"
+        },
+        "search_depth": {
+          "$ref": "#/$defs/cortex.instance.SearchDepth"
+        },
+        "include_domains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude_domains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "country": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic",
+        "max_results",
+        "search_depth",
+        "include_domains",
+        "exclude_domains"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.SearchTopic": {
+      "title": "SearchTopic",
+      "x-ess-name": "cortex.instance.SearchTopic",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "general",
+        "news",
+        "finance"
+      ]
+    },
+    "cortex.instance.SitesInput": {
+      "title": "SitesInput",
+      "x-ess-name": "cortex.instance.SitesInput",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "urls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mode": {
+          "$ref": "#/$defs/cortex.instance.WebMode"
+        },
+        "policy": {
+          "$ref": "#/$defs/cortex.instance.CrawlPolicy"
+        }
+      },
+      "required": [
+        "urls",
+        "mode"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.TimeRange": {
+      "title": "TimeRange",
+      "x-ess-name": "cortex.instance.TimeRange",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "day",
+        "week",
+        "month",
+        "year"
+      ]
+    },
+    "cortex.instance.WebInput": {
+      "title": "WebInput",
+      "x-ess-name": "cortex.instance.WebInput",
+      "x-ess-kind": "union",
+      "oneOf": [
+        {
+          "title": "search",
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "string",
+              "const": "search"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.SearchInput"
+            }
+          },
+          "required": [
+            "input",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "sites",
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "string",
+              "const": "sites"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.SitesInput"
+            }
+          },
+          "required": [
+            "input",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "x-ess-union-tag": "input"
+    },
+    "cortex.instance.WebMode": {
+      "title": "WebMode",
+      "x-ess-name": "cortex.instance.WebMode",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Pages",
+        "Crawl"
+      ]
+    },
+    "cortex.instance.WebSource": {
+      "title": "WebSource",
+      "x-ess-name": "cortex.instance.WebSource",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "input": {
+          "$ref": "#/$defs/cortex.instance.WebInput"
+        }
+      },
+      "required": [
+        "connection",
+        "input"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

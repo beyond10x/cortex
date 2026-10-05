@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SourceNotDisabled payload",
+  "description": "The source is already enabled, so nothing changed.",
+  "x-ess-name": "cortex.instance.SourceNotDisabled",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "state": {
+      "$ref": "#/$defs/cortex.instance.Source.State"
+    }
+  },
+  "required": [
+    "state"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:77c124943865db0c0650c9652b5474bc33994ae19636d82449417fddd8b252c6",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.Source.State": {
+      "title": "State",
+      "x-ess-name": "cortex.instance.Source.State",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Disabled",
+        "Enabled"
+      ]
+    }
+  }
+}

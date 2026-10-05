@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.SourceKind",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:2a06e0fa84d5d27ba71e5ed7cab7e14b0c92b446cc1245df6a1be8a8e4ea2ce2",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.SourceKind": {
+      "title": "SourceKind",
+      "x-ess-name": "cortex.instance.SourceKind",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Web",
+        "Connectors",
+        "Files"
+      ]
+    }
+  }
+}

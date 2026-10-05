@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ConnectionMissing payload",
+  "description": "Connectors lists no live connection with the id a source names. Run `connectors connections connect` for it, then try again.",
+  "x-ess-name": "cortex.instance.ConnectionMissing",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "connection": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "connection"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:532a24d701adc1a4cf2c75682bbd67c779d9cebc48435c5562905037111aedfd",
+    "regenerate": "ess generate"
+  }
+}

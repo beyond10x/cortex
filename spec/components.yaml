@@ -1,0 +1,45 @@
+components:
+  - component: cortex
+    summary: >-
+      The operator's command line: create, update, run and remove instances, and switch a source off
+      and on. A systemd user timer per source calls the same binary.
+    owns:
+      domains:
+        - cortex.instance
+    accepts:
+      commands:
+        - cortex.instance.CreateInstance
+        - cortex.instance.UpdateInstance
+        - cortex.instance.RemoveInstance
+        - cortex.instance.AddSource
+        - cortex.instance.RunSource
+        - cortex.instance.RecordFailure
+        - cortex.instance.EnableSource
+    publishes:
+      events:
+        - cortex.instance.InstanceCreated
+        - cortex.instance.InstanceUpdated
+        - cortex.instance.InstanceRemoved
+        - cortex.instance.SourceAdded
+        - cortex.instance.SourceRan
+        - cortex.instance.RunFailed
+        - cortex.instance.SourceDisabled
+        - cortex.instance.SourceEnabled
+    reached_by: command_line
+    cli:
+      binary: cortex
+      commands:
+        - cortex.instance.CreateInstance
+        - cortex.instance.UpdateInstance
+        - cortex.instance.RemoveInstance
+        - cortex.instance.RunSource
+      groups:
+        - name: source
+          summary: One data source of an instance
+          commands:
+            - cortex.instance.AddSource
+            - cortex.instance.RecordFailure
+            - cortex.instance.EnableSource
+      views:
+        - cortex.instance.Instances
+        - cortex.instance.Sources

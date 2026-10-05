@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.FetchPolicy",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:08dcb8e3527ce577cb382cb0183f5aba4179f2c597f10e3f971d1a5946e8bee9",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.ChangeDetection": {
+      "title": "ChangeDetection",
+      "x-ess-name": "cortex.instance.ChangeDetection",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "ContentHash"
+      ]
+    },
+    "cortex.instance.FetchPolicy": {
+      "title": "FetchPolicy",
+      "x-ess-name": "cortex.instance.FetchPolicy",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "refresh_after_days": {
+          "type": "integer"
+        },
+        "change": {
+          "$ref": "#/$defs/cortex.instance.ChangeDetection"
+        },
+        "max_documents_per_run": {
+          "type": "integer"
+        },
+        "max_chars_per_document": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "refresh_after_days",
+        "change",
+        "max_documents_per_run",
+        "max_chars_per_document"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

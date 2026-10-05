@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.SitesInput",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:20e3e447dff0f243fdb4a036a391843521b8bd73476ef6cfc217a62e64263997",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.CrawlPolicy": {
+      "title": "CrawlPolicy",
+      "x-ess-name": "cortex.instance.CrawlPolicy",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "max_depth": {
+          "type": "integer"
+        },
+        "max_breadth": {
+          "type": "integer"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "select_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "allow_external": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "max_depth",
+        "max_breadth",
+        "limit",
+        "select_paths",
+        "exclude_paths",
+        "allow_external"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.SitesInput": {
+      "title": "SitesInput",
+      "x-ess-name": "cortex.instance.SitesInput",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "urls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mode": {
+          "$ref": "#/$defs/cortex.instance.WebMode"
+        },
+        "policy": {
+          "$ref": "#/$defs/cortex.instance.CrawlPolicy"
+        }
+      },
+      "required": [
+        "urls",
+        "mode"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.WebMode": {
+      "title": "WebMode",
+      "x-ess-name": "cortex.instance.WebMode",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Pages",
+        "Crawl"
+      ]
+    }
+  }
+}

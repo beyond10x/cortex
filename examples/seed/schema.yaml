@@ -1,0 +1,24 @@
+format: ekr.extraction-document/1
+ontology:
+  node_types:
+  - name: Organization
+    parents: []
+    abstract_type: false
+    properties:
+    - name: website
+      value: {value_kind: String}
+      cardinality: One
+      required: false
+  - name: Product
+    parents: []
+    abstract_type: false
+    properties: []
+  edge_types:
+  - name: DEVELOPS
+    source_types: [Organization]
+    target_types: [Product]
+    cardinality: Many
+    properties: []
+entities: []
+facts: []
+evidence: []

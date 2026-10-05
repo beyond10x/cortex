@@ -1,0 +1,54 @@
+version: '3'
+
+vars:
+  TARGET: '{{env "CARGO_TARGET_DIR" | default (printf "%s/.cache/b10x-target/cortex" (env "HOME"))}}'
+  CARGO: 'env CARGO_TARGET_DIR="{{.TARGET}}" CARGO_BUILD_JOBS=4 RUST_TEST_THREADS=4 nice -n 19 cargo'
+  ESS: ess
+
+tasks:
+  generate:
+    desc: Regenerate everything under generated/ and spec/suite.json from spec/
+    cmds:
+      - rm -rf generated/cortex-model generated/spec-types generated/schema generated/docs
+      - '{{.ESS}} specify validate --path spec --strict-requires'
+      - '{{.ESS}} generate synthesize --path spec --target rust --layout crate --out generated/cortex-model --strict-requires'
+      - '{{.ESS}} generate types --path spec --target rust --root cortex.instance.InstanceSpec --package cortex-spec-types --out generated/spec-types --strict-requires'
+      - '{{.ESS}} generate --path spec --kind schema --out generated/schema --strict-requires'
+      - '{{.ESS}} generate --path spec --kind docs --out generated/docs --strict-requires'
+      - '{{.ESS}} verify conform synthesize --path spec --out spec/suite.json --strict-requires'
+
+  drift:
+    desc: Fail when generated/ or spec/suite.json differ from what spec/ generates
+    cmds:
+      - |
+        set -eu
+        tmp=$(mktemp -d "${TMPDIR:-$HOME/.cache}/cortex-drift.XXXXXX")
+        trap 'rm -rf "$tmp"' EXIT
+        mkdir -p "$tmp/generated"
+        {{.ESS}} generate synthesize --path spec --target rust --layout crate --out "$tmp/generated/cortex-model" --strict-requires >/dev/null
+        {{.ESS}} generate types --path spec --target rust --root cortex.instance.InstanceSpec --package cortex-spec-types --out "$tmp/generated/spec-types" --strict-requires >/dev/null
+        {{.ESS}} generate --path spec --kind schema --out "$tmp/generated/schema" --strict-requires >/dev/null
+        {{.ESS}} generate --path spec --kind docs --out "$tmp/generated/docs" --strict-requires >/dev/null
+        {{.ESS}} verify conform synthesize --path spec --out "$tmp/suite.json" --strict-requires >/dev/null
+        diff -r --exclude=.ess-output generated "$tmp/generated"
+        cmp spec/suite.json "$tmp/suite.json"
+        echo "generated/ and spec/suite.json match spec/"
+
+  build:
+    desc: Build the cortex binary
+    cmds:
+      - '{{.CARGO}} build --locked --release'
+
+  test:
+    desc: Run every test
+    cmds:
+      - '{{.CARGO}} test --locked'
+
+  check:
+    desc: The gate — spec validity, generated-code drift, fmt, clippy, tests
+    cmds:
+      - '{{.ESS}} specify validate --path spec --strict-requires'
+      - task: drift
+      - '{{.CARGO}} fmt --all -- --check'
+      - '{{.CARGO}} clippy --locked --all-targets -- -D warnings'
+      - task: test

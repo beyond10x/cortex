@@ -1,0 +1,62 @@
+format: cortex.instance/1
+name: example
+description: Developments in open-source vector databases and the companies behind them.
+ekr:
+  version: "0.0.30"
+seed:
+  schema: seed/schema.yaml
+  documents: []
+model:
+  model: claude-sonnet-5-5
+  budget_usd: "1"
+  timeout_s: 900
+sources:
+  - name: news
+    schedule: "*-*-* 06:00:00"
+    settings:
+      kind: web
+      value:
+        connection: conn_replace_with_your_tavily_connection_id
+        input:
+          input: search
+          value:
+            queries:
+              - open-source vector database release
+              - vector database funding round
+            policy:
+              topic: news
+              time_range: week
+              max_results: 5
+              search_depth: basic
+              include_domains: []
+              exclude_domains: []
+    policy:
+      refresh_after_days: 30
+      change: ContentHash
+      max_documents_per_run: 20
+      max_chars_per_document: 20000
+  - name: project-docs
+    schedule: "*-*-* 07:00:00"
+    settings:
+      kind: web
+      value:
+        connection: conn_replace_with_your_tavily_connection_id
+        input:
+          input: sites
+          value:
+            urls:
+              - https://example.org/docs
+            mode: Crawl
+            policy:
+              max_depth: 1
+              max_breadth: 20
+              limit: 10
+              select_paths: ["/docs/.*"]
+              exclude_paths: []
+              allow_external: false
+    policy:
+      refresh_after_days: 7
+      change: ContentHash
+      max_documents_per_run: 10
+      max_chars_per_document: 20000
+serve: {}

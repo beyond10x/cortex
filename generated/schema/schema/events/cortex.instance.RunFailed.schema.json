@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunFailed payload",
+  "x-ess-name": "cortex.instance.RunFailed",
+  "x-ess-kind": "event-payload",
+  "type": "object",
+  "properties": {
+    "source_id": {
+      "$ref": "#/$defs/cortex.instance.SourceId"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "source_id",
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:119d9ccfad1241556686c5d039d5520c970c45cbc6c3d8a6c6d743624cd9bda2",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.SourceId": {
+      "title": "SourceId",
+      "x-ess-name": "cortex.instance.SourceId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

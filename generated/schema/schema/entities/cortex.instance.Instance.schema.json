@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Instance",
+  "x-ess-name": "cortex.instance.Instance",
+  "x-ess-kind": "entity",
+  "type": "object",
+  "properties": {
+    "name": {
+      "$ref": "#/$defs/cortex.instance.InstanceName"
+    },
+    "description": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "ekr_version": {
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/cortex.instance.Instance.State"
+    }
+  },
+  "required": [
+    "name",
+    "description",
+    "model",
+    "ekr_version",
+    "state"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:4773046052868d05055fcf1cea1361b4a3886c102aed41c5708e20556b7a90e4",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.Instance.State": {
+      "title": "State",
+      "x-ess-name": "cortex.instance.Instance.State",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Active",
+        "Removed"
+      ]
+    },
+    "cortex.instance.InstanceName": {
+      "title": "InstanceName",
+      "x-ess-name": "cortex.instance.InstanceName",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

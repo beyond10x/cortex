@@ -1,0 +1,12 @@
+format: ess/19
+system: cortex
+version: v1
+
+summary: >-
+  Spin up knowledge brains from a spec. Each instance is one EKR store fed on a schedule by the data
+  sources its spec connects: web pages found by search or crawled from listed sites, records of any
+  Connectors operation, and local files. Secrets never pass through cortex; a source names a
+  Connectors connection and only invokes operations through it.
+
+domains:
+  - cortex.instance

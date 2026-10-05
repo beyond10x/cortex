@@ -1,0 +1,14 @@
+[package]
+name = "cortex-spec-types"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "types.rs"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = { version = "=1.0.151", features = ["arbitrary_precision"] }
+
+[workspace]

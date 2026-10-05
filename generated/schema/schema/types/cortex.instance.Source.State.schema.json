@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.Source.State",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:0ae7c9757d48b8ffcb94ef170b30dfe231382cacd1f373ff8d8ad7db17693b44",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.Source.State": {
+      "title": "State",
+      "x-ess-name": "cortex.instance.Source.State",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Disabled",
+        "Enabled"
+      ]
+    }
+  }
+}

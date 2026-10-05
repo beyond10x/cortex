@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Source",
+  "x-ess-name": "cortex.instance.Source",
+  "x-ess-kind": "entity",
+  "type": "object",
+  "properties": {
+    "source_id": {
+      "$ref": "#/$defs/cortex.instance.SourceId"
+    },
+    "instance_name": {
+      "$ref": "#/$defs/cortex.instance.InstanceName",
+      "x-ess-relation": {
+        "name": "sources",
+        "kind": "owns",
+        "source": "cortex.instance.Instance",
+        "target": "cortex.instance.Source",
+        "cardinality": "many",
+        "via": "instance_name"
+      }
+    },
+    "name": {
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/cortex.instance.SourceKind"
+    },
+    "schedule": {
+      "type": "string"
+    },
+    "runs": {
+      "type": "integer"
+    },
+    "consecutive_failures": {
+      "type": "integer"
+    },
+    "state": {
+      "$ref": "#/$defs/cortex.instance.Source.State"
+    }
+  },
+  "required": [
+    "source_id",
+    "instance_name",
+    "name",
+    "kind",
+    "schedule",
+    "runs",
+    "consecutive_failures",
+    "state"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:4773046052868d05055fcf1cea1361b4a3886c102aed41c5708e20556b7a90e4",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.InstanceName": {
+      "title": "InstanceName",
+      "x-ess-name": "cortex.instance.InstanceName",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "cortex.instance.Source.State": {
+      "title": "State",
+      "x-ess-name": "cortex.instance.Source.State",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Disabled",
+        "Enabled"
+      ]
+    },
+    "cortex.instance.SourceId": {
+      "title": "SourceId",
+      "x-ess-name": "cortex.instance.SourceId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "cortex.instance.SourceKind": {
+      "title": "SourceKind",
+      "x-ess-name": "cortex.instance.SourceKind",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Web",
+        "Connectors",
+        "Files"
+      ]
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SourceRan payload",
+  "x-ess-name": "cortex.instance.SourceRan",
+  "x-ess-kind": "event-payload",
+  "type": "object",
+  "properties": {
+    "source_id": {
+      "$ref": "#/$defs/cortex.instance.SourceId"
+    },
+    "documents_new": {
+      "type": "integer"
+    },
+    "documents_applied": {
+      "type": "integer"
+    },
+    "cost_usd": {
+      "type": "string",
+      "format": "decimal",
+      "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    }
+  },
+  "required": [
+    "source_id",
+    "documents_new",
+    "documents_applied",
+    "cost_usd"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
+    "contract_digest": "slice-sha256/2:88ccd8115cc3a8abea2c32982a41c3a79d42ac70c77b27674f1a437c5859c8c6",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.SourceId": {
+      "title": "SourceId",
+      "x-ess-name": "cortex.instance.SourceId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}
