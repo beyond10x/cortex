@@ -544,7 +544,10 @@ mod tests {
         assert!(one.starts_with("dir:people.list:"), "{one}");
         assert!(!one.contains("glpat"), "{one}");
         assert_eq!(one.len(), "dir:people.list:".len() + 16);
-        assert_ne!(one, s.identity(&format!("glpat-{}", "abcdefghijklmnopqrstuvwy")));
+        assert_ne!(
+            one,
+            s.identity(&format!("glpat-{}", "abcdefghijklmnopqrstuvwy"))
+        );
         assert_eq!(s.identity("P-1"), "dir:people.list:P-1");
     }
 
@@ -585,7 +588,8 @@ mod tests {
     #[test]
     fn cleaning_masks_every_string_of_a_record_and_keeps_it_json() {
         let text =
-            json!({"a": {"b": [format!("token glpat-{}", "abcdefghijklmnopqrstuvwx")]}, "n": 1}).to_string();
+            json!({"a": {"b": [format!("token glpat-{}", "abcdefghijklmnopqrstuvwx")]}, "n": 1})
+                .to_string();
         let (cleaned, masked, scrubbed) = clean(&text, None);
         assert_eq!(masked, 1);
         assert!(scrubbed.is_empty());
