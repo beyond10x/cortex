@@ -1,7 +1,7 @@
 //! `RunSource`, the obligation `generated/cortex-model/PLAN.md` leaves to the implementation:
 //! fetch, keep what is new or changed, extract in batches within the run's budget, apply.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
 use cortex_model::instance as m;
@@ -12,6 +12,7 @@ use crate::evidence;
 use crate::extract::{self, Known, Model};
 use crate::instance::{now_ms, Layout};
 use crate::mask::mask;
+use crate::redact::{self, Redactor};
 use crate::sources::{self, FetchError};
 use crate::state::SeenState;
 
@@ -40,6 +41,12 @@ pub struct Report {
     /// Parts of applied documents EKR rejected (`rejected` in its report).
     pub parts_rejected: usize,
     pub masked: usize,
+    /// Values replaced by a placeholder in the prompts sent, per class or rule of the instance's
+    /// `redaction` policy, every one it names counted from `0`; `None` when the policy names
+    /// nothing to pseudonymise.
+    pub redacted: Option<BTreeMap<String, usize>>,
+    /// Placeholder-shaped strings in the model's answers that had no value to restore.
+    pub unrestored: usize,
     /// Why a run stopped before applying every new document, when it did.
     pub stopped: Option<String>,
 }
@@ -54,6 +61,8 @@ impl Default for Report {
             facts_refused: 0,
             parts_rejected: 0,
             masked: 0,
+            redacted: None,
+            unrestored: 0,
             stopped: None,
         }
     }
@@ -139,13 +148,42 @@ fn process(
 ) -> Result<Report, Failure> {
     let started = now_ms();
     let mut report = Report::default();
+    let redactor = redact::compile(spec.redaction.as_ref()).map_err(Failure::Extract)?;
+    report.redacted = redactor.as_ref().map(Redactor::counts);
+    // Each document's text before the cut, so a value the cut splits is still found, with what
+    // the irreversible rules replaced in it.
+    let mut uncut: HashMap<String, Vec<Uncut>> = HashMap::new();
     let docs: Vec<_> = fetched
         .into_iter()
         .map(|mut d| {
             let (masked, n) = mask(&d.text);
             report.masked += n;
             d.text = masked;
+            let Some(r) = &redactor else {
+                truncate(&mut d.text, policy.max_chars_per_document as usize);
+                return d;
+            };
+            // Irreversible rules, like masking, run before anything is stored.
+            let mut scrubbed: BTreeMap<String, usize> = BTreeMap::new();
+            for field in [&mut d.title, &mut d.description].into_iter().flatten() {
+                let (text, hits) = r.scrub(field);
+                *field = text;
+                for (name, _) in hits {
+                    *scrubbed.entry(name).or_default() += 1;
+                }
+            }
+            let (text, hits) = r.scrub(&d.text);
+            d.text = text.clone();
             truncate(&mut d.text, policy.max_chars_per_document as usize);
+            for (name, at) in hits {
+                if at < d.text.len() {
+                    *scrubbed.entry(name).or_default() += 1;
+                }
+            }
+            uncut
+                .entry(d.key.clone())
+                .or_default()
+                .push(Uncut { text, scrubbed });
             d
         })
         .collect();
@@ -214,8 +252,29 @@ fn process(
             break;
         }
         let ontology = store.ontology().map_err(Failure::Apply)?;
-        let known = Known::from_ontology(&ontology, entities.clone());
-        let prompt = extract::prompt(&spec.description, instructions.as_deref(), &known, &batch);
+        // The model is shown the batch with personal data replaced by placeholders; the mapping
+        // stays in `pseudonyms`, in memory, until this batch's answer is restored.
+        let (prompt, pseudonyms) = match &redactor {
+            None => {
+                let known = Known::from_ontology(&ontology, entities.clone());
+                let prompt =
+                    extract::prompt(&spec.description, instructions.as_deref(), &known, &batch);
+                (prompt, None)
+            }
+            Some(r) => {
+                let mut p = r.batch();
+                let (shown, known) = pseudonymise(&mut p, &batch, &uncut, &entities);
+                let known = Known::from_ontology(&ontology, known);
+                let prompt =
+                    extract::prompt(&spec.description, instructions.as_deref(), &known, &shown);
+                if let Some(counts) = report.redacted.as_mut() {
+                    for (name, n) in p.counts() {
+                        *counts.entry(name.clone()).or_default() += n;
+                    }
+                }
+                (prompt, Some(p))
+            }
+        };
         let dir = run_dir.join(format!("batch-{n}"));
         let answer = match model.ask(&dir.join("claude"), &schema, &prompt, remaining) {
             Ok(answer) => answer,
@@ -227,15 +286,25 @@ fn process(
         };
         spent += answer.cost_usd.unwrap_or(0.0);
         report.cost_usd = add_cost(report.cost_usd, answer.cost_usd);
-        let (doc, refused) = extract::merge(&answer.document, &batch);
+        let mut restored = answer.document.clone();
+        // With a policy, the batch directory keeps only the restored `extraction.yaml`: the
+        // prompt and the raw answer carry placeholders, and beside it they would give the mapping.
+        let pseudonymised = pseudonyms.is_some();
+        if let Some(p) = &pseudonyms {
+            report.unrestored += p.restore(&mut restored);
+        }
+        drop(pseudonyms);
+        let (doc, refused) = extract::merge(&restored, &batch);
         report.facts_refused += refused;
         let path = dir.join("extraction.yaml");
         let text = serde_yaml_ng::to_string(&doc).expect("YAML");
-        let _ = std::fs::write(dir.join("prompt.txt"), &prompt);
-        let _ = std::fs::write(
-            dir.join("model.json"),
-            serde_json::to_string_pretty(&answer.document).unwrap_or_default(),
-        );
+        if !pseudonymised {
+            let _ = std::fs::write(dir.join("prompt.txt"), &prompt);
+            let _ = std::fs::write(
+                dir.join("model.json"),
+                serde_json::to_string_pretty(&answer.document).unwrap_or_default(),
+            );
+        }
         std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
         let applied = match store.apply(&path) {
             Ok(r) => r,
@@ -245,15 +314,17 @@ fn process(
                 break;
             }
         };
-        let _ = std::fs::write(
-            dir.join("report.json"),
-            serde_json::to_string_pretty(&applied).unwrap_or_default(),
-        );
+        if !pseudonymised {
+            let _ = std::fs::write(
+                dir.join("report.json"),
+                serde_json::to_string_pretty(&applied).unwrap_or_default(),
+            );
+        }
         report.parts_rejected += crate::ekr::applied(&applied).rejected;
         for issued in &batch {
             seen.record(&issued.doc, started);
         }
-        for (ty, name) in extract::entity_names(&answer.document) {
+        for (ty, name) in extract::entity_names(&restored) {
             let names = entities.entry(ty).or_default();
             if !names.contains(&name) && names.len() < KNOWN_PER_TYPE {
                 names.push(name);
@@ -273,7 +344,7 @@ fn process(
 }
 
 fn log(layout: &Layout, label: &str, report: &Report, started: i64) {
-    layout.log_line(&json!({
+    let mut line = json!({
         "at": started,
         "source": label,
         "documents_new": report.documents_new,
@@ -284,7 +355,84 @@ fn log(layout: &Layout, label: &str, report: &Report, started: i64) {
         "cost_usd": report.cost_usd,
         "seconds": (now_ms() - started) as f64 / 1000.0,
         "stopped": report.stopped,
-    }));
+    });
+    // Present only when the policy pseudonymises: a spec file without one logs what it did before.
+    if let Some(redacted) = &report.redacted {
+        line["redacted"] = json!(redacted);
+        line["unrestored"] = json!(report.unrestored);
+    }
+    layout.log_line(&line);
+}
+
+/// A document's masked and scrubbed text before the cut, and what the irreversible rules
+/// replaced in its kept text, title and description.
+struct Uncut {
+    text: String,
+    scrubbed: BTreeMap<String, usize>,
+}
+
+/// What the model is shown of `batch`, and the known entity names, with every value the
+/// redaction policy finds replaced by its placeholder in `p`: the document key (the `Source:`
+/// line), title, description and text. The text is the kept part of the text before the cut
+/// (`uncut`), so a value the cut splits is replaced too. What the irreversible rules replaced
+/// before storage is counted in `p` here, as the document is sent.
+fn pseudonymise(
+    p: &mut redact::Batch<'_>,
+    batch: &[evidence::Issued],
+    uncut: &HashMap<String, Vec<Uncut>>,
+    entities: &BTreeMap<String, Vec<String>>,
+) -> (Vec<evidence::Issued>, BTreeMap<String, Vec<String>>) {
+    let find = |doc: &sources::Document| -> Option<&Uncut> {
+        uncut
+            .get(&doc.key)
+            .and_then(|texts| texts.iter().find(|t| t.text.starts_with(&doc.text)))
+    };
+    let full = |doc: &sources::Document| -> String {
+        find(doc).map_or_else(|| doc.text.clone(), |u| u.text.clone())
+    };
+    for issued in batch {
+        if let Some(u) = find(&issued.doc) {
+            for (name, n) in &u.scrubbed {
+                p.add(name, *n);
+            }
+        }
+    }
+    for issued in batch {
+        let d = &issued.doc;
+        for text in [Some(&d.key), d.title.as_ref(), d.description.as_ref()]
+            .into_iter()
+            .flatten()
+        {
+            p.reserve(text);
+        }
+        p.reserve(&full(d));
+    }
+    for name in entities.values().flatten() {
+        p.reserve(name);
+    }
+    let shown = batch
+        .iter()
+        .map(|issued| {
+            let d = &issued.doc;
+            evidence::Issued {
+                id: issued.id.clone(),
+                item: serde_yaml_ng::Value::Null,
+                doc: sources::Document {
+                    key: p.replace(&d.key),
+                    origin: d.origin.clone(),
+                    title: d.title.as_deref().map(|t| p.replace(t)),
+                    description: d.description.as_deref().map(|t| p.replace(t)),
+                    published: d.published.clone(),
+                    text: p.replace_prefix(&full(d), d.text.len()),
+                },
+            }
+        })
+        .collect();
+    let known = entities
+        .iter()
+        .map(|(ty, names)| (ty.clone(), names.iter().map(|n| p.replace(n)).collect()))
+        .collect();
+    (shown, known)
 }
 
 #[cfg(test)]
