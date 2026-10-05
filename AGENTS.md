@@ -88,6 +88,12 @@ this repository and published by the organisation's reusable workflow.
   `~/.local/share/cortex`). Tests build their own homes in temp directories.
 - **The repository is public.** No secrets, no machine-specific absolute paths, nothing private in
   code, docs, examples or the planning store.
+- **Every commit and every GitHub write goes through the bot.** Commit with
+  `b10x-gates bot --repository beyond10x/cortex -- commit`, push with `b10x-gates bot ... -- push`,
+  and open or merge pull requests with `b10x-gates api`. The shared `Security and privacy` gate
+  refuses a commit after the enrolled baseline that is not authored by `b10x-bot[bot]`
+  ("inadmissible authorship"), and a `/home/<name>/` path in any commit, which admits no exception.
+  Run `b10x-gates scan-text` on every staged file first and check its own exit status.
 - **Committed code is Rust.** Probes in other languages stay outside the repository. The one
   exception is `website/`, whose Docusaurus configuration is TypeScript as in canon and loom.
 - **Fetched text is untrusted.** It is masked for credential shapes (`src/mask.rs`), stored as
