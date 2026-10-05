@@ -13,6 +13,7 @@ use crate::extract::{self, Known, Model};
 use crate::instance::{now_ms, Layout};
 use crate::mask::{mask, mask_key};
 use crate::redact::{self, Redactor};
+use crate::snapshot::{self, BeforeApply};
 use crate::sources::{self, FetchError, Window};
 use crate::state::{text_hash, SeenState};
 use crate::structured;
@@ -357,6 +358,13 @@ fn process(
     }
 
     let store = layout.store_handle(spec);
+    // A source run copies the store and `state/` once, before its first `apply-extraction`, and
+    // keeps the copy, named by the run's start, once that apply commits; the seed of a new store
+    // takes none.
+    let mut before = match window {
+        Some(_) => BeforeApply::new(layout, &store, label, started, snapshot::keep(spec)),
+        None => BeforeApply::none(),
+    };
     let host = std::fs::read_to_string(layout.host()).map_err(|e| Failure::Apply(e.to_string()))?;
     let operator = crate::ekr::operator(&host).map_err(Failure::Apply)?;
     if let Some(source) = &structured {
@@ -376,6 +384,7 @@ fn process(
             &mut seen,
             &seen_path,
             &mut report,
+            &mut before,
         )?;
         unread(&mut report, &fetched.unread, redactor.as_ref());
         let failures = fetched.child_failures.clone();
@@ -494,6 +503,7 @@ fn process(
             );
         }
         std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
+        before.take().map_err(Failure::Apply)?;
         let applied = match store.apply(&path) {
             Ok(r) => r,
             Err(e) if report.documents_applied == 0 => return Err(Failure::Apply(e)),
@@ -502,6 +512,7 @@ fn process(
                 break;
             }
         };
+        keep_snapshot(&mut before);
         if !pseudonymised {
             let _ = std::fs::write(
                 dir.join("report.json"),
@@ -534,6 +545,14 @@ fn process(
     )?;
     log(layout, label, &report, started);
     Ok(report)
+}
+
+/// Keeps the run's snapshot once its first `apply-extraction` committed. The run's answer stays
+/// what the store did; a snapshot that cannot be kept is said on stderr.
+fn keep_snapshot(before: &mut BeforeApply) {
+    if let Err(e) = before.publish() {
+        eprintln!("cortex: the snapshot taken before this run was not kept: {e}");
+    }
 }
 
 /// `issued` in batches of at most [`BATCH_CHARS`] characters of text, a longer document alone.
@@ -577,6 +596,7 @@ fn apply_records(
     seen: &mut SeenState,
     seen_path: &std::path::Path,
     report: &mut Report,
+    before: &mut BeforeApply,
 ) -> Result<(), Failure> {
     let mut entities = load_entities(layout);
     let issued: Vec<_> = selected
@@ -593,6 +613,7 @@ fn apply_records(
         let path = dir.join("extraction.yaml");
         let text = serde_yaml_ng::to_string(&doc).expect("YAML");
         std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
+        before.take().map_err(Failure::Apply)?;
         let applied = match r.store.apply(&path) {
             Ok(applied) => applied,
             Err(e) if report.documents_applied == 0 => return Err(Failure::Apply(e)),
@@ -601,6 +622,7 @@ fn apply_records(
                 break;
             }
         };
+        keep_snapshot(before);
         let _ = std::fs::write(
             dir.join("report.json"),
             serde_json::to_string_pretty(&applied).unwrap_or_default(),

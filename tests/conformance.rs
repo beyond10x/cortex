@@ -102,6 +102,10 @@ fn event(e: PublishedEvent) -> (String, Value) {
             json!({"source_id": e.source_id.0, "reason": e.reason}),
         ),
         PublishedEvent::SourceEnabled(e) => ("SourceEnabled", json!({"source_id": e.source_id.0})),
+        PublishedEvent::SnapshotRestored(e) => (
+            "SnapshotRestored",
+            json!({"name": e.name.0, "snapshot": e.snapshot}),
+        ),
         PublishedEvent::SourceRan(e) => (
             "SourceRan",
             json!({
@@ -337,6 +341,31 @@ impl Scenario {
                 m::EnableSourceOutcome::NoSuchSource { error } => (
                     "no-such-source",
                     Some(("SourceNotFound", json!({"source_id": error.source_id.0}))),
+                ),
+            },
+            "cortex.instance.RestoreSnapshot" => match app
+                .restore_snapshot(m::RestoreSnapshot {
+                    name: m::InstanceName(s("name")),
+                    snapshot: s("snapshot"),
+                })
+                .unwrap()
+            {
+                m::RestoreSnapshotOutcome::Restored { .. } => ("restored", None),
+                m::RestoreSnapshotOutcome::BackendUnsupported { error } => (
+                    "backend-unsupported",
+                    Some(("RestoreUnsupported", json!({"name": error.name.0}))),
+                ),
+                m::RestoreSnapshotOutcome::Busy { error } => (
+                    "busy",
+                    Some(("InstanceBusy", json!({"reason": error.reason}))),
+                ),
+                m::RestoreSnapshotOutcome::NoSuchSnapshot { error } => (
+                    "no-such-snapshot",
+                    Some(("SnapshotNotFound", json!({"snapshot": error.snapshot}))),
+                ),
+                m::RestoreSnapshotOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
                 ),
             },
             other => panic!("unknown command {other}"),
@@ -593,7 +622,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        34,
+        39,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

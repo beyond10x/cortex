@@ -424,6 +424,7 @@ actors:
       - cortex.instance.RemoveInstance
       - cortex.instance.AddSource
       - cortex.instance.EnableSource
+      - cortex.instance.RestoreSnapshot
     naming:
       display: Operator
 
@@ -484,6 +485,25 @@ errors:
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
 
+  - name: cortex.instance.RestoreUnsupported
+    summary: >-
+      The instance's store is on the postgres backend: its snapshot is the operator's database
+      backup, which cortex neither takes nor restores.
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+
+  - name: cortex.instance.InstanceBusy
+    summary: >-
+      Another cortex command holds the home's lock, or a process other than the viewer holds the
+      store open; nothing was restored.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.SnapshotNotFound
+    summary: The instance directory holds no snapshot by this name.
+    fields:
+      - {name: snapshot, type: String}
+
   - name: cortex.instance.FetchFailed
     summary: >-
       Connectors or the filesystem could not deliver the source's documents (an outage, a refused
@@ -505,9 +525,6 @@ commands:
   # UNMAPPED: AdoptInstance registers an existing EKR store, on either backend, as an instance
   # without reseeding it. Its outcomes (adopted, name taken, store unreadable, backend mismatch) and
   # how the seen-documents state is backfilled are not decided; story:adopt-existing-store does.
-  # UNMAPPED: RestoreSnapshot puts an instance's store back to a snapshot taken before a run. Whether
-  # it exists for the postgres backend, where a snapshot is the operator's database backup, is not
-  # decided; story:run-snapshots does.
   - name: cortex.instance.CreateInstance
     naming:
       wire: create
@@ -836,6 +853,65 @@ commands:
             source_id: input.source_id
         summary: Nothing changed.
 
+  - name: cortex.instance.RestoreSnapshot
+    naming:
+      wire: restore
+      display: Restore a snapshot
+    # A run of a `sqlite` instance copies the store and its state before its first apply and keeps
+    # the copy, `<run start ms>-<source>`, once that apply commits; the newest `snapshots.keep`
+    # (default 3) of the snapshots cortex named are kept. `snapshot` names any `.sqlite` file in the
+    # instance's `snapshots/` directory, without the extension.
+    input:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: snapshot, type: String}
+    outcomes:
+      - name: backend-unsupported
+        external: The instance's store is on the postgres backend, whose snapshot is the operator's database backup
+        error: cortex.instance.RestoreUnsupported
+        payload:
+          cortex.instance.RestoreUnsupported:
+            name: input.name
+        summary: Nothing was restored.
+
+      - name: busy
+        external: Another cortex command holds the home's lock, or a process other than the viewer holds the store open
+        error: cortex.instance.InstanceBusy
+        payload:
+          cortex.instance.InstanceBusy:
+            reason: {generated: true}
+        summary: Nothing was restored.
+
+      - name: no-such-snapshot
+        external: The instance directory holds no snapshot by this name
+        error: cortex.instance.SnapshotNotFound
+        payload:
+          cortex.instance.SnapshotNotFound:
+            snapshot: input.snapshot
+        summary: Nothing was restored.
+
+      - name: restored
+        updates: cortex.instance.Instance
+        instance: name
+        emits:
+          - cortex.instance.SnapshotRestored
+        payload:
+          cortex.instance.SnapshotRestored:
+            name: input.name
+            snapshot: input.snapshot
+        summary: >-
+          The store and the instance state were snapshotted as `<ms>-before-restore`, then put
+          back to the snapshot's copies: every source's seen state and the known entity names
+          included, so the next runs apply again what the undone runs applied. A viewer that was
+          running was stopped first and started again after.
+
+      - name: no-such-instance
+        unknown_instance: true
+        error: cortex.instance.InstanceNotFound
+        payload:
+          cortex.instance.InstanceNotFound:
+            name: input.name
+        summary: Nothing was restored.
+
 events:
   - name: cortex.instance.InstanceCreated
     fields:
@@ -875,6 +951,11 @@ events:
   - name: cortex.instance.SourceEnabled
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
+
+  - name: cortex.instance.SnapshotRestored
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: snapshot, type: String}
 
 views:
   - name: cortex.instance.Instances

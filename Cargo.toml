@@ -22,6 +22,7 @@ cortex-spec-types = { path = "generated/spec-types" }
 clap = { version = "4.6", features = ["derive", "env"] }
 globset = "0.4"
 regex = "1"
+rusqlite = { version = "0.40", features = ["bundled", "backup"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151", features = ["arbitrary_precision"] }
 serde_yaml_ng = "0.10"
