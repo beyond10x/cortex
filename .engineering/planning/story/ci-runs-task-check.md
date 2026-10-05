@@ -2,12 +2,16 @@
 format: aep.planning-md/3
 id: story:ci-runs-task-check
 kind: story
-status: draft
+status: implemented
 title: CI runs task check on every pull request
 relations:
 - decomposes: epic:first-web-instance
 - serves: vision:self-updating-instances
-revision: 1
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T08:30:18Z", actor: "agent:claude", revision: 2, decided_on: {"recorded":{"test_result":2}}}
+- {from: "proposed", to: "active", at: "2026-10-05T08:30:18Z", actor: "agent:claude", revision: 3, decided_on: {"recorded":{"test_result":2}}}
+- {from: "active", to: "implemented", at: "2026-10-05T08:30:18Z", actor: "agent:claude", revision: 4, decided_on: {"recorded":{"test_result":2}}}
 ---
 ## Outcome
 

@@ -167,6 +167,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cortex-docs"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "serde_json",
+]
+
+[[package]]
 name = "cortex-spec-types"
 version = "0.0.0"
 dependencies = [

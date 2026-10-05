@@ -10,7 +10,7 @@ relations:
 - depends_on: story:extraction-links-facts
 - depends_on: story:timer-runs-unattended
 - depends_on: story:seen-documents-modelled
-revision: 4
+revision: 5
 ---
 ## Outcome
 
@@ -36,8 +36,8 @@ The 7-day run passes when all of these hold, read on day 8:
    0 documents).
 1. No manual step was taken: no `cortex run` by hand and no timer restarted (`journalctl --user`
    shows only timer-started runs).
-2. The store holds at least as many edges as documents applied, and at least 20 (`ekr view`
-   counts; the smoke baseline is 0 edges for 8 documents).
+2. The store holds at least as many `Relation` assertions as documents applied, and at least 20
+   (`ekr snapshot`; the smoke baseline is 4 relations for 8 documents).
 3. Each of these three questions is answered through `ekr mcp` `search` by a node whose evidence
    cites a page the instance fetched, and opening that page confirms the answer:
    - Which Model Context Protocol specification revision is the newest, and what is its date?

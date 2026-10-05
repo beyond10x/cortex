@@ -16,6 +16,7 @@ tasks:
       - '{{.ESS}} generate --path spec --kind schema --out generated/schema --strict-requires'
       - '{{.ESS}} generate --path spec --kind docs --out generated/docs --strict-requires'
       - '{{.ESS}} verify conform synthesize --path spec --out spec/suite.json --strict-requires'
+      - task: docs-generate
 
   drift:
     desc: Fail when generated/ or spec/suite.json differ from what spec/ generates
@@ -42,13 +43,31 @@ tasks:
   test:
     desc: Run every test
     cmds:
-      - '{{.CARGO}} test --locked'
+      - '{{.CARGO}} test --locked --workspace'
 
   check:
     desc: The gate — spec validity, generated-code drift, fmt, clippy, tests
     cmds:
       - '{{.ESS}} specify validate --path spec --strict-requires'
       - task: drift
-      - '{{.CARGO}} fmt -p cortex-cli -- --check'
-      - '{{.CARGO}} clippy --locked --all-targets -- -D warnings'
+      - '{{.CARGO}} fmt -p cortex-cli -p cortex-docs -- --check'
+      - '{{.CARGO}} clippy --locked --workspace --all-targets -- -D warnings'
       - task: test
+      - task: docs-check
+
+  docs-generate:
+    desc: Regenerate the derived documentation files under website/ from spec/
+    cmds:
+      - '{{.CARGO}} run --locked -p cortex-docs -- generate --ess {{.ESS}}'
+
+  docs-check:
+    desc: Fail when a generated documentation file is missing, stale or edited by hand
+    cmds:
+      - '{{.CARGO}} run --locked -p cortex-docs -- generate --check --ess {{.ESS}}'
+
+  website:
+    desc: Build the documentation site, as CI's Documentation validation workflow does
+    dir: website
+    cmds:
+      - npm ci
+      - npm run build

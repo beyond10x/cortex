@@ -33,6 +33,7 @@ walkdir = "2"
 tempfile = "3"
 
 [workspace]
+members = ["crates/cortex-docs"]
 exclude = ["generated/cortex-model", "generated/spec-types"]
 
 [lints.rust]
