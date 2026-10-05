@@ -131,3 +131,53 @@ this repository and published by the organisation's reusable workflow.
   `~/.cache/company-brain-v3/bin/0.0.30/bin/ekr`) with stand-in `connectors`, `claude` and
   `systemctl`. A missing `ekr` fails them; it never skips them.
 - After a site change, `task website` must build; it fails on a broken link or anchor.
+
+## Cutting a release
+
+A release is the tag `v<version>`, where `<version>` is `version` in `Cargo.toml`, and a GitHub
+Release on that tag. `.github/workflows/release.yml` runs when the Release is published: it reads
+the version from `Cargo.toml` and fails before uploading anything when the tag is not
+`v<version>`, runs `cargo build --release --locked`, checks that the binary prints
+`cortex <version>`, and attaches `cortex-<version>-x86_64-unknown-linux-gnu.tar.gz` (the `cortex`
+binary, `LICENSE`, `README.md`) and `SHA256SUMS` to the Release. Only its upload job holds
+`contents: write`. A tag push alone starts no release build. A manual run (`workflow_dispatch`)
+builds the same two files as a workflow artifact and attaches nothing. Repackaging the same binary
+gives the same tarball: entries sorted, dated at the commit time, owned by 0/0, setuid and setgid
+bits cleared, and gzip without a name or time. An independent rebuild does not: the binary embeds
+the build host's Cargo registry paths.
+
+- The upload job refuses a prerelease before uploading anything; publish a full release.
+- The upload job refuses a tag whose commit is not on `origin/main` before uploading anything; tag
+  only a commit merged to `main`.
+
+1. On a `release/<version>` branch from current `origin/main`: set `version` in `Cargo.toml` and
+   let a build update the `cortex-cli` entry in `Cargo.lock` (`--locked` refuses a lock file that
+   disagrees). In `CHANGELOG.md`, turn `## Unreleased` into `## <version> — <YYYY-MM-DD>` and put
+   a new, empty `## Unreleased` above it.
+2. `task check`, exit 0.
+3. Commit and push through the bot (`b10x-gates bot --repository beyond10x/cortex -- commit`,
+   `... -- push`), open the pull request with `b10x-gates api`, and merge it once `Check` and the
+   shared gates are green.
+4. Tag the merge commit on `origin/main` through the bot:
+   `b10x-gates bot --repository beyond10x/cortex -- tag -a v<version> <commit> -m "cortex <version>"`
+   and `b10x-gates bot --repository beyond10x/cortex -- push origin v<version>`.
+5. Write the version's `CHANGELOG.md` section to a notes file outside the checkout and publish the
+   Release page through the bot:
+   `b10x-gates gh --repository beyond10x/cortex -- release create v<version> --verify-tag --title "cortex <version>" --notes-file <file>`.
+   Publishing it starts the `Release` workflow.
+6. Verify, and report the release only when every line holds:
+   - the `Release` run for the tag succeeded (`gh run list --repo beyond10x/cortex --workflow release.yml`);
+   - the Release carries exactly the tarball and `SHA256SUMS`
+     (`gh release view v<version> --repo beyond10x/cortex --json assets,author`), and its author
+     is `b10x-bot[bot]`;
+   - the checksum: `gh release download v<version> --repo beyond10x/cortex --dir <dir>`, then
+     `sha256sum --check --strict SHA256SUMS` in `<dir>`, and the unpacked `cortex --version`
+     prints `cortex <version>`;
+   - the tagger: `git for-each-ref refs/tags/v<version> --format='%(objecttype) %(taggername)'`
+     prints `tag b10x-bot[bot]`;
+   - the author: `git log -1 --format='%an' 'v<version>^{commit}'` prints `b10x-bot[bot]`.
+
+The workflow never overwrites an asset (`gh release upload` without `--clobber`). After a partial
+upload, delete the stray asset through the bot
+(`b10x-gates gh --repository beyond10x/cortex -- release delete-asset v<version> <asset>`) and
+re-run the workflow.
