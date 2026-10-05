@@ -56,6 +56,11 @@ enum Command {
         /// Install no systemd units.
         #[arg(long)]
         no_units: bool,
+        /// For a `postgres` store: the `ekr.postgres/1` file of the schema-management role.
+        /// `ekr postgres-schema` provisions the provider's tables with it before the seed. Without
+        /// it the tables must already exist.
+        #[arg(long)]
+        postgres_schema_config: Option<PathBuf>,
     },
     /// Change an instance's sources, model or serve settings (`cortex.instance.UpdateInstance`).
     Update {
@@ -220,7 +225,15 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             spec,
             no_extract,
             no_units,
-        } => create(app, ctx, &spec, no_extract, no_units),
+            postgres_schema_config,
+        } => create(
+            app,
+            ctx,
+            &spec,
+            no_extract,
+            no_units,
+            postgres_schema_config.as_deref(),
+        ),
         Command::Update {
             name,
             spec,
@@ -329,8 +342,16 @@ fn missing_connection(ctx: &Ctx, spec: &m::InstanceSpec) -> Result<Option<String
 }
 
 /// Seeds a new instance directory: frozen spec, host, store, seed schema. Answers why it failed.
-fn seed_instance(layout: &Layout, loaded: &spec::Loaded) -> Result<(), String> {
+/// A `postgres` store is provisioned first when `schema_config` names the schema-management role.
+fn seed_instance(
+    layout: &Layout,
+    loaded: &spec::Loaded,
+    schema_config: Option<&Path>,
+) -> Result<(), String> {
     let spec = &loaded.model;
+    if let Some(reason) = store_refusal(spec) {
+        return Err(reason);
+    }
     std::fs::create_dir_all(&layout.dir).map_err(|e| e.to_string())?;
     layout.freeze(loaded)?;
     let bin = ekr::resolve_bin(&spec.ekr.version, spec.ekr.bin.as_deref());
@@ -353,9 +374,72 @@ fn seed_instance(layout: &Layout, loaded: &spec::Loaded) -> Result<(), String> {
             path
         }
     };
-    store.seed(&seed_path)?;
-    if let Some(schema) = &spec.seed.schema {
-        let report = store.apply(&layout.dir.join(schema))?;
+    let schema = spec.seed.schema.as_ref().map(|s| layout.dir.join(s));
+    if store.backend == ekr::Backend::Sqlite {
+        return seed_and_apply(&store, &seed_path, schema.as_deref());
+    }
+
+    // PostgreSQL outlives the instance directory a refusal deletes, so nothing is written to it
+    // that could be refused.
+    let tenant = &spec.name.0;
+    let held = || {
+        format!(
+            "tenant {tenant:?} already holds a store in PostgreSQL: cortex creates only new \
+             stores; taking over an existing one is story:adopt-existing-store"
+        )
+    };
+    if let Some(schema_config) = schema_config {
+        store.provision(schema_config)?;
+    }
+    if store.seeded()? {
+        return Err(held());
+    }
+    // The seed and the seed schema are tried on a scratch SQLite store first, by the same `ekr`.
+    let scratch = ekr::Store {
+        bin: store.bin.clone(),
+        host: store.host.clone(),
+        backend: ekr::Backend::Sqlite,
+        store: layout.dir.join("seed-check.sqlite"),
+    };
+    let checked = seed_and_apply(&scratch, &seed_path, schema.as_deref());
+    remove_scratch(&layout.dir, "seed-check.sqlite");
+    checked.map_err(|e| {
+        format!("{e} (found on a scratch SQLite store; no PostgreSQL lineage was written)")
+    })?;
+    let left = |e: String| match store.seeded() {
+        Ok(false) => format!("{e} (no PostgreSQL lineage was written)"),
+        _ => format!(
+            "{e} (the PostgreSQL lineage of tenant {tenant:?} remains; drop it before creating \
+             this instance again)"
+        ),
+    };
+    // Another home may seed the tenant between the check above and this seed, and an identical
+    // seed answers that home's result with exit 0. `ekr` stamps a seed it writes after this
+    // clock reading, so an older `committed_at` is the other home's seed.
+    let started = unix_millis();
+    let committed_at = store.seed(&seed_path).map_err(left)?;
+    if committed_at < started {
+        return Err(held());
+    }
+    apply_schema(&store, schema.as_deref()).map_err(left)
+}
+
+fn unix_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+}
+
+/// Seeds `store` and applies the seed schema, refusing a schema with rejected parts.
+fn seed_and_apply(store: &ekr::Store, seed: &Path, schema: Option<&Path>) -> Result<(), String> {
+    store.seed(seed)?;
+    apply_schema(store, schema)
+}
+
+/// Applies the seed schema, refusing a schema with rejected parts.
+fn apply_schema(store: &ekr::Store, schema: Option<&Path>) -> Result<(), String> {
+    if let Some(schema) = schema {
+        let report = store.apply(schema)?;
         let applied = ekr::applied(&report);
         if applied.rejected > 0 {
             return Err(format!(
@@ -367,12 +451,48 @@ fn seed_instance(layout: &Layout, loaded: &spec::Loaded) -> Result<(), String> {
     Ok(())
 }
 
-fn create(app: &mut App, ctx: &Ctx, path: &Path, no_extract: bool, no_units: bool) -> ExitCode {
+/// Removes the SQLite file `name` in `dir` and its `-wal`, `-shm` and `-journal` companions.
+fn remove_scratch(dir: &Path, name: &str) {
+    for suffix in ["", "-wal", "-shm", "-journal"] {
+        let _ = std::fs::remove_file(dir.join(format!("{name}{suffix}")));
+    }
+}
+
+/// Why the spec's `store` cannot be used, naming the field and never its value, which may be a
+/// connection string an operator wrote in the wrong place.
+fn store_refusal(spec: &m::InstanceSpec) -> Option<String> {
+    match &spec.store {
+        // Timers and the viewer run from no particular directory, so the path must stand alone.
+        Some(m::StoreSpec::Postgres(p)) if !ekr::expand(&p.config).is_absolute() => Some(
+            "store.value.config: write an absolute path, or one starting with ~/, to an \
+             ekr.postgres/1 file"
+                .into(),
+        ),
+        Some(m::StoreSpec::Sqlite(Some(m::SqliteStore { path: Some(_) }))) => Some(
+            "store.value.path is not supported yet: a sqlite store is store.sqlite in the \
+             instance directory; remove the path"
+                .into(),
+        ),
+        _ => None,
+    }
+}
+
+fn create(
+    app: &mut App,
+    ctx: &Ctx,
+    path: &Path,
+    no_extract: bool,
+    no_units: bool,
+    schema_config: Option<&Path>,
+) -> ExitCode {
     let loaded = match spec::load(path) {
         Ok(l) => l,
         Err(e) => return fail(e),
     };
     let spec = loaded.model.clone();
+    if schema_config.is_some() && !matches!(spec.store, Some(m::StoreSpec::Postgres(_))) {
+        return fail("--postgres-schema-config needs `store.backend: postgres` in the spec");
+    }
     let name = spec.name.0.clone();
     let layout = Layout::new(ctx.home.instance_dir(&name));
     const CMD: &str = "cortex.instance.CreateInstance";
@@ -406,7 +526,7 @@ fn create(app: &mut App, ctx: &Ctx, path: &Path, no_extract: bool, no_units: boo
                         "{} exists and is no registered instance",
                         layout.dir.display()
                     ));
-                } else if let Err(reason) = seed_instance(&layout, &loaded) {
+                } else if let Err(reason) = seed_instance(&layout, &loaded, schema_config) {
                     let _ = std::fs::remove_dir_all(&layout.dir);
                     ctx.shared
                         .borrow_mut()
@@ -493,13 +613,11 @@ fn create(app: &mut App, ctx: &Ctx, path: &Path, no_extract: bool, no_units: boo
             if !no_units {
                 let systemd = Systemd::from_env(&ctx.home.root);
                 let store = layout.store_handle(&spec);
-                let installed = systemd
-                    .install_view(&name, &store.bin, &store.host, &store.store, port)
-                    .and_then(|_| {
-                        spec.sources
-                            .iter()
-                            .try_for_each(|s| systemd.install_source(&name, &s.name, &s.schedule))
-                    });
+                let installed = systemd.install_view(&name, &store, port).and_then(|_| {
+                    spec.sources
+                        .iter()
+                        .try_for_each(|s| systemd.install_source(&name, &s.name, &s.schedule))
+                });
                 if let Err(e) = installed {
                     detail["units"] = json!({"failed": e});
                 }
@@ -524,11 +642,24 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, no_units: bool) -> 
         return fail(format!("the spec names {:?}, not {name:?}", spec.name.0));
     }
     let layout = Layout::new(ctx.home.instance_dir(name));
+    // A store the spec cannot use, or another store than the instance's, refuses as a seed change:
+    // the instance's history is in the store it has. `reason` says which, naming fields only.
+    let mut reason = store_refusal(&spec);
     let seed_changed = match layout.load_spec() {
         Ok(old) => {
-            old.seed != spec.seed || seed_bytes(&layout.dir, &old) != seed_bytes(&loaded.dir, &spec)
+            let (was, will) = (layout.store_handle(&old), layout.store_handle(&spec));
+            if reason.is_none() && (was.backend, was.store) != (will.backend, will.store) {
+                reason = Some(
+                    "store: the spec names another store than the instance's; moving a store \
+                     is not supported"
+                        .into(),
+                );
+            }
+            reason.is_some()
+                || old.seed != spec.seed
+                || seed_bytes(&layout.dir, &old) != seed_bytes(&loaded.dir, &spec)
         }
-        Err(_) => false,
+        Err(_) => reason.is_some(),
     };
     let input = m::UpdateInstance {
         name: spec.name.clone(),
@@ -542,7 +673,10 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, no_units: bool) -> 
         Ok(m::UpdateInstanceOutcome::SeedChangeRefused { error }) => Done {
             outcome: "seed-change-refused",
             ok: false,
-            detail: json!({"name": error.name.0}),
+            detail: match &reason {
+                Some(reason) => json!({"name": error.name.0, "reason": reason}),
+                None => json!({"name": error.name.0}),
+            },
         },
         Ok(m::UpdateInstanceOutcome::NotActive { .. }) => Done {
             outcome: "not-active",
@@ -817,8 +951,9 @@ fn mcp_line(home: &Home, name: &str) -> ExitCode {
     };
     let store = layout.store_handle(&spec);
     println!(
-        "claude mcp add --transport stdio cortex-{name} -- env EKR_HOST={} EKR_BACKEND=sqlite EKR_STORE={} {} mcp",
+        "claude mcp add --transport stdio cortex-{name} -- env EKR_HOST={} EKR_BACKEND={} EKR_STORE={} {} mcp",
         store.host.display(),
+        store.backend.name(),
         store.store.display(),
         store.bin.display()
     );
@@ -846,7 +981,14 @@ mod tests {
         ),
     ];
     /// Flags that steer the implementation and are no command input.
-    const STEERING: &[&str] = &["spec", "no_extract", "no_units", "record_failure", "help"];
+    const STEERING: &[&str] = &[
+        "spec",
+        "no_extract",
+        "no_units",
+        "postgres_schema_config",
+        "record_failure",
+        "help",
+    ];
 
     fn compiled() -> Value {
         let root = std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR");

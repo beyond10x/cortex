@@ -187,11 +187,28 @@ fn both_sqlite_forms_freeze_update_into_each_other_and_run() {
     let frozen = w.home.join("instances/rt/instance.yaml");
     assert_eq!(std::fs::read_to_string(&frozen).unwrap(), short);
 
-    for store in [
-        "{backend: sqlite, value: {}}",
-        "{backend: sqlite, value: {path: brain.db}}",
-        "{backend: sqlite}",
-    ] {
+    // A sqlite `value.path` is not supported yet (wave 20261005c, U1 fix 1, F2/F3): the update is
+    // refused and the frozen spec and the store stay as they were.
+    let with_path = write(
+        &w,
+        "rt.yaml",
+        &spec_text("rt", "{backend: sqlite, value: {path: brain.db}}"),
+    );
+    let (code, refused) = w.cortex(&[
+        "update",
+        "rt",
+        "--spec",
+        with_path.to_str().unwrap(),
+        "--no-units",
+    ]);
+    assert_eq!(
+        (code, refused["outcome"].as_str()),
+        (1, Some("seed-change-refused")),
+        "{refused}"
+    );
+    assert_eq!(std::fs::read_to_string(&frozen).unwrap(), short);
+
+    for store in ["{backend: sqlite, value: {}}", "{backend: sqlite}"] {
         let text = spec_text("rt", store);
         let path = write(&w, "rt.yaml", &text);
         let (code, updated) = w.cortex(&[

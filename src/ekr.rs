@@ -140,10 +140,31 @@ impl Binary {
     }
 }
 
+/// The EKR provider a store lives on (`EKR_BACKEND`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Backend {
+    /// One SQLite file.
+    Sqlite,
+    /// Hosted PostgreSQL, configured by an `ekr.postgres/1` file.
+    Postgres,
+}
+
+impl Backend {
+    pub fn name(self) -> &'static str {
+        match self {
+            Backend::Sqlite => "sqlite",
+            Backend::Postgres => "postgres",
+        }
+    }
+}
+
 /// One instance's store, through its host.
 pub struct Store {
     pub bin: PathBuf,
     pub host: PathBuf,
+    pub backend: Backend,
+    /// `EKR_STORE`: the SQLite file, or the `ekr.postgres/1` file. cortex passes the path and never
+    /// reads the file, which references the database credential.
     pub store: PathBuf,
 }
 
@@ -151,15 +172,61 @@ impl Store {
     fn cmd(&self) -> Command {
         let mut cmd = Command::new(&self.bin);
         cmd.env("EKR_HOST", &self.host)
-            .env("EKR_BACKEND", "sqlite")
+            .env("EKR_BACKEND", self.backend.name())
             .env("EKR_STORE", &self.store);
         cmd
     }
 
-    pub fn seed(&self, seed: &Path) -> Result<(), String> {
+    /// `ekr postgres-schema --config <schema_config>`: the provider's tables, created under the
+    /// schema-management role that `schema_config` names. The store's own configuration names the
+    /// DML-only application role, which EKR 0.0.30 refuses schema DDL; only creating an instance
+    /// provisions, never a run.
+    pub fn provision(&self, schema_config: &Path) -> Result<(), String> {
+        let mut cmd = Command::new(&self.bin);
+        cmd.args(["postgres-schema", "--config"])
+            .arg(schema_config)
+            .env_remove("EKR_HOST")
+            .env_remove("EKR_BACKEND")
+            .env_remove("EKR_STORE");
+        let receipt = json(&run(cmd, "postgres-schema")?, "postgres-schema")?;
+        if receipt["format"] == "ekr.postgres-schema/1" && receipt["ready"] == true {
+            Ok(())
+        } else {
+            Err(format!(
+                "ekr postgres-schema reported no ready schema: {receipt}"
+            ))
+        }
+    }
+
+    /// Whether the store's lineage holds a seed: `ekr head` answers a head, or says "the lineage
+    /// has no seed" (EKR 0.0.30, measured on PostgreSQL). Any other answer is an error.
+    pub fn seeded(&self) -> Result<bool, String> {
+        let mut cmd = self.cmd();
+        cmd.arg("head");
+        let out = cmd
+            .output()
+            .map_err(|e| format!("cannot run ekr for head: {e}"))?;
+        if out.status.success() {
+            return Ok(true);
+        }
+        let err = String::from_utf8_lossy(&out.stderr);
+        if err.contains("the lineage has no seed") {
+            Ok(false)
+        } else {
+            Err(format!("ekr head failed: {}", err.trim()))
+        }
+    }
+
+    /// Seeds the store and answers the `committed_at` (Unix milliseconds) of its
+    /// `ekr.seed-result/1`. Seeding an identical seed again exits 0 with the first seed's result,
+    /// so a `committed_at` from before this call means another caller wrote the seed.
+    pub fn seed(&self, seed: &Path) -> Result<i64, String> {
         let mut cmd = self.cmd();
         cmd.arg("seed").arg(seed);
-        run(cmd, "seed").map(|_| ())
+        let result = json(&run(cmd, "seed")?, "seed")?;
+        result["committed_at"]
+            .as_i64()
+            .ok_or_else(|| "ekr seed answered no committed_at".to_string())
     }
 
     /// The `ekr.integrate.ExtractionReport` of applying `doc`.
@@ -194,5 +261,59 @@ pub fn applied(report: &Value) -> Applied {
     let count = |key: &str| report[key].as_array().map_or(0, Vec::len);
     Applied {
         rejected: count("rejected"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsStr;
+    use std::path::PathBuf;
+
+    use super::{Backend, Store};
+
+    fn env(store: &Store) -> Vec<(String, String)> {
+        let cmd = store.cmd();
+        let mut out: Vec<_> = cmd
+            .get_envs()
+            .map(|(k, v)| {
+                (
+                    k.to_string_lossy().into_owned(),
+                    v.map(OsStr::to_string_lossy)
+                        .unwrap_or_default()
+                        .into_owned(),
+                )
+            })
+            .collect();
+        out.sort();
+        out
+    }
+
+    fn store(backend: Backend, store: &str) -> Store {
+        Store {
+            bin: PathBuf::from("ekr"),
+            host: PathBuf::from("/i/host.json"),
+            backend,
+            store: PathBuf::from(store),
+        }
+    }
+
+    #[test]
+    fn a_store_verb_names_the_backend_and_its_location() {
+        assert_eq!(
+            env(&store(Backend::Sqlite, "/i/store.sqlite")),
+            [
+                ("EKR_BACKEND".into(), "sqlite".into()),
+                ("EKR_HOST".into(), "/i/host.json".into()),
+                ("EKR_STORE".into(), "/i/store.sqlite".into()),
+            ]
+        );
+        assert_eq!(
+            env(&store(Backend::Postgres, "/etc/brain/pg.json")),
+            [
+                ("EKR_BACKEND".into(), "postgres".into()),
+                ("EKR_HOST".into(), "/i/host.json".into()),
+                ("EKR_STORE".into(), "/etc/brain/pg.json".into()),
+            ]
+        );
     }
 }
