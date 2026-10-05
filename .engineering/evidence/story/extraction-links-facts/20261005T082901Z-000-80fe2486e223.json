@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-05T08:29:01Z",
+  "actor": "agent:claude",
+  "artifact": "story:extraction-links-facts",
+  "kind": "story",
+  "revision": 2,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "replay of the 8 smoke documents, new prompt, run 1: ekr snapshot 25 Relation, 1 Property; cost_usd 0.1700",
+    "reference": "https://github.com/beyond10x/cortex/pull/3"
+  }
+}

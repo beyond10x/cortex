@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-05T08:30:40Z",
+  "actor": "agent:claude",
+  "artifact": "story:extraction-links-facts",
+  "kind": "story",
+  "revision": 2,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "same replay, previous prompt, baseline runs: 7 and 2 Relation, 3 and 3 Property; cost_usd 0.1716 and 0.1427",
+    "reference": "https://github.com/beyond10x/cortex/pull/3"
+  }
+}

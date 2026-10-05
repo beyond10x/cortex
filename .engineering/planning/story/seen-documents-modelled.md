@@ -8,7 +8,19 @@ relations:
 - decomposes: epic:first-web-instance
 - serves: vision:self-updating-instances
 - depends_on: story:ci-runs-task-check
-revision: 1
+- depends_on: story:spec-standalone-types
+scope:
+- confidence: cited
+  path: generated
+- confidence: cited
+  path: spec/domains/instance.yaml
+- confidence: cited
+  path: spec/suite.json
+- confidence: cited
+  path: src/home.rs
+- confidence: cited
+  path: src/state.rs
+revision: 6
 ---
 ## Outcome
 
