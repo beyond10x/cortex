@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43
-// contract digest 28f44d88be3d554adbf5e4d04488470231c93d64c08ef39e288ec9c2d93f34e4
+// model digest b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85
+// contract digest b949168dd73a8a82c270bfa858354cf5311edabd072da4e2c85eaf684999ade6
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Every actor the specification declares, and the commands each may invoke — as data.

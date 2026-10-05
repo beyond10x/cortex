@@ -73,6 +73,10 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
         },
         model: m::ModelSpec {
             model: spec.model.model.clone(),
+            backend: opt(&spec.model.backend).map(|b| match *b {
+                s::CortexInstanceModelBackend::V0 => m::ModelBackend::Claude,
+                s::CortexInstanceModelBackend::V1 => m::ModelBackend::Codex,
+            }),
             budget_usd: Decimal(spec.model.budget_usd.clone()),
             timeout_s: int(&spec.model.timeout_s, "model.timeout_s")?,
             instructions: opt(&spec.model.instructions),
@@ -88,6 +92,166 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
                 EssPresence::Present(n) => Some(int(n, "serve.view_port")?),
             },
         },
+        store: opt(&spec.store).map(|store| match *store {
+            s::CortexInstanceStoreSpec::V0(p) => m::StoreSpec::Postgres(m::PostgresStore {
+                config: p.value.config.clone(),
+            }),
+            s::CortexInstanceStoreSpec::V1(q) => {
+                m::StoreSpec::Sqlite(opt(&q.value).map(|v| m::SqliteStore { path: opt(&v.path) }))
+            }
+        }),
+        redaction: match &spec.redaction {
+            EssPresence::Absent => None,
+            EssPresence::Present(r) => Some(redaction(r)?),
+        },
+        snapshots: match &spec.snapshots {
+            EssPresence::Absent => None,
+            EssPresence::Present(p) => Some(m::SnapshotPolicy {
+                keep: int(&p.keep, "snapshots.keep")?,
+            }),
+        },
+        gate: opt(&spec.gate).map(|g| m::RunGate {
+            checks: g
+                .checks
+                .iter()
+                .map(|c| m::GateCheck {
+                    measure: c.measure.clone(),
+                    min: opt(&c.min).map(Decimal),
+                    max: opt(&c.max).map(Decimal),
+                })
+                .collect(),
+        }),
+    })
+}
+
+fn redaction_class(class: &s::CortexInstanceRedactionClass) -> m::RedactionClass {
+    match class {
+        s::CortexInstanceRedactionClass::V0 => m::RedactionClass::Credential,
+        s::CortexInstanceRedactionClass::V1 => m::RedactionClass::Email,
+        s::CortexInstanceRedactionClass::V2 => m::RedactionClass::IpAddress,
+        s::CortexInstanceRedactionClass::V3 => m::RedactionClass::PaymentCard,
+        s::CortexInstanceRedactionClass::V4 => m::RedactionClass::Phone,
+        s::CortexInstanceRedactionClass::V5 => m::RedactionClass::RareName,
+        s::CortexInstanceRedactionClass::V6 => m::RedactionClass::Url,
+    }
+}
+
+fn redaction(r: &s::CortexInstanceRedactionPolicy) -> Result<m::RedactionPolicy, MapError> {
+    Ok(m::RedactionPolicy {
+        classes: r.classes.iter().map(|c| redaction_class(c)).collect(),
+        rules: r
+            .rules
+            .iter()
+            .map(|rule| m::RedactionRule {
+                name: rule.name.clone(),
+                pattern: rule.pattern.clone(),
+                replacement: rule.replacement.clone(),
+            })
+            .collect(),
+        known_names: opt(&r.known_names),
+        rare_limit: match &r.rare_limit {
+            EssPresence::Absent => None,
+            EssPresence::Present(n) => Some(int(n, "redaction.rare_limit")?),
+        },
+        refuse_if_left: opt(&r.refuse_if_left)
+            .map(|classes| classes.iter().map(|c| redaction_class(c)).collect()),
+    })
+}
+
+fn paging(
+    p: &EssPresence<Box<s::CortexInstancePaging>>,
+    at: &str,
+) -> Result<Option<m::Paging>, MapError> {
+    Ok(match p {
+        EssPresence::Absent => None,
+        EssPresence::Present(p) => Some(m::Paging {
+            style: match *p.style {
+                s::CortexInstancePageStyle::V0 => m::PageStyle::Keyset,
+                s::CortexInstancePageStyle::V1 => m::PageStyle::PageNumber,
+                s::CortexInstancePageStyle::V2 => m::PageStyle::Token,
+            },
+            param: p.param.clone(),
+            next: opt(&p.next),
+            max_pages: int(&p.max_pages, &format!("{at}.paging.max_pages"))?,
+        }),
+    })
+}
+
+fn file_records(r: &s::CortexInstanceFileRecords) -> m::FileRecords {
+    m::FileRecords {
+        format: match *r.format {
+            s::CortexInstanceRecordFormat::V0 => m::RecordFormat::JsonLines,
+            s::CortexInstanceRecordFormat::V1 => m::RecordFormat::MarkdownSections,
+            s::CortexInstanceRecordFormat::V2 => m::RecordFormat::WholeFile,
+        },
+        id: r.id.clone(),
+        time: opt(&r.time),
+        author: opt(&r.author),
+        text: r.text.clone(),
+        thread: opt(&r.thread),
+        filters: r
+            .filters
+            .iter()
+            .map(|f| m::RecordFilter {
+                field: f.field.clone(),
+                values: f.values.clone(),
+                include: f.include,
+            })
+            .collect(),
+    }
+}
+
+fn structured(
+    st: &s::CortexInstanceStructuredSource,
+    at: &str,
+) -> Result<m::StructuredSource, MapError> {
+    let mapping = &st.mapping;
+    Ok(m::StructuredSource {
+        input: match &*st.input {
+            s::CortexInstanceStructuredInput::V0(c) => {
+                m::StructuredInput::Connectors(m::StructuredConnectors {
+                    adapter: c.value.adapter.clone(),
+                    connection: c.value.connection.clone(),
+                    operation: c.value.operation.clone(),
+                    inputs: c.value.inputs.iter().map(json).collect(),
+                    paging: paging(&c.value.paging, at)?,
+                })
+            }
+            s::CortexInstanceStructuredInput::V1(f) => {
+                m::StructuredInput::Files(m::StructuredFiles {
+                    paths: f.value.paths.clone(),
+                    glob: f.value.glob.clone(),
+                })
+            }
+        },
+        records: st.records.clone(),
+        mapping: m::RecordMapping {
+            node_type: mapping.node_type.clone(),
+            id: mapping.id.clone(),
+            name: mapping.name.clone(),
+            aliases: mapping.aliases.clone(),
+            properties: mapping
+                .properties
+                .iter()
+                .map(|p| m::PropertyMapping {
+                    property: p.property.clone(),
+                    path: p.path.clone(),
+                })
+                .collect(),
+            relations: mapping
+                .relations
+                .iter()
+                .map(|r| m::RelationMapping {
+                    relation: r.relation.clone(),
+                    target_type: r.target_type.clone(),
+                    target_name: r.target_name.clone(),
+                })
+                .collect(),
+        },
+        dropped: opt(&st.dropped).map(|d| match *d {
+            s::CortexInstanceDropPolicy::V0 => m::DropPolicy::Keep,
+            s::CortexInstanceDropPolicy::V1 => m::DropPolicy::Supersede,
+        }),
     })
 }
 
@@ -123,13 +287,27 @@ fn settings(
                 id: c.value.id.clone(),
                 time: opt(&c.value.time),
                 text: c.value.text.clone(),
+                paging: paging(&c.value.paging, at)?,
+                child: match &c.value.child {
+                    EssPresence::Absent => None,
+                    EssPresence::Present(child) => Some(m::ChildCall {
+                        operation: child.operation.clone(),
+                        input: json(&child.input),
+                        records: child.records.clone(),
+                        paging: paging(&child.paging, &format!("{at}.child"))?,
+                    }),
+                },
             })
         }
         s::CortexInstanceSourceSettings::V1(f) => m::SourceSettings::Files(m::FilesSource {
             paths: f.value.paths.clone(),
             glob: f.value.glob.clone(),
+            records: opt(&f.value.records).map(|r| file_records(&r)),
         }),
-        s::CortexInstanceSourceSettings::V2(w) => m::SourceSettings::Web(m::WebSource {
+        s::CortexInstanceSourceSettings::V2(st) => {
+            m::SourceSettings::Structured(structured(&st.value, at)?)
+        }
+        s::CortexInstanceSourceSettings::V3(w) => m::SourceSettings::Web(m::WebSource {
             adapter: opt(&w.value.adapter),
             connection: w.value.connection.clone(),
             input: web_input(&w.value.input, at)?,
@@ -190,5 +368,6 @@ pub fn kind(settings: &m::SourceSettings) -> m::SourceKind {
         m::SourceSettings::Web(_) => m::SourceKind::Web,
         m::SourceSettings::Connectors(_) => m::SourceKind::Connectors,
         m::SourceSettings::Files(_) => m::SourceKind::Files,
+        m::SourceSettings::Structured(_) => m::SourceKind::Structured,
     }
 }

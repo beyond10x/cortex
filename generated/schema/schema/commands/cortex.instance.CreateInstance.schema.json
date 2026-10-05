@@ -32,8 +32,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43",
-    "contract_digest": "slice-sha256/2:439974964873104294ac668f56033b149014e70b36227d3a6c30c78cf44cb524",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:264a2e3ec7a66764e69432e699f70a62e9e9e2b628cb0a281e9c035358143699",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -45,6 +45,30 @@
       "enum": [
         "ContentHash"
       ]
+    },
+    "cortex.instance.ChildCall": {
+      "title": "ChildCall",
+      "x-ess-name": "cortex.instance.ChildCall",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string"
+        },
+        "input": {},
+        "records": {
+          "type": "string"
+        },
+        "paging": {
+          "$ref": "#/$defs/cortex.instance.Paging"
+        }
+      },
+      "required": [
+        "operation",
+        "input",
+        "records"
+      ],
+      "additionalProperties": false
     },
     "cortex.instance.ConnectorsSource": {
       "title": "ConnectorsSource",
@@ -79,6 +103,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "paging": {
+          "$ref": "#/$defs/cortex.instance.Paging"
+        },
+        "child": {
+          "$ref": "#/$defs/cortex.instance.ChildCall"
         }
       },
       "required": [
@@ -136,6 +166,16 @@
       ],
       "additionalProperties": false
     },
+    "cortex.instance.DropPolicy": {
+      "title": "DropPolicy",
+      "x-ess-name": "cortex.instance.DropPolicy",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Keep",
+        "Supersede"
+      ]
+    },
     "cortex.instance.EkrPin": {
       "title": "EkrPin",
       "x-ess-name": "cortex.instance.EkrPin",
@@ -181,6 +221,48 @@
       ],
       "additionalProperties": false
     },
+    "cortex.instance.FileRecords": {
+      "title": "FileRecords",
+      "x-ess-name": "cortex.instance.FileRecords",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/cortex.instance.RecordFormat"
+        },
+        "id": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "text": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "thread": {
+          "type": "string"
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.RecordFilter"
+          }
+        }
+      },
+      "required": [
+        "format",
+        "id",
+        "text",
+        "filters"
+      ],
+      "additionalProperties": false
+    },
     "cortex.instance.FilesSource": {
       "title": "FilesSource",
       "x-ess-name": "cortex.instance.FilesSource",
@@ -195,11 +277,39 @@
         },
         "glob": {
           "type": "string"
+        },
+        "records": {
+          "$ref": "#/$defs/cortex.instance.FileRecords"
         }
       },
       "required": [
         "paths",
         "glob"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.GateCheck": {
+      "title": "GateCheck",
+      "x-ess-name": "cortex.instance.GateCheck",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "measure": {
+          "type": "string"
+        },
+        "min": {
+          "type": "string",
+          "format": "decimal",
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "max": {
+          "type": "string",
+          "format": "decimal",
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        }
+      },
+      "required": [
+        "measure"
       ],
       "additionalProperties": false
     },
@@ -241,6 +351,18 @@
         },
         "serve": {
           "$ref": "#/$defs/cortex.instance.ServeSpec"
+        },
+        "store": {
+          "$ref": "#/$defs/cortex.instance.StoreSpec"
+        },
+        "redaction": {
+          "$ref": "#/$defs/cortex.instance.RedactionPolicy"
+        },
+        "snapshots": {
+          "$ref": "#/$defs/cortex.instance.SnapshotPolicy"
+        },
+        "gate": {
+          "$ref": "#/$defs/cortex.instance.RunGate"
         }
       },
       "required": [
@@ -255,6 +377,16 @@
       ],
       "additionalProperties": false
     },
+    "cortex.instance.ModelBackend": {
+      "title": "ModelBackend",
+      "x-ess-name": "cortex.instance.ModelBackend",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Claude",
+        "Codex"
+      ]
+    },
     "cortex.instance.ModelSpec": {
       "title": "ModelSpec",
       "x-ess-name": "cortex.instance.ModelSpec",
@@ -263,6 +395,9 @@
       "properties": {
         "model": {
           "type": "string"
+        },
+        "backend": {
+          "$ref": "#/$defs/cortex.instance.ModelBackend"
         },
         "budget_usd": {
           "type": "string",
@@ -280,6 +415,277 @@
         "model",
         "budget_usd",
         "timeout_s"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.PageStyle": {
+      "title": "PageStyle",
+      "x-ess-name": "cortex.instance.PageStyle",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "PageNumber",
+        "Token",
+        "Keyset"
+      ]
+    },
+    "cortex.instance.Paging": {
+      "title": "Paging",
+      "x-ess-name": "cortex.instance.Paging",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "style": {
+          "$ref": "#/$defs/cortex.instance.PageStyle"
+        },
+        "param": {
+          "type": "string"
+        },
+        "next": {
+          "type": "string"
+        },
+        "max_pages": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "style",
+        "param",
+        "max_pages"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.PostgresStore": {
+      "title": "PostgresStore",
+      "x-ess-name": "cortex.instance.PostgresStore",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "config": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.PropertyMapping": {
+      "title": "PropertyMapping",
+      "x-ess-name": "cortex.instance.PropertyMapping",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "property": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "property",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RecordFilter": {
+      "title": "RecordFilter",
+      "x-ess-name": "cortex.instance.RecordFilter",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "include": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "field",
+        "values",
+        "include"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RecordFormat": {
+      "title": "RecordFormat",
+      "x-ess-name": "cortex.instance.RecordFormat",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "WholeFile",
+        "JsonLines",
+        "MarkdownSections"
+      ]
+    },
+    "cortex.instance.RecordMapping": {
+      "title": "RecordMapping",
+      "x-ess-name": "cortex.instance.RecordMapping",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "node_type": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.PropertyMapping"
+          }
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.RelationMapping"
+          }
+        }
+      },
+      "required": [
+        "node_type",
+        "id",
+        "name",
+        "aliases",
+        "properties",
+        "relations"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RedactionClass": {
+      "title": "RedactionClass",
+      "x-ess-name": "cortex.instance.RedactionClass",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Email",
+        "Phone",
+        "IpAddress",
+        "PaymentCard",
+        "Url",
+        "Credential",
+        "RareName"
+      ]
+    },
+    "cortex.instance.RedactionPolicy": {
+      "title": "RedactionPolicy",
+      "x-ess-name": "cortex.instance.RedactionPolicy",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "classes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.RedactionClass"
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.RedactionRule"
+          }
+        },
+        "known_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rare_limit": {
+          "type": "integer"
+        },
+        "refuse_if_left": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.RedactionClass"
+          }
+        }
+      },
+      "required": [
+        "classes",
+        "rules"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RedactionRule": {
+      "title": "RedactionRule",
+      "x-ess-name": "cortex.instance.RedactionRule",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "pattern",
+        "replacement"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RelationMapping": {
+      "title": "RelationMapping",
+      "x-ess-name": "cortex.instance.RelationMapping",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "relation": {
+          "type": "string"
+        },
+        "target_type": {
+          "type": "string"
+        },
+        "target_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "relation",
+        "target_type",
+        "target_name"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RunGate": {
+      "title": "RunGate",
+      "x-ess-name": "cortex.instance.RunGate",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.GateCheck"
+          }
+        }
+      },
+      "required": [
+        "checks"
       ],
       "additionalProperties": false
     },
@@ -418,6 +824,21 @@
       ],
       "additionalProperties": false
     },
+    "cortex.instance.SnapshotPolicy": {
+      "title": "SnapshotPolicy",
+      "x-ess-name": "cortex.instance.SnapshotPolicy",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "keep": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "keep"
+      ],
+      "additionalProperties": false
+    },
     "cortex.instance.SourceSettings": {
       "title": "SourceSettings",
       "x-ess-name": "cortex.instance.SourceSettings",
@@ -451,6 +872,24 @@
             },
             "value": {
               "$ref": "#/$defs/cortex.instance.FilesSource"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "structured",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "structured"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.StructuredSource"
             }
           },
           "required": [
@@ -504,6 +943,184 @@
         "schedule",
         "settings",
         "policy"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.SqliteStore": {
+      "title": "SqliteStore",
+      "x-ess-name": "cortex.instance.SqliteStore",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "cortex.instance.StoreSpec": {
+      "title": "StoreSpec",
+      "x-ess-name": "cortex.instance.StoreSpec",
+      "x-ess-kind": "union",
+      "oneOf": [
+        {
+          "title": "postgres",
+          "type": "object",
+          "properties": {
+            "backend": {
+              "type": "string",
+              "const": "postgres"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.PostgresStore"
+            }
+          },
+          "required": [
+            "backend",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "sqlite",
+          "type": "object",
+          "properties": {
+            "backend": {
+              "type": "string",
+              "const": "sqlite"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.SqliteStore"
+            }
+          },
+          "required": [
+            "backend"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "x-ess-union-tag": "backend"
+    },
+    "cortex.instance.StructuredConnectors": {
+      "title": "StructuredConnectors",
+      "x-ess-name": "cortex.instance.StructuredConnectors",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {}
+        },
+        "paging": {
+          "$ref": "#/$defs/cortex.instance.Paging"
+        }
+      },
+      "required": [
+        "adapter",
+        "connection",
+        "operation",
+        "inputs"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.StructuredFiles": {
+      "title": "StructuredFiles",
+      "x-ess-name": "cortex.instance.StructuredFiles",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "glob": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "paths",
+        "glob"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.StructuredInput": {
+      "title": "StructuredInput",
+      "x-ess-name": "cortex.instance.StructuredInput",
+      "x-ess-kind": "union",
+      "oneOf": [
+        {
+          "title": "connectors",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "connectors"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.StructuredConnectors"
+            }
+          },
+          "required": [
+            "from",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "files",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "files"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.StructuredFiles"
+            }
+          },
+          "required": [
+            "from",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "x-ess-union-tag": "from"
+    },
+    "cortex.instance.StructuredSource": {
+      "title": "StructuredSource",
+      "x-ess-name": "cortex.instance.StructuredSource",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "input": {
+          "$ref": "#/$defs/cortex.instance.StructuredInput"
+        },
+        "records": {
+          "type": "string"
+        },
+        "mapping": {
+          "$ref": "#/$defs/cortex.instance.RecordMapping"
+        },
+        "dropped": {
+          "$ref": "#/$defs/cortex.instance.DropPolicy"
+        }
+      },
+      "required": [
+        "input",
+        "records",
+        "mapping"
       ],
       "additionalProperties": false
     },

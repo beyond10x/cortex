@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.StoreSpec",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:bc8461b7685b43f778404284b85f4ef1712e2844c3a018728c1a77a8831d2fa7",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.PostgresStore": {
+      "title": "PostgresStore",
+      "x-ess-name": "cortex.instance.PostgresStore",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "config": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.SqliteStore": {
+      "title": "SqliteStore",
+      "x-ess-name": "cortex.instance.SqliteStore",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "cortex.instance.StoreSpec": {
+      "title": "StoreSpec",
+      "x-ess-name": "cortex.instance.StoreSpec",
+      "x-ess-kind": "union",
+      "oneOf": [
+        {
+          "title": "postgres",
+          "type": "object",
+          "properties": {
+            "backend": {
+              "type": "string",
+              "const": "postgres"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.PostgresStore"
+            }
+          },
+          "required": [
+            "backend",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "sqlite",
+          "type": "object",
+          "properties": {
+            "backend": {
+              "type": "string",
+              "const": "sqlite"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.SqliteStore"
+            }
+          },
+          "required": [
+            "backend"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "x-ess-union-tag": "backend"
+    }
+  }
+}

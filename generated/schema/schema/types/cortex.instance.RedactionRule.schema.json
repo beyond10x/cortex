@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.RedactionRule",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:45bba544aab15a2259ab56209c981c4fa0bc1e75809f80807226b413d2ba8645",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.RedactionRule": {
+      "title": "RedactionRule",
+      "x-ess-name": "cortex.instance.RedactionRule",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "pattern",
+        "replacement"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -21,7 +21,7 @@ types:
 
   - name: cortex.instance.SourceKind
     kind: enum
-    variants: [Web, Connectors, Files]
+    variants: [Web, Connectors, Files, Structured]
 
   - name: cortex.instance.WebMode
     kind: enum
@@ -98,6 +98,26 @@ types:
       - {name: connection, type: String}
       - {name: input, type: cortex.instance.WebInput}
 
+  - name: cortex.instance.PageStyle
+    kind: enum
+    variants: [PageNumber, Token, Keyset]
+
+  - name: cortex.instance.Paging
+    kind: struct
+    fields:
+      - {name: style, type: cortex.instance.PageStyle}
+      - {name: param, type: String}
+      - {name: next, type: Optional<String>}
+      - {name: max_pages, type: Integer}
+
+  - name: cortex.instance.ChildCall
+    kind: struct
+    fields:
+      - {name: operation, type: String}
+      - {name: input, type: Json}
+      - {name: records, type: String}
+      - {name: paging, type: Optional<cortex.instance.Paging>}
+
   - name: cortex.instance.ConnectorsSource
     kind: struct
     fields:
@@ -109,12 +129,94 @@ types:
       - {name: id, type: String}
       - {name: time, type: Optional<String>}
       - {name: text, type: List<String>}
+      - {name: paging, type: Optional<cortex.instance.Paging>}
+      - {name: child, type: Optional<cortex.instance.ChildCall>}
+
+  - name: cortex.instance.RecordFormat
+    kind: enum
+    variants: [WholeFile, JsonLines, MarkdownSections]
+
+  - name: cortex.instance.RecordFilter
+    kind: struct
+    fields:
+      - {name: field, type: String}
+      - {name: values, type: List<String>}
+      - {name: include, type: Boolean}
+
+  - name: cortex.instance.FileRecords
+    kind: struct
+    fields:
+      - {name: format, type: cortex.instance.RecordFormat}
+      - {name: id, type: String}
+      - {name: time, type: Optional<String>}
+      - {name: author, type: Optional<String>}
+      - {name: text, type: List<String>}
+      - {name: thread, type: Optional<String>}
+      - {name: filters, type: List<cortex.instance.RecordFilter>}
 
   - name: cortex.instance.FilesSource
     kind: struct
     fields:
       - {name: paths, type: List<String>}
       - {name: glob, type: String}
+      - {name: records, type: Optional<cortex.instance.FileRecords>}
+
+  - name: cortex.instance.PropertyMapping
+    kind: struct
+    fields:
+      - {name: property, type: String}
+      - {name: path, type: String}
+
+  - name: cortex.instance.RelationMapping
+    kind: struct
+    fields:
+      - {name: relation, type: String}
+      - {name: target_type, type: String}
+      - {name: target_name, type: String}
+
+  - name: cortex.instance.RecordMapping
+    kind: struct
+    fields:
+      - {name: node_type, type: String}
+      - {name: id, type: String}
+      - {name: name, type: String}
+      - {name: aliases, type: List<String>}
+      - {name: properties, type: List<cortex.instance.PropertyMapping>}
+      - {name: relations, type: List<cortex.instance.RelationMapping>}
+
+  - name: cortex.instance.StructuredConnectors
+    kind: struct
+    fields:
+      - {name: adapter, type: String}
+      - {name: connection, type: String}
+      - {name: operation, type: String}
+      - {name: inputs, type: List<Json>}
+      - {name: paging, type: Optional<cortex.instance.Paging>}
+
+  - name: cortex.instance.StructuredFiles
+    kind: struct
+    fields:
+      - {name: paths, type: List<String>}
+      - {name: glob, type: String}
+
+  - name: cortex.instance.StructuredInput
+    kind: union
+    tag: from
+    variants:
+      connectors: cortex.instance.StructuredConnectors
+      files: cortex.instance.StructuredFiles
+
+  - name: cortex.instance.DropPolicy
+    kind: enum
+    variants: [Keep, Supersede]
+
+  - name: cortex.instance.StructuredSource
+    kind: struct
+    fields:
+      - {name: input, type: cortex.instance.StructuredInput}
+      - {name: records, type: String}
+      - {name: mapping, type: cortex.instance.RecordMapping}
+      - {name: dropped, type: Optional<cortex.instance.DropPolicy>}
 
   - name: cortex.instance.SourceSettings
     kind: union
@@ -123,6 +225,7 @@ types:
       web: cortex.instance.WebSource
       connectors: cortex.instance.ConnectorsSource
       files: cortex.instance.FilesSource
+      structured: cortex.instance.StructuredSource
 
   - name: cortex.instance.SourceSpec
     kind: struct
@@ -139,13 +242,72 @@ types:
       - {name: ekr_seed, type: Optional<String>}
       - {name: documents, type: List<String>}
 
+  - name: cortex.instance.ModelBackend
+    kind: enum
+    variants: [Claude, Codex]
+
   - name: cortex.instance.ModelSpec
     kind: struct
     fields:
       - {name: model, type: String}
+      - {name: backend, type: Optional<cortex.instance.ModelBackend>}
       - {name: budget_usd, type: Decimal}
       - {name: timeout_s, type: Integer}
       - {name: instructions, type: Optional<String>}
+
+  - name: cortex.instance.SqliteStore
+    kind: struct
+    fields:
+      - {name: path, type: Optional<String>}
+
+  - name: cortex.instance.PostgresStore
+    kind: struct
+    fields:
+      - {name: config, type: String}
+
+  - name: cortex.instance.StoreSpec
+    kind: union
+    tag: backend
+    variants:
+      sqlite: Optional<cortex.instance.SqliteStore>
+      postgres: cortex.instance.PostgresStore
+
+  - name: cortex.instance.RedactionClass
+    kind: enum
+    variants: [Email, Phone, IpAddress, PaymentCard, Url, Credential, RareName]
+
+  - name: cortex.instance.RedactionRule
+    kind: struct
+    fields:
+      - {name: name, type: String}
+      - {name: pattern, type: String}
+      - {name: replacement, type: String}
+
+  - name: cortex.instance.RedactionPolicy
+    kind: struct
+    fields:
+      - {name: classes, type: List<cortex.instance.RedactionClass>}
+      - {name: rules, type: List<cortex.instance.RedactionRule>}
+      - {name: known_names, type: Optional<List<String>>}
+      - {name: rare_limit, type: Optional<Integer>}
+      - {name: refuse_if_left, type: Optional<List<cortex.instance.RedactionClass>>}
+
+  - name: cortex.instance.GateCheck
+    kind: struct
+    fields:
+      - {name: measure, type: String}
+      - {name: min, type: Optional<Decimal>}
+      - {name: max, type: Optional<Decimal>}
+
+  - name: cortex.instance.RunGate
+    kind: struct
+    fields:
+      - {name: checks, type: List<cortex.instance.GateCheck>}
+
+  - name: cortex.instance.SnapshotPolicy
+    kind: struct
+    fields:
+      - {name: keep, type: Integer}
 
   - name: cortex.instance.EkrPin
     kind: struct
@@ -169,6 +331,10 @@ types:
       - {name: model, type: cortex.instance.ModelSpec}
       - {name: sources, type: List<cortex.instance.SourceSpec>}
       - {name: serve, type: cortex.instance.ServeSpec}
+      - {name: store, type: Optional<cortex.instance.StoreSpec>}
+      - {name: redaction, type: Optional<cortex.instance.RedactionPolicy>}
+      - {name: snapshots, type: Optional<cortex.instance.SnapshotPolicy>}
+      - {name: gate, type: Optional<cortex.instance.RunGate>}
 
 entities:
   - name: cortex.instance.Instance
@@ -312,6 +478,12 @@ errors:
       - {name: reason, type: String}
 
 commands:
+  # UNMAPPED: AdoptInstance registers an existing EKR store, on either backend, as an instance
+  # without reseeding it. Its outcomes (adopted, name taken, store unreadable, backend mismatch) and
+  # how the seen-documents state is backfilled are not decided; story:adopt-existing-store does.
+  # UNMAPPED: RestoreSnapshot puts an instance's store back to a snapshot taken before a run. Whether
+  # it exists for the postgres backend, where a snapshot is the operator's database backup, is not
+  # decided; story:run-snapshots does.
   - name: cortex.instance.CreateInstance
     naming:
       wire: create
@@ -660,7 +832,7 @@ events:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: documents_new, type: Integer}
       - {name: documents_applied, type: Integer}
-      - {name: cost_usd, type: Decimal}
+      - {name: cost_usd, type: Optional<Decimal>}
 
   - name: cortex.instance.RunFailed
     fields:

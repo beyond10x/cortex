@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.RunGate",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:85b86d3b3d728258d674bf41963be4ffd05795bb93fccce3cdfd7cc2349e3ced",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.GateCheck": {
+      "title": "GateCheck",
+      "x-ess-name": "cortex.instance.GateCheck",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "measure": {
+          "type": "string"
+        },
+        "min": {
+          "type": "string",
+          "format": "decimal",
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "max": {
+          "type": "string",
+          "format": "decimal",
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        }
+      },
+      "required": [
+        "measure"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RunGate": {
+      "title": "RunGate",
+      "x-ess-name": "cortex.instance.RunGate",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.GateCheck"
+          }
+        }
+      },
+      "required": [
+        "checks"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

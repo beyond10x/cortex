@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.Paging",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:a115fa029fded700f43c25d8c490876c3d61560275c6044ac8ca9f185d56a705",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.PageStyle": {
+      "title": "PageStyle",
+      "x-ess-name": "cortex.instance.PageStyle",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "PageNumber",
+        "Token",
+        "Keyset"
+      ]
+    },
+    "cortex.instance.Paging": {
+      "title": "Paging",
+      "x-ess-name": "cortex.instance.Paging",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "style": {
+          "$ref": "#/$defs/cortex.instance.PageStyle"
+        },
+        "param": {
+          "type": "string"
+        },
+        "next": {
+          "type": "string"
+        },
+        "max_pages": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "style",
+        "param",
+        "max_pages"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

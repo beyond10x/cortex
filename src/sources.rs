@@ -73,6 +73,10 @@ pub fn fetch(
         m::SourceSettings::Web(web) => fetch_web(web, connectors),
         m::SourceSettings::Connectors(c) => fetch_records(c, connectors),
         m::SourceSettings::Files(f) => fetch_files(f, base),
+        // The spec accepts the settings; running them is `story:structured-source`'s.
+        m::SourceSettings::Structured(_) => Err(FetchError::Failed(
+            "a structured source is not run yet (story:structured-source)".into(),
+        )),
     }
 }
 

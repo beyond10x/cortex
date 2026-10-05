@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.DropPolicy",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:6cb2c848cdd0bc40d58a030a5ef93cd0d08afb0c21a93f6e1037b8c460433b8b",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.DropPolicy": {
+      "title": "DropPolicy",
+      "x-ess-name": "cortex.instance.DropPolicy",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Keep",
+        "Supersede"
+      ]
+    }
+  }
+}

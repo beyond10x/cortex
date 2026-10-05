@@ -23,15 +23,14 @@
   "required": [
     "source_id",
     "documents_new",
-    "documents_applied",
-    "cost_usd"
+    "documents_applied"
   ],
   "additionalProperties": false,
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43",
-    "contract_digest": "slice-sha256/2:2dd4483a0982aba5332d75059df1a2449b27eb88a02a4b4385eceab04621cfdf",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:a2b74153500aaa37376d551239eeedaa64b7674518d826a6524f2d5d535fc300",
     "regenerate": "ess generate"
   },
   "$defs": {
