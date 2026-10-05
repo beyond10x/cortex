@@ -15,7 +15,7 @@ scope:
   path: examples/agent-tooling.yaml
 - confidence: inferred
   path: examples/seed/agent-tooling.yaml
-revision: 12
+revision: 13
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":6}}}
 - {from: "proposed", to: "active", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":6}}}
@@ -75,3 +75,17 @@ Landed 2026-10-05 in `dbc0f4f` (wave 20261005h, merged `5b6249a`): the instance 
 - **Files:** `examples/agent-tooling.yaml`, `examples/seed/agent-tooling.yaml`, `tests/agent_tooling.rs` (new, 3 cases), `website/docs/spec-file.md`
 - **Inferred scope line wrong:** `examples/seed/schema.yaml` still holds only `DEVELOPS`
 - **Not yet done:** the 7-day run. It starts from `main` after this wave merges, with model cost bounded by `budget_usd: "0.50"` per run (at most about $4.00 over 7 days). The story stays `active` until the day-8 verification report.
+
+## The run
+
+Created 2026-10-05 ~20:55 CEST by the coordinating session from `main` at `712488a` (cortex 0.1.0 built `--release --locked`, installed to `~/.local/bin/cortex`; `ekr` 0.0.30 at `~/.cache/cortex/bin/0.0.30/bin/ekr`).
+
+- Spec: `~/.config/cortex/agent-tooling/agent-tooling.yaml` (the example with the machine's Tavily connection id; not committed)
+- Timers: `cortex-agent-tooling-news.timer` daily 00:30, `cortex-agent-tooling-mcp-specification.timer` Wednesdays 01:30; linger on
+- Units carry no `ANTHROPIC_API_KEY`; `claude` uses its signed-in session
+
+Restarted window. The first timer run (2026-10-06 00:30) failed before any search: `connections revalidate: outcome_unknown at publication` (Connectors applied the revalidation and could not confirm it; `next_action: retry_status`). cortex PR #19 (`4c0eb7d`) settles that case by reading `connections status`; the binary was rebuilt from `4c0eb7d` and installed 2026-10-06 01:16. The story wants one binary for all 7 days, so the window counts from the first run on that binary:
+
+- Day 1: 2026-10-07 (news 00:30, crawl 01:30)
+- Read on day 8: 2026-10-14, against the Acceptance; Tavily credits and model cost go into the `verification-report`
+- At the restart: news `runs: 0`, `consecutive_failures: 1` (a success resets it); crawl `runs: 0`
