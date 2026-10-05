@@ -1,0 +1,66 @@
+format: ekr.extraction-document/1
+ontology:
+  node_types:
+  - name: Organization
+    parents: []
+    abstract_type: false
+    properties:
+    - name: website
+      value: {value_kind: String}
+      cardinality: One
+      required: false
+  - name: Project
+    parents: []
+    abstract_type: false
+    properties:
+    - name: website
+      value: {value_kind: String}
+      cardinality: One
+      required: false
+    - name: language
+      value: {value_kind: String}
+      cardinality: Many
+      required: false
+  - name: Release
+    parents: []
+    abstract_type: false
+    properties:
+    - name: version
+      value: {value_kind: String}
+      cardinality: One
+      required: false
+    - name: release_date
+      value: {value_kind: String}
+      cardinality: One
+      required: false
+  - name: Specification
+    parents: []
+    abstract_type: false
+    properties:
+    - name: revision
+      value: {value_kind: String}
+      cardinality: One
+      required: false
+    - name: revision_date
+      value: {value_kind: String}
+      cardinality: One
+      required: false
+  edge_types:
+  - name: RELEASES
+    source_types: [Organization, Project]
+    target_types: [Release]
+    cardinality: Many
+    properties: []
+  - name: SPECIFIES
+    source_types: [Organization, Project]
+    target_types: [Specification]
+    cardinality: Many
+    properties: []
+  - name: DEPENDS_ON
+    source_types: [Project, Release, Specification]
+    target_types: [Project, Specification]
+    cardinality: Many
+    properties: []
+entities: []
+facts: []
+evidence: []

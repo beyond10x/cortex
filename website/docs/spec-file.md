@@ -13,6 +13,9 @@ Schema is [`instance-spec.schema.json`](https://beyond10x.github.io/cortex/schem
 and `cortex schema` prints the same document. This page says what each section does.
 
 The repository's `examples/example.yaml` is a complete file with two web sources.
+`examples/agent-tooling.yaml` is another, with its own seed ontology
+(`examples/seed/agent-tooling.yaml`): a daily news search on three queries, a weekly crawl of the
+Model Context Protocol specification, and a budget of $0.50 per run.
 
 ## Top level
 

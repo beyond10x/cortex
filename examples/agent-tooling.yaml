@@ -1,0 +1,65 @@
+format: cortex.instance/1
+name: agent-tooling
+description: >-
+  Agent tooling: revisions of the Model Context Protocol specification, Claude Code releases,
+  and releases of AI agent frameworks written in Rust, with the projects and organisations behind
+  them and what each release or project depends on.
+ekr:
+  version: "0.0.30"
+seed:
+  schema: seed/agent-tooling.yaml
+  documents: []
+model:
+  model: claude-sonnet-5-5
+  budget_usd: "0.50"
+  timeout_s: 900
+sources:
+  - name: news
+    schedule: "*-*-* 00:30:00"
+    settings:
+      kind: web
+      value:
+        connection: conn_replace_with_your_tavily_connection_id
+        input:
+          input: search
+          value:
+            queries:
+              - Model Context Protocol specification change
+              - Claude Code release
+              - Rust AI agent framework release
+            policy:
+              topic: news
+              time_range: week
+              max_results: 5
+              include_domains: []
+              exclude_domains: []
+    policy:
+      refresh_after_days: 30
+      change: ContentHash
+      max_documents_per_run: 15
+      max_chars_per_document: 8000
+  - name: mcp-specification
+    schedule: "Wed *-*-* 01:30:00"
+    settings:
+      kind: web
+      value:
+        connection: conn_replace_with_your_tavily_connection_id
+        input:
+          input: sites
+          value:
+            urls:
+              - https://modelcontextprotocol.io/specification
+            mode: Crawl
+            policy:
+              max_depth: 2
+              max_breadth: 20
+              limit: 20
+              select_paths: ["/specification.*"]
+              exclude_paths: []
+              allow_external: false
+    policy:
+      refresh_after_days: 7
+      change: ContentHash
+      max_documents_per_run: 20
+      max_chars_per_document: 8000
+serve: {}
