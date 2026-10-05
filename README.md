@@ -55,6 +55,9 @@ every command, operating notes, limits and the generated specification reference
    cortex create --spec examples/example.yaml
    ```
 
+   The timers run with the `PATH`, `HOME` and `connectors`/`claude` binaries of the shell you run
+   this from. For runs while you are logged out, enable lingering once: `loginctl enable-linger`.
+
 5. Run a source now instead of waiting for its timer, and look at the result:
 
    ```sh

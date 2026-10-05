@@ -26,19 +26,47 @@ fn env_line(key: &str, value: &str) -> String {
     format!("Environment=\"{key}={escaped}\"\n")
 }
 
-/// The variables a unit needs so `connectors` and `claude` find their configuration and sign-in.
+/// The variables a unit needs so `connectors` and `claude` find their configuration and sign-in:
+/// the user manager's `PATH` holds none of the user's tool directories, and `claude` reads its
+/// sign-in under `HOME`.
 fn environment() -> String {
     let mut out = String::new();
     for (key, value) in std::env::vars() {
         let wanted = matches!(
             key.as_str(),
-            "PATH" | "XDG_CONFIG_HOME" | "XDG_STATE_HOME" | "XDG_DATA_HOME" | "XDG_RUNTIME_DIR"
+            "PATH"
+                | "HOME"
+                | "XDG_CONFIG_HOME"
+                | "XDG_STATE_HOME"
+                | "XDG_DATA_HOME"
+                | "XDG_RUNTIME_DIR"
         ) || key.starts_with("CONNECTORS_");
         if wanted {
             out.push_str(&env_line(&key, &value));
         }
     }
     out
+}
+
+/// `CORTEX_CONNECTORS`, `CORTEX_CLAUDE` and `CORTEX_CODEX` for a source unit, so a scheduled run
+/// uses the binaries this process runs. A bare name is written as it is and found on the unit's
+/// `PATH`, the one this process has; a path is made absolute.
+fn tool_environment(tools: &crate::run::Tools) -> String {
+    let named = |bin: &Path| {
+        if bin.components().count() == 1 && bin.is_relative() {
+            bin.to_path_buf()
+        } else {
+            std::path::absolute(bin).unwrap_or_else(|_| bin.to_path_buf())
+        }
+    };
+    [
+        ("CORTEX_CONNECTORS", &tools.connectors.bin),
+        ("CORTEX_CLAUDE", &tools.claude),
+        ("CORTEX_CODEX", &tools.codex),
+    ]
+    .into_iter()
+    .map(|(key, bin)| env_line(key, &named(bin).display().to_string()))
+    .collect()
 }
 
 impl Systemd {
@@ -96,18 +124,21 @@ impl Systemd {
         Ok(dest)
     }
 
+    /// The source's service runs the `tools` this process runs ([`tool_environment`]).
     pub fn install_source(
         &self,
         instance: &str,
         source: &str,
         schedule: &str,
+        tools: &crate::run::Tools,
     ) -> Result<(), String> {
         let unit = source_unit(instance, source);
         let exe = self.binary()?;
+        let tools = tool_environment(tools);
         self.write(
             &format!("{unit}.service"),
             &format!(
-                "[Unit]\nDescription=cortex: run {instance}/{source}\n\n[Service]\nType=oneshot\n{}ExecStart=\"{}\" --home \"{}\" run {instance}/{source} --record-failure\n",
+                "[Unit]\nDescription=cortex: run {instance}/{source}\n\n[Service]\nType=oneshot\n{}{tools}ExecStart=\"{}\" --home \"{}\" run {instance}/{source} --record-failure\n",
                 environment(),
                 exe.display(),
                 self.home_root.display()

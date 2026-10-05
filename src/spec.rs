@@ -36,8 +36,10 @@ pub fn load(path: &Path) -> Result<Loaded, String> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     let model = parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    // A bare file name's parent is the empty path, which names no directory to canonicalise.
     let dir = path
         .parent()
+        .filter(|dir| !dir.as_os_str().is_empty())
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."));
     Ok(Loaded { dir, text, model })
