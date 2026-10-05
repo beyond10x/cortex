@@ -1,6 +1,6 @@
 //! cortex as a library: the binary in `main.rs` and the conformance runner in `tests/` share it.
 
-pub mod connectors;
+pub   mod connectors;
 pub mod ekr;
 pub mod evidence;
 pub mod extract;
