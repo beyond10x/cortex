@@ -6,7 +6,7 @@ status: draft
 title: The first real web instance runs unattended for a week
 relations:
 - serves: vision:self-updating-instances
-revision: 2
+revision: 3
 ---
 ## Outcome
 
@@ -19,7 +19,7 @@ step, into its own EKR store, with the result inspected through `ekr view` and t
 | fact | source |
 |---|---|
 | One manual smoke run: search applied 3 documents ($0.0722), the repeat applied 0, a crawl applied 5 ($0.0955) | `~/.cache/cortex-smoke-8c9138d1`, live run 2026-10-05 |
-| That store holds 14 nodes, 22 assertions and **0 edges** | `ekr view` on the smoke store |
+| That store holds 14 nodes and 22 assertions, of which 4 are relations (`Relation` predicate); EKR leaves the separate `edges` section empty for extraction | `ekr snapshot` on the smoke store |
 | No timer has ever run | `systemctl --user list-timers` lists no cortex unit |
 | No CI | no `.github/workflows/` in the repository |
 | Web pages are filed as `!HumanStatement` evidence because EKR 0.0.30 admits no other kind | `AGENTS.md` upstream table; EKR `crates/ekr-integrate/src/extraction.rs:722` |
@@ -29,7 +29,7 @@ step, into its own EKR store, with the result inspected through `ekr view` and t
 
 1. `story:ci-runs-task-check` — CI holds the gate.
 2. `story:seen-documents-modelled` — the three `UNMAPPED:` markers settled in the spec.
-3. `story:extraction-links-facts` — extracted facts carry edges.
+3. `story:extraction-links-facts` — extraction states the relations its documents carry.
 4. `story:timer-runs-unattended` — scheduled runs, observed for 24 h.
 5. `story:first-web-instance` — the real instance, 7 days.
 6. `story:web-pages-cited-as-urls` — evidence kind, blocked on EKR.

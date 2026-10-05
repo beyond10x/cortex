@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-05T08:26:37Z",
+  "actor": "agent:claude",
+  "artifact": "story:ci-runs-task-check",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "check workflow on draft PR #2, formatting break in src/lib.rs (fail at cargo fmt --check, as intended)",
+    "reference": "https://github.com/beyond10x/cortex/actions/runs/37283247088/job/111676019329"
+  }
+}

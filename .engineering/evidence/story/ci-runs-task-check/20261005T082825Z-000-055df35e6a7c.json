@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-05T08:28:25Z",
+  "actor": "agent:claude",
+  "artifact": "story:ci-runs-task-check",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "check workflow on PR #1 (pass)",
+    "reference": "https://github.com/beyond10x/cortex/actions/runs/37283218086/job/111675923137"
+  }
+}
