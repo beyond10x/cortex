@@ -7,6 +7,9 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Added
 
+- Redaction classes `Url`, `known_names` and `RareName` replace links and personal names with
+  placeholders the model sees and the store does not keep; `Credential` masks secrets for good.
+  `refuse_if_left` fails a run, before any model call, when a listed class survives.
 - A `structured` source imports records from a Connectors operation with no model call and no
   cost: paths map record fields to a node, its aliases, properties and relations. A record's
   identity is `<adapter>:<operation>:<id>`; nodes are named `<name> (<identity>)`, and a plain name
