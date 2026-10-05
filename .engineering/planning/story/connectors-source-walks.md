@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:connectors-source-walks
 kind: story
-status: active
+status: implemented
 title: A connectors source pages, calls a child per record and reads only what changed
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -21,10 +21,11 @@ scope:
   path: src/state.rs
 - confidence: inferred
   path: tests/connectors_walks.rs
-revision: 14
+revision: 16
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T13:10:33Z", actor: "agent:claude", revision: 13, decided_on: {"recorded":{"review_outcome":7}}}
 - {from: "proposed", to: "active", at: "2026-10-05T13:10:33Z", actor: "agent:claude", revision: 14, decided_on: {"recorded":{"review_outcome":7}}}
+- {from: "active", to: "implemented", at: "2026-10-05T14:10:03Z", actor: "agent:claude", revision: 16, decided_on: {"recorded":{"test_result":1,"review_outcome":7}}}
 ---
 ## Outcome
 
@@ -64,5 +65,10 @@ source's state; a second run's stand-in receives exactly that instant as `{since
 
 ## Scope
 
-`src/sources.rs`, `src/connectors.rs`, `src/state.rs`, `src/run.rs` (the fetch call and window),
-`tests/connectors_walks.rs` (new).
+Landed 2026-10-05 in `c3fa691` (wave 20261005d, merged `3079840`).
+
+- **Files:** `src/sources.rs`, `src/run.rs`, `src/state.rs`, `src/main.rs` (`truncated` and `skipped` in the run result), `website/docs/spec-file.md`, `tests/connectors_walks.rs` (new, 21 cases)
+- **Not needed:** `src/connectors.rs`
+- **Beyond the story, decided during the wave:** a 5-minute window overlap; `held_since` (changes held back by `refresh_after_days`), `pending_since` (runs that stopped or failed) and per-key child-failure counts in the source state, all omitted when empty so old state loads; a child call failing on 3 runs in a row is skipped; the hash is taken before the `max_chars_per_document` cut and cut documents count as `truncated`
+- **Documented limits:** `PageNumber` paging over a changing result set can skip records stamped before the overlap; text past the cut does not reach the model; `refresh_after_days: 0` gives the first run an empty window
+- **Review:** `review-result:adversary-connectors-source-walks-pass-1` (8) and `-pass-2` (6), fixed or documented; coordinator check of the final diff

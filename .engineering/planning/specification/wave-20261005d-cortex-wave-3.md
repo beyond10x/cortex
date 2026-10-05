@@ -2,12 +2,13 @@
 format: aep.planning-md/3
 id: specification:wave-20261005d-cortex-wave-3
 kind: specification
-status: approved
+status: implemented
 title: 'Wave 20261005d: cortex 1.0 wave 3'
-revision: 3
+revision: 5
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-05T13:10:34Z", actor: "agent:claude", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-05T13:10:34Z", actor: "agent:claude", revision: 3}
+- {from: "approved", to: "implemented", at: "2026-10-05T14:10:03Z", actor: "agent:claude", revision: 5}
 ---
 ## Wave 20261005d: cortex 1.0 wave 3
 
@@ -32,3 +33,12 @@ Opened 2026-10-05 by the coordinating session, `aep:implementing` 0.19.2 wave mo
 ## Commits approval authorises
 
 One commit per unit through `b10x-gates bot`; the merges into `wave/20261005d`; the closing planning-store commit; the pull request into `main` and its merge.
+
+## Outcome
+
+Closed 2026-10-05. Both units merged into `wave/20261005d`; `task check` on the integration branch: EXIT=0, 177 tests (`~/.cache/cortex-wave-20261005d/int/gate.log`).
+
+| unit | story | commit | merge | adversary findings, pass 1 → 2 |
+|---|---|---|---|---|
+| U1 | `story:connectors-source-walks` | `c3fa691` | `3079840` | 8 → 6 |
+| U2 | `story:symlinked-seed-directory` | `aa32a84` | `101d821` | none run (small fix) |
