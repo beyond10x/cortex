@@ -1,0 +1,99 @@
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_TARGET_DIR: ${{ github.workspace }}/target
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  EKR_VERSION: "0.0.30"
+
+jobs:
+  check:
+    name: task check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: 1.99.0
+          components: rustfmt, clippy
+
+      - name: Install task runner
+        env:
+          TASK_VERSION: "3.53.1"
+          TASK_SHA256: a54a408f6861ff921f6e87774180db31bacd8c1e7c944ca696db9fea49a82fc7
+        run: |
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/task.tar.gz" \
+            "https://github.com/go-task/task/releases/download/v$TASK_VERSION/task_linux_amd64.tar.gz"
+          echo "$TASK_SHA256  $RUNNER_TEMP/task.tar.gz" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/task-bin"
+          tar -xzf "$RUNNER_TEMP/task.tar.gz" -C "$RUNNER_TEMP/task-bin" task
+          echo "$RUNNER_TEMP/task-bin" >> "$GITHUB_PATH"
+
+      - name: Install pinned specification and planning tools
+        env:
+          ESS_VERSION: "0.52.0"
+          ESS_SHA256: 54ae56c63135afc9d8da12e36ef3dcc3d6c4ec8fdc6c2c30fb34bd2d8dc8a5ce
+          AEP_VERSION: "0.68.0"
+          AEP_SHA256: 02bf6a2c4bc9a3ffd717edfb365f665491005004f159774a8847d3cbd18c5e91
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tools-bin"
+          for pair in "ess:$ESS_VERSION:$ESS_SHA256" "aep:$AEP_VERSION:$AEP_SHA256"; do
+            IFS=: read -r tool version digest <<< "$pair"
+            archive="$tool-$version-x86_64-unknown-linux-gnu.tar.gz"
+            dir="$RUNNER_TEMP/$tool-release"
+            mkdir -p "$dir"
+            curl --fail --silent --show-error --location --output "$dir/$archive" \
+              "https://github.com/beyond10x/$tool/releases/download/$version/$archive"
+            curl --fail --silent --show-error --location --output "$dir/SHA256SUMS" \
+              "https://github.com/beyond10x/$tool/releases/download/$version/SHA256SUMS"
+            grep -qxF "$digest  $archive" "$dir/SHA256SUMS"
+            (cd "$dir" && echo "$digest  $archive" | sha256sum --check --strict)
+            tar -xzf "$dir/$archive" -C "$dir"
+            find "$dir" -type f -name "$tool" -exec install -m 755 {} "$RUNNER_TEMP/tools-bin/" \;
+          done
+          echo "$RUNNER_TEMP/tools-bin" >> "$GITHUB_PATH"
+
+      - name: Restore the ekr binary
+        id: ekr-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.ekr/${{ env.EKR_VERSION }}
+          key: ekr-${{ env.EKR_VERSION }}-rust-1.99.0
+
+      - name: Build ekr from its release tag
+        if: steps.ekr-cache.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked --git https://github.com/beyond10x/epistemic-knowledge-runtime \
+            --tag "$EKR_VERSION" --bin ekr --root "$HOME/.ekr/$EKR_VERSION" ekr
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          shared-key: check-rust-1.99.0
+
+      - name: Validate the planning store
+        run: aep plan artifact validate
+
+      - name: task check
+        run: |
+          export CORTEX_TEST_EKR="$HOME/.ekr/$EKR_VERSION/bin/ekr"
+          "$CORTEX_TEST_EKR" --version
+          task check
