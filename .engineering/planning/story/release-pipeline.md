@@ -18,7 +18,7 @@ scope:
   path: Cargo.lock
 - confidence: cited
   path: Cargo.toml
-revision: 10
+revision: 11
 ---
 ## Outcome
 
@@ -42,4 +42,6 @@ artifact, the checksum matches the tarball, and the binary inside prints `cortex
 
 ## Scope
 
-`Cargo.toml`, `Cargo.lock`, `CHANGELOG.md` (new), `.github/workflows/release.yml` (new), `AGENTS.md`.
+`Cargo.toml`, `Cargo.lock`, `CHANGELOG.md` (new), `.github/workflows/release.yml` (new), `AGENTS.md`
+(the "Cutting a release" section; `story:redaction-before-model` edits a different section of the
+same file and comes after this story, its edge records it).

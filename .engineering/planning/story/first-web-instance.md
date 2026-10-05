@@ -15,7 +15,7 @@ scope:
   path: examples/agent-tooling.yaml
 - confidence: inferred
   path: examples/seed/agent-tooling.yaml
-revision: 8
+revision: 9
 ---
 ## Outcome
 
@@ -57,10 +57,9 @@ Tavily credits and model cost for the 7 days are recorded beside the result in a
 ## Concurrency
 
 The instance runs one cortex binary for the whole 7 days: built once from `main` on day 1, installed
-to `~/.local/bin/cortex`, and not rebuilt or replaced until day 8. Stories that land on `main`
-meanwhile (in the computed waves: `story:run-snapshots`, `story:adopt-existing-store`, and
-`story:web-pages-cited-as-urls`, which also moves the EKR pin) do not reach the running instance.
-The EKR binary and the evidence kind stay as they were on day 1.
+to `~/.local/bin/cortex`, and not rebuilt or replaced until day 8. Every story that lands on `main`
+during the 7 days, in whichever wave `aep plan artifact waves` places it, does not reach the
+running instance. The EKR binary and the evidence kind stay as they were on day 1.
 
 ## Depends on
 
