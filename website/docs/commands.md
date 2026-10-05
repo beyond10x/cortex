@@ -28,7 +28,7 @@ errors and events.
 
 | command | does | outcomes |
 |---|---|---|
-| `cortex create --spec <file> [--no-extract] [--no-units]` | create an instance from a spec file and add its sources. `--no-extract` skips the seed documents, `--no-units` installs no systemd units | `created`, `name-taken`, `connection-missing`, `seed-refused` |
+| `cortex create --spec <file> [--no-extract] [--no-units] [--postgres-schema-config <file>]` | create an instance from a spec file and add its sources. `--no-extract` skips the seed documents, `--no-units` installs no systemd units. For a `postgres` store, `--postgres-schema-config` names the `ekr.postgres/1` file of the schema-management role, and `ekr postgres-schema` creates the provider tables with it before the seed; without it the tables must already exist | `created`, `name-taken`, `connection-missing`, `seed-refused` |
 | `cortex update <name> --spec <file> [--no-units]` | replace the instance's spec: sources, model and serve settings. New sources are added and every source's timer is (re)installed; the seed cannot change | `updated`, `seed-change-refused`, `not-active`, `no-such-instance` |
 | `cortex remove <name>` | stop and delete the instance's timers and viewer; its directory and store stay | `removed`, `wrong-state`, `no-such-instance` |
 | `cortex list` | instances: name, state, description, model, EKR version, viewer address | |
@@ -50,7 +50,10 @@ A source id is `<instance>/<source>`.
 
 A `ran` line's detail carries `documents_new`, `documents_applied`, `cost_usd`, `facts_refused`
 (facts the model cited unissued evidence for), `parts_rejected` (parts EKR rejected), `masked`
-(credential shapes replaced) and `stopped` (why the run ended early, if it did).
+(credential shapes replaced) and `stopped` (why the run ended early, if it did). When the spec
+has a `redaction` policy it also carries `redacted` (values replaced by placeholders in the
+prompts sent, per class or rule) and `unrestored` (placeholders in the model's answers that had no
+value to put back).
 
 ## Setup
 

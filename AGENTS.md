@@ -5,8 +5,8 @@ user documentation is the site under `website/`, published at <https://beyond10x
 
 ## What this is
 
-`cortex` spins up EKR knowledge brains from an instance spec. One instance is one EKR SQLite store
-plus the data sources that feed them on a schedule. The engine is EKR (`ekr` binary); integrations
+`cortex` spins up EKR knowledge brains from an instance spec. One instance is one EKR store, SQLite
+or PostgreSQL as its spec names, plus the data sources that feed it on a schedule. The engine is EKR (`ekr` binary); integrations
 and every secret belong to Connectors (`connectors` binary); extraction is a tool-less
 `claude -p` call whose output is checked against EKR's own schema.
 
@@ -142,7 +142,7 @@ this repository and published by the organisation's reusable workflow.
   documentation drift.
 - Format with `cargo fmt -p cortex-cli -p cortex-docs`. `cargo fmt --all` also rewrites the
   generated crates, which are path dependencies, and `task drift` then fails.
-- `tests/conformance.rs` runs every scenario of `spec/suite.json` (35) in process; `tests/e2e.rs`
+- `tests/conformance.rs` runs every scenario of `spec/suite.json` (34) in process; `tests/e2e.rs`
   drives the binary end to end; the clap ⇔ spec test in `src/main.rs` holds the command line to
   the commands, inputs and views `spec/` puts on it.
 - Builds use `CARGO_TARGET_DIR=$HOME/.cache/b10x-target/cortex`. Check `df -h /` first; do not

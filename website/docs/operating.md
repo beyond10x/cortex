@@ -16,7 +16,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `cortex.lock` | the lock every writing command holds, so two commands on one home never interleave |
 | `bin/cortex` | the copy of cortex the systemd units run |
 | `instances/<name>/instance.yaml` | the frozen spec file, beside copies of the seed files and instructions it names |
-| `instances/<name>/store.sqlite` | the instance's EKR store |
+| `instances/<name>/store.sqlite` | the instance's EKR store, unless its spec names `store.backend: postgres`; then the store is in PostgreSQL, opened through the spec's `ekr.postgres/1` file |
 | `instances/<name>/host.json` | the EKR host document the store is opened with |
 | `instances/<name>/meta.json` | the viewer's port and the directory the spec was created from |
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
@@ -50,7 +50,9 @@ timers until a `create` or `update` installs the units again and copies the new 
 5. **Extract** in batches of up to 60,000 characters. Each batch is one `claude -p` call that
    answers in the JSON form of `ekr schema ekr.extraction-document/1`. The prompt carries the
    instance's description, its instructions, the store's node and edge types, and up to 50 known
-   entity names per type.
+   entity names per type. When the spec has a `redaction` policy, every value it finds in the
+   documents and the known names is shown to the model as a placeholder (`[Email-1]`), and each
+   placeholder in the answer is put back before merging; the mapping exists for that one call.
 6. **Merge.** A fact citing an evidence id cortex did not issue for that batch is refused; cortex
    adds the evidence items itself and records each web page as a `WebPage` node.
 7. **Apply** the document with `ekr apply-extraction`, then record the batch's documents as seen.
@@ -82,7 +84,8 @@ user's configuration:
 - the call is stopped after `timeout_s` seconds.
 
 The model sees fetched text and nothing else. Fetched text is untrusted: it is masked for
-credential shapes, stored as evidence and sent to a model that cannot act on it.
+credential shapes, stored as evidence and sent to a model that cannot act on it, with the
+personal data a `redaction` policy names replaced by placeholders (see [Limits](./limits.md)).
 
 ## Serving a store
 
