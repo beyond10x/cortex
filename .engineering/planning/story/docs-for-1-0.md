@@ -27,7 +27,9 @@ scope:
   path: website/docs/quickstart.md
 - confidence: cited
   path: website/docs/spec-file.md
-revision: 8
+- confidence: inferred
+  path: website/docs/use-cases.md
+revision: 10
 ---
 ## Outcome
 
@@ -46,10 +48,13 @@ and how to install a released binary.
 - `website/docs/limits.md`: redaction is pattern-based; the open EKR limits (URL evidence,
   relations not walked by graph reads) with their upstream story ids.
 - README.md feature list.
+- `website/docs/use-cases.md` (new): five problems cortex solves, from the draft below,
+  each with its sources, the question it answers and what it needs; every "Ready" claim
+  re-checked against the code at the time of writing.
 
 ## Acceptance
 
-The PR body carries a table with one row per statement added to the six files, each naming the test
+The PR body carries a table with one row per statement added to the seven files, each naming the test
 or command output that shows it, and no row without one.
 
 ## Depends on
@@ -60,5 +65,94 @@ or command output that shows it, and no row without one.
 
 ## Scope
 
-`website/docs/quickstart.md`, `website/docs/spec-file.md`, `website/docs/commands.md`,
+`website/docs/quickstart.md`, `website/docs/use-cases.md` (new), `website/docs/spec-file.md`, `website/docs/commands.md`,
 `website/docs/operating.md`, `website/docs/limits.md`, `README.md`.
+
+## Use cases page draft (2026-10-05)
+
+Each is one cortex instance: a spec file naming the sources, a seed schema, a model budget. "Ready"
+means the Connectors adapter or cortex source kind exists today (Connectors v0.27.0, cortex `main`).
+
+#### 1. Dependency and vendor watch for an engineering team
+
+**Problem.** A team depends on dozens of libraries, managed services and APIs. Releases,
+deprecations, CVEs and pricing changes land on changelogs, advisories and news; nobody reads all of
+them, and the one that matters is found after it breaks something.
+
+**Instance.** Web search per dependency (`topic: news`, `time_range: week`) plus a weekly crawl of
+each vendor's changelog page. Seed: Product, Release, Vulnerability, Organization;
+`AFFECTS`, `RELEASES`, `DEPRECATES`, `REPLACES`.
+
+**Question it answers over MCP.** "Did anything we depend on ship a breaking change or a CVE this
+week?" Each answer cites the page.
+
+**Ready:** yes (web source, `tavily`).
+database by accident.
+
+#### 2. Engineering memory across code, tickets and docs
+
+**Problem.** Why a service is built the way it is, who owns it and which incident changed it lives in
+merge requests, issues, tickets and wiki pages across three tools. New people and coding agents ask
+the same questions and re-derive the answer from scratch.
+
+**Instance.** Connectors sources over GitLab (merge requests, issues), Jira (issues, changelogs) and
+Confluence (pages changed since a cutoff). Seed: Service, Team, Person, Decision, Incident;
+`OWNS`, `DECIDED`, `CAUSED`, `CHANGED`.
+
+**Question.** "Who owns the billing service and what was the last decision about its retry policy?"
+
+**Ready:** GitLab, Jira and Confluence through the Connectors catalog. Slack threads are not: the
+Connectors Slack story is a draft.
+
+#### 3. Account knowledge for support and sales
+
+**Problem.** What a customer runs, what they reported, who their contacts are and what was promised is
+split between the CRM and the support desk. Agents answering a ticket do not see the sales history,
+and the account owner does not see the open tickets.
+
+**Instance.** Connectors sources over HubSpot (companies, deals, contacts) and Zendesk (tickets,
+users, organizations, incremental exports). Seed: Account, Contact, Product, Ticket, Deal;
+`USES`, `REPORTED`, `OWNS_ACCOUNT`, `BLOCKS_DEAL`.
+
+**Question.** "Which open tickets does this account have, and is any of them tied to a deal in
+progress?"
+
+**Ready:** both adapters ship (HubSpot by 0.25.1, Zendesk since 0.26.0). Zendesk has run only against
+a local fixture, not a live account. Customer data needs a redaction policy before it reaches a model,
+which cortex does not have yet.
+
+#### 4. Standards and regulation tracking
+
+**Problem.** A product must follow a moving specification (a protocol spec, an API version policy, a
+regulation). Changes are published as new revisions of long documents, and the question is always
+"what changed since the version we implemented, and does it touch us?".
+
+**Instance.** A weekly crawl of the specification site plus web search for announcements. Seed:
+Specification, Revision, Requirement, Organization; `SUPERSEDES`, `REQUIRES`, `PUBLISHED`.
+
+**Question.** "What changed between the revision we implement and the newest one?"
+
+**Ready:** yes. 
+
+#### 5. Grounding for coding and support agents
+
+**Problem.** Agents re-read the same files and docs on every task and still miss facts that live
+outside the repository. Answers come without provenance, so a person cannot check them.
+
+**Instance.** A files source over a repository's docs and ADRs, plus a Connectors source over the
+issue tracker, served to the agent through `cortex mcp` (`ekr mcp`). Every fact carries the file or
+record it came from.
+
+**Question.** Any "where is X decided / what does Y mean here" question, answered with a citation.
+
+**Ready:** yes, with one EKR limit: relations are stored but graph walks (`expand`, `degree`) do not
+see them yet (EKR story `extracted-relations-visible-to-graph-reads`). Search and explain work.
+
+#### What these share, and what cortex lacks for them
+
+| gap | needed by | where it belongs |
+|---|---|---|
+| Redaction of personal data before the model sees a document | 2, 3 | cortex (a spec-level policy), generic |
+| Relations visible to graph reads | 2, 3, 5 | EKR |
+| Slack reads | 2 | Connectors (`story:catalog-slack-reads`, draft) |
+| A deterministic source kind: map structured records straight to entities without a model call | 2, 3 | cortex |
