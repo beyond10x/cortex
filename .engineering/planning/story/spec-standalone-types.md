@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:spec-standalone-types
 kind: story
-status: active
+status: implemented
 title: The 1.0 types are in the specification and cortex behaves as before
 relations:
 - decomposes: epic:standalone-1-0
@@ -46,10 +46,11 @@ scope:
   path: website/docs/reference
 - confidence: cited
   path: website/static/schemas
-revision: 32
+revision: 34
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T11:10:14Z", actor: "agent:claude", revision: 31, decided_on: {"recorded":{"review_outcome":3}}}
 - {from: "proposed", to: "active", at: "2026-10-05T11:10:14Z", actor: "agent:claude", revision: 32, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "active", to: "implemented", at: "2026-10-05T11:47:27Z", actor: "agent:claude", revision: 34, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 
@@ -253,28 +254,13 @@ on `main` at `f2ce283` with stand-in `claude` and `connectors`.
 
 ## Scope
 
-Derived 2026-10-05 by `story-scoper`. Every line is **cited** (read from the story or the tree) or
-**inferred** (a reading that could be wrong).
+Landed 2026-10-05 in `b628e4d` (wave 20261005a, merged `1caa195`); read from `git show --stat b628e4d`.
 
-- **Primary surface:** the cortex binary crate's spec-to-model seam (`src/model_map.rs`, `src/spec.rs`) and the generated model (`generated/`) — cited
-- **Files:** `spec/domains/instance.yaml` (draft `3fc988b` plus the "Organisation-scale types" diff) — cited
-- **Files:** `generated/`, `spec/suite.json` (`task generate`) — cited
-- **Files:** `src/model_map.rs:61-135,189-192` (InstanceSpec/ModelSpec/SourceSettings mapping) — cited
-- **Files:** `src/spec.rs:103` (settings match) — cited
-- **Files:** `src/extract.rs:41-49,209-222` (`Model`, `cost_usd: f64`, Codex refusal) — cited
-- **Files:** `src/run.rs:18-21,35,91,149-153,161-198,253` (`Tools.codex`, `Report.cost_usd`, `FilesSource` literal, budget loop) — cited
-- **Files:** `src/ports.rs:262-266` (`SourceRan` cost) — cited
-- **Files:** `src/main.rs:36-38,173-178,483,677` (`--codex`, Tools, cost output) — cited
-- **Files:** `tests/e2e.rs:9-197` (fixtures move out) — cited
-- **Files:** `tests/common/mod.rs` (new) — cited
-- **Files:** `tests/spec_compat.rs` (new) — cited
-- **Files:** `website/docs/reference/`, `website/static/schemas/` (`task docs-generate`) — cited
-- **Also likely:** `tests/conformance.rs:40-58,105,124` — inferred; `m::InstanceSpec`/`m::ModelSpec` and `Tools` struct literals plus `e.cost_usd.0` stop compiling once the draft adds fields and `SourceRan.cost_usd` becomes `Optional<Decimal>`
-- **Also likely:** `src/sources.rs:72-76` — inferred; exhaustive `match settings` loses exhaustiveness when `SourceSettings` gains `structured`
-- **Also likely:** `src/home.rs:101-105,164-169` — inferred; exhaustive `SourceKind` match gains `Structured`, and the registry reader refuses an unknown kind string
-- **Also likely:** `website/data/ess/` — inferred; `cortex-docs` writes the domain graph there (`crates/cortex-docs/src/main.rs:29,399`)
-- **Documents:** `website/docs/commands.md:25,51` documents `--claude` and `cost_usd` by hand; left to `story:docs-for-1-0` per the story — inferred
-- **Confidence:** high — the story names files and line ranges, and each one matched the tree at `012e5a1`; the four extra paths follow from compile breaks the scoper read but did not build
-- **Would collide with:** any unit touching `spec/domains/instance.yaml`, `generated/`, `src/model_map.rs`, `src/spec.rs`, `src/run.rs` (Tools/Report/budget loop), `src/extract.rs`, `src/main.rs` CLI flags, `src/sources.rs` fetch dispatch, `tests/e2e.rs`, `tests/conformance.rs`, or the generated website reference and schemas
-- **Safety fact:** every draft field added to an existing type is `Optional` (`ModelSpec.backend`, `InstanceSpec.store/redaction/snapshots/gate`, `FilesSource.records`, `ConnectorsSource.paging/child`), so an existing spec file parses to the same values — draft `instance.yaml:184,247-252`, unproven. One wire edge: `src/extract.rs:209` turns a missing `total_cost_usd` into `0.0` today; under the new rule the same answer reports `null` in `SourceRan.cost_usd`, the run log and `cortex` JSON output. The e2e stand-in always sends it (`tests/e2e.rs:101`).
-- **Open for the implementor:** whether `src/sources.rs` and `src/home.rs` need edits or the generated model avoids the break; how `tests/spec_compat.rs` gets its reference output from `f2ce283` (committed fixtures vs computed); whether the organisation diff applies cleanly on `3fc988b` (the story's scratch check says it does).
+- **Files, as scoped:** `spec/domains/instance.yaml`, `spec/suite.json`, `generated/` (103 files), `src/model_map.rs`, `src/spec.rs`, `src/extract.rs`, `src/run.rs`, `src/ports.rs`, `src/main.rs`, `tests/e2e.rs`, `tests/common/mod.rs` (new), `tests/spec_compat.rs` (new), `website/docs/reference/ess/cortex-instance.md`, `website/static/schemas/instance-spec.schema.json`
+- **Inferred lines, confirmed:** `tests/conformance.rs` (+9/-), `src/sources.rs` (+4), `src/home.rs` (+2) needed edits
+- **Inferred line, wrong:** `website/data/ess/` did not change
+- **Added beyond the scope:** `tests/fixtures/spec_compat/example.json` (recorded from `f2ce283`, re-recorded independently by the adversary, byte-identical), `tests/cost.rs` and `tests/spec_forms.rs` (adversary cases moved in)
+- **Spec change beyond the draft:** the sqlite store is `Optional<cortex.instance.SqliteStore>`, so `store: {backend: sqlite}` as the Acceptance writes it is accepted
+- **Left to `story:docs-for-1-0`:** `website/docs/commands.md` (`--codex`, `cost_usd` may be null); patch at `~/.cache/cortex-wave-20261005a/spec/commands-md.patch`, carried into that story
+- **Not acted on yet (by design):** store backend, model backend Codex, redaction, snapshots, gate, structured sources, paging, file records
+- **Review:** `review-result:adversary-spec-standalone-types-pass-1` (3, fixed) and `-pass-2` (6, fixed; coordinator check: 7 `src/run.rs` mutants each fail the unit suite, `spec/coord-verify/mutant-*.log`)

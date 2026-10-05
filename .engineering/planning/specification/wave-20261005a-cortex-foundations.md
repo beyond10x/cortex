@@ -2,14 +2,15 @@
 format: aep.planning-md/3
 id: specification:wave-20261005a-cortex-foundations
 kind: specification
-status: approved
+status: implemented
 title: 'Wave 20261005a: cortex 1.0 foundations'
 relations:
 - serves: vision:self-updating-instances
-revision: 3
+revision: 5
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-05T11:10:19Z", actor: "agent:claude", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-05T11:10:19Z", actor: "agent:claude", revision: 3}
+- {from: "approved", to: "implemented", at: "2026-10-05T11:49:32Z", actor: "agent:claude", revision: 5}
 ---
 ## Wave 20261005a: cortex 1.0 foundations
 
@@ -227,3 +228,29 @@ collision: story:structured-from-files-and-drops story:structured-source src/str
 collision: story:structured-source story:timer-runs-unattended src/run.rs (inferred)
 10 wave(s), 137 collision(s), 0 unassessed
 ```
+
+## Outcome
+
+Closed 2026-10-05. Both units merged into `wave/20261005a`; `task check` on `1caa195` EXIT=0, 45 tests (`~/.cache/cortex-wave-20261005a/int-gate.log`).
+
+| unit | story | commit | merge | adversary passes (findings) | ledger pass 1 → 2 |
+|---|---|---|---|---|---|
+| U1 | `story:spec-standalone-types` | `b628e4d` | `1caa195` | 2 (3, then 6) | carried 0, new 6, resolved 3 |
+| U2 | `story:release-pipeline` | `2a047ee` | `1e02578` | 2 (5, then 3 notes) | carried 0, new 3, resolved 5 |
+
+- U2's pass-2 notes were fixed by the coordinator (one line each in `release.yml`, `CHANGELOG.md`, `AGENTS.md`) and re-checked with `check-release.sh` (0 failed) and the pass-2 `attack.sh` (1 of 23 red: `hostpath`, now documented in `AGENTS.md` as a property of an independent rebuild).
+- U1's final correction was checked by the coordinator: 7 `src/run.rs` mutants from pass 2 each fail the unit's own suite (`spec/coord-verify/mutant-*.log`, EXIT=101 each).
+- Carried: `website/docs/commands.md` patch → `story:docs-for-1-0` section "Carried from wave 20261005a".
+- Not yet verified: the release workflow's first real run (`workflow_dispatch` after merge to `main`).
+
+Agent cost (from the harness's per-agent usage; passes before the session's context compaction were not kept):
+
+| agent | tokens | tool uses | duration |
+|---|---|---|---|
+| U2 correction 1 | 117 484 | 22 | 196 s |
+| U2 adversary 2 | 93 792 | 22 | 748 s |
+| U1 adversary 1 | 135 769 | 52 | 403 s |
+| U1 correction 1 | 229 497 | 30 | 210 s |
+| U1 adversary 2 | 153 910 | 61 | 507 s |
+| U1 correction 2 | 253 533 | 14 | 137 s |
+| U1, U2 implementation, U2 adversary 1 | not recorded | | |
