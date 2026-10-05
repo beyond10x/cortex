@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:timer-runs-unattended
 kind: story
-status: active
+status: implemented
 title: Scheduled runs work with nobody at the keyboard
 relations:
 - decomposes: epic:first-web-instance
@@ -25,10 +25,11 @@ scope:
   path: src/schedule.rs
 - confidence: inferred
   path: src/state.rs
-revision: 11
+revision: 13
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T15:42:25Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":2}}}
 - {from: "proposed", to: "active", at: "2026-10-05T15:42:25Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "active", to: "implemented", at: "2026-10-05T16:11:41Z", actor: "agent:claude", revision: 13, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 
@@ -64,6 +65,10 @@ source when it fails with one failure already counted, i.e. on its second consec
 
 ## Scope
 
-`src/schedule.rs`, `README.md` (operating section). A fix the observation forces may touch
-`src/run.rs:128-232`, `src/ports.rs:175,260`, `src/state.rs` and `src/home.rs:172`; the last two
-are also `story:seen-documents-modelled`'s, which lands first.
+Landed 2026-10-05 in `fb905ce` (wave 20261005g, merged `ba07060`).
+
+- **Files:** `src/schedule.rs` (CORTEX_CONNECTORS, CORTEX_CLAUDE, CORTEX_CODEX and HOME in source units), `src/home.rs` (an absolute home), `src/spec.rs` (a bare spec file name keeps `.` as its base), `src/main.rs` (two call sites), `README.md`, `website/docs/operating.md`, `tests/unattended.rs` (new, 4 cases)
+- **Inferred lines, not needed:** `src/ports.rs`, `src/run.rs`, `src/state.rs`; failure handling worked unchanged under a real timer
+- **Acceptance, split by the coordinator:** a 15-minute window of real systemd user timers on the operator machine with a stand-in model: 15 runs, all exit 0, `cortex sources` `runs: 15`, and the failure path counting then disabling (`~/.cache/cortex-wave-20261005g/timer/live/evidence/`). The 24 h window on a real instance is recorded by `story:first-web-instance`.
+- **Left open:** the viewer unit exits 143 on stop, so `cortex remove` leaves it listed as failed (`SuccessExitStatus=143` would fix it); `%` and `$` in a home path or PATH are not escaped in unit files
+- **Review:** coordinator review of the diff; no adversary pass

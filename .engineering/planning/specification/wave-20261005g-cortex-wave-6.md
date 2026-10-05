@@ -2,12 +2,13 @@
 format: aep.planning-md/3
 id: specification:wave-20261005g-cortex-wave-6
 kind: specification
-status: approved
+status: implemented
 title: 'Wave 20261005g: cortex 1.0 wave 6'
-revision: 3
+revision: 5
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-05T15:42:25Z", actor: "agent:claude", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-05T15:42:25Z", actor: "agent:claude", revision: 3}
+- {from: "approved", to: "implemented", at: "2026-10-05T16:11:41Z", actor: "agent:claude", revision: 5}
 ---
 ## Wave 20261005g: cortex 1.0 wave 6
 
@@ -30,3 +31,11 @@ Opened 2026-10-05 by the coordinating session, `aep:implementing` 0.19.2 wave mo
 ## Commits approval authorises
 
 One commit per unit through `b10x-gates bot`; the merges into `wave/20261005g`; coordinator commits for docs and the changelog; the closing planning-store commit; the pull request into `main` and its merge.
+
+## Outcome
+
+Closed 2026-10-05. One unit merged into `wave/20261005g`; the integration tree equals the unit tree (`git diff` of everything outside `.engineering` is empty), whose `task check` exited 0 with 248 tests.
+
+| unit | story | commit |
+|---|---|---|
+| U1 | `story:timer-runs-unattended` | `fb905ce` |

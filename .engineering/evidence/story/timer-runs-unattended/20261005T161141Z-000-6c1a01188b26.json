@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-05T16:11:41Z",
+  "actor": "agent:claude",
+  "artifact": "story:timer-runs-unattended",
+  "kind": "story",
+  "revision": 12,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261005g (EXIT=0, 248 tests)"
+  }
+}
