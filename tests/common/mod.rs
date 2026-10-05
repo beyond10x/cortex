@@ -74,7 +74,11 @@ impl World {
                 r#"R="{root}"
 case "$*" in
   *"connections list"*) if [ -e "$R/revalidated" ]; then S=ready; else S=pending; fi; C=conn_test; if [ -e "$R/connection" ]; then C=$(cat "$R/connection"); fi; printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily","connection":"%s","state":"%s","revision":"rev1"}}]}}}}' "$C" "$S" ;;
-  *"connections revalidate"*) echo "$*" >> "$R/revalidations.log"; touch "$R/revalidated"; echo '{{"ok":true,"result":{{}}}}' ;;
+  *"connections revalidate"*)
+    echo "$*" >> "$R/revalidations.log"; touch "$R/revalidated"
+    if [ -e "$R/unknown" ]; then echo '{{"ok":false,"error":{{"code":"failure","data":{{"code":"outcome_unknown","kind":"operational","next_action":"retry_status","stage":"publication"}}}}}}' >&2; exit 1; fi
+    echo '{{"ok":true,"result":{{}}}}' ;;
+  *"connections status"*) echo "$*" >> "$R/status.log"; if [ -e "$R/revalidated" ] && [ ! -e "$R/stays-pending" ]; then S=ready; else S=pending; fi; printf '{{"ok":true,"result":{{"connection":{{"summary":{{"state":"%s"}}}}}}}}' "$S" ;;
   *"operations describe"*) echo '{{"ok":true,"result":{{"schema":"s","revision":"r"}}}}' ;;
   *"operations invoke"*)
     echo "$*" >> "$R/invocations.log"

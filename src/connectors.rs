@@ -31,9 +31,7 @@ impl std::fmt::Display for InvokeError {
     }
 }
 
-fn envelope(stdout: &[u8], what: &str) -> Result<Value, InvokeError> {
-    let doc: Value = serde_json::from_slice(stdout)
-        .map_err(|e| InvokeError::Failed(format!("{what}: no JSON answer: {e}")))?;
+fn envelope(doc: Value, what: &str) -> Result<Value, InvokeError> {
     if doc["ok"] == Value::Bool(true) {
         return Ok(doc["result"].clone());
     }
@@ -53,6 +51,11 @@ fn envelope(stdout: &[u8], what: &str) -> Result<Value, InvokeError> {
 
 impl Connectors {
     fn json(&self, args: &[&str], what: &str) -> Result<Value, InvokeError> {
+        envelope(self.answer(args, what)?, what)
+    }
+
+    /// The JSON document `connectors` answered, success or refusal.
+    fn answer(&self, args: &[&str], what: &str) -> Result<Value, InvokeError> {
         let out = Command::new(&self.bin)
             .args(args)
             .args(["--output", "json"])
@@ -64,7 +67,8 @@ impl Connectors {
         } else {
             &out.stdout
         };
-        envelope(answer, what)
+        serde_json::from_slice(answer)
+            .map_err(|e| InvokeError::Failed(format!("{what}: no JSON answer: {e}")))
     }
 
     /// The state of `connection` among `adapter`'s connections, or `None` when it is not listed.
@@ -112,7 +116,8 @@ impl Connectors {
             return Ok(());
         }
         let revision = found["revision"].as_str().unwrap_or_default().to_string();
-        self.json(
+        let what = "connections revalidate";
+        let doc = self.answer(
             &[
                 "connections",
                 "revalidate",
@@ -123,9 +128,57 @@ impl Connectors {
                 "--expected-revision",
                 &revision,
             ],
-            "connections revalidate",
-        )
-        .map(|_| ())
+            what,
+        )?;
+        // Connectors can apply a revalidation and still be unable to confirm it
+        // (`outcome_unknown` at publication); it then names reading the status as the next step.
+        let unconfirmed = doc["error"]["data"]["next_action"].as_str() == Some("retry_status");
+        match envelope(doc, what) {
+            Err(InvokeError::Failed(message)) if unconfirmed => {
+                self.await_ready(adapter, connection, &message)
+            }
+            other => other.map(|_| ()),
+        }
+    }
+
+    /// Reads `connection`'s status until it is `ready`, up to `CORTEX_STATUS_POLLS` reads (12)
+    /// `CORTEX_STATUS_POLL_MS` apart (5000); otherwise fails naming `cause` and the last state.
+    fn await_ready(&self, adapter: &str, connection: &str, cause: &str) -> Result<(), InvokeError> {
+        let setting = |name: &str, default: u64| {
+            std::env::var(name)
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default)
+        };
+        let polls = setting("CORTEX_STATUS_POLLS", 12).max(1);
+        let pause = std::time::Duration::from_millis(setting("CORTEX_STATUS_POLL_MS", 5000));
+        let mut state = String::from("unknown");
+        for read in 0..polls {
+            if read > 0 {
+                std::thread::sleep(pause);
+            }
+            let status = self.json(
+                &[
+                    "connections",
+                    "status",
+                    "--adapter",
+                    adapter,
+                    "--connection",
+                    connection,
+                ],
+                "connections status",
+            )?;
+            state = status["connection"]["summary"]["state"]
+                .as_str()
+                .unwrap_or("unknown")
+                .to_string();
+            if state == "ready" {
+                return Ok(());
+            }
+        }
+        Err(InvokeError::Failed(format!(
+            "{cause}; connections status still {state} after {polls} reads"
+        )))
     }
 
     /// Invokes `operation` once and answers the adapter's own result. The CLI wraps it as
