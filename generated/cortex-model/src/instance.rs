@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43
-// contract digest 28f44d88be3d554adbf5e4d04488470231c93d64c08ef39e288ec9c2d93f34e4
+// model digest b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85
+// contract digest b949168dd73a8a82c270bfa858354cf5311edabd072da4e2c85eaf684999ade6
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -14,6 +14,19 @@
 pub enum ChangeDetection {
     /// `ContentHash`.
     ContentHash,
+}
+
+/// ChildCall — `cortex.instance.ChildCall`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChildCall {
+    /// `operation` — `String`.
+    pub operation: String,
+    /// `input` — `Json`.
+    pub input: crate::json::Value,
+    /// `records` — `String`.
+    pub records: String,
+    /// `paging` — `Optional<cortex.instance.Paging>`.
+    pub paging: Option<Paging>,
 }
 
 /// ConnectorsSource — `cortex.instance.ConnectorsSource`.
@@ -35,6 +48,10 @@ pub struct ConnectorsSource {
     pub time: Option<String>,
     /// `text` — `List<String>`.
     pub text: Vec<String>,
+    /// `paging` — `Optional<cortex.instance.Paging>`.
+    pub paging: Option<Paging>,
+    /// `child` — `Optional<cortex.instance.ChildCall>`.
+    pub child: Option<ChildCall>,
 }
 
 /// CrawlPolicy — `cortex.instance.CrawlPolicy`.
@@ -54,6 +71,15 @@ pub struct CrawlPolicy {
     pub instructions: Option<String>,
     /// `allow_external` — `Boolean`.
     pub allow_external: bool,
+}
+
+/// DropPolicy — `cortex.instance.DropPolicy`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DropPolicy {
+    /// `Keep`.
+    Keep,
+    /// `Supersede`.
+    Supersede,
 }
 
 /// EkrPin — `cortex.instance.EkrPin`.
@@ -78,6 +104,25 @@ pub struct FetchPolicy {
     pub max_chars_per_document: i64,
 }
 
+/// FileRecords — `cortex.instance.FileRecords`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileRecords {
+    /// `format` — `cortex.instance.RecordFormat`.
+    pub format: RecordFormat,
+    /// `id` — `String`.
+    pub id: String,
+    /// `time` — `Optional<String>`.
+    pub time: Option<String>,
+    /// `author` — `Optional<String>`.
+    pub author: Option<String>,
+    /// `text` — `List<String>`.
+    pub text: Vec<String>,
+    /// `thread` — `Optional<String>`.
+    pub thread: Option<String>,
+    /// `filters` — `List<cortex.instance.RecordFilter>`.
+    pub filters: Vec<RecordFilter>,
+}
+
 /// FilesSource — `cortex.instance.FilesSource`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FilesSource {
@@ -85,6 +130,19 @@ pub struct FilesSource {
     pub paths: Vec<String>,
     /// `glob` — `String`.
     pub glob: String,
+    /// `records` — `Optional<cortex.instance.FileRecords>`.
+    pub records: Option<FileRecords>,
+}
+
+/// GateCheck — `cortex.instance.GateCheck`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GateCheck {
+    /// `measure` — `String`.
+    pub measure: String,
+    /// `min` — `Optional<Decimal>`.
+    pub min: Option<crate::primitives::Decimal>,
+    /// `max` — `Optional<Decimal>`.
+    pub max: Option<crate::primitives::Decimal>,
 }
 
 /// The states of `cortex.instance.Instance`, as runtime values.
@@ -122,6 +180,23 @@ pub struct InstanceSpec {
     pub sources: Vec<SourceSpec>,
     /// `serve` — `cortex.instance.ServeSpec`.
     pub serve: ServeSpec,
+    /// `store` — `Optional<cortex.instance.StoreSpec>`.
+    pub store: Option<StoreSpec>,
+    /// `redaction` — `Optional<cortex.instance.RedactionPolicy>`.
+    pub redaction: Option<RedactionPolicy>,
+    /// `snapshots` — `Optional<cortex.instance.SnapshotPolicy>`.
+    pub snapshots: Option<SnapshotPolicy>,
+    /// `gate` — `Optional<cortex.instance.RunGate>`.
+    pub gate: Option<RunGate>,
+}
+
+/// ModelBackend — `cortex.instance.ModelBackend`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelBackend {
+    /// `Claude`.
+    Claude,
+    /// `Codex`.
+    Codex,
 }
 
 /// ModelSpec — `cortex.instance.ModelSpec`.
@@ -129,12 +204,156 @@ pub struct InstanceSpec {
 pub struct ModelSpec {
     /// `model` — `String`.
     pub model: String,
+    /// `backend` — `Optional<cortex.instance.ModelBackend>`.
+    pub backend: Option<ModelBackend>,
     /// `budget_usd` — `Decimal`.
     pub budget_usd: crate::primitives::Decimal,
     /// `timeout_s` — `Integer`.
     pub timeout_s: i64,
     /// `instructions` — `Optional<String>`.
     pub instructions: Option<String>,
+}
+
+/// PageStyle — `cortex.instance.PageStyle`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageStyle {
+    /// `PageNumber`.
+    PageNumber,
+    /// `Token`.
+    Token,
+    /// `Keyset`.
+    Keyset,
+}
+
+/// Paging — `cortex.instance.Paging`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Paging {
+    /// `style` — `cortex.instance.PageStyle`.
+    pub style: PageStyle,
+    /// `param` — `String`.
+    pub param: String,
+    /// `next` — `Optional<String>`.
+    pub next: Option<String>,
+    /// `max_pages` — `Integer`.
+    pub max_pages: i64,
+}
+
+/// PostgresStore — `cortex.instance.PostgresStore`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PostgresStore {
+    /// `config` — `String`.
+    pub config: String,
+}
+
+/// PropertyMapping — `cortex.instance.PropertyMapping`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PropertyMapping {
+    /// `property` — `String`.
+    pub property: String,
+    /// `path` — `String`.
+    pub path: String,
+}
+
+/// RecordFilter — `cortex.instance.RecordFilter`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordFilter {
+    /// `field` — `String`.
+    pub field: String,
+    /// `values` — `List<String>`.
+    pub values: Vec<String>,
+    /// `include` — `Boolean`.
+    pub include: bool,
+}
+
+/// RecordFormat — `cortex.instance.RecordFormat`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecordFormat {
+    /// `WholeFile`.
+    WholeFile,
+    /// `JsonLines`.
+    JsonLines,
+    /// `MarkdownSections`.
+    MarkdownSections,
+}
+
+/// RecordMapping — `cortex.instance.RecordMapping`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordMapping {
+    /// `node_type` — `String`.
+    pub node_type: String,
+    /// `id` — `String`.
+    pub id: String,
+    /// `name` — `String`.
+    pub name: String,
+    /// `aliases` — `List<String>`.
+    pub aliases: Vec<String>,
+    /// `properties` — `List<cortex.instance.PropertyMapping>`.
+    pub properties: Vec<PropertyMapping>,
+    /// `relations` — `List<cortex.instance.RelationMapping>`.
+    pub relations: Vec<RelationMapping>,
+}
+
+/// RedactionClass — `cortex.instance.RedactionClass`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RedactionClass {
+    /// `Email`.
+    Email,
+    /// `Phone`.
+    Phone,
+    /// `IpAddress`.
+    IpAddress,
+    /// `PaymentCard`.
+    PaymentCard,
+    /// `Url`.
+    Url,
+    /// `Credential`.
+    Credential,
+    /// `RareName`.
+    RareName,
+}
+
+/// RedactionPolicy — `cortex.instance.RedactionPolicy`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RedactionPolicy {
+    /// `classes` — `List<cortex.instance.RedactionClass>`.
+    pub classes: Vec<RedactionClass>,
+    /// `rules` — `List<cortex.instance.RedactionRule>`.
+    pub rules: Vec<RedactionRule>,
+    /// `known_names` — `Optional<List<String>>`.
+    pub known_names: Option<Vec<String>>,
+    /// `rare_limit` — `Optional<Integer>`.
+    pub rare_limit: Option<i64>,
+    /// `refuse_if_left` — `Optional<List<cortex.instance.RedactionClass>>`.
+    pub refuse_if_left: Option<Vec<RedactionClass>>,
+}
+
+/// RedactionRule — `cortex.instance.RedactionRule`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RedactionRule {
+    /// `name` — `String`.
+    pub name: String,
+    /// `pattern` — `String`.
+    pub pattern: String,
+    /// `replacement` — `String`.
+    pub replacement: String,
+}
+
+/// RelationMapping — `cortex.instance.RelationMapping`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelationMapping {
+    /// `relation` — `String`.
+    pub relation: String,
+    /// `target_type` — `String`.
+    pub target_type: String,
+    /// `target_name` — `String`.
+    pub target_name: String,
+}
+
+/// RunGate — `cortex.instance.RunGate`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunGate {
+    /// `checks` — `List<cortex.instance.GateCheck>`.
+    pub checks: Vec<GateCheck>,
 }
 
 /// SearchInput — `cortex.instance.SearchInput`.
@@ -203,6 +422,13 @@ pub struct SitesInput {
     pub policy: Option<CrawlPolicy>,
 }
 
+/// SnapshotPolicy — `cortex.instance.SnapshotPolicy`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnapshotPolicy {
+    /// `keep` — `Integer`.
+    pub keep: i64,
+}
+
 /// The states of `cortex.instance.Source`, as runtime values.
 ///
 /// Synthesised from the lifecycle, so the two cannot disagree. Which *moves* are legal is not
@@ -228,6 +454,8 @@ pub enum SourceKind {
     Connectors,
     /// `Files`.
     Files,
+    /// `Structured`.
+    Structured,
 }
 
 /// SourceSettings — `cortex.instance.SourceSettings`: one of a fixed set of shapes, tagged on the wire by `kind`.
@@ -237,6 +465,8 @@ pub enum SourceSettings {
     Connectors(ConnectorsSource),
     /// Tagged `files` — `cortex.instance.FilesSource`.
     Files(FilesSource),
+    /// Tagged `structured` — `cortex.instance.StructuredSource`.
+    Structured(StructuredSource),
     /// Tagged `web` — `cortex.instance.WebSource`.
     Web(WebSource),
 }
@@ -252,6 +482,68 @@ pub struct SourceSpec {
     pub settings: SourceSettings,
     /// `policy` — `cortex.instance.FetchPolicy`.
     pub policy: FetchPolicy,
+}
+
+/// SqliteStore — `cortex.instance.SqliteStore`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SqliteStore {
+    /// `path` — `Optional<String>`.
+    pub path: Option<String>,
+}
+
+/// StoreSpec — `cortex.instance.StoreSpec`: one of a fixed set of shapes, tagged on the wire by `backend`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StoreSpec {
+    /// Tagged `postgres` — `cortex.instance.PostgresStore`.
+    Postgres(PostgresStore),
+    /// Tagged `sqlite` — `Optional<cortex.instance.SqliteStore>`.
+    Sqlite(Option<SqliteStore>),
+}
+
+/// StructuredConnectors — `cortex.instance.StructuredConnectors`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StructuredConnectors {
+    /// `adapter` — `String`.
+    pub adapter: String,
+    /// `connection` — `String`.
+    pub connection: String,
+    /// `operation` — `String`.
+    pub operation: String,
+    /// `inputs` — `List<Json>`.
+    pub inputs: Vec<crate::json::Value>,
+    /// `paging` — `Optional<cortex.instance.Paging>`.
+    pub paging: Option<Paging>,
+}
+
+/// StructuredFiles — `cortex.instance.StructuredFiles`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StructuredFiles {
+    /// `paths` — `List<String>`.
+    pub paths: Vec<String>,
+    /// `glob` — `String`.
+    pub glob: String,
+}
+
+/// StructuredInput — `cortex.instance.StructuredInput`: one of a fixed set of shapes, tagged on the wire by `from`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StructuredInput {
+    /// Tagged `connectors` — `cortex.instance.StructuredConnectors`.
+    Connectors(StructuredConnectors),
+    /// Tagged `files` — `cortex.instance.StructuredFiles`.
+    Files(StructuredFiles),
+}
+
+/// StructuredSource — `cortex.instance.StructuredSource`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StructuredSource {
+    /// `input` — `cortex.instance.StructuredInput`.
+    pub input: StructuredInput,
+    /// `records` — `String`.
+    pub records: String,
+    /// `mapping` — `cortex.instance.RecordMapping`.
+    pub mapping: RecordMapping,
+    /// `dropped` — `Optional<cortex.instance.DropPolicy>`.
+    pub dropped: Option<DropPolicy>,
 }
 
 /// TimeRange — `cortex.instance.TimeRange`: one of a closed set of names.
@@ -1051,8 +1343,8 @@ pub struct SourceRan {
     pub documents_new: i64,
     /// `documents_applied` — `Integer`.
     pub documents_applied: i64,
-    /// `cost_usd` — `Decimal`.
-    pub cost_usd: crate::primitives::Decimal,
+    /// `cost_usd` — `Optional<Decimal>`.
+    pub cost_usd: Option<crate::primitives::Decimal>,
 }
 
 /// The declared error `cortex.instance.ApplyRefused`.

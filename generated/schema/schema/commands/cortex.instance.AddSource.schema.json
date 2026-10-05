@@ -32,8 +32,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43",
-    "contract_digest": "slice-sha256/2:b26af69de8f539fa7534b9463dc389ff830abc2cbddc23a93e6e99f84d74a4f4",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:dcbda73a839721cc0eb985c65347b3d265ebecc34fe64eec2acc07dc5ea42d82",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -57,7 +57,8 @@
       "enum": [
         "Web",
         "Connectors",
-        "Files"
+        "Files",
+        "Structured"
       ]
     }
   }

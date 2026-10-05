@@ -102,6 +102,7 @@ pub fn kind_name(kind: m::SourceKind) -> &'static str {
         m::SourceKind::Web => "Web",
         m::SourceKind::Connectors => "Connectors",
         m::SourceKind::Files => "Files",
+        m::SourceKind::Structured => "Structured",
     }
 }
 
@@ -165,6 +166,7 @@ impl Registry {
                         "Web" => m::SourceKind::Web,
                         "Connectors" => m::SourceKind::Connectors,
                         "Files" => m::SourceKind::Files,
+                        "Structured" => m::SourceKind::Structured,
                         other => return Err(format!("unknown source kind {other:?}")),
                     },
                     schedule: text(s, "schedule")?,

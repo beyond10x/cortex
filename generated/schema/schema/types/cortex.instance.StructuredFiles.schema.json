@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.StructuredFiles",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:a9b7f3d8120a377d8bba3db64f0657fa74132e452e8954a222f9f88900f3baed",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.StructuredFiles": {
+      "title": "StructuredFiles",
+      "x-ess-name": "cortex.instance.StructuredFiles",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "glob": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "paths",
+        "glob"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

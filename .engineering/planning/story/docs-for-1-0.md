@@ -29,7 +29,7 @@ scope:
   path: website/docs/spec-file.md
 - confidence: inferred
   path: website/docs/use-cases.md
-revision: 10
+revision: 11
 ---
 ## Outcome
 
@@ -156,3 +156,37 @@ see them yet (EKR story `extracted-relations-visible-to-graph-reads`). Search an
 | Relations visible to graph reads | 2, 3, 5 | EKR |
 | Slack reads | 2 | Connectors (`story:catalog-slack-reads`, draft) |
 | A deterministic source kind: map structured records straight to entities without a model call | 2, 3 | cortex |
+
+## Carried from wave 20261005a
+
+From wave 20261005a (`story:spec-standalone-types`, landed `b628e4d`): `website/docs/commands.md` must document `--codex` beside `--claude` and say `cost_usd` may be `null` (an uncosted answer). The implementor left this patch for this story, against `b628e4d`:
+
+```diff
+--- a/website/docs/commands.md	2026-10-05 13:19:33.430301006 +0200
++++ b/website/docs/commands.md	2026-10-05 13:19:33.432128747 +0200
+@@ -23,6 +23,7 @@
+ | `--home <dir>` | `CORTEX_HOME` | `~/.local/share/cortex` |
+ | `--connectors <bin>` | `CORTEX_CONNECTORS` | `connectors` |
+ | `--claude <bin>` | `CORTEX_CLAUDE` | `claude` |
++| `--codex <bin>` | `CORTEX_CODEX` | `codex` |
+ 
+ ## Instances
+ 
+@@ -45,12 +46,14 @@
+ | `cortex run <instance>/<source> [--record-failure]` | run one source once. With `--record-failure`, which the timers pass, a failed run is also counted | `ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `disabled`, `no-such-source` |
+ | `cortex source enable <instance>/<source>` | enable a source that two failed runs in a row disabled, and its timer | `enabled`, `wrong-state`, `no-such-source` |
+ | `cortex source record-failure <instance>/<source> --reason <text>` | count one failed run; the second in a row disables the source and its timer | `counted`, `disabled`, `already-disabled`, `no-such-source` |
+-| `cortex source add --instance-name <name> --source-id <id> --name <name> --kind <Web\|Connectors\|Files> --schedule <calendar>` | register a source in the registry; `create` and `update` do this for the spec's sources | `added` |
++| `cortex source add --instance-name <name> --source-id <id> --name <name> --kind <Web\|Connectors\|Files\|Structured> --schedule <calendar>` | register a source in the registry; `create` and `update` do this for the spec's sources | `added` |
+ | `cortex sources` | sources: id, kind, state, schedule, runs, consecutive failures | |
+ 
+ A `ran` line's detail carries `documents_new`, `documents_applied`, `cost_usd`, `facts_refused`
+ (facts the model cited unissued evidence for), `parts_rejected` (parts EKR rejected), `masked`
+-(credential shapes replaced) and `stopped` (why the run ended early, if it did).
++(credential shapes replaced) and `stopped` (why the run ended early, if it did). `cost_usd` is `"0.0000"`
++when no model was asked, the sum when every model answer carried a cost, and `null` when any
++answer carried none; a missing cost is never written as `0`.
+ 
+ ## Setup
+ 
+```

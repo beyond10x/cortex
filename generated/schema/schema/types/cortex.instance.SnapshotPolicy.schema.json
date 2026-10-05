@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.SnapshotPolicy",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:ea87251441bd9484727882beeab9932976042425b223511e0ab0454470be6835",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.SnapshotPolicy": {
+      "title": "SnapshotPolicy",
+      "x-ess-name": "cortex.instance.SnapshotPolicy",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "keep": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "keep"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

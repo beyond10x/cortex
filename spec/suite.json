@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/12",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43",
-    "contract_digest": "28f44d88be3d554adbf5e4d04488470231c93d64c08ef39e288ec9c2d93f34e4"
+    "spec_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "b949168dd73a8a82c270bfa858354cf5311edabd072da4e2c85eaf684999ade6"
   },
   "scenarios": {
     "cortex.instance.AddSource/outcome/added": {
@@ -40,13 +40,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -55,7 +66,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -321,13 +341,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -336,7 +367,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -392,11 +432,19 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ConnectorsSource"
         },
         {
           "kind": "type",
           "name": "cortex.instance.CrawlPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.DropPolicy"
         },
         {
           "kind": "type",
@@ -408,7 +456,15 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FileRecords"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.GateCheck"
         },
         {
           "kind": "type",
@@ -420,7 +476,59 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ModelBackend"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ModelSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PageStyle"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.Paging"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PostgresStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PropertyMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFilter"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFormat"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionClass"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RelationMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunGate"
         },
         {
           "kind": "type",
@@ -448,11 +556,39 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.SnapshotPolicy"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.SourceSettings"
         },
         {
           "kind": "type",
           "name": "cortex.instance.SourceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredConnectors"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredFiles"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredSource"
         },
         {
           "kind": "type",
@@ -556,13 +692,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -571,7 +718,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -670,11 +826,19 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ConnectorsSource"
         },
         {
           "kind": "type",
           "name": "cortex.instance.CrawlPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.DropPolicy"
         },
         {
           "kind": "type",
@@ -686,7 +850,15 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FileRecords"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.GateCheck"
         },
         {
           "kind": "type",
@@ -698,7 +870,59 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ModelBackend"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ModelSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PageStyle"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.Paging"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PostgresStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PropertyMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFilter"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFormat"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionClass"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RelationMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunGate"
         },
         {
           "kind": "type",
@@ -726,11 +950,39 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.SnapshotPolicy"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.SourceSettings"
         },
         {
           "kind": "type",
           "name": "cortex.instance.SourceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredConnectors"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredFiles"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredSource"
         },
         {
           "kind": "type",
@@ -845,13 +1097,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -860,7 +1123,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -919,11 +1191,19 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ConnectorsSource"
         },
         {
           "kind": "type",
           "name": "cortex.instance.CrawlPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.DropPolicy"
         },
         {
           "kind": "type",
@@ -935,7 +1215,15 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FileRecords"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.GateCheck"
         },
         {
           "kind": "type",
@@ -947,7 +1235,59 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ModelBackend"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ModelSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PageStyle"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.Paging"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PostgresStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PropertyMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFilter"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFormat"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionClass"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RelationMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunGate"
         },
         {
           "kind": "type",
@@ -975,11 +1315,39 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.SnapshotPolicy"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.SourceSettings"
         },
         {
           "kind": "type",
           "name": "cortex.instance.SourceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredConnectors"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredFiles"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredSource"
         },
         {
           "kind": "type",
@@ -1090,13 +1458,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -1105,7 +1484,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -1161,11 +1549,19 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ConnectorsSource"
         },
         {
           "kind": "type",
           "name": "cortex.instance.CrawlPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.DropPolicy"
         },
         {
           "kind": "type",
@@ -1177,7 +1573,15 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FileRecords"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.GateCheck"
         },
         {
           "kind": "type",
@@ -1189,7 +1593,59 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ModelBackend"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ModelSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PageStyle"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.Paging"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PostgresStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PropertyMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFilter"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFormat"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionClass"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RelationMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunGate"
         },
         {
           "kind": "type",
@@ -1217,11 +1673,39 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.SnapshotPolicy"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.SourceSettings"
         },
         {
           "kind": "type",
           "name": "cortex.instance.SourceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredConnectors"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredFiles"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredSource"
         },
         {
           "kind": "type",
@@ -1325,13 +1809,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -1340,7 +1835,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -1856,13 +2360,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -1871,7 +2386,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -2139,13 +2663,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -2154,7 +2689,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -2294,13 +2838,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -2309,7 +2864,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -2410,13 +2974,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -2425,7 +3000,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -2640,13 +3224,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -2655,7 +3250,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -2998,13 +3602,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -3013,7 +3628,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -3655,13 +4279,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -3670,7 +4305,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -4008,13 +4652,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -4023,7 +4678,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -4274,7 +4938,8 @@
                 "variants": [
                   "Web",
                   "Connectors",
-                  "Files"
+                  "Files",
+                  "Structured"
                 ]
               }
             }
@@ -4846,13 +5511,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -4861,7 +5537,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -4987,7 +5672,8 @@
           "shape": {
             "cost_usd": {
               "holds": "primitive",
-              "kind": "decimal"
+              "kind": "decimal",
+              "optional": true
             },
             "documents_applied": {
               "holds": "primitive",
@@ -5194,13 +5880,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -5209,7 +5906,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -5373,13 +6079,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -5388,7 +6105,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -5702,13 +6428,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -5717,7 +6454,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -5945,13 +6691,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -5960,7 +6717,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -6245,13 +7011,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -6260,7 +7037,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -6498,13 +7284,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -6513,7 +7310,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -6743,7 +7549,8 @@
                 "variants": [
                   "Web",
                   "Connectors",
-                  "Files"
+                  "Files",
+                  "Structured"
                 ]
               }
             }
@@ -6950,13 +7757,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -6965,7 +7783,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -7216,7 +8043,8 @@
                 "variants": [
                   "Web",
                   "Connectors",
-                  "Files"
+                  "Files",
+                  "Structured"
                 ]
               }
             }
@@ -7351,13 +8179,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -7366,7 +8205,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -7496,7 +8344,8 @@
                 "variants": [
                   "Web",
                   "Connectors",
-                  "Files"
+                  "Files",
+                  "Structured"
                 ]
               }
             }
@@ -7692,13 +8541,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -7707,7 +8567,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -8107,13 +8976,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -8122,7 +9002,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -8519,13 +9408,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -8534,7 +9434,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -8677,13 +9586,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -8692,7 +9612,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -8832,13 +9761,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -8847,7 +9787,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -8914,11 +9863,19 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ConnectorsSource"
         },
         {
           "kind": "type",
           "name": "cortex.instance.CrawlPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.DropPolicy"
         },
         {
           "kind": "type",
@@ -8930,7 +9887,15 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FileRecords"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.GateCheck"
         },
         {
           "kind": "type",
@@ -8946,7 +9911,59 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ModelBackend"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ModelSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PageStyle"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.Paging"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PostgresStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PropertyMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFilter"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFormat"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionClass"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RelationMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunGate"
         },
         {
           "kind": "type",
@@ -8974,11 +9991,39 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.SnapshotPolicy"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.SourceSettings"
         },
         {
           "kind": "type",
           "name": "cortex.instance.SourceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredConnectors"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredFiles"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredSource"
         },
         {
           "kind": "type",
@@ -9108,13 +10153,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -9123,7 +10179,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -9204,13 +10269,24 @@
                   "version": "spec.ekr.version-1"
                 },
                 "format": "spec.format-1",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Codex",
                   "budget_usd": 2.0,
                   "instructions": "spec.model.instructions-1",
                   "model": "spec.model.model-1",
                   "timeout_s": 2.0
                 },
                 "name": "spec.name-1",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 2.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed-1",
@@ -9219,7 +10295,16 @@
                 "serve": {
                   "view_port": 2.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 2.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config-1"
+                  }
+                }
               }
             }
           }
@@ -9341,13 +10426,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -9356,7 +10452,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -9442,13 +10547,24 @@
                   "version": "spec.ekr.version-2"
                 },
                 "format": "spec.format-2",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 3.0,
                   "instructions": "spec.model.instructions-2",
                   "model": "spec.model.model-2",
                   "timeout_s": 3.0
                 },
                 "name": "spec.name-2",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 3.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed-2",
@@ -9457,7 +10573,16 @@
                 "serve": {
                   "view_port": 3.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 3.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config-2"
+                  }
+                }
               }
             }
           }
@@ -9597,13 +10722,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -9612,7 +10748,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -9676,11 +10821,19 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ConnectorsSource"
         },
         {
           "kind": "type",
           "name": "cortex.instance.CrawlPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.DropPolicy"
         },
         {
           "kind": "type",
@@ -9692,7 +10845,15 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FileRecords"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.GateCheck"
         },
         {
           "kind": "type",
@@ -9704,7 +10865,59 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ModelBackend"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ModelSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PageStyle"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.Paging"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PostgresStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PropertyMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFilter"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFormat"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionClass"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RelationMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunGate"
         },
         {
           "kind": "type",
@@ -9732,11 +10945,39 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.SnapshotPolicy"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.SourceSettings"
         },
         {
           "kind": "type",
           "name": "cortex.instance.SourceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredConnectors"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredFiles"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredSource"
         },
         {
           "kind": "type",
@@ -9870,13 +11111,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -9885,7 +11137,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -9955,13 +11216,24 @@
                   "version": "spec.ekr.version"
                 },
                 "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
                 "model": {
+                  "backend": "Claude",
                   "budget_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
                 "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -9970,7 +11242,16 @@
                 "serve": {
                   "view_port": 1.0
                 },
-                "sources": []
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
               }
             }
           }
@@ -10082,11 +11363,19 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ConnectorsSource"
         },
         {
           "kind": "type",
           "name": "cortex.instance.CrawlPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.DropPolicy"
         },
         {
           "kind": "type",
@@ -10098,7 +11387,15 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FileRecords"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.GateCheck"
         },
         {
           "kind": "type",
@@ -10110,7 +11407,59 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.ModelBackend"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ModelSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PageStyle"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.Paging"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PostgresStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PropertyMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFilter"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFormat"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionClass"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RelationMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunGate"
         },
         {
           "kind": "type",
@@ -10138,11 +11487,39 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.SnapshotPolicy"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.SourceSettings"
         },
         {
           "kind": "type",
           "name": "cortex.instance.SourceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredConnectors"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredFiles"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredSource"
         },
         {
           "kind": "type",

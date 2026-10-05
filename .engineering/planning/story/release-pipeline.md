@@ -2,23 +2,23 @@
 format: aep.planning-md/3
 id: story:release-pipeline
 kind: story
-status: draft
+status: implemented
 title: cortex releases through a tag, a changelog and a binary
 relations:
 - decomposes: epic:standalone-1-0
 - serves: vision:self-updating-instances
 scope:
-- confidence: inferred
+- confidence: cited
   path: .github/workflows/release.yml
 - confidence: cited
   path: AGENTS.md
-- confidence: inferred
+- confidence: cited
   path: CHANGELOG.md
-- confidence: cited
-  path: Cargo.lock
-- confidence: cited
-  path: Cargo.toml
-revision: 11
+revision: 18
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T11:10:14Z", actor: "agent:claude", revision: 15, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-10-05T11:10:14Z", actor: "agent:claude", revision: 16, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "active", to: "implemented", at: "2026-10-05T11:47:27Z", actor: "agent:claude", revision: 18, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 
@@ -42,6 +42,10 @@ artifact, the checksum matches the tarball, and the binary inside prints `cortex
 
 ## Scope
 
-`Cargo.toml`, `Cargo.lock`, `CHANGELOG.md` (new), `.github/workflows/release.yml` (new), `AGENTS.md`
-(the "Cutting a release" section; `story:redaction-before-model` edits a different section of the
-same file and comes after this story, its edge records it).
+Landed 2026-10-05 in `2a047ee` (wave 20261005a, merged `1e02578`); read from `git show --stat 2a047ee`.
+
+- **Files:** `.github/workflows/release.yml` (new, 150 lines), `CHANGELOG.md` (new, 33), `AGENTS.md` (+50, a "Cutting a release" section only)
+- **Not changed, confirmed:** `Cargo.toml`, `Cargo.lock`, `Taskfile.yml`, `README.md`, `website/`, `src/`
+- **Open questions, answered:** the bot creates the Release (`b10x-gates gh -- release create`) and the workflow attaches to it on `release: published`; the version comes from `Cargo.toml` and a tag other than `v<version>` fails before upload; uploads use `gh release upload` with `GITHUB_TOKEN` in the publish job only (`contents: write`); `actions/upload-artifact` for `workflow_dispatch`
+- **Safety fact, changed:** a tag push alone starts no release build (the scoper read `v*` tag pushes as the trigger); the publish job refuses a prerelease and a tag whose commit is not on `origin/main`
+- **Review:** `review-result:adversary-release-pipeline-pass-1` (5 findings, all fixed) and `-pass-2` (3 notes, fixed by the coordinator)

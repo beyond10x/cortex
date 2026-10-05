@@ -4,11 +4,53 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43",
-    "contract_digest": "slice-sha256/2:f1f15700c5a486770091559b873577835a8951c220c1f532fbb1073fc1ee5b6c",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:1c86545a8fa6fa38391530533271c106b71d04e51ceb383b6251b6cf1af3b8e1",
     "regenerate": "ess generate"
   },
   "$defs": {
+    "cortex.instance.FileRecords": {
+      "title": "FileRecords",
+      "x-ess-name": "cortex.instance.FileRecords",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/cortex.instance.RecordFormat"
+        },
+        "id": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "text": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "thread": {
+          "type": "string"
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.RecordFilter"
+          }
+        }
+      },
+      "required": [
+        "format",
+        "id",
+        "text",
+        "filters"
+      ],
+      "additionalProperties": false
+    },
     "cortex.instance.FilesSource": {
       "title": "FilesSource",
       "x-ess-name": "cortex.instance.FilesSource",
@@ -23,6 +65,9 @@
         },
         "glob": {
           "type": "string"
+        },
+        "records": {
+          "$ref": "#/$defs/cortex.instance.FileRecords"
         }
       },
       "required": [
@@ -30,6 +75,43 @@
         "glob"
       ],
       "additionalProperties": false
+    },
+    "cortex.instance.RecordFilter": {
+      "title": "RecordFilter",
+      "x-ess-name": "cortex.instance.RecordFilter",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "include": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "field",
+        "values",
+        "include"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RecordFormat": {
+      "title": "RecordFormat",
+      "x-ess-name": "cortex.instance.RecordFormat",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "WholeFile",
+        "JsonLines",
+        "MarkdownSections"
+      ]
     }
   }
 }

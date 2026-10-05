@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43
-contract digest slice-sha256/2:28f44d88be3d554adbf5e4d04488470231c93d64c08ef39e288ec9c2d93f34e4
+model digest b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85
+contract digest slice-sha256/2:b949168dd73a8a82c270bfa858354cf5311edabd072da4e2c85eaf684999ade6
 do not edit: regenerate with `ess generate`
 -->
 
@@ -17,9 +17,18 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 
 `cortex.instance.ChangeDetection` is one of `ContentHash`.
 
+### `ChildCall`
+
+`cortex.instance.ChildCall` is a record of four fields:
+
+- `operation` — `String`
+- `input` — `Json`
+- `records` — `String`
+- `paging` — `Optional<cortex.instance.Paging>`, which may be absent
+
 ### `ConnectorsSource`
 
-`cortex.instance.ConnectorsSource` is a record of eight fields:
+`cortex.instance.ConnectorsSource` is a record of 10 fields:
 
 - `adapter` — `String`
 - `connection` — `String`
@@ -29,6 +38,8 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `id` — `String`
 - `time` — `Optional<String>`, which may be absent
 - `text` — `List<String>`
+- `paging` — `Optional<cortex.instance.Paging>`, which may be absent
+- `child` — `Optional<cortex.instance.ChildCall>`, which may be absent
 
 ### `CrawlPolicy`
 
@@ -41,6 +52,10 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `exclude_paths` — `List<String>`
 - `instructions` — `Optional<String>`, which may be absent
 - `allow_external` — `Boolean`
+
+### `DropPolicy`
+
+`cortex.instance.DropPolicy` is one of `Keep` and `Supersede`.
 
 ### `EkrPin`
 
@@ -58,12 +73,33 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `max_documents_per_run` — `Integer`
 - `max_chars_per_document` — `Integer`
 
+### `FileRecords`
+
+`cortex.instance.FileRecords` is a record of seven fields:
+
+- `format` — `cortex.instance.RecordFormat`
+- `id` — `String`
+- `time` — `Optional<String>`, which may be absent
+- `author` — `Optional<String>`, which may be absent
+- `text` — `List<String>`
+- `thread` — `Optional<String>`, which may be absent
+- `filters` — `List<cortex.instance.RecordFilter>`
+
 ### `FilesSource`
 
-`cortex.instance.FilesSource` is a record of two fields:
+`cortex.instance.FilesSource` is a record of three fields:
 
 - `paths` — `List<String>`
 - `glob` — `String`
+- `records` — `Optional<cortex.instance.FileRecords>`, which may be absent
+
+### `GateCheck`
+
+`cortex.instance.GateCheck` is a record of three fields:
+
+- `measure` — `String`
+- `min` — `Optional<Decimal>`, which may be absent
+- `max` — `Optional<Decimal>`, which may be absent
 
 ### `InstanceName`
 
@@ -71,7 +107,7 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 
 ### `InstanceSpec`
 
-`cortex.instance.InstanceSpec` is a record of eight fields:
+`cortex.instance.InstanceSpec` is a record of 12 fields:
 
 - `format` — `String`
 - `name` — `cortex.instance.InstanceName`
@@ -81,15 +117,109 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `model` — `cortex.instance.ModelSpec`
 - `sources` — `List<cortex.instance.SourceSpec>`
 - `serve` — `cortex.instance.ServeSpec`
+- `store` — `Optional<cortex.instance.StoreSpec>`, which may be absent
+- `redaction` — `Optional<cortex.instance.RedactionPolicy>`, which may be absent
+- `snapshots` — `Optional<cortex.instance.SnapshotPolicy>`, which may be absent
+- `gate` — `Optional<cortex.instance.RunGate>`, which may be absent
+
+### `ModelBackend`
+
+`cortex.instance.ModelBackend` is one of `Claude` and `Codex`.
 
 ### `ModelSpec`
 
-`cortex.instance.ModelSpec` is a record of four fields:
+`cortex.instance.ModelSpec` is a record of five fields:
 
 - `model` — `String`
+- `backend` — `Optional<cortex.instance.ModelBackend>`, which may be absent
 - `budget_usd` — `Decimal`
 - `timeout_s` — `Integer`
 - `instructions` — `Optional<String>`, which may be absent
+
+### `PageStyle`
+
+`cortex.instance.PageStyle` is one of `PageNumber`, `Token` and `Keyset`.
+
+### `Paging`
+
+`cortex.instance.Paging` is a record of four fields:
+
+- `style` — `cortex.instance.PageStyle`
+- `param` — `String`
+- `next` — `Optional<String>`, which may be absent
+- `max_pages` — `Integer`
+
+### `PostgresStore`
+
+`cortex.instance.PostgresStore` is a record of one field:
+
+- `config` — `String`
+
+### `PropertyMapping`
+
+`cortex.instance.PropertyMapping` is a record of two fields:
+
+- `property` — `String`
+- `path` — `String`
+
+### `RecordFilter`
+
+`cortex.instance.RecordFilter` is a record of three fields:
+
+- `field` — `String`
+- `values` — `List<String>`
+- `include` — `Boolean`
+
+### `RecordFormat`
+
+`cortex.instance.RecordFormat` is one of `WholeFile`, `JsonLines` and `MarkdownSections`.
+
+### `RecordMapping`
+
+`cortex.instance.RecordMapping` is a record of six fields:
+
+- `node_type` — `String`
+- `id` — `String`
+- `name` — `String`
+- `aliases` — `List<String>`
+- `properties` — `List<cortex.instance.PropertyMapping>`
+- `relations` — `List<cortex.instance.RelationMapping>`
+
+### `RedactionClass`
+
+`cortex.instance.RedactionClass` is one of `Email`, `Phone`, `IpAddress`, `PaymentCard`, `Url`, `Credential` and `RareName`.
+
+### `RedactionPolicy`
+
+`cortex.instance.RedactionPolicy` is a record of five fields:
+
+- `classes` — `List<cortex.instance.RedactionClass>`
+- `rules` — `List<cortex.instance.RedactionRule>`
+- `known_names` — `Optional<List<String>>`, which may be absent
+- `rare_limit` — `Optional<Integer>`, which may be absent
+- `refuse_if_left` — `Optional<List<cortex.instance.RedactionClass>>`, which may be absent
+
+### `RedactionRule`
+
+`cortex.instance.RedactionRule` is a record of three fields:
+
+- `name` — `String`
+- `pattern` — `String`
+- `replacement` — `String`
+
+### `RelationMapping`
+
+`cortex.instance.RelationMapping` is a record of three fields:
+
+- `relation` — `String`
+- `target_type` — `String`
+- `target_name` — `String`
+
+### `RunGate`
+
+`cortex.instance.RunGate` is a record of one field:
+
+- `checks` — `List<cortex.instance.GateCheck>`
 
 ### `SearchInput`
 
@@ -136,20 +266,27 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `mode` — `cortex.instance.WebMode`
 - `policy` — `Optional<cortex.instance.CrawlPolicy>`, which may be absent
 
+### `SnapshotPolicy`
+
+`cortex.instance.SnapshotPolicy` is a record of one field:
+
+- `keep` — `Integer`
+
 ### `SourceId`
 
 `cortex.instance.SourceId` wraps `String` and is not interchangeable with one: the whole value of naming it separately is the crossings the model then refuses.
 
 ### `SourceKind`
 
-`cortex.instance.SourceKind` is one of `Web`, `Connectors` and `Files`.
+`cortex.instance.SourceKind` is one of `Web`, `Connectors`, `Files` and `Structured`.
 
 ### `SourceSettings`
 
-`cortex.instance.SourceSettings` is one of three shapes, told apart by a `kind` field — tagged, so a decoder never has to guess which branch it is reading:
+`cortex.instance.SourceSettings` is one of four shapes, told apart by a `kind` field — tagged, so a decoder never has to guess which branch it is reading:
 
 - `connectors` — `cortex.instance.ConnectorsSource`
 - `files` — `cortex.instance.FilesSource`
+- `structured` — `cortex.instance.StructuredSource`
 - `web` — `cortex.instance.WebSource`
 
 ### `SourceSpec`
@@ -160,6 +297,52 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `schedule` — `String`
 - `settings` — `cortex.instance.SourceSettings`
 - `policy` — `cortex.instance.FetchPolicy`
+
+### `SqliteStore`
+
+`cortex.instance.SqliteStore` is a record of one field:
+
+- `path` — `Optional<String>`, which may be absent
+
+### `StoreSpec`
+
+`cortex.instance.StoreSpec` is one of two shapes, told apart by a `backend` field — tagged, so a decoder never has to guess which branch it is reading:
+
+- `postgres` — `cortex.instance.PostgresStore`
+- `sqlite` — `Optional<cortex.instance.SqliteStore>`
+
+### `StructuredConnectors`
+
+`cortex.instance.StructuredConnectors` is a record of five fields:
+
+- `adapter` — `String`
+- `connection` — `String`
+- `operation` — `String`
+- `inputs` — `List<Json>`
+- `paging` — `Optional<cortex.instance.Paging>`, which may be absent
+
+### `StructuredFiles`
+
+`cortex.instance.StructuredFiles` is a record of two fields:
+
+- `paths` — `List<String>`
+- `glob` — `String`
+
+### `StructuredInput`
+
+`cortex.instance.StructuredInput` is one of two shapes, told apart by a `from` field — tagged, so a decoder never has to guess which branch it is reading:
+
+- `connectors` — `cortex.instance.StructuredConnectors`
+- `files` — `cortex.instance.StructuredFiles`
+
+### `StructuredSource`
+
+`cortex.instance.StructuredSource` is a record of four fields:
+
+- `input` — `cortex.instance.StructuredInput`
+- `records` — `String`
+- `mapping` — `cortex.instance.RecordMapping`
+- `dropped` — `Optional<cortex.instance.DropPolicy>`, which may be absent
 
 ### `TimeRange`
 
@@ -553,7 +736,7 @@ It carries:
 - `source_id` — `cortex.instance.SourceId`
 - `documents_new` — `Integer`
 - `documents_applied` — `Integer`
-- `cost_usd` — `Decimal`
+- `cost_usd` — `Optional<Decimal>`, which may be absent
 
 Emitted by `cortex.instance.RunSource` on its `ran` outcome.
 
@@ -710,4 +893,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43` · contract digest `slice-sha256/2:28f44d88be3d554adbf5e4d04488470231c93d64c08ef39e288ec9c2d93f34e4`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85` · contract digest `slice-sha256/2:b949168dd73a8a82c270bfa858354cf5311edabd072da4e2c85eaf684999ade6`. Do not edit this file; change the specification and regenerate it with `ess generate`.

@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-05T11:47:27Z",
+  "actor": "agent:claude",
+  "artifact": "story:spec-standalone-types",
+  "kind": "story",
+  "revision": 33,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261005a at 1caa195 (EXIT=0, 45 tests)"
+  }
+}

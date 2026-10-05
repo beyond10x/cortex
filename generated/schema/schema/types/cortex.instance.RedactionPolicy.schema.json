@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.RedactionPolicy",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:d4f441bd969c9334e284e0ac9b4bc541e5df34c901d38bc80ce172d732da7a92",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.RedactionClass": {
+      "title": "RedactionClass",
+      "x-ess-name": "cortex.instance.RedactionClass",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Email",
+        "Phone",
+        "IpAddress",
+        "PaymentCard",
+        "Url",
+        "Credential",
+        "RareName"
+      ]
+    },
+    "cortex.instance.RedactionPolicy": {
+      "title": "RedactionPolicy",
+      "x-ess-name": "cortex.instance.RedactionPolicy",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "classes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.RedactionClass"
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.RedactionRule"
+          }
+        },
+        "known_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rare_limit": {
+          "type": "integer"
+        },
+        "refuse_if_left": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.RedactionClass"
+          }
+        }
+      },
+      "required": [
+        "classes",
+        "rules"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RedactionRule": {
+      "title": "RedactionRule",
+      "x-ess-name": "cortex.instance.RedactionRule",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "pattern",
+        "replacement"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

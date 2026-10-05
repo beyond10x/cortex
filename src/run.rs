@@ -18,6 +18,7 @@ use crate::state::SeenState;
 pub struct Tools {
     pub connectors: Connectors,
     pub claude: PathBuf,
+    pub codex: PathBuf,
 }
 
 /// Which declared failure outcome a run takes.
@@ -28,17 +29,40 @@ pub enum Failure {
     Apply(String),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Report {
     pub documents_new: i64,
     pub documents_applied: i64,
-    pub cost_usd: f64,
+    /// `0` when no model was asked, the sum when every answer carried a cost, `None` as soon as
+    /// one answer carried none: a missing cost is never written as `0`.
+    pub cost_usd: Option<f64>,
     pub facts_refused: usize,
     /// Parts of applied documents EKR rejected (`rejected` in its report).
     pub parts_rejected: usize,
     pub masked: usize,
     /// Why a run stopped before applying every new document, when it did.
     pub stopped: Option<String>,
+}
+
+impl Default for Report {
+    /// A run that asked no model: it cost `0`.
+    fn default() -> Self {
+        Self {
+            documents_new: 0,
+            documents_applied: 0,
+            cost_usd: Some(0.0),
+            facts_refused: 0,
+            parts_rejected: 0,
+            masked: 0,
+            stopped: None,
+        }
+    }
+}
+
+/// A run's cost after one more answer: the sum while every answer is costed, `None` from the
+/// first answer that is not.
+pub fn add_cost(total: Option<f64>, answer: Option<f64>) -> Option<f64> {
+    Some(total? + answer?)
 }
 
 /// Characters of document text per model call.
@@ -91,6 +115,7 @@ pub fn seed(layout: &Layout, tools: &Tools) -> Result<Report, Failure> {
     let files = m::SourceSettings::Files(m::FilesSource {
         paths: spec.seed.documents.clone(),
         glob: "**/*".into(),
+        records: None,
     });
     let fetched = sources::fetch(&files, &tools.connectors, &layout.dir).map_err(|e| match e {
         FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
@@ -147,7 +172,9 @@ fn process(
         .model_schema()
         .map_err(Failure::Extract)?;
     let model = Model {
+        backend: spec.model.backend.unwrap_or(m::ModelBackend::Claude),
         claude: tools.claude.clone(),
+        codex: tools.codex.clone(),
         model: spec.model.model.clone(),
         timeout_s: spec.model.timeout_s,
     };
@@ -159,6 +186,9 @@ fn process(
         None => None,
     };
     let budget: f64 = spec.model.budget_usd.0.parse().unwrap_or(0.0);
+    // Dollars the costed answers spent. An answer with no cost spends none; such a run is bounded
+    // by `policy.max_documents_per_run` and `model.timeout_s`.
+    let mut spent = 0.0;
     let mut entities = load_entities(layout);
 
     let issued: Vec<_> = selected
@@ -178,7 +208,7 @@ fn process(
     }
 
     for (n, batch) in batches.into_iter().enumerate() {
-        let remaining = budget - report.cost_usd;
+        let remaining = budget - spent;
         if remaining <= 0.0 {
             report.stopped = Some(format!("budget of {budget} USD spent"));
             break;
@@ -195,7 +225,8 @@ fn process(
                 break;
             }
         };
-        report.cost_usd += answer.cost_usd;
+        spent += answer.cost_usd.unwrap_or(0.0);
+        report.cost_usd = add_cost(report.cost_usd, answer.cost_usd);
         let (doc, refused) = extract::merge(&answer.document, &batch);
         report.facts_refused += refused;
         let path = dir.join("extraction.yaml");
@@ -254,4 +285,22 @@ fn log(layout: &Layout, label: &str, report: &Report, started: i64) {
         "seconds": (now_ms() - started) as f64 / 1000.0,
         "stopped": report.stopped,
     }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_run_costs_zero_without_a_model_call_the_sum_when_all_are_costed_and_none_otherwise() {
+        assert_eq!(Report::default().cost_usd, Some(0.0));
+        let costed = [Some(0.25), Some(0.5)]
+            .into_iter()
+            .fold(Report::default().cost_usd, add_cost);
+        assert_eq!(costed, Some(0.75));
+        let one_uncosted = [Some(0.25), None, Some(0.5)]
+            .into_iter()
+            .fold(Report::default().cost_usd, add_cost);
+        assert_eq!(one_uncosted, None);
+    }
 }

@@ -4,11 +4,21 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43",
-    "contract_digest": "slice-sha256/2:8190906bbb9ab93d7c80f1fe99ee65cca5a99ede030042655db507b1520cb510",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:832b3088e3a20f44b067788c69384c6bd0dba315d88ea8be47ef4c4e24c582d2",
     "regenerate": "ess generate"
   },
   "$defs": {
+    "cortex.instance.ModelBackend": {
+      "title": "ModelBackend",
+      "x-ess-name": "cortex.instance.ModelBackend",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Claude",
+        "Codex"
+      ]
+    },
     "cortex.instance.ModelSpec": {
       "title": "ModelSpec",
       "x-ess-name": "cortex.instance.ModelSpec",
@@ -17,6 +27,9 @@
       "properties": {
         "model": {
           "type": "string"
+        },
+        "backend": {
+          "$ref": "#/$defs/cortex.instance.ModelBackend"
         },
         "budget_usd": {
           "type": "string",

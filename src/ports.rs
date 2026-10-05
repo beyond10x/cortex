@@ -263,7 +263,7 @@ impl RunSourceBehavior for Ports {
             source_id: input.source_id,
             documents_new: report.documents_new,
             documents_applied: report.documents_applied,
-            cost_usd: Decimal(format!("{:.4}", report.cost_usd)),
+            cost_usd: report.cost_usd.map(|c| Decimal(format!("{c:.4}"))),
         };
         self.shared.borrow_mut().last_run = Some(report);
         Ok(m::RunSourceOutcome::Ran { source_ran: ran })

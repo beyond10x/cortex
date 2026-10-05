@@ -4,11 +4,35 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43",
-    "contract_digest": "slice-sha256/2:763b3a79b4aed776631f3dffa85ebc462c2ce124791d81ab58dc4f18e76a1568",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:53c15807df75055be4249b117c9e52b5e5d5495c5f7d7dfe30946a8e807318a5",
     "regenerate": "ess generate"
   },
   "$defs": {
+    "cortex.instance.ChildCall": {
+      "title": "ChildCall",
+      "x-ess-name": "cortex.instance.ChildCall",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string"
+        },
+        "input": {},
+        "records": {
+          "type": "string"
+        },
+        "paging": {
+          "$ref": "#/$defs/cortex.instance.Paging"
+        }
+      },
+      "required": [
+        "operation",
+        "input",
+        "records"
+      ],
+      "additionalProperties": false
+    },
     "cortex.instance.ConnectorsSource": {
       "title": "ConnectorsSource",
       "x-ess-name": "cortex.instance.ConnectorsSource",
@@ -42,6 +66,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "paging": {
+          "$ref": "#/$defs/cortex.instance.Paging"
+        },
+        "child": {
+          "$ref": "#/$defs/cortex.instance.ChildCall"
         }
       },
       "required": [
@@ -52,6 +82,43 @@
         "records",
         "id",
         "text"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.PageStyle": {
+      "title": "PageStyle",
+      "x-ess-name": "cortex.instance.PageStyle",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "PageNumber",
+        "Token",
+        "Keyset"
+      ]
+    },
+    "cortex.instance.Paging": {
+      "title": "Paging",
+      "x-ess-name": "cortex.instance.Paging",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "style": {
+          "$ref": "#/$defs/cortex.instance.PageStyle"
+        },
+        "param": {
+          "type": "string"
+        },
+        "next": {
+          "type": "string"
+        },
+        "max_pages": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "style",
+        "param",
+        "max_pages"
       ],
       "additionalProperties": false
     }
