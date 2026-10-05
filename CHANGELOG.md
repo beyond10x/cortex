@@ -7,6 +7,12 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Added
 
+- A files source can yield one document per JSON line or per markdown section, with ids, authors
+  and threads; unreadable lines and files are named in `skipped`.
+- Run snapshots: a run that applies something first copies the store and `state/`; `cortex restore`
+  puts both back after snapshotting the current state, so a restore can itself be undone.
+- `examples/agent-tooling.yaml`: a web instance that searches agent-tooling news daily and crawls
+  the MCP specification weekly.
 - Scheduled runs work with nobody at the keyboard: timers carry the `connectors`, `claude` and
   `codex` paths and `HOME` cortex was created with, and a relative home or a spec given as a bare
   file name no longer breaks them. Run `loginctl enable-linger` once to keep timers running while

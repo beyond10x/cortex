@@ -15,6 +15,7 @@ components:
         - cortex.instance.RunSource
         - cortex.instance.RecordFailure
         - cortex.instance.EnableSource
+        - cortex.instance.RestoreSnapshot
     publishes:
       events:
         - cortex.instance.InstanceCreated
@@ -25,6 +26,7 @@ components:
         - cortex.instance.RunFailed
         - cortex.instance.SourceDisabled
         - cortex.instance.SourceEnabled
+        - cortex.instance.SnapshotRestored
     reached_by: command_line
     cli:
       binary: cortex
@@ -33,6 +35,7 @@ components:
         - cortex.instance.UpdateInstance
         - cortex.instance.RemoveInstance
         - cortex.instance.RunSource
+        - cortex.instance.RestoreSnapshot
       groups:
         - name: source
           summary: One data source of an instance

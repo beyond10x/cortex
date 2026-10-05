@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/12",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588",
-    "contract_digest": "47b9eba3ad77dada209fcb9da03489c850f2c30b3e2807d97f0f47acad9cd78e"
+    "spec_digest": "7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d",
+    "contract_digest": "add61f1f192f4767e91f96690fe684e5461a92681a4000b4032423d92532ec30"
   },
   "scenarios": {
     "cortex.instance.AddSource/outcome/added": {
@@ -167,6 +167,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceDisabled"
         },
         {
@@ -278,6 +282,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -415,6 +423,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
         },
         {
           "step": "expect_no_event",
@@ -643,6 +655,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SourceAdded"
         },
         {
@@ -779,6 +795,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
         },
         {
           "step": "expect_no_event",
@@ -1046,6 +1066,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -1326,6 +1350,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -1387,6 +1415,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -1528,6 +1560,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
         },
         {
           "step": "expect_no_event",
@@ -1753,6 +1789,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -2058,6 +2098,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -2192,6 +2236,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SourceAdded"
         },
         {
@@ -2262,6 +2310,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -2308,6 +2360,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -2540,6 +2596,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -2615,6 +2675,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -2779,6 +2843,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -2877,6 +2945,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -3117,6 +3189,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -3259,6 +3335,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -3553,6 +3633,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -3701,6 +3785,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SourceAdded"
         },
         {
@@ -3775,6 +3863,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -3821,6 +3913,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -3894,6 +3990,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -3940,6 +4040,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -4100,6 +4204,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -4201,6 +4309,829 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Instances"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.RestoreSnapshot/outcome/backend-unsupported": {
+      "purpose": "`cortex.instance.RestoreSnapshot` answers `backend-unsupported` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.RestoreSnapshot",
+            "outcome": "backend-unsupported"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RestoreSnapshot",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "snapshot": {
+              "kind": "literal",
+              "value": "snapshot"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RestoreSnapshot",
+            "outcome": "backend-unsupported"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.RestoreUnsupported",
+          "fields": {
+            "name": "name"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RestoreSnapshot"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RestoreSnapshot",
+            "outcome": "backend-unsupported"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.RestoreUnsupported"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.RestoreSnapshot/outcome/busy": {
+      "purpose": "`cortex.instance.RestoreSnapshot` answers `busy` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.RestoreSnapshot",
+            "outcome": "busy"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RestoreSnapshot",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "snapshot": {
+              "kind": "literal",
+              "value": "snapshot"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RestoreSnapshot",
+            "outcome": "busy"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.InstanceBusy"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RestoreSnapshot"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RestoreSnapshot",
+            "outcome": "busy"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.InstanceBusy"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.RestoreSnapshot/outcome/no-such-instance": {
+      "purpose": "`cortex.instance.RestoreSnapshot` for an identity no record carries takes `no-such-instance` and reports `cortex.instance.InstanceNotFound`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RestoreSnapshot",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name-1048576"
+            },
+            "snapshot": {
+              "kind": "literal",
+              "value": "snapshot"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RestoreSnapshot",
+            "outcome": "no-such-instance"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.InstanceNotFound",
+          "fields": {
+            "name": "name-1048576"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RestoreSnapshot"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RestoreSnapshot",
+            "outcome": "no-such-instance"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.InstanceNotFound"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.RestoreSnapshot/outcome/no-such-snapshot": {
+      "purpose": "`cortex.instance.RestoreSnapshot` answers `no-such-snapshot` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.RestoreSnapshot",
+            "outcome": "no-such-snapshot"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RestoreSnapshot",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "snapshot": {
+              "kind": "literal",
+              "value": "snapshot"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RestoreSnapshot",
+            "outcome": "no-such-snapshot"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.SnapshotNotFound",
+          "fields": {
+            "snapshot": "snapshot"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RestoreSnapshot"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RestoreSnapshot",
+            "outcome": "no-such-snapshot"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.SnapshotNotFound"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.RestoreSnapshot/outcome/restored": {
+      "purpose": "`cortex.instance.RestoreSnapshot` answers `restored` for an input no other branch's guard claims",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.CreateInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "budget_usd": 1.0,
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "created"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceCreated",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RestoreSnapshot",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "snapshot": {
+              "kind": "literal",
+              "value": "snapshot"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RestoreSnapshot",
+            "outcome": "restored"
+          }
+        },
+        {
+          "step": "expect_event",
+          "event": "cortex.instance.SnapshotRestored",
+          "payload": {
+            "snapshot": "snapshot"
+          },
+          "shape": {
+            "name": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "snapshot": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Instances"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Instances",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "description": {
+                "kind": "literal",
+                "value": "description"
+              },
+              "ekr_version": {
+                "kind": "literal",
+                "value": "ekr_version"
+              },
+              "model": {
+                "kind": "literal",
+                "value": "model"
+              },
+              "name": {
+                "kind": "instance",
+                "instance": "instance"
+              },
+              "seed_digest": {
+                "kind": "literal",
+                "value": "seed_digest"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Active"
+              }
+            }
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.CreateInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RestoreSnapshot"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "created"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RestoreSnapshot",
+            "outcome": "restored"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SourceAdded"
         },
         {
@@ -4275,6 +5206,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -4321,6 +5256,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -4729,6 +5668,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -4818,6 +5761,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SourceAdded"
         },
         {
@@ -4896,6 +5843,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -4942,6 +5893,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -5019,6 +5974,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -5065,6 +6024,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -5138,6 +6101,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -5184,6 +6151,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -5444,6 +6415,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -5557,6 +6532,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -7361,6 +8340,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -7454,6 +8437,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -8160,6 +9147,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -8246,6 +9237,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -8544,6 +9539,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -8689,6 +9688,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -8994,6 +9997,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -9128,6 +10135,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SourceAdded"
         },
         {
@@ -9257,6 +10268,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -9303,6 +10318,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",
@@ -9418,6 +10437,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
         },
         {
           "step": "expect_no_event",
@@ -9679,6 +10702,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
         },
         {
           "step": "expect_no_event",
@@ -9958,6 +10985,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SourceAdded"
         },
         {
@@ -10074,6 +11105,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
         },
         {
           "step": "expect_no_event",
@@ -10317,6 +11352,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
         },
         {
           "step": "expect_no_event",
@@ -10581,6 +11620,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SourceAdded"
         },
         {
@@ -10826,6 +11869,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
         },
         {
           "step": "expect_no_event",
@@ -11128,6 +12175,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
         },
         {
           "kind": "event",

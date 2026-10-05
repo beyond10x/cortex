@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-05T18:48:43Z",
+  "actor": "agent:claude",
+  "artifact": "story:file-records",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261005h (EXIT=0, 295 tests)"
+  }
+}

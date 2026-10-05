@@ -13,6 +13,7 @@ use crate::extract::{self, Known, Model};
 use crate::instance::{now_ms, Layout};
 use crate::mask::{mask, mask_key};
 use crate::redact::{self, Redactor};
+use crate::snapshot::{self, BeforeApply};
 use crate::sources::{self, FetchError, Window};
 use crate::state::{text_hash, SeenState};
 use crate::structured;
@@ -130,6 +131,7 @@ pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Rep
         &meta.spec_dir,
         &window,
         &state.child_failures,
+        source_spec.policy.max_chars_per_document.max(0) as usize,
     )
     .map_err(|e| match e {
         FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
@@ -180,22 +182,23 @@ pub fn seed(layout: &Layout, tools: &Tools) -> Result<Report, Failure> {
     });
     let start = now_ms();
     let window = Window::of_run(start, None, None, None, 0);
-    let fetched = sources::fetch(
-        &files,
-        &tools.connectors,
-        &layout.dir,
-        &window,
-        &BTreeMap::new(),
-    )
-    .map_err(|e| match e {
-        FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
-    })?;
     let policy = m::FetchPolicy {
         refresh_after_days: 0,
         change: m::ChangeDetection::ContentHash,
         max_documents_per_run: i64::MAX,
         max_chars_per_document: 100_000,
     };
+    let fetched = sources::fetch(
+        &files,
+        &tools.connectors,
+        &layout.dir,
+        &window,
+        &BTreeMap::new(),
+        policy.max_chars_per_document as usize,
+    )
+    .map_err(|e| match e {
+        FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
+    })?;
     process(layout, tools, &spec, "seed", fetched, &policy, None, None)
 }
 
@@ -357,6 +360,13 @@ fn process(
     }
 
     let store = layout.store_handle(spec);
+    // A source run copies the store and `state/` once, before its first `apply-extraction`, and
+    // keeps the copy, named by the run's start, once that apply commits; the seed of a new store
+    // takes none.
+    let mut before = match window {
+        Some(_) => BeforeApply::new(layout, &store, label, started, snapshot::keep(spec)),
+        None => BeforeApply::none(),
+    };
     let host = std::fs::read_to_string(layout.host()).map_err(|e| Failure::Apply(e.to_string()))?;
     let operator = crate::ekr::operator(&host).map_err(Failure::Apply)?;
     if let Some(source) = &structured {
@@ -376,6 +386,7 @@ fn process(
             &mut seen,
             &seen_path,
             &mut report,
+            &mut before,
         )?;
         unread(&mut report, &fetched.unread, redactor.as_ref());
         let failures = fetched.child_failures.clone();
@@ -494,6 +505,7 @@ fn process(
             );
         }
         std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
+        before.take().map_err(Failure::Apply)?;
         let applied = match store.apply(&path) {
             Ok(r) => r,
             Err(e) if report.documents_applied == 0 => return Err(Failure::Apply(e)),
@@ -502,6 +514,7 @@ fn process(
                 break;
             }
         };
+        keep_snapshot(&mut before);
         if !pseudonymised {
             let _ = std::fs::write(
                 dir.join("report.json"),
@@ -534,6 +547,14 @@ fn process(
     )?;
     log(layout, label, &report, started);
     Ok(report)
+}
+
+/// Keeps the run's snapshot once its first `apply-extraction` committed. The run's answer stays
+/// what the store did; a snapshot that cannot be kept is said on stderr.
+fn keep_snapshot(before: &mut BeforeApply) {
+    if let Err(e) = before.publish() {
+        eprintln!("cortex: the snapshot taken before this run was not kept: {e}");
+    }
 }
 
 /// `issued` in batches of at most [`BATCH_CHARS`] characters of text, a longer document alone.
@@ -577,6 +598,7 @@ fn apply_records(
     seen: &mut SeenState,
     seen_path: &std::path::Path,
     report: &mut Report,
+    before: &mut BeforeApply,
 ) -> Result<(), Failure> {
     let mut entities = load_entities(layout);
     let issued: Vec<_> = selected
@@ -593,6 +615,7 @@ fn apply_records(
         let path = dir.join("extraction.yaml");
         let text = serde_yaml_ng::to_string(&doc).expect("YAML");
         std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
+        before.take().map_err(Failure::Apply)?;
         let applied = match r.store.apply(&path) {
             Ok(applied) => applied,
             Err(e) if report.documents_applied == 0 => return Err(Failure::Apply(e)),
@@ -601,6 +624,7 @@ fn apply_records(
                 break;
             }
         };
+        keep_snapshot(before);
         let _ = std::fs::write(
             dir.join("report.json"),
             serde_json::to_string_pretty(&applied).unwrap_or_default(),
@@ -790,13 +814,30 @@ fn pseudonymise(
     }
     for issued in batch {
         let d = &issued.doc;
+        // A record read from a file repeats text that is not its own: its thread context (earlier
+        // records), its key (its id) and its title (the file's name, on every record of it).
+        // Only its own text counts toward how often a name occurs, so a repetition never makes a
+        // name look frequent; the rest is reserved without counting, and a name in it gets the
+        // batch's placeholder like any other.
+        let file_record = d.origin == sources::Origin::FileRecord;
         for text in [Some(&d.key), d.title.as_ref(), d.description.as_ref()]
             .into_iter()
             .flatten()
         {
-            p.reserve(text);
+            if file_record {
+                p.reserve_name(text);
+            } else {
+                p.reserve(text);
+            }
         }
-        p.reserve(&full(d));
+        let text = full(d);
+        if file_record {
+            let (own, context) = sources::split_context(&text);
+            p.reserve(own);
+            p.reserve_name(context);
+        } else {
+            p.reserve(&text);
+        }
     }
     for name in entities.values().flatten() {
         p.reserve_name(name);

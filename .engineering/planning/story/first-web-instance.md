@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:first-web-instance
 kind: story
-status: draft
+status: active
 title: The agent-tooling web instance runs for 7 days
 relations:
 - decomposes: epic:first-web-instance
@@ -15,7 +15,10 @@ scope:
   path: examples/agent-tooling.yaml
 - confidence: inferred
   path: examples/seed/agent-tooling.yaml
-revision: 9
+revision: 12
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":6}}}
+- {from: "proposed", to: "active", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":6}}}
 ---
 ## Outcome
 
@@ -67,4 +70,8 @@ running instance. The EKR binary and the evidence kind stay as they were on day 
 
 ## Scope
 
-`examples/agent-tooling.yaml`, `examples/seed/agent-tooling.yaml`. No source code.
+Landed 2026-10-05 in `dbc0f4f` (wave 20261005h, merged `5b6249a`): the instance definition only.
+
+- **Files:** `examples/agent-tooling.yaml`, `examples/seed/agent-tooling.yaml`, `tests/agent_tooling.rs` (new, 3 cases), `website/docs/spec-file.md`
+- **Inferred scope line wrong:** `examples/seed/schema.yaml` still holds only `DEVELOPS`
+- **Not yet done:** the 7-day run. It starts from `main` after this wave merges, with model cost bounded by `budget_usd: "0.50"` per run (at most about $4.00 over 7 days). The story stays `active` until the day-8 verification report.

@@ -104,6 +104,15 @@ impl Systemd {
         }
     }
 
+    /// Whether `unit` is running: `systemctl --user is-active --quiet` exits 0.
+    fn active(&self, unit: &str) -> Result<bool, String> {
+        Command::new(&self.systemctl)
+            .args(["--user", "is-active", "--quiet", unit])
+            .status()
+            .map(|status| status.success())
+            .map_err(|e| format!("cannot run {}: {e}", self.systemctl.display()))
+    }
+
     fn write(&self, name: &str, text: &str) -> Result<(), String> {
         std::fs::create_dir_all(&self.unit_dir)
             .map_err(|e| format!("{}: {e}", self.unit_dir.display()))?;
@@ -173,6 +182,25 @@ impl Systemd {
         )?;
         self.systemctl(&["daemon-reload"])?;
         self.systemctl(&["enable", "--now", &format!("{unit}.service")])
+    }
+
+    /// Stops the viewer of `instance` when it is running, runs `stopped`, and starts the viewer
+    /// again whatever `stopped` answered. A viewer that was not running (the operator stopped it)
+    /// is left stopped, and an instance with no viewer unit (created with `--no-units`, or
+    /// removed) only runs `stopped`. Answers its value and why the viewer did not start again,
+    /// when it did not; a viewer that cannot be stopped runs nothing.
+    pub fn restart_view<T>(
+        &self,
+        instance: &str,
+        stopped: impl FnOnce() -> T,
+    ) -> Result<(T, Option<String>), String> {
+        let service = format!("{}.service", view_unit(instance));
+        if !self.unit_dir.join(&service).is_file() || !self.active(&service)? {
+            return Ok((stopped(), None));
+        }
+        self.systemctl(&["stop", &service])?;
+        let value = stopped();
+        Ok((value, self.systemctl(&["start", &service]).err()))
     }
 
     pub fn set_source_timer(&self, instance: &str, source: &str, on: bool) -> Result<(), String> {

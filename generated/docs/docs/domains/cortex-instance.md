@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588
-contract digest slice-sha256/2:47b9eba3ad77dada209fcb9da03489c850f2c30b3e2807d97f0f47acad9cd78e
+model digest 7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d
+contract digest slice-sha256/2:add61f1f192f4767e91f96690fe684e5461a92681a4000b4032423d92532ec30
 do not edit: regenerate with `ess generate`
 -->
 
@@ -633,6 +633,27 @@ It has three outcomes.
 
 **`no-such-instance`** — Nothing changed. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
+### `RestoreSnapshot`
+
+`cortex.instance.RestoreSnapshot`, shown to a person as "Restore a snapshot" and called `restore` on the wire.
+
+It takes:
+
+- `name` — `cortex.instance.InstanceName`
+- `snapshot` — `String`
+
+It has five outcomes.
+
+**`backend-unsupported`** — Nothing was restored. Decided outside the input: The instance's store is on the postgres backend, whose snapshot is the operator's database backup. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.RestoreUnsupported`, carrying `name`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`busy`** — Nothing was restored. Decided outside the input: Another cortex command holds the home's lock, or a process other than the viewer holds the store open. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.InstanceBusy`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`no-such-snapshot`** — Nothing was restored. Decided outside the input: The instance directory holds no snapshot by this name. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SnapshotNotFound`, carrying `snapshot`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`restored`** — The store and the instance state were snapshotted as `<ms>-before-restore`, then put back to the snapshot's copies: every source's seen state and the known entity names included, so the next runs apply again what the undone runs applied. A viewer that was running was stopped first and started again after. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SnapshotRestored`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+
+**`no-such-instance`** — Nothing was restored. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
+
 ### `RunSource`
 
 `cortex.instance.RunSource`, shown to a person as "Run a source once" and called `run` on the wire.
@@ -726,6 +747,19 @@ It carries:
 - `reason` — `String`
 
 Emitted by `cortex.instance.RecordFailure` on its `counted` outcome.
+
+Nothing in this system reacts to it.
+
+### `SnapshotRestored`
+
+`cortex.instance.SnapshotRestored`.
+
+It carries:
+
+- `name` — `cortex.instance.InstanceName`
+- `snapshot` — `String`
+
+Emitted by `cortex.instance.RestoreSnapshot` on its `restored` outcome.
 
 Nothing in this system reacts to it.
 
@@ -824,6 +858,16 @@ It carries:
 
 Reported by `cortex.instance.RunSource` on its `fetch-failed` outcome.
 
+### `InstanceBusy`
+
+Another cortex command holds the home's lock, or a process other than the viewer holds the store open; nothing was restored.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.RestoreSnapshot` on its `busy` outcome.
+
 ### `InstanceNotActive`
 
 The instance is removed, so nothing changed.
@@ -846,6 +890,8 @@ It carries:
 
 Reported by `cortex.instance.RemoveInstance` on its `no-such-instance` outcome.
 
+Reported by `cortex.instance.RestoreSnapshot` on its `no-such-instance` outcome.
+
 Reported by `cortex.instance.UpdateInstance` on its `no-such-instance` outcome.
 
 ### `NameTaken`
@@ -857,6 +903,16 @@ It carries:
 - `name` — `cortex.instance.InstanceName`
 
 Reported by `cortex.instance.CreateInstance` on its `name-taken` outcome.
+
+### `RestoreUnsupported`
+
+The instance's store is on the postgres backend: its snapshot is the operator's database backup, which cortex neither takes nor restores.
+
+It carries:
+
+- `name` — `cortex.instance.InstanceName`
+
+Reported by `cortex.instance.RestoreSnapshot` on its `backend-unsupported` outcome.
 
 ### `SeedChangeRefused`
 
@@ -877,6 +933,16 @@ It carries:
 - `reason` — `String`
 
 Reported by `cortex.instance.CreateInstance` on its `seed-refused` outcome.
+
+### `SnapshotNotFound`
+
+The instance directory holds no snapshot by this name.
+
+It carries:
+
+- `snapshot` — `String`
+
+Reported by `cortex.instance.RestoreSnapshot` on its `no-such-snapshot` outcome.
 
 ### `SourceDisabledError`
 
@@ -922,7 +988,7 @@ An actor is who may ask this context for something. Every grant below points at 
 
 `cortex.instance.Operator`, shown to a person as "Operator".
 
-It may invoke [`AddSource`](#addsource), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`RemoveInstance`](#removeinstance) and [`UpdateInstance`](#updateinstance).
+It may invoke [`AddSource`](#addsource), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot) and [`UpdateInstance`](#updateinstance).
 
 ### `Scheduler`
 
@@ -933,4 +999,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588` · contract digest `slice-sha256/2:47b9eba3ad77dada209fcb9da03489c850f2c30b3e2807d97f0f47acad9cd78e`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d` · contract digest `slice-sha256/2:add61f1f192f4767e91f96690fe684e5461a92681a4000b4032423d92532ec30`. Do not edit this file; change the specification and regenerate it with `ess generate`.

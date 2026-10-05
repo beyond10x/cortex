@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588
-// contract digest 47b9eba3ad77dada209fcb9da03489c850f2c30b3e2807d97f0f47acad9cd78e
+// model digest 7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d
+// contract digest add61f1f192f4767e91f96690fe684e5461a92681a4000b4032423d92532ec30
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! The `cortex` system, v1: its components assembled, its bindings wired, and its one transport.
@@ -27,6 +27,8 @@ pub enum SystemEvent {
     InstanceUpdated(crate::instance::InstanceUpdated),
     /// `cortex.instance.RunFailed`.
     RunFailed(crate::instance::RunFailed),
+    /// `cortex.instance.SnapshotRestored`.
+    SnapshotRestored(crate::instance::SnapshotRestored),
     /// `cortex.instance.SourceAdded`.
     SourceAdded(crate::instance::SourceAdded),
     /// `cortex.instance.SourceDisabled`.
@@ -45,6 +47,7 @@ impl SystemEvent {
             Self::InstanceRemoved(_) => "cortex.instance.InstanceRemoved",
             Self::InstanceUpdated(_) => "cortex.instance.InstanceUpdated",
             Self::RunFailed(_) => "cortex.instance.RunFailed",
+            Self::SnapshotRestored(_) => "cortex.instance.SnapshotRestored",
             Self::SourceAdded(_) => "cortex.instance.SourceAdded",
             Self::SourceDisabled(_) => "cortex.instance.SourceDisabled",
             Self::SourceEnabled(_) => "cortex.instance.SourceEnabled",
@@ -60,6 +63,7 @@ impl From<crate::ports::cortex::PublishedEvent> for SystemEvent {
             crate::ports::cortex::PublishedEvent::InstanceRemoved(event) => Self::InstanceRemoved(event),
             crate::ports::cortex::PublishedEvent::InstanceUpdated(event) => Self::InstanceUpdated(event),
             crate::ports::cortex::PublishedEvent::RunFailed(event) => Self::RunFailed(event),
+            crate::ports::cortex::PublishedEvent::SnapshotRestored(event) => Self::SnapshotRestored(event),
             crate::ports::cortex::PublishedEvent::SourceAdded(event) => Self::SourceAdded(event),
             crate::ports::cortex::PublishedEvent::SourceDisabled(event) => Self::SourceDisabled(event),
             crate::ports::cortex::PublishedEvent::SourceEnabled(event) => Self::SourceEnabled(event),
@@ -111,7 +115,7 @@ impl<CortexBehaviors> System<CortexBehaviors> {
 
 impl<CortexBehaviors> System<CortexBehaviors>
 where
-    CortexBehaviors: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    CortexBehaviors: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
 {
     /// Delivers until quiescent: collects every component's outbox onto the log. No binding
     /// reacts to anything this specification publishes, so collecting is the whole delivery.

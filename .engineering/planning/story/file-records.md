@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:file-records
 kind: story
-status: draft
+status: implemented
 title: A files source yields one document per JSON line or markdown section
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -17,7 +17,11 @@ scope:
   path: src/state.rs
 - confidence: inferred
   path: tests/file_records.rs
-revision: 8
+revision: 12
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 9, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "active", to: "implemented", at: "2026-10-05T18:48:43Z", actor: "agent:claude", revision: 12, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 
@@ -55,4 +59,8 @@ as `[context]`.
 
 ## Scope
 
-`src/sources.rs`, `src/state.rs`, `tests/file_records.rs` (new).
+Landed 2026-10-05 in `4dfee0f` (wave 20261005h, merged `4ae226a`).
+
+- **Files:** `src/sources.rs`, `src/state.rs`, `src/run.rs` (rarity over a file record's own text), `src/evidence.rs` (one arm), `AGENTS.md`, `website/docs/spec-file.md`, `website/docs/limits.md`, `tests/file_records.rs` (new, 14 cases)
+- **Decided during the wave:** thread context after a record's own text, nearest first, capped at `max_chars_per_document`; context does not count toward rarity; repeated headings keyed `-2`, `-3`; CommonMark fences and setext headings; a leading BOM stripped; unreadable lines and files named in `skipped`
+- **Review:** `review-result:adversary-file-records-pass-1` (11, one blocker), fixed; coordinator check of the correction

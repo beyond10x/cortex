@@ -16,6 +16,7 @@ use cortex_cli::home::Home;
 use cortex_cli::instance::{Layout, Meta};
 use cortex_cli::ports::{Ports, Shared, SharedRef};
 use cortex_cli::schedule::Systemd;
+use cortex_cli::snapshot::{self, Refusal, RestoreError};
 use cortex_cli::{ekr, home, instance, model_map, run, spec};
 
 /// Spin up EKR knowledge brains from a spec, fed on a schedule by Connectors data sources.
@@ -80,6 +81,13 @@ enum Command {
         /// On a failed run, record the failure (`cortex.instance.RecordFailure`), as the timers do.
         #[arg(long)]
         record_failure: bool,
+    },
+    /// Put an instance's store back to a snapshot a run took before it applied anything
+    /// (`cortex.instance.RestoreSnapshot`).
+    Restore {
+        name: String,
+        /// A file name under `<instance>/snapshots/`, without `.sqlite`.
+        snapshot: String,
     },
     /// One data source of an instance.
     Source {
@@ -171,7 +179,13 @@ fn main() -> ExitCode {
         },
         Command::McpLine { name } => mcp_line(&home, &name),
         command => {
-            let _lock = match home.lock() {
+            // `restore` does not wait for the lock: while another command holds it, it answers
+            // `busy` and writes nothing.
+            let lock = match &command {
+                Command::Restore { .. } => home.try_lock(),
+                _ => home.lock().map(Some),
+            };
+            let lock = match lock {
                 Ok(lock) => lock,
                 Err(e) => return fail(format!("cannot lock {}: {e}", home.root.display())),
             };
@@ -200,10 +214,13 @@ fn main() -> ExitCode {
                 home: &home,
                 shared: shared.clone(),
                 tools: tools(),
+                locked: lock.is_some(),
             };
             let result = dispatch(&mut app, &ctx, command);
-            if let Err(e) = home.save_registry(&shared.borrow().registry) {
-                return fail(e);
+            if ctx.locked {
+                if let Err(e) = home.save_registry(&shared.borrow().registry) {
+                    return fail(e);
+                }
             }
             result
         }
@@ -217,6 +234,8 @@ struct Ctx<'a> {
     home: &'a Home,
     shared: SharedRef,
     tools: run::Tools,
+    /// Whether this command holds the home's lock; only `restore` runs without it.
+    locked: bool,
 }
 
 fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
@@ -240,6 +259,7 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             no_units,
         } => update(app, ctx, &name, &spec, no_units),
         Command::Remove { name } => remove(app, ctx, &name),
+        Command::Restore { name, snapshot } => restore(app, ctx, &name, &snapshot),
         Command::Run {
             source_id,
             record_failure,
@@ -793,6 +813,95 @@ fn remove(app: &mut App, ctx: &Ctx, name: &str) -> ExitCode {
         },
     };
     print("remove", &done)
+}
+
+fn restore(app: &mut App, ctx: &Ctx, name: &str, snapshot: &str) -> ExitCode {
+    const CMD: &str = "cortex.instance.RestoreSnapshot";
+    let mut finished = None;
+    // An unknown name restores nothing; the generated behaviour answers `no-such-instance`.
+    let known = ctx.shared.borrow().registry.instances.contains_key(name);
+    if known {
+        let layout = Layout::new(ctx.home.instance_dir(name));
+        let refusal = if ctx.locked {
+            match snapshot::restore_held(
+                &layout,
+                name,
+                snapshot,
+                &Systemd::from_env(&ctx.home.root),
+            ) {
+                Ok(restored) => {
+                    finished = Some(restored);
+                    None
+                }
+                Err(RestoreError::Refused(refusal)) => Some(refusal),
+                Err(RestoreError::Failed(e)) => return fail(e),
+            }
+        } else {
+            Some(Refusal::Busy(format!(
+                "another cortex command holds the lock of {}",
+                ctx.home.root.display()
+            )))
+        };
+        let mut shared = ctx.shared.borrow_mut();
+        match refusal {
+            None => {}
+            Some(Refusal::Unsupported) => {
+                shared.external.insert((CMD, "backend-unsupported"), true);
+            }
+            Some(Refusal::Busy(reason)) => {
+                shared.external.insert((CMD, "busy"), true);
+                shared.strings.push_back(reason);
+            }
+            Some(Refusal::NoSuchSnapshot) => {
+                shared.external.insert((CMD, "no-such-snapshot"), true);
+            }
+        }
+    }
+    let done = match app.restore_snapshot(m::RestoreSnapshot {
+        name: m::InstanceName(name.to_string()),
+        snapshot: snapshot.to_string(),
+    }) {
+        Err(e) => return fail(e),
+        Ok(m::RestoreSnapshotOutcome::Restored { snapshot_restored }) => {
+            let mut detail = json!({
+                "name": snapshot_restored.name.0,
+                "snapshot": snapshot_restored.snapshot,
+            });
+            if let Some(restored) = finished {
+                detail["before_restore"] = json!(restored.before_restore);
+                detail["state_restored"] = json!(restored.state_restored);
+                if let Some(e) = restored.viewer_failed {
+                    detail["units"] = json!({"failed": e});
+                }
+            }
+            Done {
+                outcome: "restored",
+                ok: true,
+                detail,
+            }
+        }
+        Ok(m::RestoreSnapshotOutcome::BackendUnsupported { error }) => Done {
+            outcome: "backend-unsupported",
+            ok: false,
+            detail: json!({"name": error.name.0}),
+        },
+        Ok(m::RestoreSnapshotOutcome::Busy { error }) => Done {
+            outcome: "busy",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
+        Ok(m::RestoreSnapshotOutcome::NoSuchSnapshot { error }) => Done {
+            outcome: "no-such-snapshot",
+            ok: false,
+            detail: json!({"snapshot": error.snapshot}),
+        },
+        Ok(m::RestoreSnapshotOutcome::NoSuchInstance { error }) => Done {
+            outcome: "no-such-instance",
+            ok: false,
+            detail: json!({"name": error.name.0}),
+        },
+    };
+    print("restore", &done)
 }
 
 fn split(source_id: &str) -> (&str, &str) {

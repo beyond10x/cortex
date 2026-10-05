@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:run-snapshots
 kind: story
-status: draft
+status: implemented
 title: A bad run can be undone from the snapshot taken before it
 relations:
 - decomposes: epic:standalone-1-0
@@ -40,7 +40,11 @@ scope:
   path: tests/conformance.rs
 - confidence: inferred
   path: tests/snapshots.rs
-revision: 21
+revision: 25
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 22, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 23, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "active", to: "implemented", at: "2026-10-05T18:48:43Z", actor: "agent:claude", revision: 25, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 
@@ -80,5 +84,8 @@ edit `src/main.rs`), `story:timer-runs-unattended` (both edit `src/schedule.rs`)
 
 ## Scope
 
-`spec/domains/instance.yaml`, `generated/`, `spec/suite.json`, `src/snapshot.rs` (new), `src/run.rs`, `src/schedule.rs`, `Cargo.toml`, `Cargo.lock`,
-`src/lib.rs`, `src/main.rs`, `tests/snapshots.rs` (new), `tests/conformance.rs`.
+Landed 2026-10-05 in `d795671` (wave 20261005h, merged `a6f536b`).
+
+- **Files:** `src/snapshot.rs` (new), `src/run.rs`, `src/main.rs`, `src/home.rs`, `src/schedule.rs`, `spec/domains/instance.yaml` (RestoreSnapshot; 34 -> 39 scenarios) and what it regenerates, `Cargo.toml`/`Cargo.lock` (rusqlite 0.40.2), `tests/snapshots.rs` (new, 13 cases), `AGENTS.md`, `website/docs/operating.md`, `spec-file.md`, `commands.md`
+- **Decided during the wave:** snapshots carry `state/` (in `snapshots-state/`) and a restore rewinds it; published only after the first apply commits; named by the run's start; only cortex-named snapshots rotate; a restore first snapshots the current state; the viewer restarts only if it was running
+- **Review:** `review-result:adversary-run-snapshots-pass-1` (10), fixed or documented; coordinator check of the correction

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SnapshotNotFound payload",
+  "description": "The instance directory holds no snapshot by this name.",
+  "x-ess-name": "cortex.instance.SnapshotNotFound",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "snapshot": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "snapshot"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d",
+    "contract_digest": "slice-sha256/2:3bba0fcb3758100c793147a78cf76295a892bb5dcd2b8de8f11ebc0d5d418d3d",
+    "regenerate": "ess generate"
+  }
+}

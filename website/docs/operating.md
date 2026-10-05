@@ -22,6 +22,8 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
 | `instances/<name>/state/entities.json` | entity names from earlier runs, offered to the model so it reuses them |
 | `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report |
+| `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
+| `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
 | `instances/<name>/cortex.log` | one JSON line per run: counts, cost, seconds, why it stopped |
 
 ## systemd units
@@ -72,6 +74,9 @@ timers until a `create` or `update` installs the units again and copies the new 
 6. **Merge.** A fact citing an evidence id cortex did not issue for that batch is refused; cortex
    adds the evidence items itself and records each web page as a `WebPage` node.
 7. **Apply** the document with `ekr apply-extraction`, then record the batch's documents as seen.
+   Before the run's first apply, a `sqlite` store and `state/` are copied, and kept as a
+   snapshot once that apply commits (see [Undoing a run](#undoing-a-run)); a copy that cannot be
+   taken fails the run with nothing applied.
 
 A `structured` source skips steps 5 and 6: each batch of records is mapped to an extraction
 document by the source's `mapping` and applied without a model call, at a cost of 0 (see
@@ -91,6 +96,49 @@ count. `cortex source enable <instance>/<source>` switches it back on.
 
 If Connectors refuses a read because a connection's validation lapsed, cortex revalidates the
 connection once and retries.
+
+## Undoing a run
+
+Before a run's first `apply-extraction` on a `sqlite` store, cortex copies the store, through
+SQLite's online backup, and every file of `state/` (each source's seen state and the known entity
+names) to hidden temporary files. Once that apply commits, the copies become the snapshot
+`<time>-<source>`, where `<time>` is the run's start in Unix milliseconds, the same time that
+names the run's directory under `runs/` and its `at` in `cortex.log`:
+`instances/<name>/snapshots/<time>-<source>.sqlite` and
+`instances/<name>/snapshots-state/<time>-<source>.json`. A run that applies nothing, or whose
+first apply is refused, keeps no snapshot. A copy a killed run left behind is removed by the next
+snapshot.
+
+Of the snapshots cortex named, `<digits>-<label>`, the instance keeps the newest
+`snapshots.keep` (default 3) and removes older ones with their side files. Any other file in
+`snapshots/` is never removed: to keep a snapshot past rotation, copy its `.sqlite` (and its
+`.json` in `snapshots-state/`) under a name of your own, such as `pinned-before-incident`.
+
+`cortex restore <name> <snapshot>` puts the instance back to a snapshot, undoing the run that
+followed it and every later run, of every source. `<snapshot>` is the name of any `.sqlite` file
+in `snapshots/`, without the extension. To undo the last run, restore the newest snapshot:
+
+1. It refuses as `busy` while another cortex command holds the home's lock; it does not wait.
+2. If the viewer (`cortex-<name>-view.service`) is running, it stops it. It refuses as `busy` if
+   another process still holds the store open, such as an `ekr mcp` session, and then starts the
+   viewer again.
+3. It snapshots the store and `state/` as they are, as `<now>-before-restore`, which counts
+   toward `keep`, and reports the name as `before_restore`.
+4. It copies the snapshot over the store and puts `state/` back to the snapshot's copy, then
+   starts the viewer if it was running. The snapshot stays.
+
+Because `state/` is put back, the next runs apply again what the undone runs applied, at the
+cost of their model calls. A snapshot with no copy of `state/` in `snapshots-state/` (one you
+copied without it) puts back the store only, and the restore reports `state_restored: false`.
+
+To undo a restore, restore its `before_restore` snapshot.
+
+The check for another process holding the store reads `/proc`: it does not see a process of
+another user or one `/proc` hides, and a process can open the store after the check. SQLite's
+locking keeps such a reader consistent, but it reads the restored store from then on.
+
+A `postgres` store has no snapshot; its backup is the operator's database backup, and
+`cortex restore` answers `backend-unsupported`.
 
 ## The model call
 

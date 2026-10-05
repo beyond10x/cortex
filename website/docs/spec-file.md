@@ -13,6 +13,9 @@ Schema is [`instance-spec.schema.json`](https://beyond10x.github.io/cortex/schem
 and `cortex schema` prints the same document. This page says what each section does.
 
 The repository's `examples/example.yaml` is a complete file with two web sources.
+`examples/agent-tooling.yaml` is another, with its own seed ontology
+(`examples/seed/agent-tooling.yaml`): a daily news search on three queries, a weekly crawl of the
+Model Context Protocol specification, and a budget of $0.50 per run.
 
 ## Top level
 
@@ -199,8 +202,66 @@ earlier version holds the hash of the cut text, so every document longer than
 |---|---|
 | `paths` | directories to read; relative paths are read against the directory the spec file was created from, and `~/` is expanded |
 | `glob` | matched against each file's path relative to its directory, for example `**/*.md` |
+| `records` | optional: read each file as records, one document per record (below). Without it, each file is one document |
 
 Files that are not UTF-8 text, or are empty, are skipped. A document's key is the file's path.
+
+**`records`** has the fields:
+
+| field | meaning |
+|---|---|
+| `format` | `WholeFile` (each file is one document, as without `records`), `JsonLines` (each line is a JSON record) or `MarkdownSections` (each `##` section is a record) |
+| `id` | dotted path to a record's id |
+| `time` | optional dotted path to the record's publication time |
+| `author` | optional dotted path to the record's author |
+| `text` | templates whose `{a.b}` placeholders are filled from the record; the non-empty results, joined, are the record's text |
+| `thread` | optional dotted path to the field that groups records into threads |
+| `filters` | a list, possibly empty, of `field` (a dotted path), `values` and `include`. With `include: true` only records whose field equals one of the values are read; with `include: false` those records are left out. A record is read only when it passes every filter |
+
+A record of a `MarkdownSections` file is one level-two section, with the fields `heading` (the
+heading's text) and `body` (the lines up to the next level-two heading, trimmed), so
+`id: heading` and `text: ["{body}"]` read each section as written. A level-two heading is a
+`## ` line, or a one-line paragraph underlined by `-` characters (`Setup` over `-----`). A
+deeper heading stays in its section. Neither form counts inside a fenced code block, which closes
+only on a fence of its own character (backtick or tilde) at least as long as the one that opened
+it. A `---` front matter block at the top of the file and text before the first heading are not
+read. A section whose key is already taken in its file, such as a second `## Notes`, gets
+`-2` after its id (`<file path>#Notes-2`), the third `-3`, counted in file order.
+
+A `JsonLines` file is read line by line, and its blank lines are ignored. A leading byte-order mark
+is ignored in both formats. What cannot be read is left out and named in `skipped`, in the run's
+result and in `cortex.log`, while the rest of the file is still read:
+
+| left out | named as |
+|---|---|
+| a JSON line that is not UTF-8 | `<path>: line <n> is not UTF-8; skipped` |
+| a JSON line that is not JSON | `<path>: line <n> is not JSON; skipped` |
+| a markdown file that is not UTF-8 | `<path>: not UTF-8 text; skipped` |
+| a markdown file with no level-two heading | `<path>: no ## section; skipped` |
+
+An empty file is skipped and named nowhere, as without `records`.
+
+A record without an id, whose text is empty, or that a filter leaves out, is skipped. A document's
+key is `<file path>#<id>`, and its evidence is cited as `file:<file path>#<id>`; a key read twice
+in one run counts once. With `author`, the text reads `<author>: <text>`. Records are read in file
+order, and files by name, one entry of `paths` after the other.
+
+**Threads.** With `thread`, a record that has the field carries the earlier records of that thread
+in the run after its own text, as paragraphs marked `[context]`: the nearest first (the record it
+replies to), then older ones. The context holds at most `max_chars_per_document` characters of
+their text; where that cuts it, a last paragraph `[context cut]` says so. A record without the
+field carries no context and starts the thread named by its own id: a later record whose field
+names that id sees it, and not an earlier file's thread of the same id.
+
+**Redaction.** Thread context repeats earlier records, and every record repeats its file's name as
+its title. With a `redaction` policy, `RareName` counts a name over each record's own text only,
+not over its context, key or title, so a name written once stays rare when it is repeated as
+context. A name in the context is replaced like any other, by the same placeholder as in the
+record it came from when both are sent in one batch.
+
+A record whose text changed is extracted again on the next run, whatever `refresh_after_days`:
+the window holds back only whole files and the other kinds of source. Its thread context is part
+of its text, so a record whose nearer thread records changed is extracted again too.
 
 ### `kind: structured`
 
@@ -299,6 +360,19 @@ redaction:
 | `known_names` | optional names replaced by `[Name-1]`-style placeholders wherever they appear as whole words, in any case, and restored |
 | `rare_limit` | optional; for `RareName`, the most times a capitalised word may appear in a batch to be taken as a name. Default 1 |
 | `refuse_if_left` | optional classes that fail the run, before any model call, when they are still found in what the model would be shown |
+
+## `snapshots`
+
+Optional. How many snapshots of a `sqlite` store the instance keeps; see
+[Operating](./operating.md#undoing-a-run).
+
+```yaml
+snapshots: {keep: 3}
+```
+
+| field | meaning |
+|---|---|
+| `keep` | the newest snapshots cortex named that are kept; a new snapshot removes the oldest beyond it. Files of other names in `snapshots/` are never removed. 0 takes none. Without a `snapshots` section, 3 |
 
 ## `serve`
 
