@@ -12,6 +12,7 @@ relations:
 - depends_on: story:store-backend-per-instance
 - depends_on: story:timer-runs-unattended
 - depends_on: story:release-pipeline
+- depends_on: story:redaction-names-and-gate
 scope:
 - confidence: cited
   path: Cargo.lock
@@ -39,7 +40,7 @@ scope:
   path: tests/conformance.rs
 - confidence: inferred
   path: tests/snapshots.rs
-revision: 19
+revision: 21
 ---
 ## Outcome
 
@@ -58,6 +59,9 @@ one command.
   the store; stops the viewer, restores, restarts it. The stop and start are a new
   `Systemd::restart_view` in `src/schedule.rs`.
 
+- `snapshot::restore_held(instance)`: the same restore for a caller that already holds the instance
+  lock (used by `story:run-gate` inside a run); `cortex restore` takes the lock and calls it.
+
 ## Acceptance
 
 `tests/snapshots.rs` runs a source twice, restores the snapshot taken before the second run, and
@@ -69,9 +73,10 @@ The keep count and the refusals are held by their own checks: a unit test in `sr
 
 ## Depends on
 
-`story:seen-documents-modelled` (both edit the spec), `story:structured-source` (both edit
-`src/run.rs`), `story:store-backend-per-instance` (both edit `src/main.rs`), `story:timer-runs-unattended`
-(both edit `src/schedule.rs`), `story:release-pipeline` (both edit `Cargo.toml`).
+`story:seen-documents-modelled` (both edit the spec), `story:structured-source` and
+`story:redaction-names-and-gate` (all edit `src/run.rs`), `story:store-backend-per-instance` (both
+edit `src/main.rs`), `story:timer-runs-unattended` (both edit `src/schedule.rs`),
+`story:release-pipeline` (both edit `Cargo.toml`).
 
 ## Scope
 

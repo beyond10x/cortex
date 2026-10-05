@@ -9,6 +9,7 @@ relations:
 - serves: vision:self-updating-instances
 - depends_on: story:spec-standalone-types
 - depends_on: story:redaction-before-model
+- depends_on: story:connectors-source-walks
 scope:
 - confidence: cited
   path: src/lib.rs

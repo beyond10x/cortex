@@ -21,7 +21,7 @@ scope:
   path: src/schedule.rs
 - confidence: inferred
   path: tests/store_backend.rs
-revision: 12
+revision: 13
 ---
 ## Outcome
 
@@ -38,9 +38,12 @@ PostgreSQL provider.
 - Every other place that names the store follows the backend: the viewer unit
   (`src/schedule.rs:127-146`, `install_view`, which writes `EKR_BACKEND=sqlite` and the
   `store.sqlite` path today) and the `claude mcp add` line (`src/main.rs:815`).
-- cortex holds no credential: the `ekr.postgres/1` file and the connection file it names are the
-  operator's. Where those credentials come from (an operator-written file, or Connectors' secret
-  backends) is an open question recorded here, not decided by this story.
+- Credentials come from Connectors (decided by the operator 2026-10-05): the database credential is
+  a Connectors connection held in Connectors' secret backends; the instance spec names the
+  connection, never a secret. cortex never reads, prints or stores it. How EKR's PostgreSQL provider
+  receives it is designed first in this story with the Connectors and EKR owners: Connectors hands it
+  to the `ekr` child it launches over a private channel, or EKR's provider reads it through
+  Connectors. The design is recorded here before code starts.
 
 ## Acceptance
 

@@ -8,6 +8,7 @@ relations:
 - decomposes: epic:standalone-1-0
 - serves: vision:self-updating-instances
 - depends_on: story:spec-standalone-types
+- depends_on: story:release-pipeline
 scope:
 - confidence: cited
   path: AGENTS.md

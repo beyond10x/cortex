@@ -13,6 +13,8 @@ relations:
 - depends_on: story:store-backend-per-instance
 - depends_on: story:adopt-existing-store
 - depends_on: story:docs-for-1-0
+- depends_on: story:document-time-as-valid-time
+- depends_on: story:quality-judge
 scope:
 - confidence: cited
   path: .github/workflows/check.yml
@@ -38,7 +40,7 @@ scope:
   path: website/docs/quickstart.md
 - confidence: cited
   path: website/docs/spec-file.md
-revision: 20
+revision: 21
 ---
 ## Outcome
 
@@ -61,11 +63,11 @@ e2e test asserts the evidence kind, and the `AGENTS.md` upstream row is removed.
 ## Depends on
 
 `story:ci-runs-task-check` (the workflow it adds pins the EKR binary this story moves),
-`story:extraction-links-facts` and `story:codex-model-backend` (all three edit `src/extract.rs`),
-`story:store-backend-per-instance` (both edit `src/main.rs`), `story:adopt-existing-store`
-(both edit `tests/conformance.rs`; adopt already follows `story:run-snapshots`, the other story that
-edits it), and `story:docs-for-1-0` (both edit the four docs pages; the docs story writes the
-URL-evidence limit as open, and this story closes it).
+`story:extraction-links-facts`, `story:codex-model-backend` and `story:document-time-as-valid-time`
+(all edit `src/extract.rs`; the last also `src/evidence.rs`), `story:store-backend-per-instance`
+(both edit `src/main.rs`), `story:adopt-existing-store` (both edit `tests/conformance.rs`), and
+`story:docs-for-1-0` (both edit the four docs pages; the docs story writes the URL-evidence limit as
+open, and this story closes it).
 
 ## Scope
 

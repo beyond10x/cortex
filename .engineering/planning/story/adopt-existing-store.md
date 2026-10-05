@@ -9,6 +9,7 @@ relations:
 - serves: vision:self-updating-instances
 - depends_on: story:run-snapshots
 - depends_on: story:store-backend-per-instance
+- depends_on: story:file-records
 scope:
 - confidence: cited
   path: generated
@@ -26,7 +27,7 @@ scope:
   path: tests/adopt.rs
 - confidence: cited
   path: tests/conformance.rs
-revision: 13
+revision: 14
 ---
 ## Outcome
 
@@ -58,7 +59,7 @@ The outcomes other than adopted are held by the synthesized `AdoptInstance` scen
 ## Depends on
 
 `story:run-snapshots` (both edit the spec and `src/main.rs`), `story:store-backend-per-instance`
-(both edit `src/instance.rs`).
+(both edit `src/instance.rs`), `story:file-records` (both edit `src/state.rs`).
 
 ## Scope
 

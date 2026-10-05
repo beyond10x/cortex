@@ -10,6 +10,8 @@ relations:
 - depends_on: story:ci-runs-task-check
 - depends_on: story:seen-documents-modelled
 - depends_on: story:store-backend-per-instance
+- depends_on: story:redaction-names-and-gate
+- depends_on: story:connectors-source-walks
 scope:
 - confidence: cited
   path: README.md
@@ -23,7 +25,7 @@ scope:
   path: src/schedule.rs
 - confidence: inferred
   path: src/state.rs
-revision: 8
+revision: 9
 ---
 ## Outcome
 
@@ -52,8 +54,10 @@ source when it fails with one failure already counted, i.e. on its second consec
 
 ## Depends on
 
-`story:ci-runs-task-check` (fixes this story forces land behind the gate) and
-`story:seen-documents-modelled` (it changes the run-state files this story observes).
+`story:ci-runs-task-check` (fixes this story forces land behind the gate),
+`story:seen-documents-modelled` (it changes the run-state files this story observes),
+`story:store-backend-per-instance` (both edit `src/schedule.rs`), `story:redaction-names-and-gate`
+(a fix this story forces in `src/run.rs` lands after it).
 
 ## Scope
 
