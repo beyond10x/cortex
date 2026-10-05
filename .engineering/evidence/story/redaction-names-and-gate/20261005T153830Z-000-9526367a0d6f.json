@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-05T15:38:30Z",
+  "actor": "agent:claude",
+  "artifact": "story:redaction-names-and-gate",
+  "kind": "story",
+  "revision": 10,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261005f (EXIT=0, 244 tests)"
+  }
+}
