@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:connectors-source-walks
 kind: story
-status: draft
+status: active
 title: A connectors source pages, calls a child per record and reads only what changed
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -21,7 +21,10 @@ scope:
   path: src/state.rs
 - confidence: inferred
   path: tests/connectors_walks.rs
-revision: 12
+revision: 14
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T13:10:33Z", actor: "agent:claude", revision: 13, decided_on: {"recorded":{"review_outcome":7}}}
+- {from: "proposed", to: "active", at: "2026-10-05T13:10:33Z", actor: "agent:claude", revision: 14, decided_on: {"recorded":{"review_outcome":7}}}
 ---
 ## Outcome
 
