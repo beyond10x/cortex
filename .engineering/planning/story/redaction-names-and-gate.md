@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:redaction-names-and-gate
 kind: story
-status: draft
+status: active
 title: Names, links and credentials are masked and a run refuses what survives
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -17,7 +17,10 @@ scope:
   path: src/run.rs
 - confidence: inferred
   path: tests/redaction_gate.rs
-revision: 7
+revision: 9
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T15:00:26Z", actor: "agent:claude", revision: 8, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-10-05T15:00:26Z", actor: "agent:claude", revision: 9, decided_on: {"recorded":{"review_outcome":2}}}
 ---
 ## Outcome
 
