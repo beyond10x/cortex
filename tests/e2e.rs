@@ -36,9 +36,9 @@ struct World {
 }
 
 const PAGES: &str = r#"{"results":[
- {"url":"https://example.org/a","title":"A","content":"Example Labs ships Widget.","raw_content":"Example Labs develops the Widget engine. Its website is example.org."},
- {"url":"https://example.org/b","title":"B","content":"Gadget news.","raw_content":"Example Labs also develops the Gadget runtime."}
-]}"#;
+ {"url":"https://example.org/a","title":"A","description":"Example Labs ships Widget.","content":"Example Labs develops the Widget engine. Its website is example.org.","content_truncated":false,"published":null,"score":"0.9"},
+ {"url":"https://example.org/b","title":"B","description":"Gadget news.","content":"Example Labs also develops the Gadget runtime.","content_truncated":false,"published":null,"score":"0.5"}
+],"complete":false,"truncation":["provider_limit"],"provenance":{"instance":"t","profile":"tavily/2026-10","received_at":"2026-10-05T00:00:00.000Z"}}"#;
 
 impl World {
     fn new() -> Self {
@@ -66,7 +66,7 @@ case "$*" in
   *"operations invoke"*)
     echo "$*" >> "$R/invocations.log"
     if [ -e "$R/fail" ]; then echo '{{"ok":false,"error":{{"code":"failure","data":{{"code":"unavailable","stage":"execution"}}}}}}'; exit 1; fi
-    printf '{{"ok":true,"result":{{"status":200,"body":%s}}}}' "$(cat "$R/pages.json")" ;;
+    printf '{{"ok":true,"result":%s}}' "$(cat "$R/pages.json")" ;;
   *) echo '{{"ok":false}}'; exit 2 ;;
 esac
 "#,
@@ -130,7 +130,7 @@ sources:
           input: search
           value:
             queries: [widget engine]
-            policy: {{topic: news, max_results: 3, search_depth: basic, include_domains: [], exclude_domains: []}}
+            policy: {{topic: news, max_results: 3, include_domains: [], exclude_domains: []}}
     policy: {{refresh_after_days: 0, change: ContentHash, max_documents_per_run: 10, max_chars_per_document: 5000}}
 serve: {{view_port: 18999}}
 "#,
@@ -216,6 +216,12 @@ fn an_instance_is_created_run_twice_and_removed() {
         ran["detail"]["parts_rejected"], 0,
         "EKR rejected nothing: {ran}"
     );
+    let invoked = w.lines("invocations.log").join("\n");
+    assert!(
+        invoked.contains("--adapter tavily") && invoked.contains("--operation websearch.search"),
+        "the web source invokes the websearch contract: {invoked}"
+    );
+    assert!(invoked.contains(r#""content":"full""#), "{invoked}");
     assert!(w.head("t") > seeded, "the run committed to the store");
 
     // The model call is isolated: no tools, no user settings, no API key.

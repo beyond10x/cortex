@@ -1,12 +1,12 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "fd997269540e2d4be43e6e94d7be03bed861ffb72e0fb53bfa205dde6b484432",
+  "source_digest": "7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:db2d396a2bab8c7b10913d5b90fd896557b3f05a002412e2106697c4c4fff11d",
-    "projection_digest": "876927778ffe0aea3e1bada8548edcef4f0ed003fd33c5b2299ddfd66918a66f"
+    "contract_digest": "slice-sha256/2:a6e6f088ca1ec656b1c56c10039d10b95fbe1b2ebc84b3c2697a4882c6f5fed8",
+    "projection_digest": "63245e37ced7648dde472a63060029ac85dfa31e1de280fab594e50e9b5397b1"
   },
   "generator_version": "0.52.0",
   "target": "rust",
@@ -27,7 +27,6 @@
     "cortex.instance.InstanceName": "CortexInstanceInstanceName",
     "cortex.instance.InstanceSpec": "CortexInstanceInstanceSpec",
     "cortex.instance.ModelSpec": "CortexInstanceModelSpec",
-    "cortex.instance.SearchDepth": "CortexInstanceSearchDepth",
     "cortex.instance.SearchInput": "CortexInstanceSearchInput",
     "cortex.instance.SearchPolicy": "CortexInstanceSearchPolicy",
     "cortex.instance.SearchTopic": "CortexInstanceSearchTopic",
@@ -179,21 +178,6 @@
     },
     {
       "pointer": "/$defs/cortex.instance.ModelSpec/x-ess-name",
-      "rule": "x-ess-name",
-      "detail": "model identity and wire mapping retained in source.schema.json"
-    },
-    {
-      "pointer": "/$defs/cortex.instance.SearchDepth/title",
-      "rule": "title",
-      "detail": "retained in source.schema.json; no decoder behavior inferred"
-    },
-    {
-      "pointer": "/$defs/cortex.instance.SearchDepth/x-ess-kind",
-      "rule": "x-ess-kind",
-      "detail": "model identity and wire mapping retained in source.schema.json"
-    },
-    {
-      "pointer": "/$defs/cortex.instance.SearchDepth/x-ess-name",
       "rule": "x-ess-name",
       "detail": "model identity and wire mapping retained in source.schema.json"
     },

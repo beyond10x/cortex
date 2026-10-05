@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "fd997269540e2d4be43e6e94d7be03bed861ffb72e0fb53bfa205dde6b484432",
-    "contract_digest": "slice-sha256/2:c6c7b3806afcd0e248027baf14a57785fff42fd50fb3860dc362e3e452214914",
+    "source_digest": "7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43",
+    "contract_digest": "slice-sha256/2:907864626a75e800b0703ac2aabe71b6c3bbe51cc466fbad5157403f09eeb24f",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -53,16 +53,6 @@
       ],
       "additionalProperties": false
     },
-    "cortex.instance.SearchDepth": {
-      "title": "SearchDepth",
-      "x-ess-name": "cortex.instance.SearchDepth",
-      "x-ess-kind": "enum",
-      "type": "string",
-      "enum": [
-        "basic",
-        "advanced"
-      ]
-    },
     "cortex.instance.SearchInput": {
       "title": "SearchInput",
       "x-ess-name": "cortex.instance.SearchInput",
@@ -100,9 +90,6 @@
         "max_results": {
           "type": "integer"
         },
-        "search_depth": {
-          "$ref": "#/$defs/cortex.instance.SearchDepth"
-        },
         "include_domains": {
           "type": "array",
           "items": {
@@ -125,7 +112,6 @@
       "required": [
         "topic",
         "max_results",
-        "search_depth",
         "include_domains",
         "exclude_domains"
       ],
@@ -138,8 +124,7 @@
       "type": "string",
       "enum": [
         "general",
-        "news",
-        "finance"
+        "news"
       ]
     },
     "cortex.instance.SitesInput": {

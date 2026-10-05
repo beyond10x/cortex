@@ -29,15 +29,12 @@ types:
 
   - name: cortex.instance.SearchTopic
     kind: enum
-    variants: [general, news, finance]
+    variants: [general, news]
 
   - name: cortex.instance.TimeRange
     kind: enum
     variants: [day, week, month, year]
 
-  - name: cortex.instance.SearchDepth
-    kind: enum
-    variants: [basic, advanced]
 
   - name: cortex.instance.ChangeDetection
     kind: enum
@@ -49,7 +46,6 @@ types:
       - {name: topic, type: cortex.instance.SearchTopic}
       - {name: time_range, type: Optional<cortex.instance.TimeRange>}
       - {name: max_results, type: Integer}
-      - {name: search_depth, type: cortex.instance.SearchDepth}
       - {name: include_domains, type: List<String>}
       - {name: exclude_domains, type: List<String>}
       - {name: country, type: Optional<String>}
@@ -97,6 +93,8 @@ types:
   - name: cortex.instance.WebSource
     kind: struct
     fields:
+      # The Connectors adapter answering datasource.websearch/v1alpha1; absent means tavily.
+      - {name: adapter, type: Optional<String>}
       - {name: connection, type: String}
       - {name: input, type: cortex.instance.WebInput}
 

@@ -130,6 +130,7 @@ fn settings(
             glob: f.value.glob.clone(),
         }),
         s::CortexInstanceSourceSettings::V2(w) => m::SourceSettings::Web(m::WebSource {
+            adapter: opt(&w.value.adapter),
             connection: w.value.connection.clone(),
             input: web_input(&w.value.input, at)?,
         }),
@@ -144,9 +145,8 @@ fn web_input(input: &s::CortexInstanceWebInput, at: &str) -> Result<m::WebInput,
                 queries: search.value.queries.clone(),
                 policy: m::SearchPolicy {
                     topic: match *p.topic {
-                        s::CortexInstanceSearchTopic::V0 => m::SearchTopic::Finance,
-                        s::CortexInstanceSearchTopic::V1 => m::SearchTopic::General,
-                        s::CortexInstanceSearchTopic::V2 => m::SearchTopic::News,
+                        s::CortexInstanceSearchTopic::V0 => m::SearchTopic::General,
+                        s::CortexInstanceSearchTopic::V1 => m::SearchTopic::News,
                     },
                     time_range: opt(&p.time_range).map(|t| match *t {
                         s::CortexInstanceTimeRange::V0 => m::TimeRange::Day,
@@ -155,10 +155,6 @@ fn web_input(input: &s::CortexInstanceWebInput, at: &str) -> Result<m::WebInput,
                         s::CortexInstanceTimeRange::V3 => m::TimeRange::Year,
                     }),
                     max_results: int(&p.max_results, at)?,
-                    search_depth: match *p.search_depth {
-                        s::CortexInstanceSearchDepth::V0 => m::SearchDepth::Advanced,
-                        s::CortexInstanceSearchDepth::V1 => m::SearchDepth::Basic,
-                    },
                     include_domains: p.include_domains.clone(),
                     exclude_domains: p.exclude_domains.clone(),
                     country: opt(&p.country),

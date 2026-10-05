@@ -11,7 +11,7 @@ and every secret belong to Connectors (`connectors` binary); extraction is a too
 
 ## The specification comes first
 
-`spec/` is an ESS specification (`ess/19`, pinned to ESS 0.52.0 in `spec/ess-inputs.yaml`). It is
+`spec/` is an ESS specification (`ess/20`, pinned to ESS 0.52.0 in `spec/ess-inputs.yaml`). It is
 the source of truth for every noun, command, outcome, error and event.
 
 - Change `spec/`, then run `task generate`. Never edit anything under `generated/` or

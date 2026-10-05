@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest fd997269540e2d4be43e6e94d7be03bed861ffb72e0fb53bfa205dde6b484432
-// contract digest 813315bd85f8cb7a45643e6abf4aa129f50831447c6e86f9d7177003d18d21dd
+// model digest 7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43
+// contract digest 28f44d88be3d554adbf5e4d04488470231c93d64c08ef39e288ec9c2d93f34e4
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -137,15 +137,6 @@ pub struct ModelSpec {
     pub instructions: Option<String>,
 }
 
-/// SearchDepth — `cortex.instance.SearchDepth`: one of a closed set of names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SearchDepth {
-    /// `basic`.
-    Basic,
-    /// `advanced`.
-    Advanced,
-}
-
 /// SearchInput — `cortex.instance.SearchInput`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchInput {
@@ -164,8 +155,6 @@ pub struct SearchPolicy {
     pub time_range: Option<TimeRange>,
     /// `max_results` — `Integer`.
     pub max_results: i64,
-    /// `search_depth` — `cortex.instance.SearchDepth`.
-    pub search_depth: SearchDepth,
     /// `include_domains` — `List<String>`.
     pub include_domains: Vec<String>,
     /// `exclude_domains` — `List<String>`.
@@ -183,8 +172,6 @@ pub enum SearchTopic {
     General,
     /// `news`.
     News,
-    /// `finance`.
-    Finance,
 }
 
 /// SeedSpec — `cortex.instance.SeedSpec`.
@@ -301,6 +288,8 @@ pub enum WebMode {
 /// WebSource — `cortex.instance.WebSource`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WebSource {
+    /// `adapter` — `Optional<String>`.
+    pub adapter: Option<String>,
     /// `connection` — `String`.
     pub connection: String,
     /// `input` — `cortex.instance.WebInput`.

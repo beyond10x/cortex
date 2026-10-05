@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest fd997269540e2d4be43e6e94d7be03bed861ffb72e0fb53bfa205dde6b484432
-  contract digest 813315bd85f8cb7a45643e6abf4aa129f50831447c6e86f9d7177003d18d21dd
+  model digest 7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43
+  contract digest 28f44d88be3d554adbf5e4d04488470231c93d64c08ef39e288ec9c2d93f34e4
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-69 capabilities: **65 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+68 capabilities: **64 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -24,7 +24,6 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.InstanceName` |
 | domain type | `cortex.instance.InstanceSpec` |
 | domain type | `cortex.instance.ModelSpec` |
-| domain type | `cortex.instance.SearchDepth` |
 | domain type | `cortex.instance.SearchInput` |
 | domain type | `cortex.instance.SearchPolicy` |
 | domain type | `cortex.instance.SearchTopic` |

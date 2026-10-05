@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "fd997269540e2d4be43e6e94d7be03bed861ffb72e0fb53bfa205dde6b484432",
-    "contract_digest": "slice-sha256/2:4ad2d2a90f5ac47a024be37375eb933bb4ecb98839aa2a9973e08dea9ea3c3bc",
+    "source_digest": "7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43",
+    "contract_digest": "slice-sha256/2:1d0e4e2d618693904330dde312dfc89b52075e018ac8eb66680cf083bb574b8a",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -16,8 +16,7 @@
       "type": "string",
       "enum": [
         "general",
-        "news",
-        "finance"
+        "news"
       ]
     }
   }

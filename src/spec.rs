@@ -101,7 +101,10 @@ pub fn connections(spec: &m::InstanceSpec) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for source in &spec.sources {
         match &source.settings {
-            m::SourceSettings::Web(w) => out.push(("tavily".to_string(), w.connection.clone())),
+            m::SourceSettings::Web(w) => out.push((
+                crate::sources::web_adapter(w).to_string(),
+                w.connection.clone(),
+            )),
             m::SourceSettings::Connectors(c) => out.push((c.adapter.clone(), c.connection.clone())),
             m::SourceSettings::Files(_) => {}
         }

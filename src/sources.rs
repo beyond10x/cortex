@@ -53,7 +53,16 @@ impl std::fmt::Display for FetchError {
     }
 }
 
-pub const WEB_ADAPTER: &str = "tavily";
+/// The Connectors adapter a web source uses when its spec names none.
+pub const DEFAULT_WEB_ADAPTER: &str = "tavily";
+
+/// A crawl's page limit when the spec gives no crawl policy.
+const DEFAULT_CRAWL_LIMIT: i64 = 20;
+
+/// The adapter a web source invokes `datasource.websearch/v1alpha1` on.
+pub fn web_adapter(web: &m::WebSource) -> &str {
+    web.adapter.as_deref().unwrap_or(DEFAULT_WEB_ADAPTER)
+}
 
 pub fn fetch(
     settings: &m::SourceSettings,
@@ -78,7 +87,6 @@ fn topic(t: m::SearchTopic) -> &'static str {
     match t {
         m::SearchTopic::General => "general",
         m::SearchTopic::News => "news",
-        m::SearchTopic::Finance => "finance",
     }
 }
 
@@ -91,18 +99,13 @@ fn time_range(t: m::TimeRange) -> &'static str {
     }
 }
 
-/// The Tavily `search` input for one query, with its policy.
+/// The `websearch.search` input for one query, with its policy; content is always asked in full.
 pub fn search_input(query: &str, p: &m::SearchPolicy) -> Value {
     let mut input = json!({
         "query": query,
-        "topic": topic(p.topic),
         "max_results": p.max_results,
-        "search_depth": match p.search_depth {
-            m::SearchDepth::Basic => "basic",
-            m::SearchDepth::Advanced => "advanced",
-        },
-        "include_raw_content": "markdown",
-        "include_published_date": true,
+        "content": "full",
+        "topic": topic(p.topic),
     });
     if let Some(t) = p.time_range {
         input["time_range"] = json!(time_range(t));
@@ -122,13 +125,13 @@ pub fn search_input(query: &str, p: &m::SearchPolicy) -> Value {
     input
 }
 
-/// The Tavily `crawl` input from one start URL, with its policy.
+/// The `websearch.crawl` input from one start URL, with its policy.
 pub fn crawl_input(url: &str, p: Option<&m::CrawlPolicy>) -> Value {
-    let mut input = json!({"url": url, "format": "markdown"});
+    let mut input = json!({"url": url, "limit": DEFAULT_CRAWL_LIMIT});
     if let Some(p) = p {
+        input["limit"] = json!(p.limit);
         input["max_depth"] = json!(p.max_depth);
         input["max_breadth"] = json!(p.max_breadth);
-        input["limit"] = json!(p.limit);
         input["allow_external"] = json!(p.allow_external);
         if !p.select_paths.is_empty() {
             input["select_paths"] = json!(p.select_paths);
@@ -143,55 +146,55 @@ pub fn crawl_input(url: &str, p: Option<&m::CrawlPolicy>) -> Value {
     input
 }
 
-fn page(result: &Value, prefer_raw: bool) -> Option<Document> {
-    let url = s(result, "url")?;
-    let raw = s(result, "raw_content");
-    let snippet = s(result, "content");
-    let text = if prefer_raw {
-        raw.or_else(|| snippet.clone())
-    } else {
-        snippet.clone()
-    }?;
+/// One website of a `datasource.websearch/v1alpha1` result: a search result (`url`, `title`,
+/// `description`, `content`, `published`) or a page (`url`, `title`, `content`). A website with no
+/// content keeps its description as its text; one with neither is dropped.
+fn website(item: &Value) -> Option<Document> {
+    let url = s(item, "url")?;
+    let description = s(item, "description");
+    let text = s(item, "content").or_else(|| description.clone())?;
     Some(Document {
         key: url,
         origin: Origin::Url,
-        title: s(result, "title"),
-        description: if prefer_raw { snippet } else { None },
-        published: s(result, "published_date"),
+        title: s(item, "title"),
+        description,
+        published: s(item, "published"),
         text,
     })
 }
 
-fn results(answer: &Value) -> impl Iterator<Item = &Value> {
-    body(answer)["results"].as_array().into_iter().flatten()
+fn items<'a>(answer: &'a Value, key: &str) -> impl Iterator<Item = &'a Value> {
+    body(answer)[key].as_array().into_iter().flatten()
 }
 
 fn fetch_web(web: &m::WebSource, connectors: &Connectors) -> Result<Vec<Document>, FetchError> {
+    let adapter = web_adapter(web);
     let mut docs = Vec::new();
     match &web.input {
         m::WebInput::Search(search) => {
             for query in &search.queries {
                 let answer = connectors.invoke(
-                    WEB_ADAPTER,
+                    adapter,
                     &web.connection,
-                    "search",
+                    "websearch.search",
                     &search_input(query, &search.policy),
                 )?;
-                docs.extend(results(&answer).filter_map(|r| page(r, true)));
+                docs.extend(items(&answer, "results").filter_map(website));
             }
         }
         m::WebInput::Sites(sites) => match sites.mode {
             m::WebMode::Pages => {
-                let input = json!({"urls": sites.urls, "format": "markdown"});
-                let answer = connectors.invoke(WEB_ADAPTER, &web.connection, "extract", &input)?;
-                docs.extend(results(&answer).filter_map(|r| page(r, true)));
+                let input = json!({"urls": sites.urls});
+                let answer =
+                    connectors.invoke(adapter, &web.connection, "websearch.fetch", &input)?;
+                docs.extend(items(&answer, "pages").filter_map(website));
             }
             m::WebMode::Crawl => {
                 for url in &sites.urls {
                     let input = crawl_input(url, sites.policy.as_ref());
                     let answer =
-                        connectors.invoke(WEB_ADAPTER, &web.connection, "crawl", &input)?;
-                    docs.extend(results(&answer).filter_map(|r| page(r, true)));
+                        connectors.invoke(adapter, &web.connection, "websearch.crawl", &input)?;
+                    docs.extend(items(&answer, "pages").filter_map(website));
                 }
             }
         },

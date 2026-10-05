@@ -27,7 +27,6 @@ sources:
               topic: news
               time_range: week
               max_results: 5
-              search_depth: basic
               include_domains: []
               exclude_domains: []
     policy:

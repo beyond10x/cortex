@@ -5,7 +5,7 @@ store in its own SQLite file, fed on a schedule by the data sources the spec con
 
 | source kind | what it fetches |
 |---|---|
-| `web` | websites with a title, a description and their content, through Tavily: either **search** (a list of queries) or **sites** (a list of URLs, read as pages or crawled), each with its own policy |
+| `web` | websites with a title, a description and their content, through any Connectors adapter implementing `datasource.websearch/v1alpha1` (`tavily` by default): either **search** (a list of queries) or **sites** (a list of URLs, read as pages or crawled), each with its own policy |
 | `connectors` | the records of any operation a [Connectors](https://github.com/beyond10x/connectors) adapter admits |
 | `files` | local files matching a glob |
 
