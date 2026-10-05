@@ -34,8 +34,24 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
   `<home>/bin/cortex --home <home> run <instance>/<source> --record-failure`.
 - `cortex-<instance>-view.service`, which runs `ekr view` on the store at the instance's port.
 
-The source services carry `PATH`, the `XDG_*` directories and every `CONNECTORS_*` variable of the
-shell that ran `cortex create`, so `connectors` and `claude` find their configuration.
+A unit runs with the systemd user manager's environment, not your shell's: its `PATH` holds no
+user tool directory such as `~/.local/bin` or `~/.cargo/bin`, and its working directory is your
+home directory. So the source services carry, from the shell that ran `cortex create` or
+`cortex update`:
+
+- `PATH`, `HOME`, the `XDG_*` directories and every `CONNECTORS_*` variable, so the tools are
+  found on the same `PATH`, and `claude`'s sign-in and the default `ekr` under
+  `~/.cache/cortex` under the same `HOME`;
+- `CORTEX_CONNECTORS`, `CORTEX_CLAUDE` and `CORTEX_CODEX`: the binaries that command ran, from
+  `--connectors`, `--claude` and `--codex` or their defaults. A path is made absolute; a bare name
+  is looked up on the unit's `PATH`.
+
+A relative `--home` or `$CORTEX_HOME` is made absolute, so the units name the same home from any
+directory. Run `cortex create` from a shell where `connectors` and `claude` work; after changing
+either, `cortex update` writes the units again.
+
+The timers run only while your systemd user manager runs. To have them run while you are logged
+out, enable lingering once: `loginctl enable-linger`.
 
 The units run the copy at `<home>/bin/cortex`. Rebuilding cortex changes nothing for existing
 timers until a `create` or `update` installs the units again and copies the new binary.

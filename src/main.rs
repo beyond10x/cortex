@@ -626,9 +626,9 @@ fn create(
                 let systemd = Systemd::from_env(&ctx.home.root);
                 let store = layout.store_handle(&spec);
                 let installed = systemd.install_view(&name, &store, port).and_then(|_| {
-                    spec.sources
-                        .iter()
-                        .try_for_each(|s| systemd.install_source(&name, &s.name, &s.schedule))
+                    spec.sources.iter().try_for_each(|s| {
+                        systemd.install_source(&name, &s.name, &s.schedule, &ctx.tools)
+                    })
                 });
                 if let Err(e) = installed {
                     detail["units"] = json!({"failed": e});
@@ -739,11 +739,9 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, no_units: bool) -> 
             let mut detail = json!({"name": instance_updated.name.0, "added_sources": added});
             if !no_units {
                 let systemd = Systemd::from_env(&ctx.home.root);
-                if let Err(e) = spec
-                    .sources
-                    .iter()
-                    .try_for_each(|s| systemd.install_source(name, &s.name, &s.schedule))
-                {
+                if let Err(e) = spec.sources.iter().try_for_each(|s| {
+                    systemd.install_source(name, &s.name, &s.schedule, &ctx.tools)
+                }) {
                     detail["units"] = json!({"failed": e});
                 }
             }
