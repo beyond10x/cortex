@@ -1,7 +1,7 @@
 # cortex
 
 Spin up knowledge instances from one spec file. Each instance is one
-[EKR](https://github.com/beyond10x/epistemic-knowledge-runtime) store in its own SQLite file, fed
+[EKR](https://github.com/beyond10x/epistemic-knowledge-runtime) store, in its own SQLite file or in PostgreSQL, fed
 on a schedule by the data sources the spec connects:
 
 | source kind | what it fetches |

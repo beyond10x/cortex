@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:redaction-before-model
 kind: story
-status: draft
+status: implemented
 title: Personal data is replaced before the model sees a document
 relations:
 - decomposes: epic:standalone-1-0
@@ -20,7 +20,11 @@ scope:
   path: src/run.rs
 - confidence: inferred
   path: tests/redaction.rs
-revision: 9
+revision: 15
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "active", to: "implemented", at: "2026-10-05T13:01:18Z", actor: "agent:claude", revision: 14, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Outcome
 
@@ -49,4 +53,22 @@ in which a planted email address, phone number and card number are absent and th
 
 ## Scope
 
-`src/redact.rs` (new), `src/lib.rs`, `src/run.rs`, `tests/redaction.rs` (new), `AGENTS.md`.
+Landed 2026-10-05 in `1a89081` (wave 20261005c).
+
+- **Files:** `src/redact.rs` (new), `src/run.rs`, `src/lib.rs`, `tests/redaction.rs` (new), `AGENTS.md`, `website/docs/limits.md`; `src/main.rs` (run and seed report counts) applied at merge
+- **Design changed by the operator, 2026-10-05:** placeholders in the prompt, restored before apply; the store keeps the real values (section "Operator decision")
+- **Not built here:** credential masking of titles, descriptions and document keys → `story:credential-mask-covers-titles` (pre-existing)
+- **Review:** `review-result:adversary-redaction-before-model-pass-1` (14) and `-pass-2` (10), fixed or documented; coordinator check of the final diff
+
+## Operator decision: PII stays out of the model, not out of the store
+
+2026-10-05, operator: "It would be nice if something like an email or otherwise PII would not reach the LLM models - but we still would kind of need to find the data later, so storing it in the brain and being able to search for it is actually fine".
+
+What follows from it (coordinator, same day):
+
+- Redaction applies to what the model sees: text, title, description and the `Source:` line built from the document key. Each distinct value becomes a stable placeholder within the batch (`[Email-1]`, `[Phone-2]`, `[<rule>-1]`).
+- Before the extraction document is applied, its placeholders are replaced by the original values. The store, the evidence text and the evidence identity hold the real values, and the brain stays searchable by them.
+- A placeholder that cannot be restored stays as written and is counted as `unrestored`.
+- The placeholder-to-value mapping lives in memory for one batch only. It is never written to disk or to the log.
+- Credentials are different: they are masked irreversibly, as before, and never stored.
+- The Acceptance's check "no planted value reaches the model" holds. Checks that a value is absent from the store are replaced by checks that it is present there in its original form.

@@ -11,14 +11,14 @@ description: What cortex is, what it owns, and what it leaves to EKR, Connectors
 cortex spins up knowledge instances on the
 [Epistemic Knowledge Runtime](https://github.com/beyond10x/epistemic-knowledge-runtime) (EKR).
 One spec file defines an instance: its seed schema, its model settings and its data sources.
-Each instance is one EKR store in its own SQLite file. systemd user timers run every source on its
+Each instance is one EKR store: its own SQLite file, or EKR's PostgreSQL provider. systemd user timers run every source on its
 own schedule, a model extracts what new or changed documents say, and EKR applies the result to
 the store. You browse a store with `ekr view` and serve it to agents over MCP with `ekr mcp`.
 
 ```text
 spec file          name, seed schema, model, sources, schedules
    ↓  cortex create
-instance           one directory, one EKR SQLite store, one viewer, one timer per source
+instance           one directory, one EKR store (SQLite or PostgreSQL), one viewer, one timer per source
    ↓  timer fires: cortex run <instance>/<source>
 fetch              web pages or operation records through Connectors, or local files
    ↓

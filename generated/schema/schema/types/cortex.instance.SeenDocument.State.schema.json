@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.SeenDocument.State",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588",
+    "contract_digest": "slice-sha256/2:533904b4ce58d474872304d9c5f2cde114d9dfc2f8dd9d74e17302912e9de4e3",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.SeenDocument.State": {
+      "title": "State",
+      "x-ess-name": "cortex.instance.SeenDocument.State",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Seen"
+      ]
+    }
+  }
+}

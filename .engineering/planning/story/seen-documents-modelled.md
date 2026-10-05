@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:seen-documents-modelled
 kind: story
-status: draft
+status: implemented
 title: The spec says what cortex remembers between runs
 relations:
 - decomposes: epic:first-web-instance
@@ -20,7 +20,11 @@ scope:
   path: src/home.rs
 - confidence: cited
   path: src/state.rs
-revision: 6
+revision: 11
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 7, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 8, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "active", to: "implemented", at: "2026-10-05T13:01:18Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 
@@ -45,5 +49,10 @@ number of filed ESS gaps; regenerated `generated/` and `spec/suite.json` committ
 
 ## Scope
 
-`spec/domains/instance.yaml`, `generated/`, `spec/suite.json`, and `src/state.rs` / `src/home.rs`
-where the generated types change.
+Landed 2026-10-05 in `da7cfa7` (wave 20261005c, with a coordinator resolution of `src/main.rs` against the store unit).
+
+- **Files:** `spec/domains/instance.yaml`, `spec/suite.json` (35 → 34 scenarios), `generated/`, the website reference, schema and domain graph, `src/home.rs`, `src/state.rs`, `src/main.rs`, `tests/conformance.rs` (error fields compared; `excludes` handled), `tests/seed_change.rs` and `tests/seed_paths.rs` (new)
+- **Beyond the scope:** `src/main.rs` (the generated inputs changed)
+- **UNMAPPED, filed upstream:** the per-run upsert of seen documents, beyond10x/ess#459; the lost unchanged-subject check after a refused update, beyond10x/ess#461 (a Rust test covers it)
+- **Moved out:** a symlinked seed directory or file inside one → `story:symlinked-seed-directory`
+- **Review:** `review-result:adversary-seen-documents-modelled-pass-1-report` (8, by reading; the disk was full) and `-pass-2` (6), fixed; coordinator check of the final diff

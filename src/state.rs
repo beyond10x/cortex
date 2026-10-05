@@ -1,10 +1,13 @@
-//! What a source has already seen: the `UNMAPPED:` rule of `spec/domains/instance.yaml`. A
-//! document is new when its key was never applied, changed when its text hash differs, and skipped
-//! while its last fetch is younger than the policy's `refresh_after_days`.
+//! What a source has already seen: the `cortex.instance.SeenDocument` records of
+//! `spec/domains/instance.yaml`, held in one state file per source, and the `UNMAPPED:` rule of
+//! `RunSource`'s `ran` that writes and reads them. A document is new when its key was never
+//! applied, changed when its text hash differs, and skipped while its last application is younger
+//! than the policy's `refresh_after_days`.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use cortex_model::instance as m;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -73,6 +76,21 @@ impl SeenState {
             .collect()
     }
 
+    /// The seen documents of `source`, as `cortex.instance.SeenDocument` declares them, in key
+    /// order. A document's id is the source id and its key, separated by a space.
+    pub fn rows(&self, source: &m::SourceId) -> Vec<m::SeenDocumentData> {
+        self.documents
+            .iter()
+            .map(|(key, seen)| m::SeenDocumentData {
+                document_id: m::DocumentId(format!("{} {key}", source.0)),
+                source_id: source.clone(),
+                key: key.clone(),
+                content_hash: seen.hash.clone(),
+                applied_at: seen.applied_at,
+            })
+            .collect()
+    }
+
     pub fn record(&mut self, doc: &Document, now_ms: i64) {
         self.documents.insert(
             doc.key.clone(),
@@ -117,5 +135,34 @@ mod tests {
             ["b", "c"]
         );
         assert_eq!(state.select(fetched(), 8 * DAY_MS, 7, 1).len(), 1);
+    }
+
+    #[test]
+    fn the_state_file_holds_the_seen_documents_the_specification_declares() {
+        let mut state = SeenState::default();
+        state.record(&doc("https://example.org/b", "two"), 7);
+        state.record(&doc("https://example.org/a", "one"), 5);
+        let source = m::SourceId("t/news".into());
+        let rows = state.rows(&source);
+        assert_eq!(
+            rows,
+            [
+                m::SeenDocumentData {
+                    document_id: m::DocumentId("t/news https://example.org/a".into()),
+                    source_id: source.clone(),
+                    key: "https://example.org/a".into(),
+                    content_hash: text_hash("one"),
+                    applied_at: 5,
+                },
+                m::SeenDocumentData {
+                    document_id: m::DocumentId("t/news https://example.org/b".into()),
+                    source_id: source.clone(),
+                    key: "https://example.org/b".into(),
+                    content_hash: text_hash("two"),
+                    applied_at: 7,
+                },
+            ]
+        );
+        assert!(rows.iter().all(|r| r.broken_invariant().is_none()));
     }
 }

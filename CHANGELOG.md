@@ -7,6 +7,17 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Added
 
+- An instance's store lives on the backend its spec names: SQLite as before, or PostgreSQL through
+  an `ekr.postgres/1` file (`cortex create --postgres-schema-config` provisions the schema). A
+  create refuses a tenant that already holds a store; refusals name fields, never their values.
+- Redaction before the model: emails, phone numbers, card numbers, IP addresses and spec rules
+  become placeholders such as `[Email-1]` in everything the model sees, and are restored before
+  the extraction is applied, so the store keeps the real values. A rule with a `replacement` is
+  irreversible. Runs log `redacted` and `unrestored` counts, and `cortex run` and `cortex create`
+  print them.
+- The specification declares what a source has seen (`SeenDocument`) and the seed digest an
+  update compares; `cortex list` prints `seed_digest`. An update naming a `..` or absolute path,
+  or a renamed seed file, is a seed change.
 - The `cortex` command line: `create`, `update`, `remove`, `run`, `source add`, `source enable`,
   `list`, `sources`, `mcp-line`, `setup` and `schema`. Each command prints its outcome as one JSON line;
   a refusal exits 1, a usage or environment failure exits 2.
