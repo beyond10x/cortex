@@ -22,7 +22,6 @@
     {"label": "Specified in ESS, model generated, 34 conformance scenarios", "status": "shipped", "area": "Specification", "detail": "spec/ generates the model and the spec file's serde types; tests/conformance.rs runs every scenario of spec/suite.json.", "href": "/docs/reference/ess"},
     {"label": "Facts from a web page cite the page as URL evidence", "status": "planned", "area": "Runs", "detail": "Waits on an EKR release that admits URL evidence; until then a page is cited as a HumanStatement naming its URL.", "href": "/docs/limits"},
     {"label": "Extraction produces edges between the nodes it finds", "status": "planned", "area": "Runs"},
-    {"label": "Scheduled runs verified with nobody at the keyboard", "status": "planned", "area": "Runs"},
     {"label": "What a source has seen is part of the specification", "status": "planned", "area": "Specification", "detail": "The specification declares the record, SeenDocument, owned by Source; the run that writes it stays an UNMAPPED rule, held by the Rust tests, until ESS can state an effect on many records."},
     {"label": "CI runs task check on every pull request", "status": "planned", "area": "Project"}
   ]
