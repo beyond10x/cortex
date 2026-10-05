@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:credential-mask-covers-titles
 kind: story
-status: draft
+status: active
 title: A credential in a document's title or description is masked
 relations:
 - decomposes: epic:standalone-1-0
@@ -14,7 +14,10 @@ scope:
   path: src/mask.rs
 - confidence: cited
   path: src/run.rs
-revision: 4
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T14:13:37Z", actor: "agent:claude", revision: 5}
+- {from: "proposed", to: "active", at: "2026-10-05T14:13:37Z", actor: "agent:claude", revision: 6}
 ---
 ## Outcome
 
