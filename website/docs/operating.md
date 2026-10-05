@@ -57,6 +57,11 @@ timers until a `create` or `update` installs the units again and copies the new 
    adds the evidence items itself and records each web page as a `WebPage` node.
 7. **Apply** the document with `ekr apply-extraction`, then record the batch's documents as seen.
 
+A `structured` source skips steps 5 and 6: each batch of records is mapped to an extraction
+document by the source's `mapping` and applied without a model call, at a cost of 0 (see
+[the spec file](./spec-file.md#kind-structured)). It masks every string in a record rather than
+the text as a whole, and never cuts a record.
+
 The run stops starting batches when its `budget_usd` is spent. When a batch fails after an earlier
 one was applied, the run ends as `ran` with `stopped` set; when the first batch fails, nothing was
 applied and the run fails.

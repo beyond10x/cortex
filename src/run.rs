@@ -15,6 +15,7 @@ use crate::mask::{mask, mask_key};
 use crate::redact::{self, Redactor};
 use crate::sources::{self, FetchError, Window};
 use crate::state::{text_hash, SeenState};
+use crate::structured;
 
 pub struct Tools {
     pub connectors: Connectors,
@@ -134,6 +135,10 @@ pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Rep
         FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
     })
     .and_then(|fetched| {
+        let structured_source = match &source_spec.settings {
+            m::SourceSettings::Structured(st) => Some(st),
+            _ => None,
+        };
         process(
             layout,
             tools,
@@ -142,6 +147,7 @@ pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Rep
             fetched,
             &source_spec.policy,
             Some(window),
+            structured_source,
         )
     });
     if ran.is_err() {
@@ -190,7 +196,7 @@ pub fn seed(layout: &Layout, tools: &Tools) -> Result<Report, Failure> {
         max_documents_per_run: i64::MAX,
         max_chars_per_document: 100_000,
     };
-    process(layout, tools, &spec, "seed", fetched, &policy, None)
+    process(layout, tools, &spec, "seed", fetched, &policy, None, None)
 }
 
 /// `window`, when given, is the window the source's fetch asked about; its end is recorded in the
@@ -201,6 +207,12 @@ pub fn seed(layout: &Layout, tools: &Tools) -> Result<Report, Failure> {
 /// apply is asked for again. `held_since` is recomputed from the documents this run holds back by
 /// `refresh_after_days`. A windowed run records its window's end as each applied document's
 /// `applied_at`, so a later change to it is inside a window that starts there.
+///
+/// With a `structured_source`, each document is a record's JSON: its key becomes the record's
+/// identity, every string in it is masked and scrubbed instead of the text as a whole, it is never
+/// cut, and the documents are applied as `src/structured.rs` maps them, with no model call (see
+/// [`apply_records`]).
+#[allow(clippy::too_many_arguments)]
 fn process(
     layout: &Layout,
     tools: &Tools,
@@ -209,6 +221,7 @@ fn process(
     fetched: sources::Fetched,
     policy: &m::FetchPolicy,
     window: Option<Window>,
+    structured_source: Option<&m::StructuredSource>,
 ) -> Result<Report, Failure> {
     let started = now_ms();
     let applied_at = window.map_or(started, |w| w.until_ms);
@@ -226,10 +239,22 @@ fn process(
     let mut uncut: HashMap<String, Vec<Uncut>> = HashMap::new();
     // Masked keys, so two documents whose keys differ only in a credential are one.
     let mut keys: HashSet<String> = HashSet::new();
+    // A record's matches of the irreversible rules, counted when the record is applied.
+    let mut record_scrubbed: HashMap<String, BTreeMap<String, usize>> = HashMap::new();
+    let structured = structured_source.map(|st| structured::Source::new(st, redactor.as_ref()));
     let docs: Vec<_> = fetched
         .documents
         .into_iter()
         .filter_map(|mut d| {
+            // A record's key is its identity, which never holds a raw id the mask or a rule
+            // would change; its strings are masked and scrubbed by `prepare`.
+            if let Some(s) = &structured {
+                let (n, scrubbed) = s.prepare(&mut d);
+                report.masked += n;
+                d.hash = Some(text_hash(&d.text));
+                record_scrubbed.insert(d.key.clone(), scrubbed);
+                return Some(d);
+            }
             // Credentials are masked, irreversibly, in every field the model, the evidence or the
             // store sees: the key (a URL's query may carry a token), title, description and text.
             // Only a key that holds a credential changes, and it changes the same way every run.
@@ -319,6 +344,32 @@ fn process(
     let store = layout.store_handle(spec);
     let host = std::fs::read_to_string(layout.host()).map_err(|e| Failure::Apply(e.to_string()))?;
     let operator = crate::ekr::operator(&host).map_err(Failure::Apply)?;
+    if let Some(source) = &structured {
+        let records = Records {
+            store: &store,
+            operator: &operator,
+            source,
+            started,
+            applied_at,
+            run_dir: &run_dir,
+            scrubbed: &record_scrubbed,
+        };
+        apply_records(
+            layout,
+            &records,
+            selected,
+            &mut seen,
+            &seen_path,
+            &mut report,
+        )?;
+        unread(&mut report, &fetched.unread);
+        let failures = fetched.child_failures.clone();
+        finish(
+            &mut seen, &seen_path, &report, wanted, held_since, window, failures,
+        )?;
+        log(layout, label, &report, started);
+        return Ok(report);
+    }
     let schema = crate::ekr::Binary(store.bin.clone())
         .model_schema()
         .map_err(Failure::Extract)?;
@@ -346,19 +397,7 @@ fn process(
         .into_iter()
         .map(|d| evidence::issue(d, &operator, started))
         .collect();
-    let mut batches: Vec<Vec<evidence::Issued>> = vec![Vec::new()];
-    let mut chars = 0;
-    for item in issued {
-        let len = item.doc.text.len();
-        if chars + len > BATCH_CHARS && !batches.last().expect("one batch").is_empty() {
-            batches.push(Vec::new());
-            chars = 0;
-        }
-        chars += len;
-        batches.last_mut().expect("one batch").push(item);
-    }
-
-    for (n, batch) in batches.into_iter().enumerate() {
+    for (n, batch) in batches(issued).into_iter().enumerate() {
         let remaining = budget - spent;
         if remaining <= 0.0 {
             report.stopped = Some(format!("budget of {budget} USD spent"));
@@ -460,6 +499,108 @@ fn process(
     )?;
     log(layout, label, &report, started);
     Ok(report)
+}
+
+/// `issued` in batches of at most [`BATCH_CHARS`] characters of text, a longer document alone.
+fn batches(issued: Vec<evidence::Issued>) -> Vec<Vec<evidence::Issued>> {
+    let mut batches: Vec<Vec<evidence::Issued>> = vec![Vec::new()];
+    let mut chars = 0;
+    for item in issued {
+        let len = item.doc.text.len();
+        if chars + len > BATCH_CHARS && !batches.last().expect("one batch").is_empty() {
+            batches.push(Vec::new());
+            chars = 0;
+        }
+        chars += len;
+        batches.last_mut().expect("one batch").push(item);
+    }
+    batches
+}
+
+/// What a structured run applies its records with.
+struct Records<'a> {
+    store: &'a crate::ekr::Store,
+    operator: &'a str,
+    source: &'a structured::Source<'a>,
+    started: i64,
+    applied_at: i64,
+    run_dir: &'a std::path::Path,
+    /// Each record's matches of the irreversible rules, by document key.
+    scrubbed: &'a HashMap<String, BTreeMap<String, usize>>,
+}
+
+/// Applies the `selected` records of a structured source with no model call: each batch is one
+/// extraction document mapped by `src/structured.rs`, written to the run's batch directory as
+/// `extraction.yaml` and applied; the report keeps its cost of `0`. A batch that fails to apply
+/// fails the run when nothing was applied yet and stops it otherwise, as on the model path. A
+/// record with a part EKR rejected is counted in `parts_rejected` but neither applied nor marked
+/// seen, so the run is not successful and the record is read and tried again.
+fn apply_records(
+    layout: &Layout,
+    r: &Records<'_>,
+    selected: Vec<sources::Document>,
+    seen: &mut SeenState,
+    seen_path: &std::path::Path,
+    report: &mut Report,
+) -> Result<(), Failure> {
+    let mut entities = load_entities(layout);
+    let issued: Vec<_> = selected
+        .into_iter()
+        .map(|d| evidence::issue(d, r.operator, r.started))
+        .collect();
+    let index = r.source.index(&issued);
+    for (n, batch) in batches(issued).into_iter().enumerate() {
+        let mapped = r.source.document(&batch, &index);
+        let (doc, refused) = extract::merge(&mapped.document, &batch);
+        report.facts_refused += refused;
+        let dir = r.run_dir.join(format!("batch-{n}"));
+        std::fs::create_dir_all(&dir).map_err(|e| Failure::Apply(e.to_string()))?;
+        let path = dir.join("extraction.yaml");
+        let text = serde_yaml_ng::to_string(&doc).expect("YAML");
+        std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
+        let applied = match r.store.apply(&path) {
+            Ok(applied) => applied,
+            Err(e) if report.documents_applied == 0 => return Err(Failure::Apply(e)),
+            Err(e) => {
+                report.stopped = Some(e);
+                break;
+            }
+        };
+        let _ = std::fs::write(
+            dir.join("report.json"),
+            serde_json::to_string_pretty(&applied).unwrap_or_default(),
+        );
+        report.parts_rejected += crate::ekr::applied(&applied).rejected;
+        let rejected = mapped.rejected(&applied);
+        for issued in &batch {
+            if rejected.contains(&issued.id) {
+                continue;
+            }
+            report.documents_applied += 1;
+            seen.record(&issued.doc, r.applied_at);
+            if let (Some(counts), Some(scrubbed)) =
+                (report.redacted.as_mut(), r.scrubbed.get(&issued.doc.key))
+            {
+                for (name, n) in scrubbed {
+                    *counts.entry(name.clone()).or_default() += n;
+                }
+            }
+        }
+        for (ty, name) in extract::entity_names(&mapped.document) {
+            let names = entities.entry(ty).or_default();
+            if !names.contains(&name) && names.len() < KNOWN_PER_TYPE {
+                names.push(name);
+            }
+        }
+        seen.save(seen_path).map_err(Failure::Apply)?;
+        let _ = crate::home::write_atomic(
+            &layout.entities(),
+            serde_json::to_string_pretty(&entities)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
+    }
+    Ok(())
 }
 
 /// Adds to why the run stopped what its fetch left unread.
