@@ -919,7 +919,7 @@ fn an_update_that_names_another_sqlite_file_is_refused() {
 #[test]
 fn a_connection_string_in_the_config_field_is_not_printed_back() {
     let w = World::new();
-    let password = ["adversary", "pw", "0e1f"].join("-");
+    let password = &["adversary", "pw", "0e1f"].join("-");
     let spec = write_spec(
         &w,
         "leak",
