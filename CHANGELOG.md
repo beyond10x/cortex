@@ -7,6 +7,10 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Added
 
+- Scheduled runs work with nobody at the keyboard: timers carry the `connectors`, `claude` and
+  `codex` paths and `HOME` cortex was created with, and a relative home or a spec given as a bare
+  file name no longer breaks them. Run `loginctl enable-linger` once to keep timers running while
+  logged out.
 - Redaction classes `Url`, `known_names` and `RareName` replace links and personal names with
   placeholders the model sees and the store does not keep; `Credential` masks secrets for good.
   `refuse_if_left` fails a run, before any model call, when a listed class survives.

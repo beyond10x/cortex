@@ -14,7 +14,10 @@ pub struct Home {
 }
 
 impl Home {
+    /// `root` made absolute, so every path derived from it, the ones the systemd units carry
+    /// included, names the same file from any directory.
     pub fn new(root: PathBuf) -> Self {
+        let root = std::path::absolute(&root).unwrap_or(root);
         Self { root }
     }
 
