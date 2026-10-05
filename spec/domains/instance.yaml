@@ -19,6 +19,10 @@ types:
     kind: newtype
     of: String
 
+  - name: cortex.instance.DocumentId
+    kind: newtype
+    of: String
+
   - name: cortex.instance.SourceKind
     kind: enum
     variants: [Web, Connectors, Files, Structured]
@@ -345,6 +349,7 @@ entities:
       - {name: description, type: String}
       - {name: model, type: String}
       - {name: ekr_version, type: String}
+      - {name: seed_digest, type: String}
     relations:
       # A source has no meaning without the instance whose store it feeds.
       - name: sources
@@ -373,13 +378,15 @@ entities:
       - {name: schedule, type: String}
       - {name: runs, type: Integer}
       - {name: consecutive_failures, type: Integer}
+    relations:
+      - name: seen
+        kind: owns
+        target: cortex.instance.SeenDocument
+        cardinality: many
+        via: source_id
     invariants:
       - runs >= 0
       - consecutive_failures >= 0
-    # UNMAPPED: which documents a source has already seen (document id, content hash, last fetch)
-    # decides whether a run applies anything. One outcome changes one record, and one run sees many
-    # documents, so the seen set is not modelled here; it is the implementation's per-source state
-    # file, checked by the Rust tests (a second run over unchanged input applies nothing).
     lifecycle:
       initial: Enabled
       states: [Enabled, Disabled]
@@ -391,6 +398,23 @@ entities:
         - name: enable
           from: [Disabled]
           to: Enabled
+
+  - name: cortex.instance.SeenDocument
+    identity:
+      name: document_id
+      type: cortex.instance.DocumentId
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+      - {name: key, type: String}
+      - {name: content_hash, type: String}
+      - {name: applied_at, type: Integer}
+    invariants:
+      - applied_at >= 0
+    lifecycle:
+      initial: Seen
+      states: [Seen]
+      terminal: [Seen]
+      transitions: []
 
 actors:
   - name: cortex.instance.Operator
@@ -488,20 +512,19 @@ commands:
     naming:
       wire: create
       display: Create an instance
-    # The command line reads the spec file; `name`, `description`, `model` and `ekr_version` are its
-    # values, carried as top-level inputs because an outcome reads only top-level input fields.
+    # The command line reads the spec file; `name`, `description`, `model`, `ekr_version` and
+    # `seed_digest` are its values, carried as top-level inputs because an outcome reads only
+    # top-level input fields.
     input:
       - {name: name, type: cortex.instance.InstanceName}
       - {name: description, type: String}
       - {name: model, type: String}
       - {name: ekr_version, type: String}
+      - {name: seed_digest, type: String}
       - {name: spec, type: cortex.instance.InstanceSpec}
     outcomes:
-      # UNMAPPED: "the home already holds an instance with this name" reads the registry, not the
-      # input, and ESS has no guard on another record's existence; it is written as an external
-      # decision the implementation makes before anything is created.
       - name: name-taken
-        external: The home already holds an instance with this name
+        existing_instance: true
         error: cortex.instance.NameTaken
         payload:
           cortex.instance.NameTaken:
@@ -531,6 +554,7 @@ commands:
           description: input.description
           model: input.model
           ekr_version: input.ekr_version
+          seed_digest: input.seed_digest
         emits:
           - cortex.instance.InstanceCreated
         payload:
@@ -550,22 +574,27 @@ commands:
       - {name: description, type: String}
       - {name: model, type: String}
       - {name: spec, type: cortex.instance.InstanceSpec}
-      - {name: seed_changed, type: Boolean}
-    # UNMAPPED: whether the seed changed is a comparison between the new spec and the frozen copy
-    # in the instance directory. A `when_subject` can compare a stored field with an input field,
-    # but the seed is not stored as a field. The implementation computes `seed_changed` from the
-    # two files and passes it; a caller cannot set it by hand from the command line.
+      - {name: seed_digest, type: String}
     outcomes:
       - name: seed-change-refused
-        when: seed_changed == true
+        when_subject:
+          predicate: seed_digest != input.seed_digest
         error: cortex.instance.SeedChangeRefused
         payload:
           cortex.instance.SeedChangeRefused:
             name: input.name
         summary: Nothing changed.
 
+      - name: not-active
+        when_subject:
+          predicate: state == Removed
+        error: cortex.instance.InstanceNotActive
+        payload:
+          cortex.instance.InstanceNotActive:
+            state: {generated: true}
+        summary: The instance is removed; nothing changed.
+
       - name: updated
-        when_subject_state: Active
         updates: cortex.instance.Instance
         instance: name
         sets:
@@ -577,13 +606,6 @@ commands:
           cortex.instance.InstanceUpdated:
             name: input.name
         summary: The frozen spec is replaced; sources, model and serve settings take effect on the next run.
-
-      - name: not-active
-        error: cortex.instance.InstanceNotActive
-        payload:
-          cortex.instance.InstanceNotActive:
-            state: {generated: true}
-        summary: The instance is removed; nothing changed.
 
       - name: no-such-instance
         unknown_instance: true
@@ -686,6 +708,12 @@ commands:
             reason: {generated: true}
         summary: Nothing was applied; the scheduler then sends RecordFailure.
 
+      # UNMAPPED: `ran` records a SeenDocument of the source (content hash, time applied) for every
+      # document it applied, and a run extracts only documents whose key no SeenDocument of the
+      # source carries, or whose hash differs once `refresh_after_days` have passed. ESS has no
+      # effect that creates or updates one record per element of a collection (`instances:` is
+      # refused on `creates:`, `affects:` only updates), so the per-source state file holds it and
+      # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.
       - name: ran
         when_subject_state: Enabled
         updates: cortex.instance.Source
@@ -857,6 +885,7 @@ views:
       - {name: description, type: String}
       - {name: model, type: String}
       - {name: ekr_version, type: String}
+      - {name: seed_digest, type: String}
       - {name: state, type: cortex.instance.Instance.State}
     naming:
       wire: list

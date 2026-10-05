@@ -295,6 +295,7 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
                             "description": row.description,
                             "model": row.model,
                             "ekr_version": row.ekr_version,
+                            "seed_digest": ctx.home.frozen_seed_digest(&row.name.0).ok(),
                             "view": port.map(|p| format!("http://127.0.0.1:{p}/")),
                         })
                     );
@@ -497,16 +498,13 @@ fn create(
     let layout = Layout::new(ctx.home.instance_dir(&name));
     const CMD: &str = "cortex.instance.CreateInstance";
 
+    // `name-taken` is the generated behaviour's own lookup; a taken name skips the checks below.
     let taken = ctx
         .shared
         .borrow_mut()
         .registry
         .instances
         .contains_key(&name);
-    ctx.shared
-        .borrow_mut()
-        .external
-        .insert((CMD, "name-taken"), taken);
     if !taken {
         match missing_connection(ctx, &spec) {
             Ok(Some(missing)) => {
@@ -548,6 +546,11 @@ fn create(
         description: spec.description.clone(),
         model: spec.model.model.clone(),
         ekr_version: spec.ekr.version.clone(),
+        // A path `freeze` refuses is never hashed; `seed-refused` answers it below.
+        seed_digest: match home::seed_path_refusal(&spec) {
+            Some(_) => String::new(),
+            None => home::seed_digest(&loaded.dir, &spec),
+        },
         spec: spec.clone(),
     };
     let outcome = match app.create_instance(input) {
@@ -642,38 +645,52 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, no_units: bool) -> 
         return fail(format!("the spec names {:?}, not {name:?}", spec.name.0));
     }
     let layout = Layout::new(ctx.home.instance_dir(name));
-    // A store the spec cannot use, or another store than the instance's, refuses as a seed change:
-    // the instance's history is in the store it has. `reason` says which, naming fields only.
-    let mut reason = store_refusal(&spec);
-    let seed_changed = match layout.load_spec() {
-        Ok(old) => {
+    // A store the spec cannot use, another store than the instance's (its history is in the store
+    // it has), or a seed or instructions path `create` would refuse is a seed change. The input then
+    // carries the refusal, which no stored digest equals, and a refused path is never hashed. The
+    // reason names fields only.
+    let mut refusal = store_refusal(&spec).or_else(|| home::seed_path_refusal(&spec));
+    if refusal.is_none() {
+        if let Ok(old) = layout.load_spec() {
             let (was, will) = (layout.store_handle(&old), layout.store_handle(&spec));
-            if reason.is_none() && (was.backend, was.store) != (will.backend, will.store) {
-                reason = Some(
+            if (was.backend, was.store) != (will.backend, will.store) {
+                refusal = Some(
                     "store: the spec names another store than the instance's; moving a store \
                      is not supported"
                         .into(),
                 );
             }
-            reason.is_some()
-                || old.seed != spec.seed
-                || seed_bytes(&layout.dir, &old) != seed_bytes(&loaded.dir, &spec)
         }
-        Err(_) => reason.is_some(),
+    }
+    let seed_digest = match &refusal {
+        Some(reason) => format!("refused: {reason}"),
+        None => home::seed_digest(&loaded.dir, &spec),
     };
+    // The stored seed is the frozen copy, read only here. A frozen spec that is missing or cannot
+    // be parsed fails the update, except for a removed instance, which holds no seed to compare
+    // once its directory is gone and answers `not-active`.
+    if let Some(held) = ctx.shared.borrow_mut().registry.instances.get_mut(name) {
+        held.data.seed_digest = match ctx.home.frozen_seed_digest(name) {
+            Ok(frozen) => frozen,
+            // A refusal known from the new spec alone answers before the frozen copy is needed.
+            Err(_) if refusal.is_some() => String::new(),
+            Err(_) if held.state == m::InstanceState::Removed => seed_digest.clone(),
+            Err(e) => return fail(e),
+        };
+    }
     let input = m::UpdateInstance {
         name: spec.name.clone(),
         description: spec.description.clone(),
         model: spec.model.model.clone(),
         spec: spec.clone(),
-        seed_changed,
+        seed_digest,
     };
     let done = match app.update_instance(input) {
         Err(e) => return fail(e),
         Ok(m::UpdateInstanceOutcome::SeedChangeRefused { error }) => Done {
             outcome: "seed-change-refused",
             ok: false,
-            detail: match &reason {
+            detail: match &refusal {
                 Some(reason) => json!({"name": error.name.0, "reason": reason}),
                 None => json!({"name": error.name.0}),
             },
@@ -729,26 +746,6 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, no_units: bool) -> 
         }
     };
     print("update", &done)
-}
-
-/// The bytes of every seed file a spec names, for comparing two specs' seeds.
-fn seed_bytes(dir: &Path, spec: &m::InstanceSpec) -> Vec<(String, Vec<u8>)> {
-    spec::seed_files(spec)
-        .into_iter()
-        .map(|rel| {
-            let mut bytes = Vec::new();
-            for entry in walkdir::WalkDir::new(dir.join(&rel))
-                .sort_by_file_name()
-                .into_iter()
-                .flatten()
-            {
-                if entry.file_type().is_file() {
-                    bytes.extend(std::fs::read(entry.path()).unwrap_or_default());
-                }
-            }
-            (rel, bytes)
-        })
-        .collect()
 }
 
 fn remove(app: &mut App, ctx: &Ctx, name: &str) -> ExitCode {
@@ -973,11 +970,18 @@ mod tests {
     const FROM_SPEC_FILE: &[(&str, &[&str])] = &[
         (
             "cortex.instance.CreateInstance",
-            &["name", "description", "model", "ekr_version", "spec"],
+            &[
+                "name",
+                "description",
+                "model",
+                "ekr_version",
+                "seed_digest",
+                "spec",
+            ],
         ),
         (
             "cortex.instance.UpdateInstance",
-            &["description", "model", "spec", "seed_changed"],
+            &["description", "model", "spec", "seed_digest"],
         ),
     ];
     /// Flags that steer the implementation and are no command input.

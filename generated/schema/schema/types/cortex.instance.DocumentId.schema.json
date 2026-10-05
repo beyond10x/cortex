@@ -1,17 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$ref": "#/$defs/cortex.instance.SourceId",
+  "$ref": "#/$defs/cortex.instance.DocumentId",
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
     "source_digest": "dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588",
-    "contract_digest": "slice-sha256/2:40305b02ec68abdb27afa7745456e8c0b854ccb0062ceab536d1a577d4256ac7",
+    "contract_digest": "slice-sha256/2:a7aa5888e7f310e58163fb9e6d097c0a208738c608eb15d074415d3b1825b78e",
     "regenerate": "ess generate"
   },
   "$defs": {
-    "cortex.instance.SourceId": {
-      "title": "SourceId",
-      "x-ess-name": "cortex.instance.SourceId",
+    "cortex.instance.DocumentId": {
+      "title": "DocumentId",
+      "x-ess-name": "cortex.instance.DocumentId",
       "x-ess-kind": "newtype",
       "type": "string"
     }
