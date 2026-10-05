@@ -72,12 +72,19 @@ impl Layout {
         crate::spec::load(&self.spec()).map(|l| l.model)
     }
 
-    /// The store, through the pinned `ekr`.
+    /// The store on the backend the spec names, through the pinned `ekr`. A `sqlite` store, and a
+    /// spec with no `store`, is `store.sqlite` in the instance directory; a `postgres` store is the
+    /// spec's `ekr.postgres/1` file, `~/` expanded.
     pub fn store_handle(&self, spec: &m::InstanceSpec) -> ekr::Store {
+        let (backend, store) = match &spec.store {
+            Some(m::StoreSpec::Postgres(p)) => (ekr::Backend::Postgres, ekr::expand(&p.config)),
+            Some(m::StoreSpec::Sqlite(_)) | None => (ekr::Backend::Sqlite, self.store()),
+        };
         ekr::Store {
             bin: ekr::resolve_bin(&spec.ekr.version, spec.ekr.bin.as_deref()),
             host: self.host(),
-            store: self.store(),
+            backend,
+            store,
         }
     }
 

@@ -126,9 +126,7 @@ impl Systemd {
     pub fn install_view(
         &self,
         instance: &str,
-        ekr: &Path,
-        host: &Path,
-        store: &Path,
+        store: &crate::ekr::Store,
         port: u16,
     ) -> Result<(), String> {
         let unit = view_unit(instance);
@@ -136,10 +134,10 @@ impl Systemd {
             &format!("{unit}.service"),
             &format!(
                 "[Unit]\nDescription=cortex: viewer of {instance}\n\n[Service]\n{}{}{}ExecStart=\"{}\" view --port {port}\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n",
-                env_line("EKR_HOST", &host.display().to_string()),
-                env_line("EKR_BACKEND", "sqlite"),
-                env_line("EKR_STORE", &store.display().to_string()),
-                ekr.display()
+                env_line("EKR_HOST", &store.host.display().to_string()),
+                env_line("EKR_BACKEND", store.backend.name()),
+                env_line("EKR_STORE", &store.store.display().to_string()),
+                store.bin.display()
             ),
         )?;
         self.systemctl(&["daemon-reload"])?;
