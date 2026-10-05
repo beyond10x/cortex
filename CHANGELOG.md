@@ -7,6 +7,13 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Added
 
+- A `structured` source imports records from a Connectors operation with no model call and no
+  cost: paths map record fields to a node, its aliases, properties and relations. A record's
+  identity is `<adapter>:<operation>:<id>`; nodes are named `<name> (<identity>)`, and a plain name
+  merges only when the spec maps it as an alias.
+- Credentials are masked in a document's title, description and URL as in its text, including
+  percent-encoded names, URL passwords and prefixed names such as `client_secret=`; documents
+  whose URLs differ only in a credential are one document.
 - Connectors sources walk every page (`Token`, `PageNumber`, `Keyset`), call a child operation
   per parent and append its records, and read a window: `{since}`/`{until}` in the inputs open
   at the last successful run (with a 5-minute overlap) and stay open for changes held back,

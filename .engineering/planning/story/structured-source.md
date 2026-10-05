@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:structured-source
 kind: story
-status: draft
+status: implemented
 title: A structured source imports records without a model call
 relations:
 - decomposes: epic:standalone-1-0
@@ -21,7 +21,11 @@ scope:
   path: src/structured.rs
 - confidence: inferred
   path: tests/structured.rs
-revision: 9
+revision: 14
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T14:13:37Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-05T14:13:37Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "active", to: "implemented", at: "2026-10-05T14:48:54Z", actor: "agent:claude", revision: 13, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Outcome
 
@@ -49,4 +53,9 @@ and the stand-in model log is empty.
 
 ## Scope
 
-`src/structured.rs` (new), `src/sources.rs`, `src/run.rs`, `src/lib.rs`, `tests/structured.rs` (new).
+Landed 2026-10-05 in `8a96919` (wave 20261005e).
+
+- **Files:** `src/structured.rs` (new), `src/run.rs`, `src/sources.rs`, `src/lib.rs`, `tests/structured.rs` (new, 22 cases), `tests/e2e.rs` (its refusal message moved to the files story), `website/docs/spec-file.md`, `website/docs/operating.md`
+- **Decided during the wave:** identity `<adapter>:<operation>:<id>` (a digest when the mask or a replacement rule would change the id); aliases `<name> (<identity>)`, the identity and the mapped aliases, so same-named records stay apart; a record with a part EKR rejects is not marked seen; values over 65,536 bytes are rejected by EKR 0.0.30
+- **Documented limit:** a changed value stays beside the old one until EKR supersession is released
+- **Review:** `review-result:adversary-structured-source-pass-1` (7), fixed or documented; coordinator check of the correction

@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-05T14:48:53Z",
+  "actor": "agent:claude",
+  "artifact": "story:credential-mask-covers-titles",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261005e (EXIT=0, 223 tests)"
+  }
+}

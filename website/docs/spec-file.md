@@ -77,7 +77,7 @@ Each source has a `name` (same rules as the instance name, unique within the ins
 `schedule` is a systemd calendar expression; it is written into the timer as `OnCalendar=`, for
 example `"*-*-* 06:00:00"` for every day at 06:00.
 
-`settings` is `kind` plus `value`, where `kind` is `web`, `connectors` or `files`.
+`settings` is `kind` plus `value`, where `kind` is `web`, `connectors`, `files` or `structured`.
 
 ### `kind: web`
 
@@ -201,6 +201,73 @@ earlier version holds the hash of the cut text, so every document longer than
 | `glob` | matched against each file's path relative to its directory, for example `**/*.md` |
 
 Files that are not UTF-8 text, or are empty, are skipped. A document's key is the file's path.
+
+### `kind: structured`
+
+Records turned into entities, properties and relations by a fixed `mapping`, with no model call:
+a structured run costs 0.
+
+| field | meaning |
+|---|---|
+| `input` | `from: connectors` with its `value`: `adapter`, `connection`, `operation`, `inputs` and an optional `paging`, as for [`kind: connectors`](#kind-connectors), window included. `from: files` is accepted but does not run yet: its run fails with `fetch-failed` |
+| `records` | path to the array of records in the answer, for example `$.people` |
+| `mapping` | how a record becomes an entity (below) |
+| `dropped` | accepted; `Keep` and `Supersede` do not act yet, and nothing a source made earlier is superseded |
+
+A path is dotted and may start at the root: `$.contact.email` and `contact.email` are the same,
+and `$` alone is the answer itself.
+
+| `mapping` field | meaning |
+|---|---|
+| `node_type` | the node type of every record's entity |
+| `id` | path to the record's stable id |
+| `name` | path to the entity's name |
+| `aliases` | paths to further names; each holds a value or a list of values. A mapped alias resolves across records and sources (below) |
+| `properties` | `property` and `path` pairs: the value at the path is asserted for the property |
+| `relations` | `relation`, `target_type` and `target_name`: a relation from the record's entity to the entity of `target_type` named by the value at the `target_name` path, one per value when it holds a list |
+
+A record without an id or a name is skipped, and a record whose id was already read in the run
+counts once.
+
+**Identity.** A record's identity is `<adapter>:<operation>:<id>`. When masking or a `redaction`
+rule with a `replacement` would change the id, the identity carries the first 16 hex digits of the
+id's SHA-256 in its place, so the id is never stored and two such ids stay two records. The
+identity is the record's document key, and its evidence reads `Source: record:<identity>`. EKR treats things of one node
+type that share any alias as one thing, so the entity's aliases are, in order:
+
+1. `<name> (<identity>)`, which names the node, for example `Ada Lovelace (directory:people.list:P-1)`;
+2. the identity;
+3. the mapped `aliases`, as the spec lists them.
+
+The bare name and the bare id are not aliases. Two records of one name, or one record's id equal
+to another's alias, are two nodes, and a record whose name changes stays the same node. A mapped
+alias resolves on purpose: records, and nodes from other sources, that share one are one node. To
+merge a record with nodes known by its plain name, map the name as an alias too
+(`aliases: ["$.name"]`).
+
+**Values.** A property's value is stored as text (a number or a boolean as written in JSON); a
+property whose value is absent, empty, null, a list or an object is not set. A changed value adds
+an assertion of the new value, and the old one stays active beside it: EKR 0.0.30 does not
+supersede an assertion, and cortex will once EKR does. Until then a property can hold every value
+a record has had.
+
+**Relations.** A relation target names a record of the same run by that record's identity (the
+target taken as an id) or, when exactly one record of the run has it, by its name or a mapped
+alias; the relation then names the target by all that record's aliases. Any other target of the
+mapping's own node type is named by the target text and its identity as an id, so it reaches a
+record of an earlier run by its id, or a node by a mapped alias; a target of another node type is
+named by the target text. The mapping's node type, its properties, the target types and the
+relations are added to the store's ontology where it does not hold them yet.
+
+**Evidence and rejections.** Each record is stored as the evidence every fact from it cites: a
+`Source:` header and the record's JSON. Before that, every string in the record has credential
+shapes masked and the `redaction` policy's rules with a `replacement` applied; no model sees a
+record, so nothing is replaced by a placeholder. `max_chars_per_document` does not cut a record,
+and EKR rejects a text value over 65,536 bytes (EKR 0.0.30's string limit). A record with any part
+EKR rejects is counted in `parts_rejected`, is not counted in `documents_applied` and is not marked
+seen; the run is then not successful, so later runs read the record and try it again until it
+applies. Shorten or unmap the value at the source to clear it. Change detection,
+`refresh_after_days` and `max_documents_per_run` work as for any source.
 
 ### `policy`
 

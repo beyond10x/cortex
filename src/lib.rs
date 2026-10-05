@@ -15,3 +15,4 @@ pub mod schedule;
 pub mod sources;
 pub mod spec;
 pub mod state;
+pub mod structured;

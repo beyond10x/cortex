@@ -3,6 +3,7 @@
   "asOf": "2026-10-05",
   "source": "cortex's status record, maintained in the repository and checked against main and its planning store",
   "items": [
+    {"label": "Structured sources import records with no model call", "status": "shipped", "area": "Sources", "detail": "Fields map to nodes, aliases, properties and relations; identity is adapter:operation:id.", "href": "/docs/spec-file"},
     {"label": "An instance from one spec file", "status": "shipped", "area": "Instances", "detail": "cortex create reads a cortex.instance/1 file, seeds one EKR store (SQLite, or PostgreSQL as the spec names), applies the seed schema, adds the sources and installs a timer per source and a viewer.", "href": "/docs/spec-file"},
     {"label": "Updating sources, model and serve settings", "status": "shipped", "area": "Instances", "detail": "cortex update replaces the frozen spec and adds new sources; a changed seed is refused (seed-change-refused).", "href": "/docs/commands"},
     {"label": "A store on SQLite or PostgreSQL, per instance", "status": "shipped", "area": "Instances", "detail": "store: {backend: postgres, value: {config}} names an ekr.postgres/1 file; the database credential stays in the file ekr reads. A Connectors-held credential is planned.", "href": "/docs/operating"},

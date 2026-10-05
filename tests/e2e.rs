@@ -266,8 +266,9 @@ fn the_codex_binary_is_a_flag_beside_the_claude_binary() {
     assert_eq!(code, 0);
 }
 
-/// A structured source is accepted, registered as `Structured`, survives a registry reload, and
-/// fails its run naming the story that builds it. Written by the wave's adversary (pass 1).
+/// A structured source is accepted, registered as `Structured`, survives a registry reload, and,
+/// reading files, fails its run naming the story that builds file input. Written by the wave's
+/// adversary (pass 1); `story:structured-source` runs the Connectors input (`tests/structured.rs`).
 #[test]
 fn a_structured_source_is_registered_round_trips_and_does_not_run() {
     let w = World::new();
@@ -322,7 +323,7 @@ serve:"#;
         ran["detail"]["reason"]
             .as_str()
             .unwrap_or_default()
-            .contains("story:structured-source"),
+            .contains("story:structured-from-files-and-drops"),
         "{ran}"
     );
     let (code, ran) = w.cortex(&["run", "st/news"]);

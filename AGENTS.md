@@ -97,9 +97,15 @@ this repository and published by the organisation's reusable workflow.
 - **Committed code is Rust.** Probes in other languages stay outside the repository. The one
   exception is `website/`, whose Docusaurus configuration is TypeScript as in canon and loom.
 - **Fetched text is untrusted.** It is masked for credential shapes (`src/mask.rs`), stored as
-  evidence and sent to a model that has no tools. Masking is irreversible: a credential in a
-  document's text is never stored, never sent and never restored. A document's title, description
-  and URL (its key) are not masked yet; `story:credential-mask-covers-titles` covers them.
+  evidence and sent to a model that has no tools. Masking covers a document's text, title,
+  description and key (its URL, file path or record key), and the key wherever cortex writes it:
+  the run report's `stopped` and `skipped` messages, `cortex.log` and `state/<source>.json`.
+  It is irreversible: a credential in a listed shape is never stored, never sent and never
+  restored. In a key, a masked value ends at `&` or `#` (raw or percent-encoded), so the rest of
+  the URL is kept; the masked key is the evidence identity, and documents whose keys differ only in
+  a credential are one document. Masking is by shape, so a credential in no listed shape (a
+  token of another form with no name before it, or an assigned value shorter than six
+  characters) is not masked.
 - **Personal data stays out of the prompt, not out of the store.** The instance's `redaction`
   policy (`src/redact.rs`) replaces each value it finds with a per-batch placeholder (`[Email-1]`,
   `[Phone-2]`, `[Card-1]`, `[IpAddress-1]`, `[<rule>-1]`) in everything the model is shown: each

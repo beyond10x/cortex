@@ -1,5 +1,5 @@
 //! Fetching one source's documents: web pages through the Connectors `tavily` provider, records of
-//! any Connectors operation, or local files.
+//! any Connectors operation (as text, or as records a `structured` source maps), or local files.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -152,8 +152,10 @@ fn render_json(template: &Value, record: &Value) -> Value {
     }
 }
 
-/// Sets the value at a dotted path, creating the objects on the way.
+/// Sets the value at a dotted path, creating the objects on the way. Like [`at`], the path may
+/// start at the root (`$.page`).
 fn set_at(v: &mut Value, path: &str, value: Value) {
+    let path = path.strip_prefix("$.").unwrap_or(path);
     let mut v = v;
     for step in path.split('.') {
         if !v.is_object() {
@@ -308,11 +310,77 @@ pub fn fetch(
         m::SourceSettings::Web(web) => fetch_web(web, connectors).map(documents),
         m::SourceSettings::Connectors(c) => fetch_records(c, connectors, window, child_failures),
         m::SourceSettings::Files(f) => fetch_files(f, base).map(documents),
-        // The spec accepts the settings; running them is `story:structured-source`'s.
-        m::SourceSettings::Structured(_) => Err(FetchError::Failed(
-            "a structured source is not run yet (story:structured-source)".into(),
-        )),
+        m::SourceSettings::Structured(st) => match &st.input {
+            m::StructuredInput::Connectors(c) => {
+                fetch_structured(st, c, connectors, window).map(|mut fetched| {
+                    fetched.child_failures = child_failures.clone();
+                    fetched
+                })
+            }
+            // The spec accepts the settings; reading files is that story's.
+            m::StructuredInput::Files(_) => Err(FetchError::Failed(
+                "a structured source reading files is not run yet \
+                 (story:structured-from-files-and-drops)"
+                    .into(),
+            )),
+        },
     }
+}
+
+/// The records of a `structured` source's Connectors operation, one document per record, read as
+/// a `connectors` source reads them: each input with the run's window filled in, walked page by
+/// page. A record with no scalar at the mapping's `id` or `name` is left out, and so is a second
+/// record with an id already read. The document's text is the record's JSON, which
+/// `src/structured.rs` maps. Its key here, `<adapter>:<operation>:<raw id>`, only tells records
+/// apart: the run replaces it with the record's identity (`structured::Source::prepare`) before
+/// anything is stored, so a raw id that masking or a redaction rule would change is never stored.
+fn fetch_structured(
+    st: &m::StructuredSource,
+    c: &m::StructuredConnectors,
+    connectors: &Connectors,
+    window: &Window,
+) -> Result<Fetched, FetchError> {
+    let mut docs = Vec::new();
+    let mut unread = Vec::new();
+    let mut keys = std::collections::BTreeSet::new();
+    let mut invoke =
+        |input: &Value| Ok(connectors.invoke(&c.adapter, &c.connection, &c.operation, input)?);
+    for input in &c.inputs {
+        let records = walk(
+            &mut invoke,
+            &format!("{}.{}", c.adapter, c.operation),
+            &with_window(&to_serde(input), window),
+            &st.records,
+            c.paging.as_ref(),
+            &mut unread,
+        )?;
+        for record in &records {
+            let Some(id) = crate::structured::text_at(record, &st.mapping.id) else {
+                continue;
+            };
+            if crate::structured::text_at(record, &st.mapping.name).is_none() {
+                continue;
+            }
+            let key = format!("{}:{}:{id}", c.adapter, c.operation);
+            if !keys.insert(key.clone()) {
+                continue;
+            }
+            docs.push(Document {
+                key,
+                origin: Origin::Record,
+                title: None,
+                description: None,
+                published: None,
+                text: record.to_string(),
+                hash: None,
+            });
+        }
+    }
+    Ok(Fetched {
+        documents: docs,
+        unread,
+        ..Fetched::default()
+    })
 }
 
 fn s(v: &Value, key: &str) -> Option<String> {
@@ -448,8 +516,13 @@ fn dedupe(docs: &mut Vec<Document>) {
     docs.retain(|d| seen.insert(d.key.clone()));
 }
 
-/// The value at a dotted path (`fields.summary`).
+/// The value at a dotted path (`fields.summary`), which may start at the root `$`
+/// (`$.fields.summary`); `$` alone is the value itself.
 pub fn at<'a>(v: &'a Value, path: &str) -> Option<&'a Value> {
+    if path == "$" {
+        return Some(v);
+    }
+    let path = path.strip_prefix("$.").unwrap_or(path);
     path.split('.').try_fold(v, |v, step| v.get(step))
 }
 
@@ -542,11 +615,11 @@ fn fetch_records(
                     &mut unread,
                 ) {
                     Ok(children) => {
-                        failures.remove(&key);
+                        failures.remove(&crate::mask::mask_key(&key).0);
                         children
                     }
                     Err(e) => {
-                        let runs = failures.entry(key.clone()).or_insert(0);
+                        let runs = failures.entry(crate::mask::mask_key(&key).0).or_insert(0);
                         *runs += 1;
                         let op = &child.operation;
                         if *runs >= CHILD_FAILURE_LIMIT {
@@ -669,6 +742,16 @@ mod tests {
         )
         .unwrap();
         (records, asked)
+    }
+
+    #[test]
+    fn a_path_may_start_at_the_root_and_the_root_alone_is_the_value() {
+        let v = json!({"a": {"b": 1}, "$x": 2});
+        assert_eq!(at(&v, "a.b"), Some(&json!(1)));
+        assert_eq!(at(&v, "$.a.b"), Some(&json!(1)));
+        assert_eq!(at(&v, "$"), Some(&v));
+        assert_eq!(at(&v, "$x"), Some(&json!(2)));
+        assert_eq!(at(&v, "a.c"), None);
     }
 
     #[test]
