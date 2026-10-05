@@ -14,7 +14,7 @@ scope:
   path: src/mask.rs
 - confidence: cited
   path: src/run.rs
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T14:13:37Z", actor: "agent:claude", revision: 5}
 - {from: "proposed", to: "active", at: "2026-10-05T14:13:37Z", actor: "agent:claude", revision: 6}
@@ -42,7 +42,7 @@ Also the document key (URL): `mask` runs on `d.text` only (`src/run.rs:158`; the
 
 ## Scope
 
-Landed 2026-10-05 in `ae4b75f` (wave 20261005e).
+Landed 2026-10-05 in `136dc46` (wave 20261005e).
 
 - **Files:** `src/mask.rs` (`mask_key`, url-password, prefixed names, percent-encoded names), `src/run.rs`, `src/state.rs`, `src/sources.rs` (two lines: child-failure keys masked), `tests/credential_mask.rs` (new, 12 cases), `AGENTS.md`, `website/docs/limits.md`
 - **Inferred line, not needed:** `src/evidence.rs` reads the already masked key

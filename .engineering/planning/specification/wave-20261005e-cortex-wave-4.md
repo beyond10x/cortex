@@ -4,7 +4,7 @@ id: specification:wave-20261005e-cortex-wave-4
 kind: specification
 status: implemented
 title: 'Wave 20261005e: cortex 1.0 wave 4'
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-05T14:13:38Z", actor: "agent:claude", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-05T14:13:38Z", actor: "agent:claude", revision: 3}
@@ -39,7 +39,9 @@ Closed 2026-10-05. Both units merged into `wave/20261005e`; `task check` on the 
 
 | unit | story | commit | adversary findings |
 |---|---|---|---|
-| U1 | `story:structured-source` | `6e2ae44` | 7 (3 blockers), fixed or documented |
-| U2 | `story:credential-mask-covers-titles` | `ae4b75f` | 7 (1 blocker), fixed |
+| U1 | `story:structured-source` | `8a96919` | 7 (3 blockers), fixed or documented |
+| U2 | `story:credential-mask-covers-titles` | `136dc46` | 7 (1 blocker), fixed |
 
 One adversary pass each (the operator's rule: one review for risky changes). The two units overlapped in `src/run.rs`; the coordinator resolved it at merge.
+
+The branch was rebuilt as `wave/20261005e-r2` with one commit per unit: gitleaks read fake GitLab tokens in `src/structured.rs` tests as credentials, and the pull-request check scans every commit.
