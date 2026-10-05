@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:store-backend-per-instance
 kind: story
-status: active
+status: implemented
 title: An instance's store lives on the backend its spec names
 relations:
 - decomposes: epic:standalone-1-0
@@ -21,10 +21,11 @@ scope:
   path: src/schedule.rs
 - confidence: inferred
   path: tests/store_backend.rs
-revision: 15
+revision: 17
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 14, decided_on: {"recorded":{"review_outcome":3}}}
 - {from: "proposed", to: "active", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 15, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "active", to: "implemented", at: "2026-10-05T13:01:18Z", actor: "agent:claude", revision: 17, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 
@@ -62,5 +63,10 @@ reason when no container runtime exists.
 
 ## Scope
 
-`src/ekr.rs`, `src/instance.rs`, `src/main.rs` (`seed_instance` and the MCP line), `src/schedule.rs` (`install_view`), `tests/store_backend.rs` (new),
-`.github/workflows/check.yml` (only if the container needs a service entry).
+Landed 2026-10-05 in `6bc3f00` (wave 20261005c, merged `694d9b3`).
+
+- **Files:** `src/ekr.rs`, `src/instance.rs`, `src/main.rs`, `src/schedule.rs`, `tests/store_backend.rs` (new, 15 cases, a real PostgreSQL in docker), `tests/spec_forms.rs` (one case: a sqlite `value.path` update is now refused)
+- **Inferred line, not needed:** `.github/workflows/check.yml`; the test runs `docker` itself and fails, not skips, when `GITHUB_ACTIONS` is set and no runtime answers
+- **Beyond the story:** `cortex create --postgres-schema-config`, because the application role may not own DDL (measured: `SQLSTATE 42501`); a sqlite `value.path` is refused as not supported yet
+- **Moved out:** the Connectors credential channel → `story:postgres-credential-from-connectors`; a conditional seed that closes the two-home race → EKR `story:seed-if-absent`
+- **Review:** `review-result:adversary-store-backend-per-instance-pass-1` (6) and `-pass-2` (2), both fixed; coordinator check of the final diff

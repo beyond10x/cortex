@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-05T13:01:18Z",
+  "actor": "agent:claude",
+  "artifact": "story:store-backend-per-instance",
+  "kind": "story",
+  "revision": 16,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261005c at 601ba5f (EXIT=0, 146 tests)"
+  }
+}
