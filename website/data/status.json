@@ -3,6 +3,7 @@
   "asOf": "2026-10-05",
   "source": "cortex's status record, maintained in the repository and checked against main and its planning store",
   "items": [
+    {"label": "Scheduled runs verified with nobody at the keyboard", "status": "shipped", "area": "Runs", "detail": "15 runs of a real systemd user timer in 15 minutes, all exit 0; the 24 h window on a real instance comes with the first web instance.", "href": "/docs/operating"},
     {"label": "Names and links stay out of the model; a gate refuses what survives", "status": "shipped", "area": "Runs", "detail": "Url, known_names and RareName placeholders are restored before storage; refuse_if_left checks what the model would see.", "href": "/docs/limits"},
     {"label": "Structured sources import records with no model call", "status": "shipped", "area": "Sources", "detail": "Fields map to nodes, aliases, properties and relations; identity is adapter:operation:id.", "href": "/docs/spec-file"},
     {"label": "An instance from one spec file", "status": "shipped", "area": "Instances", "detail": "cortex create reads a cortex.instance/1 file, seeds one EKR store (SQLite, or PostgreSQL as the spec names), applies the seed schema, adds the sources and installs a timer per source and a viewer.", "href": "/docs/spec-file"},
