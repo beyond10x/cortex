@@ -20,7 +20,7 @@ scope:
   path: src/run.rs
 - confidence: inferred
   path: tests/redaction.rs
-revision: 14
+revision: 15
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":1}}}
 - {from: "proposed", to: "active", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":1}}}
@@ -53,7 +53,7 @@ in which a planted email address, phone number and card number are absent and th
 
 ## Scope
 
-Landed 2026-10-05 in `5868e4d` (wave 20261005c, merged `601ba5f`).
+Landed 2026-10-05 in `1a89081` (wave 20261005c).
 
 - **Files:** `src/redact.rs` (new), `src/run.rs`, `src/lib.rs`, `tests/redaction.rs` (new), `AGENTS.md`, `website/docs/limits.md`; `src/main.rs` (run and seed report counts) applied at merge
 - **Design changed by the operator, 2026-10-05:** placeholders in the prompt, restored before apply; the store keeps the real values (section "Operator decision")

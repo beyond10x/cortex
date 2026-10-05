@@ -4,7 +4,7 @@ id: specification:wave-20261005c-cortex-wave-2
 kind: specification
 status: implemented
 title: 'Wave 20261005c: cortex 1.0 wave 2'
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 3}
@@ -38,18 +38,20 @@ One commit per unit through `b10x-gates bot`; the merges into `wave/20261005c`; 
 
 ## Outcome
 
-Closed 2026-10-05. Three of four units merged into `wave/20261005c`; `task check` on `601ba5f`: EXIT=0, 146 tests (`~/.cache/cortex-wave-20261005c/int/gate-u3.log`).
+Closed 2026-10-05. Three of four units merged into `wave/20261005c`; `task check` on the integration branch: EXIT=0, 146 tests (`~/.cache/cortex-wave-20261005c/int/gate-u3.log`).
 
 | unit | story | commit | merge | adversary findings, pass 1 → 2 |
 |---|---|---|---|---|
-| U1 | `story:store-backend-per-instance` | `6bc3f00` | `694d9b3` | 6 → 2 |
-| U2 | `story:seen-documents-modelled` | `ea5b45f` | `0a245fd` | 8 (by reading) → 6 |
-| U3 | `story:redaction-before-model` | `5868e4d` | `601ba5f` | 14 → 10 |
+| U1 | `story:store-backend-per-instance` | `b6f6fd6` | — | 6 → 2 |
+| U2 | `story:seen-documents-modelled` | `da7cfa7` | — | 8 (by reading) → 6 |
+| U3 | `story:redaction-before-model` | `1a89081` | — | 14 → 10 |
 | U4 | `story:codex-model-backend` | archived, not merged | — | none run |
 
 - U4 left the wave: `codex exec` keeps a shell tool that can read local files, against the no-tools rule (`decision-blocker:codex-exec-keeps-shell`). Its tree is archived by `worktree archive`.
 - Operator decision during the wave: PII stays out of the model, not out of the store (`story:redaction-before-model`).
 - Filed: `story:postgres-credential-from-connectors`, `story:credential-mask-covers-titles`, `story:symlinked-seed-directory`; EKR `story:seed-if-absent`; beyond10x/ess#459, #461.
 - The disk filled to 0 bytes once during the wave (EKR wave 20261005b build directories, 41 GB); U1's correction and U2's first adversary pass were cut short and re-run.
-- Docs, CHANGELOG and status page: `fad48a4`.
+- Docs, CHANGELOG and status page: `24ecfd8`.
 - Not yet verified: the PostgreSQL docker case on GitHub Actions (the pull request's CI run).
+
+The branch was rebuilt as `wave/20261005c-r2` with one commit per unit: gitleaks read a fake test password in `tests/store_backend.rs` as a credential, and the pull-request check scans every commit. The first build stays on `wave/20261005c`.

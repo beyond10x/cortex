@@ -20,7 +20,7 @@ scope:
   path: src/home.rs
 - confidence: cited
   path: src/state.rs
-revision: 10
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 7, decided_on: {"recorded":{"review_outcome":2}}}
 - {from: "proposed", to: "active", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 8, decided_on: {"recorded":{"review_outcome":2}}}
@@ -49,7 +49,7 @@ number of filed ESS gaps; regenerated `generated/` and `spec/suite.json` committ
 
 ## Scope
 
-Landed 2026-10-05 in `ea5b45f` (wave 20261005c, merged `0a245fd`, with a coordinator resolution of `src/main.rs` against the store unit).
+Landed 2026-10-05 in `da7cfa7` (wave 20261005c, with a coordinator resolution of `src/main.rs` against the store unit).
 
 - **Files:** `spec/domains/instance.yaml`, `spec/suite.json` (35 → 34 scenarios), `generated/`, the website reference, schema and domain graph, `src/home.rs`, `src/state.rs`, `src/main.rs`, `tests/conformance.rs` (error fields compared; `excludes` handled), `tests/seed_change.rs` and `tests/seed_paths.rs` (new)
 - **Beyond the scope:** `src/main.rs` (the generated inputs changed)

@@ -21,7 +21,7 @@ scope:
   path: src/schedule.rs
 - confidence: inferred
   path: tests/store_backend.rs
-revision: 17
+revision: 18
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 14, decided_on: {"recorded":{"review_outcome":3}}}
 - {from: "proposed", to: "active", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 15, decided_on: {"recorded":{"review_outcome":3}}}
@@ -63,7 +63,7 @@ reason when no container runtime exists.
 
 ## Scope
 
-Landed 2026-10-05 in `6bc3f00` (wave 20261005c, merged `694d9b3`).
+Landed 2026-10-05 in `b6f6fd6` (wave 20261005c).
 
 - **Files:** `src/ekr.rs`, `src/instance.rs`, `src/main.rs`, `src/schedule.rs`, `tests/store_backend.rs` (new, 15 cases, a real PostgreSQL in docker), `tests/spec_forms.rs` (one case: a sqlite `value.path` update is now refused)
 - **Inferred line, not needed:** `.github/workflows/check.yml`; the test runs `docker` itself and fails, not skips, when `GITHUB_ACTIONS` is set and no runtime answers
