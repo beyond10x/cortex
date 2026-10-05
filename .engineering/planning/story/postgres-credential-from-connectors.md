@@ -7,6 +7,7 @@ title: A PostgreSQL store's credential comes from a Connectors connection
 relations:
 - decomposes: epic:organisation-scale-instance
 - depends_on: story:store-backend-per-instance
+- serves: vision:self-updating-instances
 revision: 1
 ---
 ## Outcome

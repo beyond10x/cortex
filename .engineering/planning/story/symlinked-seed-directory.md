@@ -2,14 +2,18 @@
 format: aep.planning-md/3
 id: story:symlinked-seed-directory
 kind: story
-status: draft
+status: active
 title: A seed directory that is a symlink is copied, not refused
 relations:
 - decomposes: epic:standalone-1-0
+- serves: vision:self-updating-instances
 scope:
 - confidence: cited
   path: src/instance.rs
-revision: 3
+revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T13:10:50Z", actor: "agent:claude", revision: 4}
+- {from: "proposed", to: "active", at: "2026-10-05T13:10:51Z", actor: "agent:claude", revision: 5}
 ---
 ## Outcome
 
