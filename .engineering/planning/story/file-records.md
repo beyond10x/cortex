@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:file-records
 kind: story
-status: draft
+status: active
 title: A files source yields one document per JSON line or markdown section
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -17,7 +17,10 @@ scope:
   path: src/state.rs
 - confidence: inferred
   path: tests/file_records.rs
-revision: 8
+revision: 10
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 9, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":3}}}
 ---
 ## Outcome
 

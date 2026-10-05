@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:first-web-instance
 kind: story
-status: draft
+status: active
 title: The agent-tooling web instance runs for 7 days
 relations:
 - decomposes: epic:first-web-instance
@@ -15,7 +15,10 @@ scope:
   path: examples/agent-tooling.yaml
 - confidence: inferred
   path: examples/seed/agent-tooling.yaml
-revision: 9
+revision: 11
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":6}}}
+- {from: "proposed", to: "active", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":6}}}
 ---
 ## Outcome
 

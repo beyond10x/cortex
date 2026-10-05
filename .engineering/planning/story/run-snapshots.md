@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:run-snapshots
 kind: story
-status: draft
+status: active
 title: A bad run can be undone from the snapshot taken before it
 relations:
 - decomposes: epic:standalone-1-0
@@ -40,7 +40,10 @@ scope:
   path: tests/conformance.rs
 - confidence: inferred
   path: tests/snapshots.rs
-revision: 21
+revision: 23
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 22, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 23, decided_on: {"recorded":{"review_outcome":3}}}
 ---
 ## Outcome
 
