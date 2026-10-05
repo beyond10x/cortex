@@ -11,7 +11,7 @@ use crate::connectors::Connectors;
 use crate::evidence;
 use crate::extract::{self, Known, Model};
 use crate::instance::{now_ms, Layout};
-use crate::mask::mask;
+use crate::mask::{mask, mask_key};
 use crate::redact::{self, Redactor};
 use crate::sources::{self, FetchError, Window};
 use crate::state::{text_hash, SeenState};
@@ -212,8 +212,9 @@ fn process(
 ) -> Result<Report, Failure> {
     let started = now_ms();
     let applied_at = window.map_or(started, |w| w.until_ms);
+    // A message the fetch built can name a document key; it is masked as the key is.
     let mut report = Report {
-        skipped: fetched.skipped.clone(),
+        skipped: fetched.skipped.iter().map(|s| mask_key(s).0).collect(),
         ..Report::default()
     };
     // The keys of documents cut at `max_chars_per_document`: counted as they reach the model.
@@ -223,19 +224,37 @@ fn process(
     // Each document's text before the cut, so a value the cut splits is still found, with what
     // the irreversible rules replaced in it.
     let mut uncut: HashMap<String, Vec<Uncut>> = HashMap::new();
+    // Masked keys, so two documents whose keys differ only in a credential are one.
+    let mut keys: HashSet<String> = HashSet::new();
     let docs: Vec<_> = fetched
         .documents
         .into_iter()
-        .map(|mut d| {
-            let (masked, n) = mask(&d.text);
+        .filter_map(|mut d| {
+            // Credentials are masked, irreversibly, in every field the model, the evidence or the
+            // store sees: the key (a URL's query may carry a token), title, description and text.
+            // Only a key that holds a credential changes, and it changes the same way every run.
+            // A document whose masked key an earlier one already has is left out, as the fetch
+            // leaves out a repeated key, and its masks are not counted.
+            let (key, n) = mask_key(&d.key);
+            if !keys.insert(key.clone()) {
+                return None;
+            }
+            d.key = key;
             report.masked += n;
-            d.text = masked;
+            for field in [d.title.as_mut(), d.description.as_mut(), Some(&mut d.text)]
+                .into_iter()
+                .flatten()
+            {
+                let (masked, n) = mask(field);
+                report.masked += n;
+                *field = masked;
+            }
             let Some(r) = &redactor else {
                 d.hash = Some(text_hash(&d.text));
                 if truncate(&mut d.text, policy.max_chars_per_document as usize) {
                     cut.insert(d.key.clone());
                 }
-                return d;
+                return Some(d);
             };
             // Irreversible rules, like masking, run before anything is stored.
             let mut scrubbed: BTreeMap<String, usize> = BTreeMap::new();
@@ -261,7 +280,7 @@ fn process(
                 .entry(d.key.clone())
                 .or_default()
                 .push(Uncut { text, scrubbed });
-            d
+            Some(d)
         })
         .collect();
 
@@ -448,7 +467,12 @@ fn unread(report: &mut Report, unread: &[String]) {
     if unread.is_empty() {
         return;
     }
-    let why = unread.join("; ");
+    // A message the fetch built can name a document key; it is masked as the key is.
+    let why = unread
+        .iter()
+        .map(|u| mask_key(u).0)
+        .collect::<Vec<_>>()
+        .join("; ");
     report.stopped = Some(match report.stopped.take() {
         Some(stopped) => format!("{stopped}; {why}"),
         None => why,
