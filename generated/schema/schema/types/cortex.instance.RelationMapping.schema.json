@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.RelationMapping",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:ccf2e81c785529d443754916ee26b699ece88275a0a6ee2e72b440d4ffaa3d6c",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.RelationMapping": {
+      "title": "RelationMapping",
+      "x-ess-name": "cortex.instance.RelationMapping",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "relation": {
+          "type": "string"
+        },
+        "target_type": {
+          "type": "string"
+        },
+        "target_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "relation",
+        "target_type",
+        "target_name"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

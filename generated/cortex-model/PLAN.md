@@ -1,40 +1,64 @@
 <!--
   generated from cortex v1
-  model digest 7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43
-  contract digest 28f44d88be3d554adbf5e4d04488470231c93d64c08ef39e288ec9c2d93f34e4
+  model digest b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85
+  contract digest b949168dd73a8a82c270bfa858354cf5311edabd072da4e2c85eaf684999ade6
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-68 capabilities: **64 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+92 capabilities: **88 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
 | capability | source |
 | --- | --- |
 | domain type | `cortex.instance.ChangeDetection` |
+| domain type | `cortex.instance.ChildCall` |
 | domain type | `cortex.instance.ConnectorsSource` |
 | domain type | `cortex.instance.CrawlPolicy` |
+| domain type | `cortex.instance.DropPolicy` |
 | domain type | `cortex.instance.EkrPin` |
 | domain type | `cortex.instance.FetchPolicy` |
+| domain type | `cortex.instance.FileRecords` |
 | domain type | `cortex.instance.FilesSource` |
+| domain type | `cortex.instance.GateCheck` |
 | domain type | `cortex.instance.Instance.State` |
 | domain type | `cortex.instance.InstanceName` |
 | domain type | `cortex.instance.InstanceSpec` |
+| domain type | `cortex.instance.ModelBackend` |
 | domain type | `cortex.instance.ModelSpec` |
+| domain type | `cortex.instance.PageStyle` |
+| domain type | `cortex.instance.Paging` |
+| domain type | `cortex.instance.PostgresStore` |
+| domain type | `cortex.instance.PropertyMapping` |
+| domain type | `cortex.instance.RecordFilter` |
+| domain type | `cortex.instance.RecordFormat` |
+| domain type | `cortex.instance.RecordMapping` |
+| domain type | `cortex.instance.RedactionClass` |
+| domain type | `cortex.instance.RedactionPolicy` |
+| domain type | `cortex.instance.RedactionRule` |
+| domain type | `cortex.instance.RelationMapping` |
+| domain type | `cortex.instance.RunGate` |
 | domain type | `cortex.instance.SearchInput` |
 | domain type | `cortex.instance.SearchPolicy` |
 | domain type | `cortex.instance.SearchTopic` |
 | domain type | `cortex.instance.SeedSpec` |
 | domain type | `cortex.instance.ServeSpec` |
 | domain type | `cortex.instance.SitesInput` |
+| domain type | `cortex.instance.SnapshotPolicy` |
 | domain type | `cortex.instance.Source.State` |
 | domain type | `cortex.instance.SourceId` |
 | domain type | `cortex.instance.SourceKind` |
 | domain type | `cortex.instance.SourceSettings` |
 | domain type | `cortex.instance.SourceSpec` |
+| domain type | `cortex.instance.SqliteStore` |
+| domain type | `cortex.instance.StoreSpec` |
+| domain type | `cortex.instance.StructuredConnectors` |
+| domain type | `cortex.instance.StructuredFiles` |
+| domain type | `cortex.instance.StructuredInput` |
+| domain type | `cortex.instance.StructuredSource` |
 | domain type | `cortex.instance.TimeRange` |
 | domain type | `cortex.instance.WebInput` |
 | domain type | `cortex.instance.WebMode` |

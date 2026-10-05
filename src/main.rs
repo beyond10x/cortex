@@ -36,6 +36,9 @@ struct Cli {
     /// The `claude` binary.
     #[arg(long, env = "CORTEX_CLAUDE", default_value = "claude", global = true)]
     claude: PathBuf,
+    /// The `codex` binary, for an instance whose spec names `model.backend: Codex`.
+    #[arg(long, env = "CORTEX_CODEX", default_value = "codex", global = true)]
+    codex: PathBuf,
     #[command(subcommand)]
     command: Command,
 }
@@ -103,7 +106,7 @@ enum SourceCommand {
         source_id: String,
         #[arg(long)]
         name: String,
-        #[arg(long, value_parser = ["Web", "Connectors", "Files"])]
+        #[arg(long, value_parser = ["Web", "Connectors", "Files", "Structured"])]
         kind: String,
         #[arg(long)]
         schedule: String,
@@ -176,6 +179,7 @@ fn main() -> ExitCode {
                     bin: cli.connectors.clone(),
                 },
                 claude: cli.claude.clone(),
+                codex: cli.codex.clone(),
             };
             let shared: SharedRef = Rc::new(RefCell::new(Shared {
                 registry,
@@ -238,6 +242,7 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
                 let kind = match kind.as_str() {
                     "Web" => m::SourceKind::Web,
                     "Connectors" => m::SourceKind::Connectors,
+                    "Structured" => m::SourceKind::Structured,
                     _ => m::SourceKind::Files,
                 };
                 let input = m::AddSource {
@@ -674,7 +679,7 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
                         "source_id": source_ran.source_id.0,
                         "documents_new": source_ran.documents_new,
                         "documents_applied": source_ran.documents_applied,
-                        "cost_usd": source_ran.cost_usd.0,
+                        "cost_usd": source_ran.cost_usd.map(|c| c.0),
                         "facts_refused": report.facts_refused,
                         "parts_rejected": report.parts_rejected,
                         "masked": report.masked,

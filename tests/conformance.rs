@@ -52,12 +52,17 @@ fn placeholder_spec() -> m::InstanceSpec {
         },
         model: m::ModelSpec {
             model: "m".into(),
+            backend: None,
             budget_usd: cortex_model::primitives::Decimal("1".into()),
             timeout_s: 1,
             instructions: None,
         },
         sources: vec![],
         serve: m::ServeSpec { view_port: None },
+        store: None,
+        redaction: None,
+        snapshots: None,
+        gate: None,
     }
 }
 
@@ -102,7 +107,7 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "source_id": e.source_id.0,
                 "documents_new": e.documents_new,
                 "documents_applied": e.documents_applied,
-                "cost_usd": e.cost_usd.0,
+                "cost_usd": e.cost_usd.map(|c| c.0),
             }),
         ),
     };
@@ -126,6 +131,7 @@ impl Scenario {
                     bin: "connectors-unused".into(),
                 },
                 claude: "claude-unused".into(),
+                codex: "codex-unused".into(),
             },
             shared: shared.clone(),
             runner: Some(runner),
@@ -238,6 +244,7 @@ impl Scenario {
                     kind: match s("kind").as_str() {
                         "Web" => m::SourceKind::Web,
                         "Connectors" => m::SourceKind::Connectors,
+                        "Structured" => m::SourceKind::Structured,
                         _ => m::SourceKind::Files,
                     },
                     schedule: s("schedule"),

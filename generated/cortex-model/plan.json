@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7b83a57875607ec97b9c579958bfec9caf298b92a55106e478780b1216e04f43",
-    "contract_digest": "28f44d88be3d554adbf5e4d04488470231c93d64c08ef39e288ec9c2d93f34e4"
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "b949168dd73a8a82c270bfa858354cf5311edabd072da4e2c85eaf684999ade6"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -13,6 +13,13 @@
     {
       "kind": "domain_type",
       "source": "cortex.instance.ChangeDetection",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.ChildCall",
       "disposition": {
         "disposition": "generated"
       }
@@ -33,6 +40,13 @@
     },
     {
       "kind": "domain_type",
+      "source": "cortex.instance.DropPolicy",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
       "source": "cortex.instance.EkrPin",
       "disposition": {
         "disposition": "generated"
@@ -47,7 +61,21 @@
     },
     {
       "kind": "domain_type",
+      "source": "cortex.instance.FileRecords",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
       "source": "cortex.instance.FilesSource",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.GateCheck",
       "disposition": {
         "disposition": "generated"
       }
@@ -75,7 +103,98 @@
     },
     {
       "kind": "domain_type",
+      "source": "cortex.instance.ModelBackend",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
       "source": "cortex.instance.ModelSpec",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.PageStyle",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.Paging",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.PostgresStore",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.PropertyMapping",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.RecordFilter",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.RecordFormat",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.RecordMapping",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.RedactionClass",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.RedactionPolicy",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.RedactionRule",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.RelationMapping",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.RunGate",
       "disposition": {
         "disposition": "generated"
       }
@@ -124,6 +243,13 @@
     },
     {
       "kind": "domain_type",
+      "source": "cortex.instance.SnapshotPolicy",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
       "source": "cortex.instance.Source.State",
       "disposition": {
         "disposition": "generated"
@@ -153,6 +279,48 @@
     {
       "kind": "domain_type",
       "source": "cortex.instance.SourceSpec",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.SqliteStore",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.StoreSpec",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.StructuredConnectors",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.StructuredFiles",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.StructuredInput",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.StructuredSource",
       "disposition": {
         "disposition": "generated"
       }

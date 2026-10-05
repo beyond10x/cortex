@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.StructuredSource",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:d63b3cec8f1a1e244dba1fc1919518d907c70527dcebd2c7171d7a189550c363",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.DropPolicy": {
+      "title": "DropPolicy",
+      "x-ess-name": "cortex.instance.DropPolicy",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Keep",
+        "Supersede"
+      ]
+    },
+    "cortex.instance.PageStyle": {
+      "title": "PageStyle",
+      "x-ess-name": "cortex.instance.PageStyle",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "PageNumber",
+        "Token",
+        "Keyset"
+      ]
+    },
+    "cortex.instance.Paging": {
+      "title": "Paging",
+      "x-ess-name": "cortex.instance.Paging",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "style": {
+          "$ref": "#/$defs/cortex.instance.PageStyle"
+        },
+        "param": {
+          "type": "string"
+        },
+        "next": {
+          "type": "string"
+        },
+        "max_pages": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "style",
+        "param",
+        "max_pages"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.PropertyMapping": {
+      "title": "PropertyMapping",
+      "x-ess-name": "cortex.instance.PropertyMapping",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "property": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "property",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RecordMapping": {
+      "title": "RecordMapping",
+      "x-ess-name": "cortex.instance.RecordMapping",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "node_type": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.PropertyMapping"
+          }
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.RelationMapping"
+          }
+        }
+      },
+      "required": [
+        "node_type",
+        "id",
+        "name",
+        "aliases",
+        "properties",
+        "relations"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RelationMapping": {
+      "title": "RelationMapping",
+      "x-ess-name": "cortex.instance.RelationMapping",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "relation": {
+          "type": "string"
+        },
+        "target_type": {
+          "type": "string"
+        },
+        "target_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "relation",
+        "target_type",
+        "target_name"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.StructuredConnectors": {
+      "title": "StructuredConnectors",
+      "x-ess-name": "cortex.instance.StructuredConnectors",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {}
+        },
+        "paging": {
+          "$ref": "#/$defs/cortex.instance.Paging"
+        }
+      },
+      "required": [
+        "adapter",
+        "connection",
+        "operation",
+        "inputs"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.StructuredFiles": {
+      "title": "StructuredFiles",
+      "x-ess-name": "cortex.instance.StructuredFiles",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "glob": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "paths",
+        "glob"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.StructuredInput": {
+      "title": "StructuredInput",
+      "x-ess-name": "cortex.instance.StructuredInput",
+      "x-ess-kind": "union",
+      "oneOf": [
+        {
+          "title": "connectors",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "connectors"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.StructuredConnectors"
+            }
+          },
+          "required": [
+            "from",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "files",
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "const": "files"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.StructuredFiles"
+            }
+          },
+          "required": [
+            "from",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "x-ess-union-tag": "from"
+    },
+    "cortex.instance.StructuredSource": {
+      "title": "StructuredSource",
+      "x-ess-name": "cortex.instance.StructuredSource",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "input": {
+          "$ref": "#/$defs/cortex.instance.StructuredInput"
+        },
+        "records": {
+          "type": "string"
+        },
+        "mapping": {
+          "$ref": "#/$defs/cortex.instance.RecordMapping"
+        },
+        "dropped": {
+          "$ref": "#/$defs/cortex.instance.DropPolicy"
+        }
+      },
+      "required": [
+        "input",
+        "records",
+        "mapping"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.PostgresStore",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:7ef89f9b318a344582ea4b0c0f460a7bf518916063ef675f2e196f394f16f1c6",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.PostgresStore": {
+      "title": "PostgresStore",
+      "x-ess-name": "cortex.instance.PostgresStore",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "config": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

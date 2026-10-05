@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.ModelBackend",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:44b62748b627f8f5c019afa8cd9d7030043e22ffbab59abc22ef4d3d576ff30d",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.ModelBackend": {
+      "title": "ModelBackend",
+      "x-ess-name": "cortex.instance.ModelBackend",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Claude",
+        "Codex"
+      ]
+    }
+  }
+}

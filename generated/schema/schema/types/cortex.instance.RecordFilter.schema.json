@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.RecordFilter",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85",
+    "contract_digest": "slice-sha256/2:3ae4ea9ad832e2b6af16fcb355e35b6875ec69d826816529be958935284ad885",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.RecordFilter": {
+      "title": "RecordFilter",
+      "x-ess-name": "cortex.instance.RecordFilter",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "include": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "field",
+        "values",
+        "include"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
