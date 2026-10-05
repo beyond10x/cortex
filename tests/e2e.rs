@@ -165,6 +165,53 @@ fn two_failed_runs_in_a_row_disable_a_source_until_it_is_enabled() {
 }
 
 #[test]
+fn a_revalidation_whose_outcome_is_unknown_is_settled_by_reading_the_status() {
+    let w = World::new();
+    let spec = w.spec("u", "conn_test");
+    let (code, _) = w.cortex(&["create", "--spec", spec.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0);
+    // Connectors applied the revalidation but could not confirm it (outcome_unknown at
+    // publication, next_action retry_status); the status read that follows says ready.
+    std::fs::write(w.root.join("unknown"), "").unwrap();
+    let (code, ran) = w.cortex(&["run", "u/news"]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(w.lines("revalidations.log").len(), 1);
+    assert!(!w.lines("status.log").is_empty(), "the status was read");
+}
+
+#[test]
+fn a_revalidation_whose_outcome_stays_unknown_fails_the_fetch_naming_the_state() {
+    let w = World::new();
+    let spec = w.spec("p", "conn_test");
+    let (code, _) = w.cortex(&["create", "--spec", spec.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0);
+    std::fs::write(w.root.join("unknown"), "").unwrap();
+    std::fs::write(w.root.join("stays-pending"), "").unwrap();
+    let (code, ran) = w.cortex_env(
+        &["run", "p/news"],
+        &[
+            ("CORTEX_STATUS_POLLS", std::path::Path::new("2")),
+            ("CORTEX_STATUS_POLL_MS", std::path::Path::new("10")),
+        ],
+    );
+    assert_eq!(
+        (code, ran["outcome"].as_str()),
+        (1, Some("fetch-failed")),
+        "{ran}"
+    );
+    let reason = ran["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.contains("outcome_unknown") && reason.contains("pending"),
+        "{reason}"
+    );
+    assert_eq!(
+        w.lines("status.log").len(),
+        2,
+        "polled as many times as allowed"
+    );
+}
+
+#[test]
 fn evidence_that_lapses_before_admission_is_renewed_once_and_the_read_retried() {
     let w = World::new();
     let spec = w.spec("l", "conn_test");
