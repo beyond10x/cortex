@@ -1,0 +1,24 @@
+{
+  "format": "b10x-status/1",
+  "asOf": "2026-10-05",
+  "source": "cortex's status record, maintained in the repository and checked against main and its planning store",
+  "items": [
+    {"label": "An instance from one spec file", "status": "shipped", "area": "Instances", "detail": "cortex create reads a cortex.instance/1 file, seeds one EKR SQLite store, applies the seed schema, adds the sources and installs a timer per source and a viewer.", "href": "/docs/spec-file"},
+    {"label": "Updating sources, model and serve settings", "status": "shipped", "area": "Instances", "detail": "cortex update replaces the frozen spec and adds new sources; a changed seed is refused (seed-change-refused).", "href": "/docs/commands"},
+    {"label": "Removing an instance keeps its data", "status": "shipped", "area": "Instances", "detail": "cortex remove stops and deletes the timers and the viewer; the instance directory and its store stay."},
+    {"label": "Web sources: search, or listed sites read as pages or crawled", "status": "shipped", "area": "Sources", "detail": "Through any Connectors adapter that answers datasource.websearch/v1alpha1; tavily when the spec names none."},
+    {"label": "Connectors sources: records of any admitted operation", "status": "shipped", "area": "Sources", "detail": "One invocation per input; records, id, time and text are read from the answer by dotted paths and templates."},
+    {"label": "Files sources: local files matching a glob", "status": "shipped", "area": "Sources"},
+    {"label": "Only new or changed documents are extracted", "status": "shipped", "area": "Runs", "detail": "A document is new when its key was never applied and changed when its text hash differs; a changed one waits until its last fetch is older than refresh_after_days."},
+    {"label": "Extraction by an isolated model call", "status": "shipped", "area": "Runs", "detail": "claude -p with no tools, no settings sources and no MCP servers, answering in the JSON form of EKR's extraction document; cortex mints every evidence item and refuses facts citing any other.", "href": "/docs/operating"},
+    {"label": "Credential-shaped text is masked before storage", "status": "shipped", "area": "Runs", "detail": "Private keys, common token shapes and secret assignments. There is no PII redaction.", "href": "/docs/limits"},
+    {"label": "Two failed runs in a row disable a source", "status": "shipped", "area": "Runs", "detail": "Timers run with --record-failure; cortex source enable switches the source back on."},
+    {"label": "Viewer and MCP line per instance", "status": "shipped", "area": "Serving", "detail": "A systemd user service runs ekr view on 127.0.0.1; cortex mcp-line prints the claude mcp add line that serves the store through ekr mcp."},
+    {"label": "Specified in ESS, model generated, 35 conformance scenarios", "status": "shipped", "area": "Specification", "detail": "spec/ generates the model and the spec file's serde types; tests/conformance.rs runs every scenario of spec/suite.json.", "href": "/docs/reference/ess"},
+    {"label": "Facts from a web page cite the page as URL evidence", "status": "planned", "area": "Runs", "detail": "Waits on an EKR release that admits URL evidence; until then a page is cited as a HumanStatement naming its URL.", "href": "/docs/limits"},
+    {"label": "Extraction produces edges between the nodes it finds", "status": "planned", "area": "Runs"},
+    {"label": "Scheduled runs verified with nobody at the keyboard", "status": "planned", "area": "Runs"},
+    {"label": "What a source has seen is part of the specification", "status": "planned", "area": "Specification", "detail": "Today it is a per-source state file, held by the Rust tests."},
+    {"label": "CI runs task check on every pull request", "status": "planned", "area": "Project"}
+  ]
+}

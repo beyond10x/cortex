@@ -1,0 +1,31 @@
+---
+title: Status
+sidebar_position: 3
+description: What cortex implements today and what is planned.
+lede: cortex is early. Every capability below carries its status; the landing page's status strip reads the same file, so the two cannot disagree.
+source: website/data/status.json, a b10x-status/1 document
+source_url: https://github.com/beyond10x/cortex/blob/main/website/data/status.json
+---
+
+import status from '@site/data/status.json';
+
+One binary, `cortex`, over a model generated from the specification. **Shipped** means code on
+`main` today. **Planned** means a story in the repository's planning store (`.engineering/`) and
+nothing more.
+
+<StatusTable data={status} />
+
+What follows from today's code is on [Limits](./limits.md). The
+[ESS reference](./reference/ess/index.mdx) is generated from the specification.
+
+## Build from source
+
+```bash
+git clone https://github.com/beyond10x/cortex.git
+cd cortex
+task check
+```
+
+`task check` needs Rust, the [Task runner](https://taskfile.dev/), the `ess` CLI and an `ekr`
+binary for the end-to-end tests. It includes `task docs-check`, which fails when the generated
+reference pages have fallen behind the specification. `task website` builds this site.

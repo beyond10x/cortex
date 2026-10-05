@@ -1,0 +1,140 @@
+{
+  "format": "b10x-product-landing/1",
+  "product": {
+    "name": "cortex",
+    "mark": "X",
+    "eyebrow": "Knowledge instances · early",
+    "promise": [
+      "One spec file.",
+      "A knowledge store that keeps itself current."
+    ],
+    "lede": "cortex spins up knowledge instances on the Epistemic Knowledge Runtime (EKR). One spec file defines an instance: its seed schema, its model settings and its data sources. systemd timers run each source on its schedule, a model extracts what new or changed documents say, and EKR applies it to the instance's own SQLite store, which you browse with ekr view or serve to agents over MCP.",
+    "actions": [
+      {
+        "label": "Read the documentation",
+        "href": "/docs/",
+        "kind": "primary"
+      },
+      {
+        "label": "Quickstart",
+        "href": "/docs/quickstart"
+      }
+    ],
+    "meta": "Rust command line · Linux with systemd user units · specified in ESS · Apache-2.0",
+    "art": {
+      "kind": "domain-graph",
+      "data": "data/ess/cortex-instance.domain-graph.json",
+      "caption": "The cortex.instance domain, generated from spec/ by cortex-docs."
+    },
+    "kpis": [
+      "entities",
+      "relations",
+      "shipped",
+      "planned"
+    ]
+  },
+  "sections": [
+    {
+      "kind": "features",
+      "eyebrow": "What it does",
+      "title": "A store per instance, fed on a schedule.",
+      "lede": "cortex owns the instance lifecycle and the runs. EKR owns the store and its schema, Connectors owns every integration and every credential, and the model only reads text and answers in EKR's extraction format.",
+      "items": [
+        {
+          "title": "Defined by one spec file",
+          "description": "Name, description, the pinned EKR version, the seed schema, the model and its per-run budget, the sources and their schedules: one cortex.instance/1 YAML file.",
+          "status": "shipped",
+          "href": "/docs/spec-file"
+        },
+        {
+          "title": "Three kinds of source",
+          "description": "Web search or listed sites through a Connectors websearch adapter, the records of any Connectors operation, or local files matching a glob.",
+          "status": "shipped",
+          "href": "/docs/spec-file"
+        },
+        {
+          "title": "Only what is new or changed",
+          "description": "A run keeps documents it has not applied or whose text changed, extracts them in batches within the run's budget, and applies the result to the store.",
+          "status": "shipped",
+          "href": "/docs/operating"
+        },
+        {
+          "title": "No secret enters cortex",
+          "description": "A source names a Connectors connection id. Connectors signs every call; cortex never reads, stores or passes a credential.",
+          "status": "shipped",
+          "href": "/docs/operating"
+        }
+      ]
+    },
+    {
+      "kind": "flow",
+      "eyebrow": "One run",
+      "title": "From a timer to the store.",
+      "lede": "What one scheduled run of one source does.",
+      "steps": [
+        {
+          "label": "systemd",
+          "title": "Timer fires",
+          "description": "The source's timer runs cortex run <instance>/<source> --record-failure."
+        },
+        {
+          "label": "Connectors or files",
+          "title": "Fetch",
+          "description": "Web pages and operation records through Connectors, or local files, become documents; credential shapes are masked."
+        },
+        {
+          "label": "cortex",
+          "title": "Keep new or changed",
+          "description": "Against the source's seen state, at most max_documents_per_run of them."
+        },
+        {
+          "label": "model",
+          "title": "Extract",
+          "description": "An isolated claude -p call per batch answers an EKR extraction document."
+        },
+        {
+          "label": "EKR",
+          "title": "Apply",
+          "description": "ekr apply-extraction commits it to the instance's SQLite store."
+        }
+      ]
+    },
+    {
+      "kind": "domain-graph",
+      "eyebrow": "Specification",
+      "title": "What cortex is specified in.",
+      "lede": "The cortex.instance domain of cortex's ESS specification: an instance owns its sources, an instance is Active until removed, and a source is Enabled until two failed runs in a row disable it. Generated from spec/ by cortex-docs.",
+      "data": "data/ess/cortex-instance.domain-graph.json"
+    },
+    {
+      "kind": "status",
+      "eyebrow": "Status",
+      "title": "Early. Here is exactly what exists.",
+      "lede": "Shipped means code on main today. Planned means a story in the repository's planning store and nothing more.",
+      "items": "data/status.json"
+    },
+    {
+      "kind": "related",
+      "eyebrow": "Related tools",
+      "title": "Where cortex sits.",
+      "tools": [
+        {
+          "name": "EKR",
+          "description": "The Epistemic Knowledge Runtime: the store, its schema, ekr view and ekr mcp.",
+          "href": "https://github.com/beyond10x/epistemic-knowledge-runtime",
+          "mark": "E"
+        },
+        {
+          "name": "Connectors",
+          "description": "Provider setup and governed invocation; holds every credential a source uses.",
+          "href": "https://github.com/beyond10x/connectors",
+          "mark": "Co"
+        },
+        {
+          "id": "ess",
+          "relation": "specifies"
+        }
+      ]
+    }
+  ]
+}

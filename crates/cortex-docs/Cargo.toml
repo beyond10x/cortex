@@ -1,0 +1,17 @@
+[package]
+name = "cortex-docs"
+version = "0.1.0"
+edition = "2021"
+description = "Generates and checks the derived pages of the cortex documentation site."
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+clap = { version = "4.6", features = ["derive"] }
+serde_json = "1.0.151"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
