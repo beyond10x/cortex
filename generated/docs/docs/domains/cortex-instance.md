@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85
-contract digest slice-sha256/2:b949168dd73a8a82c270bfa858354cf5311edabd072da4e2c85eaf684999ade6
+model digest dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588
+contract digest slice-sha256/2:47b9eba3ad77dada209fcb9da03489c850f2c30b3e2807d97f0f47acad9cd78e
 do not edit: regenerate with `ess generate`
 -->
 
@@ -52,6 +52,10 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `exclude_paths` — `List<String>`
 - `instructions` — `Optional<String>`, which may be absent
 - `allow_external` — `Boolean`
+
+### `DocumentId`
+
+`cortex.instance.DocumentId` wraps `String` and is not interchangeable with one: the whole value of naming it separately is the crossings the model then refuses.
 
 ### `DropPolicy`
 
@@ -382,6 +386,7 @@ It holds:
 - `description` — `String`
 - `model` — `String`
 - `ekr_version` — `String`
+- `seed_digest` — `String`
 
 It owns any number of [`Source`](#source), as `sources`, carried by `Source.instance_name`.
 
@@ -410,6 +415,39 @@ Illegal transitions are illegal by absence: no rule forbids them, there is simpl
 
 One view projects it: [`Instances`](#instances).
 
+### `SeenDocument`
+
+`cortex.instance.SeenDocument`.
+
+An instance is identified by `document_id`, a `cortex.instance.DocumentId`. The name is part of the model and not a convention: a view projects the identity under that name, so a projection inventing its own would disagree with the view.
+
+It holds:
+
+- `source_id` — `cortex.instance.SourceId`
+- `key` — `String`
+- `content_hash` — `String`
+- `applied_at` — `Integer`
+
+Its `source_id` is what [`Source`](#source) owns it by, as `seen`.
+
+Every instance satisfies `applied_at >= 0` — a predicate over this entity's own fields, checked against them rather than stored as a sentence, so an invariant reading something the entity does not have is refused instead of documented.
+
+Its state is a `cortex.instance.SeenDocument.State`, one of `Seen`. That enum is synthesised from the lifecycle rather than declared beside it, so the states a view's filter compares and the states drawn below cannot disagree.
+
+An instance is created in `Seen`. `Seen` is terminal, so an instance may rest there forever. That is declared rather than inferred from having no way out: an entity that cannot leave a state is either finished or stuck, and only its author knows which.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Seen
+    Seen --> [*]
+```
+
+It declares no moves, so nothing changes its state once it exists.
+
+It has one state, so there is no move to permit or to forbid.
+
+No view projects it, so nothing outside this context is promised a way to observe one.
+
 ### `Source`
 
 `cortex.instance.Source`.
@@ -425,7 +463,7 @@ It holds:
 - `runs` — `Integer`
 - `consecutive_failures` — `Integer`
 
-Its `instance_name` is what [`Instance`](#instance) owns it by, as `sources`.
+It owns any number of [`SeenDocument`](#seendocument), as `seen`, carried by `SeenDocument.source_id`. Its `instance_name` is what [`Instance`](#instance) owns it by, as `sources`.
 
 Every instance satisfies `runs >= 0` and `consecutive_failures >= 0` — a predicate over this entity's own fields, checked against them rather than stored as a sentence, so an invariant reading something the entity does not have is refused instead of documented.
 
@@ -469,6 +507,7 @@ It exposes:
 - `description` — `String`
 - `model` — `String`
 - `ekr_version` — `String`
+- `seed_digest` — `String`
 - `state` — `cortex.instance.Instance.State`
 
 It declares no order, so the rows come back in whatever order the implementation has, and two reads may disagree.
@@ -530,17 +569,18 @@ It takes:
 - `description` — `String`
 - `model` — `String`
 - `ekr_version` — `String`
+- `seed_digest` — `String`
 - `spec` — `cortex.instance.InstanceSpec`
 
 It has four outcomes.
 
-**`name-taken`** — Nothing was created. Decided outside the input: The home already holds an instance with this name. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.NameTaken`, carrying `name`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`name-taken`** — Nothing was created. Taken when a record already carries the identity the command's creating branch would create, and no input-guarded refusal applies. No entity in this specification changes. It reports `cortex.instance.NameTaken`, carrying `name`. It emits nothing. A test reaches it by sending the command twice with one identity: the first call creates the record, the second is answered by this branch.
 
 **`connection-missing`** — Nothing was created. Decided outside the input: Connectors lists no live connection for a connection id a source of the spec names. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ConnectionMissing`, carrying `connection`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`seed-refused`** — Nothing was created. Decided outside the input: EKR refuses the minimal seed, the ekr-seed/2 file or the seed schema document. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SeedRefused`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`created`** — The store is seeded, the seed schema applied and the seed documents extracted into it. The viewer runs on its port. The sources are added by AddSource, one per source in the spec. The default branch, taken when no other outcome's condition matched. It creates a `cortex.instance.Instance`, which starts in `Active`. The new instance's identity is published as `name` on `cortex.instance.InstanceCreated`. It emits `cortex.instance.InstanceCreated`. It sets `description` from `input.description`, `model` from `input.model` and `ekr_version` from `input.ekr_version`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+**`created`** — The store is seeded, the seed schema applied and the seed documents extracted into it. The viewer runs on its port. The sources are added by AddSource, one per source in the spec. The default branch, taken when no other outcome's condition matched. It creates a `cortex.instance.Instance`, which starts in `Active`. The new instance's identity is published as `name` on `cortex.instance.InstanceCreated`. It emits `cortex.instance.InstanceCreated`. It sets `description` from `input.description`, `model` from `input.model`, `ekr_version` from `input.ekr_version` and `seed_digest` from `input.seed_digest`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
 ### `EnableSource`
 
@@ -625,15 +665,15 @@ It takes:
 - `description` — `String`
 - `model` — `String`
 - `spec` — `cortex.instance.InstanceSpec`
-- `seed_changed` — `Boolean`
+- `seed_digest` — `String`
 
 It has four outcomes.
 
-**`seed-change-refused`** — Nothing changed. Taken when `seed_changed == true` holds of the input. No entity in this specification changes. It reports `cortex.instance.SeedChangeRefused`, carrying `name`. It emits nothing. A test reaches it by constructing an input that satisfies that condition.
+**`seed-change-refused`** — Nothing changed. Taken when the existing subject's stored fields satisfy `seed_digest != input.seed_digest`. No entity in this specification changes. It reports `cortex.instance.SeedChangeRefused`, carrying `name`. It emits nothing. A test establishes and independently observes the subject enum fact before selecting this branch.
 
-**`updated`** — The frozen spec is replaced; sources, model and serve settings take effect on the next run. Taken when the existing subject is in Active. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.InstanceUpdated`. It sets `description` from `input.description` and `model` from `input.model`. A test establishes the declared subject state and constructs input selecting this branch in that state.
+**`not-active`** — The instance is removed; nothing changed. Taken when the existing subject's stored fields satisfy `state == Removed`. No entity in this specification changes. It reports `cortex.instance.InstanceNotActive`, carrying `state`. It emits nothing. A test establishes and independently observes the subject enum fact before selecting this branch.
 
-**`not-active`** — The instance is removed; nothing changed. The default branch, taken when no other outcome's condition matched. No entity in this specification changes. It reports `cortex.instance.InstanceNotActive`, carrying `state`. It emits nothing. A test reaches it by constructing an input that satisfies no other outcome's condition.
+**`updated`** — The frozen spec is replaced; sources, model and serve settings take effect on the next run. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.InstanceUpdated`. It sets `description` from `input.description` and `model` from `input.model`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
 **`no-such-instance`** — Nothing changed. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
@@ -893,4 +933,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85` · contract digest `slice-sha256/2:b949168dd73a8a82c270bfa858354cf5311edabd072da4e2c85eaf684999ade6`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588` · contract digest `slice-sha256/2:47b9eba3ad77dada209fcb9da03489c850f2c30b3e2807d97f0f47acad9cd78e`. Do not edit this file; change the specification and regenerate it with `ess generate`.

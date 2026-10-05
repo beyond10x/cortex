@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85
-// contract digest b949168dd73a8a82c270bfa858354cf5311edabd072da4e2c85eaf684999ade6
+// model digest dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588
+// contract digest 47b9eba3ad77dada209fcb9da03489c850f2c30b3e2807d97f0f47acad9cd78e
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -136,8 +136,8 @@ where
 {
     fn create_instance(&mut self, input: crate::instance::CreateInstance) -> Result<crate::instance::CreateInstanceOutcome, UnmetObligation> {
         let _ = &input;
-        // `name-taken`: an external branch, where the context takes it.
-        if self.ports.external("cortex.instance.CreateInstance", "name-taken") {
+        // `name-taken`: an identity a record already carries, before any branch is taken.
+        if InstanceStorage::get(&self.ports, &input.name).is_some() {
             return Ok(crate::instance::CreateInstanceOutcome::NameTaken { error: crate::instance::NameTaken { name: input.name.clone() } });
         }
         // `connection-missing`: an external branch, where the context takes it.
@@ -155,6 +155,7 @@ where
             description: input.description.clone(),
             model: input.model.clone(),
             ekr_version: input.ekr_version.clone(),
+            seed_digest: input.seed_digest.clone(),
         };
         InstanceStorage::put(&mut self.ports, crate::instance::AnyInstance::Active(crate::instance::Instance::new(data)).snapshot());
         return Ok(crate::instance::CreateInstanceOutcome::Created { instance_created: crate::instance::InstanceCreated { name: identity.clone(), view_port: self.ports.generate_integer() } });
@@ -229,29 +230,29 @@ where
 {
     fn update_instance(&mut self, input: crate::instance::UpdateInstance) -> Result<crate::instance::UpdateInstanceOutcome, UnmetObligation> {
         let _ = &input;
-        // `seed-change-refused`: an input-guarded refusal, before the addressed subject is loaded.
-        if decided(equal(Some(&input.seed_changed).map(|value| *value), Some(true)), "cortex.instance.UpdateInstance")? {
-            return Ok(crate::instance::UpdateInstanceOutcome::SeedChangeRefused { error: crate::instance::SeedChangeRefused { name: input.name.clone() } });
-        }
         // The addressed row, read before the branches that select by it.
         let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
             return Ok(crate::instance::UpdateInstanceOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
         };
         let _ = &held;
-        // `updated`: selected by the addressed row.
-        if decided(Some(matches!(held.state, crate::instance::InstanceState::Active)), "cortex.instance.UpdateInstance")? {
-            let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
-                return Ok(crate::instance::UpdateInstanceOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
-            };
-            let _ = &held;
-            let mut next = held;
-            next.data.description = input.description.clone();
-            next.data.model = input.model.clone();
-            InstanceStorage::put(&mut self.ports, next);
-            return Ok(crate::instance::UpdateInstanceOutcome::Updated { instance_updated: crate::instance::InstanceUpdated { name: input.name.clone() } });
+        // `seed-change-refused`: selected by the addressed row.
+        if decided(equal(Some(&held.data.seed_digest).map(|value| value.clone()), Some(&input.seed_digest).map(|value| value.clone())).map(|value| !value), "cortex.instance.UpdateInstance")? {
+            return Ok(crate::instance::UpdateInstanceOutcome::SeedChangeRefused { error: crate::instance::SeedChangeRefused { name: input.name.clone() } });
         }
-        // `not-active`: the default.
-        return Ok(crate::instance::UpdateInstanceOutcome::NotActive { error: crate::instance::InstanceNotActive { state: self.ports.generate_cortex_instance_instance_state() } });
+        // `not-active`: selected by the addressed row.
+        if decided(equal(Some(&held.state).map(|value| match value { crate::instance::InstanceState::Active => "Active", crate::instance::InstanceState::Removed => "Removed" }.to_owned()), Some("Removed".to_owned())), "cortex.instance.UpdateInstance")? {
+            return Ok(crate::instance::UpdateInstanceOutcome::NotActive { error: crate::instance::InstanceNotActive { state: self.ports.generate_cortex_instance_instance_state() } });
+        }
+        // `updated`: the default.
+        let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
+            return Ok(crate::instance::UpdateInstanceOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        };
+        let _ = &held;
+        let mut next = held;
+        next.data.description = input.description.clone();
+        next.data.model = input.model.clone();
+        InstanceStorage::put(&mut self.ports, next);
+        return Ok(crate::instance::UpdateInstanceOutcome::Updated { instance_updated: crate::instance::InstanceUpdated { name: input.name.clone() } });
     }
 }
 
@@ -269,6 +270,7 @@ where
                 description: held.data.description,
                 model: held.data.model,
                 ekr_version: held.data.ekr_version,
+                seed_digest: held.data.seed_digest,
                 state: held.state,
             })
             .collect())
