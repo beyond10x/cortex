@@ -28,7 +28,7 @@ credential in Connectors.
 1. Connect Tavily once, and note the connection id it prints:
 
    ```sh
-   connectors connections connect --adapter tavily --profile tavily.api-key --credential-prompt
+   connectors connections connect --adapter tavily --profile <the provider's API-key profile> --credential-prompt
    connectors connections list --adapter tavily
    ```
 

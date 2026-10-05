@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c
-// contract digest 599790d665fb03faa40bbb59fd50bf927e4aa794b7a29983855b87d980651c3b
+// model digest fd997269540e2d4be43e6e94d7be03bed861ffb72e0fb53bfa205dde6b484432
+// contract digest 813315bd85f8cb7a45643e6abf4aa129f50831447c6e86f9d7177003d18d21dd
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -136,6 +136,10 @@ where
 {
     fn create_instance(&mut self, input: crate::instance::CreateInstance) -> Result<crate::instance::CreateInstanceOutcome, UnmetObligation> {
         let _ = &input;
+        // `name-taken`: an external branch, where the context takes it.
+        if self.ports.external("cortex.instance.CreateInstance", "name-taken") {
+            return Ok(crate::instance::CreateInstanceOutcome::NameTaken { error: crate::instance::NameTaken { name: input.name.clone() } });
+        }
         // `connection-missing`: an external branch, where the context takes it.
         if self.ports.external("cortex.instance.CreateInstance", "connection-missing") {
             return Ok(crate::instance::CreateInstanceOutcome::ConnectionMissing { error: crate::instance::ConnectionMissing { connection: self.ports.generate_string() } });

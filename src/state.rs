@@ -1,0 +1,121 @@
+//! What a source has already seen: the `UNMAPPED:` rule of `spec/domains/instance.yaml`. A
+//! document is new when its key was never applied, changed when its text hash differs, and skipped
+//! while its last fetch is younger than the policy's `refresh_after_days`.
+
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+use crate::sources::Document;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Seen {
+    pub hash: String,
+    /// Milliseconds since the Unix epoch.
+    pub applied_at: i64,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct SeenState {
+    pub format: String,
+    pub documents: BTreeMap<String, Seen>,
+}
+
+pub fn text_hash(text: &str) -> String {
+    hex(&Sha256::digest(text.as_bytes()))
+}
+
+pub fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+const DAY_MS: i64 = 86_400_000;
+
+impl SeenState {
+    pub fn load(path: &Path) -> Result<Self, String> {
+        match std::fs::read(path) {
+            Ok(bytes) => {
+                serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", path.display()))
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self {
+                format: "cortex.seen/1".into(),
+                documents: BTreeMap::new(),
+            }),
+            Err(e) => Err(format!("cannot read {}: {e}", path.display())),
+        }
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), String> {
+        let text = serde_json::to_string_pretty(self).expect("plain JSON");
+        crate::home::write_atomic(path, text.as_bytes())
+    }
+
+    /// The documents a run should extract: new keys, and changed text past the refresh window,
+    /// at most `max` of them, in fetch order.
+    pub fn select(
+        &self,
+        docs: Vec<Document>,
+        now_ms: i64,
+        refresh_after_days: i64,
+        max: usize,
+    ) -> Vec<Document> {
+        docs.into_iter()
+            .filter(|d| match self.documents.get(&d.key) {
+                None => true,
+                Some(seen) => {
+                    now_ms - seen.applied_at >= refresh_after_days * DAY_MS
+                        && seen.hash != text_hash(&d.text)
+                }
+            })
+            .take(max)
+            .collect()
+    }
+
+    pub fn record(&mut self, doc: &Document, now_ms: i64) {
+        self.documents.insert(
+            doc.key.clone(),
+            Seen {
+                hash: text_hash(&doc.text),
+                applied_at: now_ms,
+            },
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sources::Origin;
+
+    fn doc(key: &str, text: &str) -> Document {
+        Document {
+            key: key.into(),
+            origin: Origin::Url,
+            title: None,
+            description: None,
+            published: None,
+            text: text.into(),
+        }
+    }
+
+    #[test]
+    fn an_unchanged_or_recent_document_is_not_selected_again() {
+        let mut state = SeenState::default();
+        state.record(&doc("a", "one"), 0);
+        state.record(&doc("b", "two"), 0);
+        let fetched = || vec![doc("a", "one"), doc("b", "changed"), doc("c", "new")];
+        let within = state.select(fetched(), DAY_MS, 7, 10);
+        assert_eq!(
+            within.iter().map(|d| d.key.as_str()).collect::<Vec<_>>(),
+            ["c"]
+        );
+        let after = state.select(fetched(), 8 * DAY_MS, 7, 10);
+        assert_eq!(
+            after.iter().map(|d| d.key.as_str()).collect::<Vec<_>>(),
+            ["b", "c"]
+        );
+        assert_eq!(state.select(fetched(), 8 * DAY_MS, 7, 1).len(), 1);
+    }
+}

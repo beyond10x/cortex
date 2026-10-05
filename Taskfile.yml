@@ -49,6 +49,6 @@ tasks:
     cmds:
       - '{{.ESS}} specify validate --path spec --strict-requires'
       - task: drift
-      - '{{.CARGO}} fmt --all -- --check'
+      - '{{.CARGO}} fmt -p cortex-cli -- --check'
       - '{{.CARGO}} clippy --locked --all-targets -- -D warnings'
       - task: test

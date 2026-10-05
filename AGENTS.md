@@ -58,6 +58,11 @@ the source of truth for every noun, command, outcome, error and event.
 ## Build and verify
 
 - `task check`: spec validity, generated-code drift, fmt, clippy (`-D warnings`), all tests.
+- Format with `cargo fmt -p cortex-cli`. `cargo fmt --all` also rewrites the generated crates,
+  which are path dependencies, and `task drift` then fails.
+- `tests/conformance.rs` runs every scenario of `spec/suite.json` (35) in process; `tests/e2e.rs`
+  drives the binary end to end; the clap ⇔ spec test in `src/main.rs` holds the command line to
+  the commands, inputs and views `spec/` puts on it.
 - Builds use `CARGO_TARGET_DIR=$HOME/.cache/b10x-target/cortex`. Check `df -h /` first; do not
   start a build with less than 10 GB free.
 - The end-to-end tests run a real `ekr` (`CORTEX_TEST_EKR`, default the 0.0.30 binary under

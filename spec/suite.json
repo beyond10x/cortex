@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/12",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "d914e0ceba412334644d32d91e2dc65752b2babf9d98efa2efaf64896ef68c7c",
-    "contract_digest": "599790d665fb03faa40bbb59fd50bf927e4aa794b7a29983855b87d980651c3b"
+    "spec_digest": "fd997269540e2d4be43e6e94d7be03bed861ffb72e0fb53bfa205dde6b484432",
+    "contract_digest": "813315bd85f8cb7a45643e6abf4aa129f50831447c6e86f9d7177003d18d21dd"
   },
   "scenarios": {
     "cortex.instance.AddSource/outcome/added": {
@@ -806,6 +806,255 @@
         {
           "kind": "view",
           "name": "cortex.instance.Instances"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.CreateInstance/outcome/name-taken": {
+      "purpose": "`cortex.instance.CreateInstance` answers `name-taken` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "name-taken"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.CreateInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "model": {
+                  "budget_usd": 1.0,
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "name": "spec.name",
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "sources": []
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "name-taken"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.NameTaken",
+          "fields": {
+            "name": "name"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.ChangeDetection"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectorsSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CrawlPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.EkrPin"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FetchPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ModelSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchDepth"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchTopic"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SeedSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ServeSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SitesInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceSettings"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.TimeRange"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebMode"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebSource"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.CreateInstance"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "name-taken"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.NameTaken"
         },
         {
           "kind": "actor",

@@ -281,6 +281,11 @@ errors:
     fields:
       - {name: state, type: cortex.instance.Source.State}
 
+  - name: cortex.instance.NameTaken
+    summary: The home already holds an instance with this name.
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+
   - name: cortex.instance.InstanceNotFound
     summary: No instance has this name.
     fields:
@@ -322,6 +327,17 @@ commands:
       - {name: ekr_version, type: String}
       - {name: spec, type: cortex.instance.InstanceSpec}
     outcomes:
+      # UNMAPPED: "the home already holds an instance with this name" reads the registry, not the
+      # input, and ESS has no guard on another record's existence; it is written as an external
+      # decision the implementation makes before anything is created.
+      - name: name-taken
+        external: The home already holds an instance with this name
+        error: cortex.instance.NameTaken
+        payload:
+          cortex.instance.NameTaken:
+            name: input.name
+        summary: Nothing was created.
+
       - name: connection-missing
         external: Connectors lists no live connection for a connection id a source of the spec names
         error: cortex.instance.ConnectionMissing
