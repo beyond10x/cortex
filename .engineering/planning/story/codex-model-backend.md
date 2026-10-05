@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:codex-model-backend
 kind: story
-status: draft
+status: active
 title: An instance can extract with Codex instead of Claude
 relations:
 - decomposes: epic:standalone-1-0
@@ -13,7 +13,10 @@ scope:
   path: src/extract.rs
 - confidence: inferred
   path: tests/codex.rs
-revision: 9
+revision: 11
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":6}}}
+- {from: "proposed", to: "active", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":6}}}
 ---
 ## Outcome
 

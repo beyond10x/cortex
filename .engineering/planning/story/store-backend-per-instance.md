@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:store-backend-per-instance
 kind: story
-status: draft
+status: active
 title: An instance's store lives on the backend its spec names
 relations:
 - decomposes: epic:standalone-1-0
@@ -21,7 +21,10 @@ scope:
   path: src/schedule.rs
 - confidence: inferred
   path: tests/store_backend.rs
-revision: 13
+revision: 15
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 14, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 15, decided_on: {"recorded":{"review_outcome":3}}}
 ---
 ## Outcome
 

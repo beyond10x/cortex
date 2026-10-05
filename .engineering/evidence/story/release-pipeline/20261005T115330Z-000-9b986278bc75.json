@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-05T11:53:30Z",
+  "actor": "agent:claude",
+  "artifact": "story:release-pipeline",
+  "kind": "story",
+  "revision": 18,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "release.yml workflow_dispatch on main b0078ce: build, package, SHA256SUMS -c OK, entries 0/0, cortex --version = cortex 0.1.0",
+    "reference": "https://github.com/beyond10x/cortex/actions/runs/37305761192"
+  }
+}

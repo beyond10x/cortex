@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:redaction-before-model
 kind: story
-status: draft
+status: active
 title: Personal data is replaced before the model sees a document
 relations:
 - decomposes: epic:standalone-1-0
@@ -20,7 +20,10 @@ scope:
   path: src/run.rs
 - confidence: inferred
   path: tests/redaction.rs
-revision: 9
+revision: 11
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-05T11:54:37Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":1}}}
 ---
 ## Outcome
 
