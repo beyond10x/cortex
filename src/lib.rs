@@ -9,6 +9,7 @@ pub mod instance;
 pub mod mask;
 pub mod model_map;
 pub mod ports;
+pub mod redact;
 pub mod run;
 pub mod schedule;
 pub mod sources;

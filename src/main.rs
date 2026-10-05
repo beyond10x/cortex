@@ -608,7 +608,16 @@ fn create(
                 let tools = &ctx.tools;
                 detail["seed"] = match run::seed(&layout, tools) {
                     Ok(r) => {
-                        json!({"documents_applied": r.documents_applied, "cost_usd": r.cost_usd})
+                        let mut seed = json!({
+                            "documents_applied": r.documents_applied,
+                            "cost_usd": r.cost_usd,
+                        });
+                        // As `cortex run` reports it: present only when the policy pseudonymises.
+                        if let Some(redacted) = &r.redacted {
+                            seed["redacted"] = json!(redacted);
+                            seed["unrestored"] = json!(r.unrestored);
+                        }
+                        seed
                     }
                     Err(e) => json!({"failed": format!("{e:?}")}),
                 };
@@ -802,20 +811,27 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
     let (done, failure) = match outcome {
         m::RunSourceOutcome::Ran { source_ran } => {
             let report = ctx.shared.borrow_mut().last_run.take().unwrap_or_default();
+            let mut detail = json!({
+                "source_id": source_ran.source_id.0,
+                "documents_new": source_ran.documents_new,
+                "documents_applied": source_ran.documents_applied,
+                "cost_usd": source_ran.cost_usd.map(|c| c.0),
+                "facts_refused": report.facts_refused,
+                "parts_rejected": report.parts_rejected,
+                "masked": report.masked,
+                "stopped": report.stopped,
+            });
+            // Present only when the policy pseudonymises: a spec file without one reports as
+            // before.
+            if let Some(redacted) = &report.redacted {
+                detail["redacted"] = json!(redacted);
+                detail["unrestored"] = json!(report.unrestored);
+            }
             (
                 Done {
                     outcome: "ran",
                     ok: true,
-                    detail: json!({
-                        "source_id": source_ran.source_id.0,
-                        "documents_new": source_ran.documents_new,
-                        "documents_applied": source_ran.documents_applied,
-                        "cost_usd": source_ran.cost_usd.map(|c| c.0),
-                        "facts_refused": report.facts_refused,
-                        "parts_rejected": report.parts_rejected,
-                        "masked": report.masked,
-                        "stopped": report.stopped,
-                    }),
+                    detail,
                 },
                 None,
             )

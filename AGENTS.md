@@ -97,8 +97,28 @@ this repository and published by the organisation's reusable workflow.
 - **Committed code is Rust.** Probes in other languages stay outside the repository. The one
   exception is `website/`, whose Docusaurus configuration is TypeScript as in canon and loom.
 - **Fetched text is untrusted.** It is masked for credential shapes (`src/mask.rs`), stored as
-  evidence and sent to a model that has no tools. There is **no PII redaction**: do not point an
-  instance at personal data.
+  evidence and sent to a model that has no tools. Masking is irreversible: a credential in a
+  document's text is never stored, never sent and never restored. A document's title, description
+  and URL (its key) are not masked yet; `story:credential-mask-covers-titles` covers them.
+- **Personal data stays out of the prompt, not out of the store.** The instance's `redaction`
+  policy (`src/redact.rs`) replaces each value it finds with a per-batch placeholder (`[Email-1]`,
+  `[Phone-2]`, `[Card-1]`, `[IpAddress-1]`, `[<rule>-1]`) in everything the model is shown: each
+  document's text, title, description and `Source:` key, and the known entity names. Every
+  placeholder in the answer is restored before it is applied, so the store, the evidence and the
+  extracted facts hold the originals and stay searchable. The mapping lives in memory for one batch
+  and is never written to disk or to the log; with a policy, a batch directory under `runs/` keeps
+  only the restored `extraction.yaml`. A placeholder with no value is left as written and counted
+  as `unrestored`. Limits: detection is by pattern (the classes `Email`, `Phone`, `IpAddress` and
+  `PaymentCard`, and the policy's regex `rules`), so four-part version numbers and long digit ids
+  that look like an IP address or a card are hidden from the model too (and restored); names of
+  people are not detected; `Url`, `Credential` and `RareName` are not acted on yet; the instance's
+  own description and instructions are sent as written; and a spec without a `redaction` policy
+  sends text unchanged.
+- **A rule with a `replacement` is irreversible, like a credential.** A `rules` entry with a
+  non-empty `replacement` replaces its matches by that text in a document's text, title and
+  description before the document is stored (`Redactor::scrub`), and in its URL before the model
+  is shown it; nothing is ever restored to them. The URL is stored as it is, as for credentials.
+  A rule with `replacement: ""` is a reversible `[<rule>-N]` placeholder.
 - **The model never issues evidence.** cortex mints every evidence id and payload; a fact citing
   an id cortex did not issue for that batch is refused.
 - **The model call is isolated.** `claude -p` runs with `ANTHROPIC_API_KEY` removed from its
