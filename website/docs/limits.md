@@ -30,20 +30,55 @@ stand; [Status](./status.mdx) lists what is planned.
   kept, and two URLs that differ only in a credential are one document. Masking is by shape: a
   token of no listed shape with no name before it, or an assigned value shorter than six
   characters, is not masked. An instance's `redaction` policy then
-  replaces email addresses (also percent-encoded in a URL), phone numbers, IP addresses and
-  payment card numbers (the classes `Email`, `Phone`, `IpAddress` and `PaymentCard`), and
-  whatever its own regular-expression `rules` match, with placeholders such as `[Email-1]` in what
-  the model is shown. That covers a document's text, title, description and
+  replaces links, email addresses (also percent-encoded in a URL), phone numbers, IP addresses
+  and payment card numbers (the classes `Url`, `Email`, `Phone`, `IpAddress` and `PaymentCard`),
+  the names it lists in `known_names`, rare capitalised words (`RareName`), and whatever its own
+  regular-expression `rules` match, with placeholders such as `[Email-1]`, `[Url-1]` and
+  `[Name-1]` in what the model is shown. That covers a document's text, title, description and
   source line, and the known entity names. Before the answer is applied, each placeholder is put
   back. The store and its evidence therefore hold the personal data and stay searchable for it;
   only the model does not see it. A placeholder the model changed or invented stays as written
-  and is counted as `unrestored` in the run's log. Detection is by pattern: names of people are
-  not detected, `Url`, `Credential` and `RareName` are not acted on yet, and a spec without a
+  and is counted as `unrestored` in the run's log. Detection is by pattern: a person's name is
+  found only when `known_names` lists it or it is rare in the batch, and a spec without a
   `redaction` policy sends text unchanged. Neither masking nor redaction is a guarantee.
+- **Links are found by their shape.** `Url` takes a link that starts with a scheme
+  (`https://`), with `www.`, or with a dotted host followed by a path (`intranet.example.org/a`).
+  A masked password or token inside a link stays part of it, so the whole link is one
+  placeholder. A bare host with no path, such as `example.org`, is not taken.
+- **Rare names are a guess.** `RareName` takes as a name a word that starts with a capital letter,
+  has a lower-case letter in it, and appears at most `rare_limit` times (default 1) in the batch's
+  document texts. Only text the model is shown counts: a word inside an address, a link, a known
+  name or a credential another class hides is not counted, and neither are the known entity
+  names. A known entity name the batch's documents do not hold counts as seen 0 times, so a
+  person the store already knows is hidden in the prompt's known entities too. Common sentence
+  openers (`The`, `This`, `We` and the like) are never taken. A rare product or place name, and
+  a capitalised word such as `Thanks` or `Subject`, is hidden from the model too, and restored; a
+  person named often in the batch and not listed in `known_names` is not hidden.
+- **Known names are matched in any case.** A name in `known_names` is matched as a whole word,
+  in any upper or lower case, and in either Unicode form (composed `ë` or `e` with a combining
+  mark).
+- **`Credential` adds shapes and is irreversible.** The class masks, as `[masked:<shape>]`,
+  shapes the masking on every run does not cover: bearer and basic `Authorization` headers, more
+  cloud, forge, chat and model-provider token shapes, chat webhook URLs, and assignments to a
+  wider set of names (`token`, `pwd`, `passphrase`, `private_key`, `credentials`,
+  `authorization`; not `auth` alone) whose value mixes letters and digits or is at least 20
+  characters long. In text an assigned value runs to whitespace or a quote, `;#&,<>` included;
+  in a document's URL it ends at `&` or `#`, so the rest of the query is kept. A value that is a
+  placeholder (`<your-key>`, `${TOKEN}`, `DEPLOY_TOKEN`, `xxxx`, `[masked:…]`) or a digest
+  (`sha256:…`) is kept. Its matches are neither sent nor stored, in a document's URL either.
+- **A run refuses what masking left.** The classes `refuse_if_left` names are looked for again in
+  every batch as the model would be shown it. Every batch is checked before the first model
+  call; a class still found there fails the run (`extraction-failed`, the reason naming the
+  class), and nothing is sent or stored. Each batch is checked again just before it is sent,
+  because the known entity names grow as batches are applied: a class found then stops the run
+  before that batch is sent, and the batches before it stay applied. For `Phone` the search adds
+  a number of 6 to 15 digits shortly after a word such as "call", "phone" or "mobile", which the
+  `Phone` class itself does not replace. A class named in `refuse_if_left` but not in `classes`
+  refuses every batch in which it is found.
 - **A rule with a `replacement` is irreversible.** A `rules` entry whose `replacement` is not
   empty replaces what it matches by that text before the document is stored, so the store never
-  holds it and nothing is put back from the model's answer. It covers a document's text, title and
-  description; in a URL the match is hidden from the model but stored. A rule with
+  holds it and nothing is put back from the model's answer, as for `Credential`. It covers a
+  document's text, title and description; in a URL the match is hidden from the model but stored. A rule with
   `replacement: ""` uses a reversible placeholder (`[<rule name>-1]`) instead.
 - **Some numbers that are not personal data are hidden from the model, but kept in the store.**
   Four-part version numbers and long digit ids that look like an IP address or a card number are

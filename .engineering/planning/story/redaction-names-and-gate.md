@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:redaction-names-and-gate
 kind: story
-status: draft
+status: implemented
 title: Names, links and credentials are masked and a run refuses what survives
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -17,7 +17,11 @@ scope:
   path: src/run.rs
 - confidence: inferred
   path: tests/redaction_gate.rs
-revision: 7
+revision: 11
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T15:00:26Z", actor: "agent:claude", revision: 8, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-10-05T15:00:26Z", actor: "agent:claude", revision: 9, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "active", to: "implemented", at: "2026-10-05T15:38:30Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 
@@ -50,7 +54,12 @@ Masking of each added class (`Url`, `Credential`, `RareName`) is held by unit te
 
 ## Scope
 
-`src/redact.rs`, `src/run.rs`, `tests/redaction_gate.rs` (new).
+Landed 2026-10-05 in `f3bbbf1` (wave 20261005f, merged `25a8cb9`).
+
+- **Files:** `src/redact.rs`, `src/run.rs`, `tests/redaction_gate.rs` (new, 5 cases), `Cargo.toml` and `Cargo.lock` (`unicode-normalization` 0.1.25), `AGENTS.md`, `website/docs/limits.md`, `website/docs/spec-file.md`
+- **Decided during the wave:** placeholders `[Url-n]` and `[Name-n]`, restored before storage (operator decision); `known_names` are names in the spec, not file paths; a refusal is the existing `extraction-failed` outcome; rarity counts only the batch's document texts; known names match case-insensitively after NFC normalisation
+- **Documented limits:** a bare host with no path is not a link; a rare name in capitals only is not caught; a refusal in a later batch leaves earlier batches applied
+- **Review:** `review-result:adversary-redaction-names-and-gate-pass-1` (9), fixed or documented; coordinator check of the correction
 
 ## Operator decision: PII stays out of the model, not out of the store
 
