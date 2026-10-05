@@ -121,7 +121,8 @@ this repository and published by the organisation's reusable workflow.
   are hidden from the model too (and restored); a person's name is found only when listed in
   `known_names` or rare in the batch (`rare_limit`); the instance's own description and
   instructions are sent as written; and a spec without a `redaction` policy sends text unchanged.
-  Rarity counts only the batch's document texts outside what another class hides; known entity
+  Rarity counts only the batch's document texts outside what another class hides (for a record
+  read from a file, its own text only, not its thread context, key or title); known entity
   names do not count. Known names match in any case and either Unicode normal form.
   `Credential` is irreversible (`[masked:<shape>]`, also in the stored key). `refuse_if_left`:
   every batch is checked as the model would be shown it before the first model call, and a class

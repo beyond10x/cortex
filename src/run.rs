@@ -130,6 +130,7 @@ pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Rep
         &meta.spec_dir,
         &window,
         &state.child_failures,
+        source_spec.policy.max_chars_per_document.max(0) as usize,
     )
     .map_err(|e| match e {
         FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
@@ -180,22 +181,23 @@ pub fn seed(layout: &Layout, tools: &Tools) -> Result<Report, Failure> {
     });
     let start = now_ms();
     let window = Window::of_run(start, None, None, None, 0);
-    let fetched = sources::fetch(
-        &files,
-        &tools.connectors,
-        &layout.dir,
-        &window,
-        &BTreeMap::new(),
-    )
-    .map_err(|e| match e {
-        FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
-    })?;
     let policy = m::FetchPolicy {
         refresh_after_days: 0,
         change: m::ChangeDetection::ContentHash,
         max_documents_per_run: i64::MAX,
         max_chars_per_document: 100_000,
     };
+    let fetched = sources::fetch(
+        &files,
+        &tools.connectors,
+        &layout.dir,
+        &window,
+        &BTreeMap::new(),
+        policy.max_chars_per_document as usize,
+    )
+    .map_err(|e| match e {
+        FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
+    })?;
     process(layout, tools, &spec, "seed", fetched, &policy, None, None)
 }
 
@@ -790,13 +792,30 @@ fn pseudonymise(
     }
     for issued in batch {
         let d = &issued.doc;
+        // A record read from a file repeats text that is not its own: its thread context (earlier
+        // records), its key (its id) and its title (the file's name, on every record of it).
+        // Only its own text counts toward how often a name occurs, so a repetition never makes a
+        // name look frequent; the rest is reserved without counting, and a name in it gets the
+        // batch's placeholder like any other.
+        let file_record = d.origin == sources::Origin::FileRecord;
         for text in [Some(&d.key), d.title.as_ref(), d.description.as_ref()]
             .into_iter()
             .flatten()
         {
-            p.reserve(text);
+            if file_record {
+                p.reserve_name(text);
+            } else {
+                p.reserve(text);
+            }
         }
-        p.reserve(&full(d));
+        let text = full(d);
+        if file_record {
+            let (own, context) = sources::split_context(&text);
+            p.reserve(own);
+            p.reserve_name(context);
+        } else {
+            p.reserve(&text);
+        }
     }
     for name in entities.values().flatten() {
         p.reserve_name(name);
