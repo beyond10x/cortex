@@ -115,10 +115,18 @@ impl Layout {
     }
 }
 
+/// Copies `from` to `to`, following symlinks: a symlinked root, file or subdirectory is copied as
+/// a regular file or directory holding its target's contents, the way [`crate::home::seed_digest`]
+/// reads it. A symlink below the root that cannot be followed (dangling, or a loop back to an
+/// enclosing directory) is left out, as the digest leaves it out.
 fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
     if from.is_dir() {
-        for entry in walkdir::WalkDir::new(from) {
-            let entry = entry.map_err(|e| format!("{}: {e}", from.display()))?;
+        for entry in walkdir::WalkDir::new(from).follow_links(true) {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) if e.depth() > 0 && e.path().is_some_and(is_symlink) => continue,
+                Err(e) => return Err(format!("{}: {e}", from.display())),
+            };
             let rel = entry.path().strip_prefix(from).expect("under the root");
             let dest = to.join(rel);
             if entry.file_type().is_dir() {
@@ -137,6 +145,10 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
             .map(|_| ())
             .map_err(|e| format!("cannot copy {}: {e}", from.display()))
     }
+}
+
+fn is_symlink(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
 }
 
 /// The first free loopback port at or above `from`.
