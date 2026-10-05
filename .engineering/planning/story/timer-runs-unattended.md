@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:timer-runs-unattended
 kind: story
-status: draft
+status: active
 title: Scheduled runs work with nobody at the keyboard
 relations:
 - decomposes: epic:first-web-instance
@@ -25,7 +25,10 @@ scope:
   path: src/schedule.rs
 - confidence: inferred
   path: src/state.rs
-revision: 9
+revision: 11
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T15:42:25Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-10-05T15:42:25Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":2}}}
 ---
 ## Outcome
 
