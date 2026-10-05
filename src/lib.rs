@@ -12,6 +12,7 @@ pub mod ports;
 pub mod redact;
 pub mod run;
 pub mod schedule;
+pub mod snapshot;
 pub mod sources;
 pub mod spec;
 pub mod state;

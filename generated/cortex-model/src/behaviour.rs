@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588
-// contract digest 47b9eba3ad77dada209fcb9da03489c850f2c30b3e2807d97f0f47acad9cd78e
+// model digest 7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d
+// contract digest add61f1f192f4767e91f96690fe684e5461a92681a4000b4032423d92532ec30
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -214,6 +214,36 @@ where
         let next = moved.snapshot();
         InstanceStorage::put(&mut self.ports, next);
         return Ok(crate::instance::RemoveInstanceOutcome::Removed { instance_removed: crate::instance::InstanceRemoved { name: input.name.clone() } });
+    }
+}
+
+/// `cortex.instance.RestoreSnapshot`, generated: every outcome is one the specification fully determines.
+impl<P> crate::instance::obligations::RestoreSnapshotBehavior for Generated<P>
+where
+    P: Context + InstanceStorage,
+{
+    fn restore_snapshot(&mut self, input: crate::instance::RestoreSnapshot) -> Result<crate::instance::RestoreSnapshotOutcome, UnmetObligation> {
+        let _ = &input;
+        // `backend-unsupported`: an external branch, where the context takes it.
+        if self.ports.external("cortex.instance.RestoreSnapshot", "backend-unsupported") {
+            return Ok(crate::instance::RestoreSnapshotOutcome::BackendUnsupported { error: crate::instance::RestoreUnsupported { name: input.name.clone() } });
+        }
+        // `busy`: an external branch, where the context takes it.
+        if self.ports.external("cortex.instance.RestoreSnapshot", "busy") {
+            return Ok(crate::instance::RestoreSnapshotOutcome::Busy { error: crate::instance::InstanceBusy { reason: self.ports.generate_string() } });
+        }
+        // `no-such-snapshot`: an external branch, where the context takes it.
+        if self.ports.external("cortex.instance.RestoreSnapshot", "no-such-snapshot") {
+            return Ok(crate::instance::RestoreSnapshotOutcome::NoSuchSnapshot { error: crate::instance::SnapshotNotFound { snapshot: input.snapshot.clone() } });
+        }
+        // `restored`: the default.
+        let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
+            return Ok(crate::instance::RestoreSnapshotOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        };
+        let _ = &held;
+        let next = held;
+        InstanceStorage::put(&mut self.ports, next);
+        return Ok(crate::instance::RestoreSnapshotOutcome::Restored { snapshot_restored: crate::instance::SnapshotRestored { name: input.name.clone(), snapshot: input.snapshot.clone() } });
     }
 }
 

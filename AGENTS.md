@@ -157,7 +157,7 @@ this repository and published by the organisation's reusable workflow.
   documentation drift.
 - Format with `cargo fmt -p cortex-cli -p cortex-docs`. `cargo fmt --all` also rewrites the
   generated crates, which are path dependencies, and `task drift` then fails.
-- `tests/conformance.rs` runs every scenario of `spec/suite.json` (34) in process; `tests/e2e.rs`
+- `tests/conformance.rs` runs every scenario of `spec/suite.json` (39) in process; `tests/e2e.rs`
   drives the binary end to end; the clap ⇔ spec test in `src/main.rs` holds the command line to
   the commands, inputs and views `spec/` puts on it.
 - Builds use `CARGO_TARGET_DIR=$HOME/.cache/b10x-target/cortex`. Check `df -h /` first; do not

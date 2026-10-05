@@ -361,6 +361,19 @@ redaction:
 | `rare_limit` | optional; for `RareName`, the most times a capitalised word may appear in a batch to be taken as a name. Default 1 |
 | `refuse_if_left` | optional classes that fail the run, before any model call, when they are still found in what the model would be shown |
 
+## `snapshots`
+
+Optional. How many snapshots of a `sqlite` store the instance keeps; see
+[Operating](./operating.md#undoing-a-run).
+
+```yaml
+snapshots: {keep: 3}
+```
+
+| field | meaning |
+|---|---|
+| `keep` | the newest snapshots cortex named that are kept; a new snapshot removes the oldest beyond it. Files of other names in `snapshots/` are never removed. 0 takes none. Without a `snapshots` section, 3 |
+
 ## `serve`
 
 | field | meaning |

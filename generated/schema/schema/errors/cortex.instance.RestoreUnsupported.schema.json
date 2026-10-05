@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "NameTaken payload",
-  "description": "The home already holds an instance with this name.",
-  "x-ess-name": "cortex.instance.NameTaken",
+  "title": "RestoreUnsupported payload",
+  "description": "The instance's store is on the postgres backend: its snapshot is the operator's database backup, which cortex neither takes nor restores.",
+  "x-ess-name": "cortex.instance.RestoreUnsupported",
   "x-ess-kind": "error-payload",
   "type": "object",
   "properties": {
@@ -18,7 +18,7 @@
     "system": "cortex",
     "specification_version": "v1",
     "source_digest": "7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d",
-    "contract_digest": "slice-sha256/2:ff0a80b736d251e8a22e65ebf86b3aefcb60fc22865afa715be3c400cd54d631",
+    "contract_digest": "slice-sha256/2:fd14a35d20512e1180ee9684da503826f999760c24ac5b8021b3ecd570448cff",
     "regenerate": "ess generate"
   },
   "$defs": {

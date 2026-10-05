@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588
-// contract digest 47b9eba3ad77dada209fcb9da03489c850f2c30b3e2807d97f0f47acad9cd78e
+// model digest 7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d
+// contract digest add61f1f192f4767e91f96690fe684e5461a92681a4000b4032423d92532ec30
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -26,6 +26,8 @@ pub enum PublishedEvent {
     InstanceUpdated(crate::instance::InstanceUpdated),
     /// `cortex.instance.RunFailed`.
     RunFailed(crate::instance::RunFailed),
+    /// `cortex.instance.SnapshotRestored`.
+    SnapshotRestored(crate::instance::SnapshotRestored),
     /// `cortex.instance.SourceAdded`.
     SourceAdded(crate::instance::SourceAdded),
     /// `cortex.instance.SourceDisabled`.
@@ -66,7 +68,7 @@ impl<B> Cortex<B> {
 
 impl<B> Cortex<B>
 where
-    B: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    B: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
 {
     /// Accepts `cortex.instance.AddSource`: runs the behaviour obligation, then publishes the declared events
     /// the outcome carries.
@@ -151,6 +153,25 @@ where
             }
             crate::instance::RemoveInstanceOutcome::WrongState { .. } => {}
             crate::instance::RemoveInstanceOutcome::NoSuchInstance { .. } => {}
+        }
+        Ok(outcome)
+    }
+
+    /// Accepts `cortex.instance.RestoreSnapshot`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn restore_snapshot(&mut self, input: crate::instance::RestoreSnapshot) -> Result<crate::instance::RestoreSnapshotOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.restore_snapshot(input)?;
+        match &outcome {
+            crate::instance::RestoreSnapshotOutcome::BackendUnsupported { .. } => {}
+            crate::instance::RestoreSnapshotOutcome::Busy { .. } => {}
+            crate::instance::RestoreSnapshotOutcome::NoSuchSnapshot { .. } => {}
+            crate::instance::RestoreSnapshotOutcome::Restored { snapshot_restored, .. } => {
+                self.outbox.push(PublishedEvent::SnapshotRestored(snapshot_restored.clone()));
+            }
+            crate::instance::RestoreSnapshotOutcome::NoSuchInstance { .. } => {}
         }
         Ok(outcome)
     }

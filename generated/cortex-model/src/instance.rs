@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588
-// contract digest 47b9eba3ad77dada209fcb9da03489c850f2c30b3e2807d97f0f47acad9cd78e
+// model digest 7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d
+// contract digest add61f1f192f4767e91f96690fe684e5461a92681a4000b4032423d92532ec30
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -1335,6 +1335,61 @@ pub enum RemoveInstanceOutcome {
     },
 }
 
+/// Restore a snapshot — the input of `cortex.instance.RestoreSnapshot`.
+///
+/// Everything it can result in is [`RestoreSnapshotOutcome`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestoreSnapshot {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `snapshot` — `String`.
+    pub snapshot: String,
+}
+
+/// Everything `cortex.instance.RestoreSnapshot` can result in — one variant per declared outcome.
+///
+/// An infrastructure failure is deliberately not in here: a refusal is a fact about the domain,
+/// a transport fault is a fact about the run, and conflating the two is what the declared
+/// outcomes exist to prevent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RestoreSnapshotOutcome {
+    /// `backend-unsupported` — externally decided (The instance's store is on the postgres backend, whose snapshot is the operator's database backup).
+    ///
+    /// Nothing was restored.
+    BackendUnsupported {
+        /// Why it was refused: `cortex.instance.RestoreUnsupported`.
+        error: RestoreUnsupported,
+    },
+    /// `busy` — externally decided (Another cortex command holds the home's lock, or a process other than the viewer holds the store open).
+    ///
+    /// Nothing was restored.
+    Busy {
+        /// Why it was refused: `cortex.instance.InstanceBusy`.
+        error: InstanceBusy,
+    },
+    /// `no-such-snapshot` — externally decided (The instance directory holds no snapshot by this name).
+    ///
+    /// Nothing was restored.
+    NoSuchSnapshot {
+        /// Why it was refused: `cortex.instance.SnapshotNotFound`.
+        error: SnapshotNotFound,
+    },
+    /// `restored` — otherwise.
+    ///
+    /// The store and the instance state were snapshotted as `<ms>-before-restore`, then put back to the snapshot's copies: every source's seen state and the known entity names included, so the next runs apply again what the undone runs applied. A viewer that was running was stopped first and started again after.
+    Restored {
+        /// The `cortex.instance.SnapshotRestored` this outcome publishes.
+        snapshot_restored: SnapshotRestored,
+    },
+    /// `no-such-instance` — for an identity no record carries.
+    ///
+    /// Nothing was restored.
+    NoSuchInstance {
+        /// Why it was refused: `cortex.instance.InstanceNotFound`.
+        error: InstanceNotFound,
+    },
+}
+
 /// Run a source once — the input of `cortex.instance.RunSource`.
 ///
 /// Everything it can result in is [`RunSourceOutcome`].
@@ -1481,6 +1536,15 @@ pub struct RunFailed {
     pub reason: String,
 }
 
+/// SnapshotRestored — the event `cortex.instance.SnapshotRestored`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnapshotRestored {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `snapshot` — `String`.
+    pub snapshot: String,
+}
+
 /// SourceAdded — the event `cortex.instance.SourceAdded`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceAdded {
@@ -1555,6 +1619,15 @@ pub struct FetchFailed {
     pub reason: String,
 }
 
+/// The declared error `cortex.instance.InstanceBusy`.
+///
+/// Another cortex command holds the home's lock, or a process other than the viewer holds the store open; nothing was restored.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstanceBusy {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
 /// The declared error `cortex.instance.InstanceNotActive`.
 ///
 /// The instance is removed, so nothing changed.
@@ -1582,6 +1655,15 @@ pub struct NameTaken {
     pub name: InstanceName,
 }
 
+/// The declared error `cortex.instance.RestoreUnsupported`.
+///
+/// The instance's store is on the postgres backend: its snapshot is the operator's database backup, which cortex neither takes nor restores.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestoreUnsupported {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+}
+
 /// The declared error `cortex.instance.SeedChangeRefused`.
 ///
 /// An update may change sources, model and serve settings only; the seed of an existing store cannot change.
@@ -1598,6 +1680,15 @@ pub struct SeedChangeRefused {
 pub struct SeedRefused {
     /// `reason` — `String`.
     pub reason: String,
+}
+
+/// The declared error `cortex.instance.SnapshotNotFound`.
+///
+/// The instance directory holds no snapshot by this name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnapshotNotFound {
+    /// `snapshot` — `String`.
+    pub snapshot: String,
 }
 
 /// The declared error `cortex.instance.SourceDisabledError`.
@@ -1734,6 +1825,17 @@ pub mod obligations {
         ///
         /// `Err` is the typed refusal of a request the model declares no outcome for.
         fn remove_instance(&mut self, input: super::RemoveInstance) -> Result<super::RemoveInstanceOutcome, crate::obligation::UnmetObligation>;
+    }
+
+    /// The behaviour `cortex.instance.RestoreSnapshot` — generated.
+    ///
+    /// The specification fully determines it: [`crate::behaviour::Generated`] implements it
+    /// over the storage and context ports. Implement it yourself to replace that behaviour.
+    pub trait RestoreSnapshotBehavior {
+        /// Decides and enacts exactly one declared outcome of `cortex.instance.RestoreSnapshot`.
+        ///
+        /// `Err` is the typed refusal of a request the model declares no outcome for.
+        fn restore_snapshot(&mut self, input: super::RestoreSnapshot) -> Result<super::RestoreSnapshotOutcome, crate::obligation::UnmetObligation>;
     }
 
     /// The behaviour `cortex.instance.RunSource` — an implementation obligation.

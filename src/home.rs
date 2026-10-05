@@ -50,6 +50,21 @@ impl Home {
         Ok(file)
     }
 
+    /// The lock [`Home::lock`] takes, without waiting: `None` while another command holds it.
+    pub fn try_lock(&self) -> std::io::Result<Option<File>> {
+        std::fs::create_dir_all(&self.root)?;
+        let file = File::options()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(self.root.join("cortex.lock"))?;
+        match file.try_lock() {
+            Ok(()) => Ok(Some(file)),
+            Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+            Err(std::fs::TryLockError::Error(e)) => Err(e),
+        }
+    }
+
     pub fn load_registry(&self) -> Result<Registry, String> {
         let path = self.registry_path();
         let text = match std::fs::read_to_string(&path) {
