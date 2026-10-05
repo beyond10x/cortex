@@ -27,6 +27,13 @@ fn executable(path: &Path, body: &str) {
     assert!(status.success());
 }
 
+/// The CLI's envelope around an adapter answer: `result.result` is the answer as a JSON string.
+fn answer(pages: &str) -> String {
+    serde_json::json!({"ok": true, "result": {"adapter": "tavily", "operation": "websearch.search",
+        "revision": "r", "result": pages}})
+    .to_string()
+}
+
 struct World {
     _tmp: tempfile::TempDir,
     root: PathBuf,
@@ -53,20 +60,22 @@ impl World {
         let root = tmp.path().to_path_buf();
         let bin = root.join("bin");
         std::fs::create_dir_all(&bin).unwrap();
-        std::fs::write(root.join("pages.json"), PAGES).unwrap();
-        // connectors: one live tavily connection `conn_test`; `invoke` answers pages.json, or
-        // fails when the file `fail` exists.
+        std::fs::write(root.join("answer.json"), answer(PAGES)).unwrap();
+        // connectors: one tavily connection `conn_test`, pending until revalidated; `invoke`
+        // answers answer.json, or fails when the file `fail` exists.
         executable(
             &bin.join("connectors"),
             &format!(
                 r#"R="{root}"
 case "$*" in
-  *"connections list"*) echo '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily","connection":"conn_test","state":"ready"}}]}}}}' ;;
+  *"connections list"*) if [ -e "$R/revalidated" ]; then S=ready; else S=pending; fi; printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily","connection":"conn_test","state":"%s","revision":"rev1"}}]}}}}' "$S" ;;
+  *"connections revalidate"*) echo "$*" >> "$R/revalidations.log"; touch "$R/revalidated"; echo '{{"ok":true,"result":{{}}}}' ;;
   *"operations describe"*) echo '{{"ok":true,"result":{{"schema":"s","revision":"r"}}}}' ;;
   *"operations invoke"*)
     echo "$*" >> "$R/invocations.log"
+    if [ -e "$R/lapse" ]; then rm "$R/lapse"; echo '{{"ok":false,"error":{{"code":"failure","data":{{"code":"not_granted","stage":"admission"}}}}}}' >&2; exit 1; fi
     if [ -e "$R/fail" ]; then echo '{{"ok":false,"error":{{"code":"failure","data":{{"code":"unavailable","stage":"execution"}}}}}}'; exit 1; fi
-    printf '{{"ok":true,"result":%s}}' "$(cat "$R/pages.json")" ;;
+    cat "$R/answer.json" ;;
   *) echo '{{"ok":false}}'; exit 2 ;;
 esac
 "#,
@@ -222,6 +231,10 @@ fn an_instance_is_created_run_twice_and_removed() {
         "the web source invokes the websearch contract: {invoked}"
     );
     assert!(invoked.contains(r#""content":"full""#), "{invoked}");
+    // The connection was pending, so the run revalidated it once before reading.
+    let revalidated = w.lines("revalidations.log");
+    assert_eq!(revalidated.len(), 1, "{revalidated:?}");
+    assert!(revalidated[0].contains("--connection conn_test --expected-revision rev1"));
     assert!(w.head("t") > seeded, "the run committed to the store");
 
     // The model call is isolated: no tools, no user settings, no API key.
@@ -246,11 +259,11 @@ fn an_instance_is_created_run_twice_and_removed() {
 
     // A changed page is extracted again, and re-declaring known types applies cleanly.
     std::fs::write(
-        w.root.join("pages.json"),
-        PAGES.replace(
+        w.root.join("answer.json"),
+        answer(&PAGES.replace(
             "also develops the Gadget runtime",
             "now develops the Gizmo runtime",
-        ),
+        )),
     )
     .unwrap();
     let (code, changed) = w.cortex(&["run", "t/news"]);
@@ -337,4 +350,28 @@ fn two_failed_runs_in_a_row_disable_a_source_until_it_is_enabled() {
     );
     let (code, ran) = w.cortex(&["run", "f/news"]);
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+}
+
+#[test]
+fn evidence_that_lapses_before_admission_is_renewed_once_and_the_read_retried() {
+    let w = World::new();
+    let spec = w.spec("l", "conn_test");
+    let (code, _) = w.cortex(&["create", "--spec", spec.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0);
+    // Listed ready, refused at admission once (on stderr, as the CLI does).
+    std::fs::write(w.root.join("revalidated"), "").unwrap();
+    std::fs::write(w.root.join("lapse"), "").unwrap();
+    let (code, ran) = w.cortex(&["run", "l/news"]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
+    assert_eq!(
+        w.lines("revalidations.log").len(),
+        1,
+        "renewed exactly once"
+    );
+    assert_eq!(
+        w.lines("invocations.log").len(),
+        2,
+        "the read was retried once"
+    );
 }

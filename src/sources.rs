@@ -40,7 +40,7 @@ impl From<InvokeError> for FetchError {
     fn from(e: InvokeError) -> Self {
         match e {
             InvokeError::Missing(m) => FetchError::Missing(m),
-            InvokeError::Failed(m) => FetchError::Failed(m),
+            InvokeError::Failed(m) | InvokeError::Lapsed(m) => FetchError::Failed(m),
         }
     }
 }
