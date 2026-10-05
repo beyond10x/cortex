@@ -10,7 +10,12 @@ relations:
 - depends_on: story:extraction-links-facts
 - depends_on: story:timer-runs-unattended
 - depends_on: story:seen-documents-modelled
-revision: 5
+scope:
+- confidence: inferred
+  path: examples/agent-tooling.yaml
+- confidence: inferred
+  path: examples/seed/agent-tooling.yaml
+revision: 8
 ---
 ## Outcome
 
@@ -51,9 +56,11 @@ Tavily credits and model cost for the 7 days are recorded beside the result in a
 
 ## Concurrency
 
-The EKR pin and the evidence kind stay fixed for the 7 days. `story:web-pages-cited-as-urls`
-(which moves the pin in `src/main.rs:89` and writes `!Url` evidence) lands before day 1 or after
-day 8, never during the run.
+The instance runs one cortex binary for the whole 7 days: built once from `main` on day 1, installed
+to `~/.local/bin/cortex`, and not rebuilt or replaced until day 8. Stories that land on `main`
+meanwhile (in the computed waves: `story:run-snapshots`, `story:adopt-existing-store`, and
+`story:web-pages-cited-as-urls`, which also moves the EKR pin) do not reach the running instance.
+The EKR binary and the evidence kind stay as they were on day 1.
 
 ## Depends on
 

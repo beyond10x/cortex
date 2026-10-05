@@ -2,13 +2,17 @@
 format: aep.planning-md/3
 id: story:extraction-links-facts
 kind: story
-status: draft
+status: implemented
 title: Extraction produces edges between the nodes it finds
 relations:
 - decomposes: epic:first-web-instance
 - serves: vision:self-updating-instances
 - depends_on: story:ci-runs-task-check
-revision: 2
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T08:53:49Z", actor: "agent:claude", revision: 3, decided_on: {"recorded":{"test_result":3}}}
+- {from: "proposed", to: "active", at: "2026-10-05T08:53:49Z", actor: "agent:claude", revision: 4, decided_on: {"recorded":{"test_result":3}}}
+- {from: "active", to: "implemented", at: "2026-10-05T08:56:26Z", actor: "agent:claude", revision: 6, decided_on: {"recorded":{"test_result":3}}}
 ---
 ## Outcome
 
@@ -39,8 +43,11 @@ The system prompt in `src/extract.rs` asks for no relations at all.
 ## Acceptance
 
 On the same 8 documents the store gains at least 8 `Relation` assertions (1 per document on
-average; baseline 4), with model cost under $0.15 for the replay. Before and after counts from
-`ekr snapshot` recorded as `test_result` evidence.
+average; baseline 4), with model cost per replay no higher than the baseline replay of the same
+documents (measured 2026-10-05: $0.1716 and $0.1427 before, $0.1700 and $0.1702 after). The bound
+was first written as "under $0.15", below what the replay already cost before the change; the
+operator replaced it on 2026-10-05. Before and after counts from `ekr snapshot` recorded as
+`test_result` evidence.
 
 ## Scope
 

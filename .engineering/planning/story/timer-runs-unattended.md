@@ -9,7 +9,21 @@ relations:
 - serves: vision:self-updating-instances
 - depends_on: story:ci-runs-task-check
 - depends_on: story:seen-documents-modelled
-revision: 2
+- depends_on: story:store-backend-per-instance
+scope:
+- confidence: cited
+  path: README.md
+- confidence: inferred
+  path: src/home.rs
+- confidence: inferred
+  path: src/ports.rs
+- confidence: inferred
+  path: src/run.rs
+- confidence: cited
+  path: src/schedule.rs
+- confidence: inferred
+  path: src/state.rs
+revision: 8
 ---
 ## Outcome
 
