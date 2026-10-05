@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85
-  contract digest b949168dd73a8a82c270bfa858354cf5311edabd072da4e2c85eaf684999ade6
+  model digest dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588
+  contract digest 47b9eba3ad77dada209fcb9da03489c850f2c30b3e2807d97f0f47acad9cd78e
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-92 capabilities: **88 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+95 capabilities: **91 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -18,6 +18,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.ChildCall` |
 | domain type | `cortex.instance.ConnectorsSource` |
 | domain type | `cortex.instance.CrawlPolicy` |
+| domain type | `cortex.instance.DocumentId` |
 | domain type | `cortex.instance.DropPolicy` |
 | domain type | `cortex.instance.EkrPin` |
 | domain type | `cortex.instance.FetchPolicy` |
@@ -45,6 +46,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.SearchPolicy` |
 | domain type | `cortex.instance.SearchTopic` |
 | domain type | `cortex.instance.SeedSpec` |
+| domain type | `cortex.instance.SeenDocument.State` |
 | domain type | `cortex.instance.ServeSpec` |
 | domain type | `cortex.instance.SitesInput` |
 | domain type | `cortex.instance.SnapshotPolicy` |
@@ -64,6 +66,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.WebMode` |
 | domain type | `cortex.instance.WebSource` |
 | entity lifecycle | `cortex.instance.Instance` |
+| entity lifecycle | `cortex.instance.SeenDocument` |
 | entity lifecycle | `cortex.instance.Source` |
 | command contract | `cortex.instance.AddSource` |
 | command behaviour | `cortex.instance.AddSource` |

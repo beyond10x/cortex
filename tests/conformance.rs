@@ -20,9 +20,10 @@ use serde_json::{json, Value};
 type App = Cortex<Generated<Ports>>;
 
 struct Last {
-    input: Value,
     outcome: String,
     error: Option<String>,
+    /// The error's fields, as JSON, or null when no error was answered.
+    error_fields: Value,
     events: Vec<(String, Value)>,
 }
 
@@ -178,24 +179,30 @@ impl Scenario {
             .unwrap_or_default();
         let s = |k: &str| text(input.get(k).unwrap_or(&Value::Null));
         let app = &mut self.app;
-        let (outcome, error): (&str, Option<&str>) = match command {
+        let (outcome, error): (&str, Option<(&str, Value)>) = match command {
             "cortex.instance.CreateInstance" => match app
                 .create_instance(m::CreateInstance {
                     name: m::InstanceName(s("name")),
                     description: s("description"),
                     model: s("model"),
                     ekr_version: s("ekr_version"),
+                    seed_digest: s("seed_digest"),
                     spec: placeholder_spec(),
                 })
                 .unwrap()
             {
-                m::CreateInstanceOutcome::NameTaken { .. } => ("name-taken", Some("NameTaken")),
-                m::CreateInstanceOutcome::ConnectionMissing { .. } => {
-                    ("connection-missing", Some("ConnectionMissing"))
-                }
-                m::CreateInstanceOutcome::SeedRefused { .. } => {
-                    ("seed-refused", Some("SeedRefused"))
-                }
+                m::CreateInstanceOutcome::NameTaken { error } => (
+                    "name-taken",
+                    Some(("NameTaken", json!({"name": error.name.0}))),
+                ),
+                m::CreateInstanceOutcome::ConnectionMissing { error } => (
+                    "connection-missing",
+                    Some(("ConnectionMissing", json!({"connection": error.connection}))),
+                ),
+                m::CreateInstanceOutcome::SeedRefused { error } => (
+                    "seed-refused",
+                    Some(("SeedRefused", json!({"reason": error.reason}))),
+                ),
                 m::CreateInstanceOutcome::Created { .. } => ("created", None),
             },
             "cortex.instance.UpdateInstance" => match app
@@ -204,23 +211,26 @@ impl Scenario {
                     description: s("description"),
                     model: s("model"),
                     spec: placeholder_spec(),
-                    seed_changed: input
-                        .get("seed_changed")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false),
+                    seed_digest: s("seed_digest"),
                 })
                 .unwrap()
             {
-                m::UpdateInstanceOutcome::SeedChangeRefused { .. } => {
-                    ("seed-change-refused", Some("SeedChangeRefused"))
-                }
+                m::UpdateInstanceOutcome::SeedChangeRefused { error } => (
+                    "seed-change-refused",
+                    Some(("SeedChangeRefused", json!({"name": error.name.0}))),
+                ),
                 m::UpdateInstanceOutcome::Updated { .. } => ("updated", None),
-                m::UpdateInstanceOutcome::NotActive { .. } => {
-                    ("not-active", Some("InstanceNotActive"))
-                }
-                m::UpdateInstanceOutcome::NoSuchInstance { .. } => {
-                    ("no-such-instance", Some("InstanceNotFound"))
-                }
+                m::UpdateInstanceOutcome::NotActive { error } => (
+                    "not-active",
+                    Some((
+                        "InstanceNotActive",
+                        json!({"state": home::instance_state_name(error.state)}),
+                    )),
+                ),
+                m::UpdateInstanceOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
             },
             "cortex.instance.RemoveInstance" => match app
                 .remove_instance(m::RemoveInstance {
@@ -229,12 +239,17 @@ impl Scenario {
                 .unwrap()
             {
                 m::RemoveInstanceOutcome::Removed { .. } => ("removed", None),
-                m::RemoveInstanceOutcome::WrongState { .. } => {
-                    ("wrong-state", Some("InstanceNotActive"))
-                }
-                m::RemoveInstanceOutcome::NoSuchInstance { .. } => {
-                    ("no-such-instance", Some("InstanceNotFound"))
-                }
+                m::RemoveInstanceOutcome::WrongState { error } => (
+                    "wrong-state",
+                    Some((
+                        "InstanceNotActive",
+                        json!({"state": home::instance_state_name(error.state)}),
+                    )),
+                ),
+                m::RemoveInstanceOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
             },
             "cortex.instance.AddSource" => match app
                 .add_source(m::AddSource {
@@ -259,16 +274,30 @@ impl Scenario {
                 })
                 .unwrap()
             {
-                m::RunSourceOutcome::FetchFailed { .. } => ("fetch-failed", Some("FetchFailed")),
-                m::RunSourceOutcome::ExtractionFailed { .. } => {
-                    ("extraction-failed", Some("ExtractionFailed"))
-                }
-                m::RunSourceOutcome::ApplyRefused { .. } => ("apply-refused", Some("ApplyRefused")),
+                m::RunSourceOutcome::FetchFailed { error } => (
+                    "fetch-failed",
+                    Some(("FetchFailed", json!({"reason": error.reason}))),
+                ),
+                m::RunSourceOutcome::ExtractionFailed { error } => (
+                    "extraction-failed",
+                    Some(("ExtractionFailed", json!({"reason": error.reason}))),
+                ),
+                m::RunSourceOutcome::ApplyRefused { error } => (
+                    "apply-refused",
+                    Some(("ApplyRefused", json!({"reason": error.reason}))),
+                ),
                 m::RunSourceOutcome::Ran { .. } => ("ran", None),
-                m::RunSourceOutcome::Disabled { .. } => ("disabled", Some("SourceDisabledError")),
-                m::RunSourceOutcome::NoSuchSource { .. } => {
-                    ("no-such-source", Some("SourceNotFound"))
-                }
+                m::RunSourceOutcome::Disabled { error } => (
+                    "disabled",
+                    Some((
+                        "SourceDisabledError",
+                        json!({"source_id": error.source_id.0}),
+                    )),
+                ),
+                m::RunSourceOutcome::NoSuchSource { error } => (
+                    "no-such-source",
+                    Some(("SourceNotFound", json!({"source_id": error.source_id.0}))),
+                ),
             },
             "cortex.instance.RecordFailure" => match app
                 .record_failure(m::RecordFailure {
@@ -279,12 +308,17 @@ impl Scenario {
             {
                 m::RecordFailureOutcome::Disabled { .. } => ("disabled", None),
                 m::RecordFailureOutcome::Counted { .. } => ("counted", None),
-                m::RecordFailureOutcome::AlreadyDisabled { .. } => {
-                    ("already-disabled", Some("SourceDisabledError"))
-                }
-                m::RecordFailureOutcome::NoSuchSource { .. } => {
-                    ("no-such-source", Some("SourceNotFound"))
-                }
+                m::RecordFailureOutcome::AlreadyDisabled { error } => (
+                    "already-disabled",
+                    Some((
+                        "SourceDisabledError",
+                        json!({"source_id": error.source_id.0}),
+                    )),
+                ),
+                m::RecordFailureOutcome::NoSuchSource { error } => (
+                    "no-such-source",
+                    Some(("SourceNotFound", json!({"source_id": error.source_id.0}))),
+                ),
             },
             "cortex.instance.EnableSource" => match app
                 .enable_source(m::EnableSource {
@@ -293,12 +327,17 @@ impl Scenario {
                 .unwrap()
             {
                 m::EnableSourceOutcome::Enabled { .. } => ("enabled", None),
-                m::EnableSourceOutcome::WrongState { .. } => {
-                    ("wrong-state", Some("SourceNotDisabled"))
-                }
-                m::EnableSourceOutcome::NoSuchSource { .. } => {
-                    ("no-such-source", Some("SourceNotFound"))
-                }
+                m::EnableSourceOutcome::WrongState { error } => (
+                    "wrong-state",
+                    Some((
+                        "SourceNotDisabled",
+                        json!({"state": home::source_state_name(error.state)}),
+                    )),
+                ),
+                m::EnableSourceOutcome::NoSuchSource { error } => (
+                    "no-such-source",
+                    Some(("SourceNotFound", json!({"source_id": error.source_id.0}))),
+                ),
             },
             other => panic!("unknown command {other}"),
         };
@@ -307,9 +346,9 @@ impl Scenario {
         // A forced branch holds for the one command that follows it.
         self.shared.borrow_mut().external.clear();
         self.last = Some(Last {
-            input: Value::Object(input),
             outcome: outcome.to_string(),
-            error: error.map(|e| format!("cortex.instance.{e}")),
+            error: error.as_ref().map(|(e, _)| format!("cortex.instance.{e}")),
+            error_fields: error.map(|(_, f)| f).unwrap_or(Value::Null),
             events,
         });
     }
@@ -327,6 +366,7 @@ impl Scenario {
                         "description": i.data.description,
                         "model": i.data.model,
                         "ekr_version": i.data.ekr_version,
+                        "seed_digest": i.data.seed_digest,
                         "state": home::instance_state_name(i.state),
                     })
                 })
@@ -379,6 +419,16 @@ impl Scenario {
             }
             "expect_error" => {
                 assert_eq!(last().error.as_deref(), step["error"].as_str());
+                if let Some(fields) = step["fields"].as_object() {
+                    for (field, want) in fields {
+                        let got = &last().error_fields[field];
+                        assert!(
+                            same(got, want),
+                            "{}.{field}: {got} != {want}",
+                            step["error"]
+                        );
+                    }
+                }
             }
             "expect_no_error" => assert_eq!(last().error, None),
             "expect_event" => {
@@ -389,8 +439,9 @@ impl Scenario {
                     .find(|(n, _)| n == name)
                     .unwrap_or_else(|| panic!("{name} was not published"));
                 if let Some(fields) = step["payload"].as_object() {
-                    for (field, input_field) in fields {
-                        let want = &last().input[input_field.as_str().unwrap()];
+                    // Each value is the literal the field must carry (`ess-conformance`'s
+                    // `ExpectEvent.payload`), not the name of an input field.
+                    for (field, want) in fields {
                         assert!(
                             same(&payload[field], want),
                             "{name}.{field}: {} != {want}",
@@ -445,6 +496,20 @@ impl Scenario {
                             rows.iter()
                                 .any(|r| fields.iter().all(|(k, v)| same(&r[k], v))),
                             "{view} holds no row with {fields:?}: {rows:?}"
+                        );
+                    }
+                    "excludes" => {
+                        let fields: Vec<(String, Value)> = expectation["fields"]
+                            .as_object()
+                            .unwrap()
+                            .iter()
+                            .map(|(k, v)| (k.clone(), self.resolve(v)))
+                            .collect();
+                        assert!(
+                            !rows
+                                .iter()
+                                .any(|r| fields.iter().all(|(k, v)| same(&r[k], v))),
+                            "{view} holds a row with {fields:?}: {rows:?}"
                         );
                     }
                     "satisfies" => {
@@ -528,7 +593,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        35,
+        34,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

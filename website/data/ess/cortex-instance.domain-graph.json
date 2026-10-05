@@ -20,6 +20,10 @@
         {
           "name": "ekr_version",
           "type": "string"
+        },
+        {
+          "name": "seed_digest",
+          "type": "string"
         }
       ],
       "id": "cortex.instance.Instance",
@@ -47,6 +51,41 @@
         ]
       },
       "name": "Instance"
+    },
+    {
+      "fields": [
+        {
+          "name": "source_id",
+          "type": "SourceId"
+        },
+        {
+          "name": "key",
+          "type": "string"
+        },
+        {
+          "name": "content_hash",
+          "type": "string"
+        },
+        {
+          "name": "applied_at",
+          "type": "integer"
+        }
+      ],
+      "id": "cortex.instance.SeenDocument",
+      "identity": {
+        "name": "document_id",
+        "type": "DocumentId"
+      },
+      "lifecycle": {
+        "initial": "Seen",
+        "states": [
+          "Seen"
+        ],
+        "terminal": [
+          "Seen"
+        ]
+      },
+      "name": "SeenDocument"
     },
     {
       "fields": [
@@ -115,6 +154,14 @@
       "name": "sources",
       "to": "cortex.instance.Source",
       "via": "instance_name"
+    },
+    {
+      "cardinality": "many",
+      "from": "cortex.instance.Source",
+      "kind": "owns",
+      "name": "seen",
+      "to": "cortex.instance.SeenDocument",
+      "via": "source_id"
     }
   ]
 }

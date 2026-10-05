@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest b6310870f027779babbc552b01928ccc94a4334219f5aec56f4b20fd26352d85
-// contract digest b949168dd73a8a82c270bfa858354cf5311edabd072da4e2c85eaf684999ade6
+// model digest dacf0d6d0f34b23ae13797d59a7e909e277ba6ef222144755c7e307c76b38588
+// contract digest 47b9eba3ad77dada209fcb9da03489c850f2c30b3e2807d97f0f47acad9cd78e
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -72,6 +72,10 @@ pub struct CrawlPolicy {
     /// `allow_external` — `Boolean`.
     pub allow_external: bool,
 }
+
+/// DocumentId — `cortex.instance.DocumentId`: a distinct wrapper around `String`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocumentId(pub String);
 
 /// DropPolicy — `cortex.instance.DropPolicy`: one of a closed set of names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -404,6 +408,16 @@ pub struct SeedSpec {
     pub documents: Vec<String>,
 }
 
+/// The states of `cortex.instance.SeenDocument`, as runtime values.
+///
+/// Synthesised from the lifecycle, so the two cannot disagree. Which *moves* are legal is not
+/// carried here — it is carried by `SeenDocument<S>`, where an undeclared move does not compile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SeenDocumentState {
+    /// `Seen`.
+    Seen,
+}
+
 /// ServeSpec — `cortex.instance.ServeSpec`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServeSpec {
@@ -602,6 +616,8 @@ pub struct InstanceData {
     pub model: String,
     /// `ekr_version` — `String`.
     pub ekr_version: String,
+    /// `seed_digest` — `String`.
+    pub seed_digest: String,
 }
 
 /// The states of `cortex.instance.Instance`, at the type level.
@@ -743,6 +759,160 @@ impl AnyInstance {
             },
             Self::Removed(instance) => InstanceSnapshot {
                 state: InstanceState::Removed,
+                data: instance.into_data(),
+            },
+        }
+    }
+}
+
+/// What SeenDocument — `cortex.instance.SeenDocument` — holds, apart from where it is in its lifecycle.
+///
+/// The identity and every declared field. The state is deliberately not one: inside the domain it
+/// is carried by the type parameter of [`SeenDocument<S>`], and at a boundary by [`SeenDocumentSnapshot::state`].
+///
+/// Every value satisfies `applied_at >= 0` — checked by [`SeenDocumentData::broken_invariant`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SeenDocumentData {
+    /// The identity: `document_id` — `cortex.instance.DocumentId`.
+    pub document_id: DocumentId,
+    /// `source_id` — `cortex.instance.SourceId`.
+    ///
+    /// Carries `seen`: `cortex.instance.Source` owns many `cortex.instance.SeenDocument`.
+    pub source_id: SourceId,
+    /// `key` — `String`.
+    pub key: String,
+    /// `content_hash` — `String`.
+    pub content_hash: String,
+    /// `applied_at` — `Integer`.
+    pub applied_at: i64,
+}
+
+impl SeenDocumentData {
+    /// The first declared invariant of `cortex.instance.SeenDocument` this value breaks, as the specification declares it,
+    /// or `None` when it breaks none.
+    ///
+    /// An invariant is broken only when it is false of this value. One that reads something
+    /// absent — an empty `Optional`, a list position past the end, or `state`, which this
+    /// type does not hold — decides nothing, as the conformance interpreter reads it.
+    pub fn broken_invariant(&self) -> Option<&'static str> {
+        use crate::primitives::invariant as iv;
+        if iv::broken(iv::compare(Some(iv::Fact::integer(self.applied_at)), iv::Op::Ge, iv::Fact::number("0"), false, true)) {
+            return Some("applied_at >= 0");
+        }
+        None
+    }
+}
+
+/// The states of `cortex.instance.SeenDocument`, at the type level.
+///
+/// One marker type per declared state, sealed: a state the lifecycle does not declare cannot
+/// implement [`Marker`](seen_document_state::Marker), so [`SeenDocument<S>`](SeenDocument) can only ever rest in a real state.
+pub mod seen_document_state {
+    /// Closes [`Marker`] over the declared states.
+    mod sealed {
+        /// Implemented only by the marker types beside this module.
+        pub trait Sealed {}
+        impl Sealed for super::Seen {}
+    }
+
+    /// A declared state of `SeenDocument`, as a type.
+    pub trait Marker: sealed::Sealed {
+        /// The same state, as the runtime value.
+        const STATE: super::SeenDocumentState;
+    }
+
+    /// `Seen`. Where a new instance starts.
+    pub struct Seen;
+
+    impl Marker for Seen {
+        const STATE: super::SeenDocumentState = super::SeenDocumentState::Seen;
+    }
+}
+
+/// SeenDocument — `cortex.instance.SeenDocument` — with its lifecycle state carried by the type.
+///
+/// The one constructor rests in `Seen`, and the only way to change `S` is a method generated from
+/// a declared transition. A move the specification does not declare is therefore not an error
+/// case: it does not compile. Where the state is data — wire, storage — use [`SeenDocumentSnapshot`]
+/// and [`SeenDocumentSnapshot::refine`].
+pub struct SeenDocument<S: seen_document_state::Marker> {
+    data: SeenDocumentData,
+    state: core::marker::PhantomData<S>,
+}
+
+impl<S: seen_document_state::Marker> SeenDocument<S> {
+    /// The state this instance rests in, as the runtime value.
+    pub fn state(&self) -> SeenDocumentState {
+        S::STATE
+    }
+
+    /// What it holds.
+    pub fn data(&self) -> &SeenDocumentData {
+        &self.data
+    }
+
+    /// Hands the data back, giving up the typed state.
+    pub fn into_data(self) -> SeenDocumentData {
+        self.data
+    }
+}
+
+impl SeenDocument<seen_document_state::Seen> {
+    /// A new instance, resting in `Seen` — the only state the lifecycle starts one in.
+    pub fn new(data: SeenDocumentData) -> Self {
+        Self {
+            data,
+            state: core::marker::PhantomData,
+        }
+    }
+}
+
+/// `cortex.instance.SeenDocument` as it crosses a boundary: the state as a value beside the data.
+///
+/// Wire and storage know states only at runtime; [`SeenDocumentSnapshot::refine`] is the one door back
+/// into the typed lifecycle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SeenDocumentSnapshot {
+    /// Where the instance is in its lifecycle.
+    pub state: SeenDocumentState,
+    /// What it holds.
+    pub data: SeenDocumentData,
+}
+
+/// An `SeenDocument` in whichever declared state it was found.
+pub enum AnySeenDocument {
+    /// Resting in `Seen`.
+    Seen(SeenDocument<seen_document_state::Seen>),
+}
+
+impl SeenDocumentSnapshot {
+    /// Refines the runtime state into the typed one.
+    ///
+    /// Total: every declared state has an arm, and an undeclared state cannot reach here because
+    /// `SeenDocumentState` cannot spell one.
+    pub fn refine(self) -> AnySeenDocument {
+        match self.state {
+            SeenDocumentState::Seen => AnySeenDocument::Seen(SeenDocument {
+                data: self.data,
+                state: core::marker::PhantomData,
+            }),
+        }
+    }
+}
+
+impl AnySeenDocument {
+    /// The state, as the runtime value.
+    pub fn state(&self) -> SeenDocumentState {
+        match self {
+            Self::Seen(_) => SeenDocumentState::Seen,
+        }
+    }
+
+    /// Back to the boundary shape.
+    pub fn snapshot(self) -> SeenDocumentSnapshot {
+        match self {
+            Self::Seen(instance) => SeenDocumentSnapshot {
+                state: SeenDocumentState::Seen,
                 data: instance.into_data(),
             },
         }
@@ -996,6 +1166,8 @@ pub struct CreateInstance {
     pub model: String,
     /// `ekr_version` — `String`.
     pub ekr_version: String,
+    /// `seed_digest` — `String`.
+    pub seed_digest: String,
     /// `spec` — `cortex.instance.InstanceSpec`.
     pub spec: InstanceSpec,
 }
@@ -1007,7 +1179,7 @@ pub struct CreateInstance {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CreateInstanceOutcome {
-    /// `name-taken` — externally decided (The home already holds an instance with this name).
+    /// `name-taken` — for an identity a record already carries.
     ///
     /// Nothing was created.
     NameTaken {
@@ -1236,8 +1408,8 @@ pub struct UpdateInstance {
     pub model: String,
     /// `spec` — `cortex.instance.InstanceSpec`.
     pub spec: InstanceSpec,
-    /// `seed_changed` — `Boolean`.
-    pub seed_changed: bool,
+    /// `seed_digest` — `String`.
+    pub seed_digest: String,
 }
 
 /// Everything `cortex.instance.UpdateInstance` can result in — one variant per declared outcome.
@@ -1247,26 +1419,26 @@ pub struct UpdateInstance {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UpdateInstanceOutcome {
-    /// `seed-change-refused` — when `seed_changed == true`.
+    /// `seed-change-refused` — when the existing subject's stored fields satisfy `seed_digest != input.seed_digest`.
     ///
     /// Nothing changed.
     SeedChangeRefused {
         /// Why it was refused: `cortex.instance.SeedChangeRefused`.
         error: SeedChangeRefused,
     },
-    /// `updated` — when the existing subject is in Active.
-    ///
-    /// The frozen spec is replaced; sources, model and serve settings take effect on the next run.
-    Updated {
-        /// The `cortex.instance.InstanceUpdated` this outcome publishes.
-        instance_updated: InstanceUpdated,
-    },
-    /// `not-active` — otherwise.
+    /// `not-active` — when the existing subject's stored fields satisfy `state == Removed`.
     ///
     /// The instance is removed; nothing changed.
     NotActive {
         /// Why it was refused: `cortex.instance.InstanceNotActive`.
         error: InstanceNotActive,
+    },
+    /// `updated` — otherwise.
+    ///
+    /// The frozen spec is replaced; sources, model and serve settings take effect on the next run.
+    Updated {
+        /// The `cortex.instance.InstanceUpdated` this outcome publishes.
+        instance_updated: InstanceUpdated,
     },
     /// `no-such-instance` — for an identity no record carries.
     ///
@@ -1470,6 +1642,8 @@ pub struct Instances {
     pub model: String,
     /// `ekr_version` — `String`.
     pub ekr_version: String,
+    /// `seed_digest` — `String`.
+    pub seed_digest: String,
     /// `state` — `cortex.instance.Instance.State`.
     pub state: InstanceState,
 }
