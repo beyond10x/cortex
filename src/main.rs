@@ -821,6 +821,14 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
                 "masked": report.masked,
                 "stopped": report.stopped,
             });
+            // Present only when a document was cut: a run that cut nothing reports as before.
+            if report.truncated > 0 {
+                detail["truncated"] = json!(report.truncated);
+            }
+            // Present only when a parent was skipped: a run that skipped none reports as before.
+            if !report.skipped.is_empty() {
+                detail["skipped"] = json!(report.skipped);
+            }
             // Present only when the policy pseudonymises: a spec file without one reports as
             // before.
             if let Some(redacted) = &report.redacted {

@@ -119,14 +119,79 @@ The records of any operation a Connectors adapter admits.
 | field | meaning |
 |---|---|
 | `adapter`, `connection`, `operation` | what to invoke |
-| `inputs` | a list of JSON inputs; the operation is invoked once per input |
+| `inputs` | a list of JSON inputs; the operation is invoked once per input. `{since}` and `{until}` in a string value are replaced by the run's window |
 | `records` | dotted path to the array of records in the answer, for example `issues` |
 | `id` | dotted path to a record's stable id |
 | `time` | optional dotted path to the record's publication time |
 | `text` | templates whose `{a.b}` placeholders are filled from the record; the non-empty results, joined, are the document's text |
+| `paging` | optional: how to read every page of the answer (below) |
+| `child` | optional: an operation invoked once per record, whose records are added to that record's text (below) |
 
 A record without an id, or whose text is empty, is skipped. A document's key is
-`<adapter>:<operation>:<id>`.
+`<adapter>:<operation>:<id>`; a key read twice in one run counts once.
+
+**The window.** `{since}` and `{until}` are instants in RFC 3339, in UTC and to the second
+(`2026-10-05T12:34:56Z`). `{until}` is the start of this run. `{since}` is 5 minutes before the
+start of the source's last successful run, or, before the first, the start of this run minus the
+policy's `refresh_after_days`. The 5 minutes cover a record a provider shows late; a document read
+again in them is applied again only if its text changed.
+
+With `refresh_after_days: 0` the first run's window is empty (`{since}` equals `{until}`), so
+records older than the 5 minutes before that run are never read. Set `refresh_after_days` to 1 or
+more to read that much history on the first run.
+
+A run is successful when it applied every new or changed document it fetched and read every
+record. A run that is not successful (it stopped early, failed, left documents beyond
+`max_documents_per_run`, or left records unread) keeps its `{since}` as the lower bound of every
+later run until one succeeds, so the next run asks for them again. That holds before the first
+successful run too: the window does not slide with the clock. Records are left unread by a walk
+that reaches `max_pages` with pages left, by an empty page that still names a next one, and by a
+child call that fails for a record, which leaves that record out of the run. Each of these says so
+in `stopped`, in the run's result and in `cortex.log`; the other records still apply.
+
+A child call that fails for the same record on 3 runs in a row stops holding the window: from the
+third failure on, the record is left out and named in `skipped` (`<operation>: child call failed
+for <key> on 3 runs; skipped`), in the run's result and in `cortex.log`, but not in `stopped`.
+The call is still tried on every run, and one success resets the count.
+
+A changed document whose last application is younger than `refresh_after_days` is held back, not
+lost. Every run works out, from the documents it holds back, the earliest window start that covers
+each held change: the earliest last application among them, less the 5 minutes. No later run's
+`{since}` is after that; a run that holds nothing back clears it.
+
+**`paging`** has the fields `style` (`PageNumber`, `Token` or `Keyset`), `param` (the dotted path
+of the input field to advance), `next` (optional, the dotted path in the answer of the next page,
+token or key) and `max_pages`. With `next`, its value is the next `param`, whatever the style.
+Without it, a `PageNumber` walk asks for the page after the current one (the input's `param`, or
+1 when absent), and a `Token` or `Keyset` walk reads one page. A walk stops at an empty page, at a
+missing `next`, at a page or token it has already asked for, or after `max_pages` pages.
+
+:::caution[PageNumber paging can skip records]
+A `PageNumber` walk asks for pages by offset. When a write moves a record within the result set
+while the walk runs, the records behind it shift, and one can land on a page already read and be
+skipped. The next run reads it only when its stamp lies in the 5 minutes its `{since}` reaches
+back; a skipped record stamped earlier is never read. Prefer `Token` or `Keyset` paging, or ask the
+provider for a sort that writes do not reorder, such as by creation time or id.
+:::
+
+**`child`** has the fields `operation` (on the same adapter and connection), `input` (JSON whose
+`{a.b}` placeholders are filled from the parent record), `records` (the dotted path to the array
+of records in its answer) and an optional `paging`, walked the same way. Each child record is
+added to the parent's text as one paragraph of JSON. The change hash covers the whole text,
+children included, so a child field that changes on every call (a duration, a signed URL) makes
+the parent extracted again after each `refresh_after_days`.
+
+Child records count toward the document's `max_chars_per_document`. Text past it, child records
+included, does not reach the model: a long parent's last children are cut off. The run counts the
+cut documents it shows the model as `truncated` (absent when there are none), and a cut document
+whose whole text changed is extracted again.
+
+:::note[After upgrading]
+cortex now detects a change on a document's whole text, before the cut. A source's state from an
+earlier version holds the hash of the cut text, so every document longer than
+`max_chars_per_document` looks changed once and is extracted once more, after its
+`refresh_after_days`.
+:::
 
 ### `kind: files`
 
@@ -144,7 +209,7 @@ Files that are not UTF-8 text, or are empty, are skipped. A document's key is th
 | `refresh_after_days` | a document whose text changed is extracted again only when it was last applied at least this many days ago; 0 or more |
 | `change` | how a change is detected; `ContentHash` is the only value |
 | `max_documents_per_run` | the most documents one run extracts; above 0 |
-| `max_chars_per_document` | longer text is cut to this many characters; above 0 |
+| `max_chars_per_document` | longer text is cut to this many characters; above 0. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |
 
 ## `serve`
 
