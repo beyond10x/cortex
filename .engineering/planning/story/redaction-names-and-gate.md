@@ -17,7 +17,7 @@ scope:
   path: src/run.rs
 - confidence: inferred
   path: tests/redaction_gate.rs
-revision: 6
+revision: 7
 ---
 ## Outcome
 
@@ -51,3 +51,16 @@ Masking of each added class (`Url`, `Credential`, `RareName`) is held by unit te
 ## Scope
 
 `src/redact.rs`, `src/run.rs`, `tests/redaction_gate.rs` (new).
+
+## Operator decision: PII stays out of the model, not out of the store
+
+2026-10-05, operator: "It would be nice if something like an email or otherwise PII would not reach the LLM models - but we still would kind of need to find the data later, so storing it in the brain and being able to search for it is actually fine".
+
+What follows from it (coordinator, same day):
+
+- Redaction applies to what the model sees: text, title, description and the `Source:` line built from the document key. Each distinct value becomes a stable placeholder within the batch (`[Email-1]`, `[Phone-2]`, `[<rule>-1]`).
+- Before the extraction document is applied, its placeholders are replaced by the original values. The store, the evidence text and the evidence identity hold the real values, and the brain stays searchable by them.
+- A placeholder that cannot be restored stays as written and is counted as `unrestored`.
+- The placeholder-to-value mapping lives in memory for one batch only. It is never written to disk or to the log.
+- Credentials are different: they are masked irreversibly, as before, and never stored.
+- The Acceptance's check "no planted value reaches the model" holds. Checks that a value is absent from the store are replaced by checks that it is present there in its original form.
