@@ -108,18 +108,26 @@ this repository and published by the organisation's reusable workflow.
   characters) is not masked.
 - **Personal data stays out of the prompt, not out of the store.** The instance's `redaction`
   policy (`src/redact.rs`) replaces each value it finds with a per-batch placeholder (`[Email-1]`,
-  `[Phone-2]`, `[Card-1]`, `[IpAddress-1]`, `[<rule>-1]`) in everything the model is shown: each
-  document's text, title, description and `Source:` key, and the known entity names. Every
+  `[Phone-2]`, `[Card-1]`, `[IpAddress-1]`, `[Url-1]`, `[Name-1]`, `[<rule>-1]`) in everything
+  the model is shown: each document's text, title, description and `Source:` key, and the known
+  entity names. Every
   placeholder in the answer is restored before it is applied, so the store, the evidence and the
   extracted facts hold the originals and stay searchable. The mapping lives in memory for one batch
   and is never written to disk or to the log; with a policy, a batch directory under `runs/` keeps
   only the restored `extraction.yaml`. A placeholder with no value is left as written and counted
-  as `unrestored`. Limits: detection is by pattern (the classes `Email`, `Phone`, `IpAddress` and
-  `PaymentCard`, and the policy's regex `rules`), so four-part version numbers and long digit ids
-  that look like an IP address or a card are hidden from the model too (and restored); names of
-  people are not detected; `Url`, `Credential` and `RareName` are not acted on yet; the instance's
-  own description and instructions are sent as written; and a spec without a `redaction` policy
-  sends text unchanged.
+  as `unrestored`. Limits: detection is by pattern (the classes `Url`, `Email`, `Phone`,
+  `IpAddress`, `PaymentCard` and `RareName`, the `known_names` list, and the policy's regex
+  `rules`), so four-part version numbers and long digit ids that look like an IP address or a card
+  are hidden from the model too (and restored); a person's name is found only when listed in
+  `known_names` or rare in the batch (`rare_limit`); the instance's own description and
+  instructions are sent as written; and a spec without a `redaction` policy sends text unchanged.
+  Rarity counts only the batch's document texts outside what another class hides; known entity
+  names do not count. Known names match in any case and either Unicode normal form.
+  `Credential` is irreversible (`[masked:<shape>]`, also in the stored key). `refuse_if_left`:
+  every batch is checked as the model would be shown it before the first model call, and a class
+  still detected then fails the run with nothing sent or stored; each batch is checked again just
+  before it is sent (the known entity names grow), and a class found then stops the run before
+  that batch, with the batches before it applied.
 - **A rule with a `replacement` is irreversible, like a credential.** A `rules` entry with a
   non-empty `replacement` replaces its matches by that text in a document's text, title and
   description before the document is stored (`Redactor::scrub`), and in its URL before the model

@@ -1,7 +1,7 @@
 //! `RunSource`, the obligation `generated/cortex-model/PLAN.md` leaves to the implementation:
 //! fetch, keep what is new or changed, extract in batches within the run's budget, apply.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 
 use cortex_model::instance as m;
@@ -225,14 +225,18 @@ fn process(
 ) -> Result<Report, Failure> {
     let started = now_ms();
     let applied_at = window.map_or(started, |w| w.until_ms);
+    let redactor = redact::compile(spec.redaction.as_ref()).map_err(Failure::Extract)?;
     // A message the fetch built can name a document key; it is masked as the key is.
     let mut report = Report {
-        skipped: fetched.skipped.iter().map(|s| mask_key(s).0).collect(),
+        skipped: fetched
+            .skipped
+            .iter()
+            .map(|s| masked_key(redactor.as_ref(), s))
+            .collect(),
         ..Report::default()
     };
     // The keys of documents cut at `max_chars_per_document`: counted as they reach the model.
     let mut cut: HashSet<String> = HashSet::new();
-    let redactor = redact::compile(spec.redaction.as_ref()).map_err(Failure::Extract)?;
     report.redacted = redactor.as_ref().map(Redactor::counts);
     // Each document's text before the cut, so a value the cut splits is still found, with what
     // the irreversible rules replaced in it.
@@ -259,8 +263,13 @@ fn process(
             // store sees: the key (a URL's query may carry a token), title, description and text.
             // Only a key that holds a credential changes, and it changes the same way every run.
             // A document whose masked key an earlier one already has is left out, as the fetch
-            // leaves out a repeated key, and its masks are not counted.
+            // leaves out a repeated key, and its masks are not counted. The `Credential` class
+            // masks the shapes it adds in the key too, so they are never stored either.
             let (key, n) = mask_key(&d.key);
+            let (key, credentials) = match &redactor {
+                Some(r) => r.scrub_key(&key),
+                None => (key, 0),
+            };
             if !keys.insert(key.clone()) {
                 return None;
             }
@@ -281,8 +290,14 @@ fn process(
                 }
                 return Some(d);
             };
-            // Irreversible rules, like masking, run before anything is stored.
+            // Irreversible steps, like masking, run before anything is stored.
             let mut scrubbed: BTreeMap<String, usize> = BTreeMap::new();
+            if credentials > 0 {
+                scrubbed.insert(
+                    redact::class_name(m::RedactionClass::Credential).into(),
+                    credentials,
+                );
+            }
             for field in [&mut d.title, &mut d.description].into_iter().flatten() {
                 let (text, hits) = r.scrub(field);
                 *field = text;
@@ -332,7 +347,7 @@ fn process(
     report.documents_new = selected.len() as i64;
     let run_dir = layout.runs().join(format!("{started}-{}", label));
     if selected.is_empty() {
-        unread(&mut report, &fetched.unread);
+        unread(&mut report, &fetched.unread, redactor.as_ref());
         let failures = fetched.child_failures.clone();
         finish(
             &mut seen, &seen_path, &report, wanted, held_since, window, failures,
@@ -362,7 +377,7 @@ fn process(
             &seen_path,
             &mut report,
         )?;
-        unread(&mut report, &fetched.unread);
+        unread(&mut report, &fetched.unread, redactor.as_ref());
         let failures = fetched.child_failures.clone();
         finish(
             &mut seen, &seen_path, &report, wanted, held_since, window, failures,
@@ -397,7 +412,19 @@ fn process(
         .into_iter()
         .map(|d| evidence::issue(d, &operator, started))
         .collect();
-    for (n, batch) in batches(issued).into_iter().enumerate() {
+    let batches = batches(issued);
+    // `refuse_if_left`: every batch is checked as the model would be shown it before the first
+    // model call, so a refusal fails the run with nothing sent and nothing stored.
+    if let Some(r) = redactor.as_ref().filter(|r| r.refuses()) {
+        for batch in &batches {
+            let mut p = r.batch();
+            let (shown, known) = pseudonymise(&mut p, batch, &uncut, &entities);
+            if let Some(why) = refused(&p, &shown, &known) {
+                return Err(Failure::Extract(why));
+            }
+        }
+    }
+    for (n, batch) in batches.into_iter().enumerate() {
         let remaining = budget - spent;
         if remaining <= 0.0 {
             report.stopped = Some(format!("budget of {budget} USD spent"));
@@ -416,6 +443,14 @@ fn process(
             Some(r) => {
                 let mut p = r.batch();
                 let (shown, known) = pseudonymise(&mut p, &batch, &uncut, &entities);
+                // Checked again: the known entity names grow with each batch applied.
+                if let Some(why) = refused(&p, &shown, &known) {
+                    if report.documents_applied == 0 {
+                        return Err(Failure::Extract(why));
+                    }
+                    report.stopped = Some(why);
+                    break;
+                }
                 let known = Known::from_ontology(&ontology, known);
                 let prompt =
                     extract::prompt(&spec.description, instructions.as_deref(), &known, &shown);
@@ -492,7 +527,7 @@ fn process(
                 .as_bytes(),
         );
     }
-    unread(&mut report, &fetched.unread);
+    unread(&mut report, &fetched.unread, redactor.as_ref());
     let failures = fetched.child_failures.clone();
     finish(
         &mut seen, &seen_path, &report, wanted, held_since, window, failures,
@@ -603,15 +638,56 @@ fn apply_records(
     Ok(())
 }
 
+/// `key`, or a message that can name one, masked as a document key is: credential shapes, and the
+/// `Credential` class's when the policy names it.
+fn masked_key(redactor: Option<&Redactor>, key: &str) -> String {
+    let masked = mask_key(key).0;
+    match redactor {
+        Some(r) => r.scrub_key(&masked).0,
+        None => masked,
+    }
+}
+
+/// Why the run refuses a batch: the classes `refuse_if_left` names that are still detected in
+/// what the model would be shown of it (`shown`, the known entity names `known`). Names the
+/// classes, never a value.
+fn refused(
+    p: &redact::Batch<'_>,
+    shown: &[evidence::Issued],
+    known: &BTreeMap<String, Vec<String>>,
+) -> Option<String> {
+    let mut left = BTreeSet::new();
+    for issued in shown {
+        let d = &issued.doc;
+        for text in [Some(&d.key), d.title.as_ref(), d.description.as_ref()]
+            .into_iter()
+            .flatten()
+            .chain([&d.text])
+        {
+            left.extend(p.left(text));
+        }
+    }
+    for name in known.values().flatten() {
+        left.extend(p.left(name));
+    }
+    (!left.is_empty()).then(|| {
+        format!(
+            "redaction refused a batch: {} still detected after masking in what the model would \
+             be shown (refuse_if_left); nothing of it was sent or stored",
+            left.into_iter().collect::<Vec<_>>().join(", ")
+        )
+    })
+}
+
 /// Adds to why the run stopped what its fetch left unread.
-fn unread(report: &mut Report, unread: &[String]) {
+fn unread(report: &mut Report, unread: &[String], redactor: Option<&Redactor>) {
     if unread.is_empty() {
         return;
     }
     // A message the fetch built can name a document key; it is masked as the key is.
     let why = unread
         .iter()
-        .map(|u| mask_key(u).0)
+        .map(|u| masked_key(redactor, u))
         .collect::<Vec<_>>()
         .join("; ");
     report.stopped = Some(match report.stopped.take() {
@@ -723,7 +799,7 @@ fn pseudonymise(
         p.reserve(&full(d));
     }
     for name in entities.values().flatten() {
-        p.reserve(name);
+        p.reserve_name(name);
     }
     let shown = batch
         .iter()

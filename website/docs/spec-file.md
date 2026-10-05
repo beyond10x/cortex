@@ -278,6 +278,28 @@ applies. Shorten or unmap the value at the source to clear it. Change detection,
 | `max_documents_per_run` | the most documents one run extracts; above 0 |
 | `max_chars_per_document` | longer text is cut to this many characters; above 0. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |
 
+## `redaction`
+
+Optional. What is kept from the model, and what refuses a run. See [Limits](./limits.md) for
+what each class finds.
+
+```yaml
+redaction:
+  classes: [Url, Email, Phone, Credential, RareName]
+  rules: [{name: employee-id, pattern: "EMP-[0-9]{6}", replacement: ""}]
+  known_names: [Jane Doe, Rowan]
+  rare_limit: 1
+  refuse_if_left: [Phone]
+```
+
+| field | meaning |
+|---|---|
+| `classes` | built-in classes replaced in what the model is shown: `Email`, `Phone`, `IpAddress`, `PaymentCard`, `Url` and `RareName` by placeholders that are restored before storage, `Credential` irreversibly |
+| `rules` | regular expressions, each with a `name`; an empty `replacement` gives a `[<name>-1]` placeholder that is restored, a non-empty one replaces the match before storage |
+| `known_names` | optional names replaced by `[Name-1]`-style placeholders wherever they appear as whole words, in any case, and restored |
+| `rare_limit` | optional; for `RareName`, the most times a capitalised word may appear in a batch to be taken as a name. Default 1 |
+| `refuse_if_left` | optional classes that fail the run, before any model call, when they are still found in what the model would be shown |
+
 ## `serve`
 
 | field | meaning |
