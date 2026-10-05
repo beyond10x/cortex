@@ -6,6 +6,7 @@ status: draft
 title: A credential in a document's title or description is masked
 relations:
 - decomposes: epic:standalone-1-0
+- serves: vision:self-updating-instances
 scope:
 - confidence: cited
   path: src/evidence.rs

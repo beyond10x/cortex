@@ -1,7 +1,7 @@
 //! `RunSource`, the obligation `generated/cortex-model/PLAN.md` leaves to the implementation:
 //! fetch, keep what is new or changed, extract in batches within the run's budget, apply.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
 use cortex_model::instance as m;
@@ -13,8 +13,8 @@ use crate::extract::{self, Known, Model};
 use crate::instance::{now_ms, Layout};
 use crate::mask::mask;
 use crate::redact::{self, Redactor};
-use crate::sources::{self, FetchError};
-use crate::state::SeenState;
+use crate::sources::{self, FetchError, Window};
+use crate::state::{text_hash, SeenState};
 
 pub struct Tools {
     pub connectors: Connectors,
@@ -49,6 +49,11 @@ pub struct Report {
     pub unrestored: usize,
     /// Why a run stopped before applying every new document, when it did.
     pub stopped: Option<String>,
+    /// Documents the model was shown cut at the policy's `max_chars_per_document`.
+    pub truncated: usize,
+    /// Parents left out without holding the window: their child call failed on
+    /// [`sources::CHILD_FAILURE_LIMIT`] or more consecutive runs.
+    pub skipped: Vec<String>,
 }
 
 impl Default for Report {
@@ -64,6 +69,8 @@ impl Default for Report {
             redacted: None,
             unrestored: 0,
             stopped: None,
+            truncated: 0,
+            skipped: Vec::new(),
         }
     }
 }
@@ -79,10 +86,13 @@ const BATCH_CHARS: usize = 60_000;
 /// Known entity names per node type given to the model.
 const KNOWN_PER_TYPE: usize = 50;
 
-fn truncate(text: &mut String, max: usize) {
-    if let Some((i, _)) = text.char_indices().nth(max) {
-        text.truncate(i);
-    }
+/// Cuts `text` to `max` characters; answers whether it cut anything.
+fn truncate(text: &mut String, max: usize) -> bool {
+    let Some((i, _)) = text.char_indices().nth(max) else {
+        return false;
+    };
+    text.truncate(i);
+    true
 }
 
 fn load_entities(layout: &Layout) -> BTreeMap<String, Vec<String>> {
@@ -100,18 +110,54 @@ pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Rep
         .iter()
         .find(|s| s.name == source.name)
         .ok_or_else(|| Failure::Fetch(format!("the spec has no source {:?}", source.name)))?;
-    let fetched = sources::fetch(&source_spec.settings, &tools.connectors, &meta.spec_dir)
-        .map_err(|e| match e {
-            FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
-        })?;
-    process(
-        layout,
-        tools,
-        &spec,
-        &source.name,
-        fetched,
-        &source_spec.policy,
+    // The window a `connectors` source asks about: from just before the start of its last
+    // successful run, its held-back changes or a run that did not succeed, to the start of this
+    // one.
+    let start = now_ms();
+    let seen_path = layout.seen(&source.name);
+    let state = SeenState::load(&seen_path).map_err(Failure::Fetch)?;
+    let window = Window::of_run(
+        start,
+        state.last_success_started_at,
+        state.held_since,
+        state.pending_since,
+        source_spec.policy.refresh_after_days,
+    );
+    let ran = sources::fetch(
+        &source_spec.settings,
+        &tools.connectors,
+        &meta.spec_dir,
+        &window,
+        &state.child_failures,
     )
+    .map_err(|e| match e {
+        FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
+    })
+    .and_then(|fetched| {
+        process(
+            layout,
+            tools,
+            &spec,
+            &source.name,
+            fetched,
+            &source_spec.policy,
+            Some(window),
+        )
+    });
+    if ran.is_err() {
+        // A failed run reads nothing it can be trusted to have read: the next run's `{since}` is
+        // no later than this one's. The failure is the run's answer; a state that cannot be
+        // written leaves the window as the last run left it.
+        if let Ok(mut state) = SeenState::load(&seen_path) {
+            state.pending_since = Some(
+                state
+                    .pending_since
+                    .map_or(window.since_ms, |p| p.min(window.since_ms)),
+            );
+            let _ = state.save(&seen_path);
+        }
+    }
+    ran
 }
 
 /// The seed documents of a new instance: every file under the spec's `seed.documents`, through
@@ -126,7 +172,16 @@ pub fn seed(layout: &Layout, tools: &Tools) -> Result<Report, Failure> {
         glob: "**/*".into(),
         records: None,
     });
-    let fetched = sources::fetch(&files, &tools.connectors, &layout.dir).map_err(|e| match e {
+    let start = now_ms();
+    let window = Window::of_run(start, None, None, None, 0);
+    let fetched = sources::fetch(
+        &files,
+        &tools.connectors,
+        &layout.dir,
+        &window,
+        &BTreeMap::new(),
+    )
+    .map_err(|e| match e {
         FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
     })?;
     let policy = m::FetchPolicy {
@@ -135,32 +190,51 @@ pub fn seed(layout: &Layout, tools: &Tools) -> Result<Report, Failure> {
         max_documents_per_run: i64::MAX,
         max_chars_per_document: 100_000,
     };
-    process(layout, tools, &spec, "seed", fetched, &policy)
+    process(layout, tools, &spec, "seed", fetched, &policy, None)
 }
 
+/// `window`, when given, is the window the source's fetch asked about; its end is recorded in the
+/// source's state as the start of its last successful run once every document the run wanted is
+/// applied and every record was read: a run that stopped early, left records unread (a
+/// `max_pages`, an empty page that named a next one, a failed child call), or left documents
+/// beyond `max_documents_per_run` keeps its window's start as `pending_since`, so what it did not
+/// apply is asked for again. `held_since` is recomputed from the documents this run holds back by
+/// `refresh_after_days`. A windowed run records its window's end as each applied document's
+/// `applied_at`, so a later change to it is inside a window that starts there.
 fn process(
     layout: &Layout,
     tools: &Tools,
     spec: &m::InstanceSpec,
     label: &str,
-    fetched: Vec<sources::Document>,
+    fetched: sources::Fetched,
     policy: &m::FetchPolicy,
+    window: Option<Window>,
 ) -> Result<Report, Failure> {
     let started = now_ms();
-    let mut report = Report::default();
+    let applied_at = window.map_or(started, |w| w.until_ms);
+    let mut report = Report {
+        skipped: fetched.skipped.clone(),
+        ..Report::default()
+    };
+    // The keys of documents cut at `max_chars_per_document`: counted as they reach the model.
+    let mut cut: HashSet<String> = HashSet::new();
     let redactor = redact::compile(spec.redaction.as_ref()).map_err(Failure::Extract)?;
     report.redacted = redactor.as_ref().map(Redactor::counts);
     // Each document's text before the cut, so a value the cut splits is still found, with what
     // the irreversible rules replaced in it.
     let mut uncut: HashMap<String, Vec<Uncut>> = HashMap::new();
     let docs: Vec<_> = fetched
+        .documents
         .into_iter()
         .map(|mut d| {
             let (masked, n) = mask(&d.text);
             report.masked += n;
             d.text = masked;
             let Some(r) = &redactor else {
-                truncate(&mut d.text, policy.max_chars_per_document as usize);
+                d.hash = Some(text_hash(&d.text));
+                if truncate(&mut d.text, policy.max_chars_per_document as usize) {
+                    cut.insert(d.key.clone());
+                }
                 return d;
             };
             // Irreversible rules, like masking, run before anything is stored.
@@ -174,7 +248,10 @@ fn process(
             }
             let (text, hits) = r.scrub(&d.text);
             d.text = text.clone();
-            truncate(&mut d.text, policy.max_chars_per_document as usize);
+            d.hash = Some(text_hash(&d.text));
+            if truncate(&mut d.text, policy.max_chars_per_document as usize) {
+                cut.insert(d.key.clone());
+            }
             for (name, at) in hits {
                 if at < d.text.len() {
                     *scrubbed.entry(name).or_default() += 1;
@@ -190,6 +267,18 @@ fn process(
 
     let seen_path = layout.seen(label);
     let mut seen = SeenState::load(&seen_path).map_err(Failure::Fetch)?;
+    let wanted = docs
+        .iter()
+        .filter(|d| seen.wants(d, started, policy.refresh_after_days))
+        .count();
+    // Each held change was made after its document was last applied: the earliest such instant,
+    // less the overlap for a provider's late clock, covers them all.
+    let held_since = docs
+        .iter()
+        .filter(|d| seen.holds(d, started, policy.refresh_after_days))
+        .filter_map(|d| seen.documents.get(&d.key))
+        .map(|s| s.applied_at - sources::OVERLAP_MS)
+        .min();
     let selected = seen.select(
         docs,
         started,
@@ -199,6 +288,11 @@ fn process(
     report.documents_new = selected.len() as i64;
     let run_dir = layout.runs().join(format!("{started}-{}", label));
     if selected.is_empty() {
+        unread(&mut report, &fetched.unread);
+        let failures = fetched.child_failures.clone();
+        finish(
+            &mut seen, &seen_path, &report, wanted, held_since, window, failures,
+        )?;
         log(layout, label, &report, started);
         return Ok(report);
     }
@@ -285,6 +379,7 @@ fn process(
             }
         };
         spent += answer.cost_usd.unwrap_or(0.0);
+        report.truncated += batch.iter().filter(|i| cut.contains(&i.doc.key)).count();
         report.cost_usd = add_cost(report.cost_usd, answer.cost_usd);
         let mut restored = answer.document.clone();
         // With a policy, the batch directory keeps only the restored `extraction.yaml`: the
@@ -322,7 +417,7 @@ fn process(
         }
         report.parts_rejected += crate::ekr::applied(&applied).rejected;
         for issued in &batch {
-            seen.record(&issued.doc, started);
+            seen.record(&issued.doc, applied_at);
         }
         for (ty, name) in extract::entity_names(&restored) {
             let names = entities.entry(ty).or_default();
@@ -339,8 +434,55 @@ fn process(
                 .as_bytes(),
         );
     }
+    unread(&mut report, &fetched.unread);
+    let failures = fetched.child_failures.clone();
+    finish(
+        &mut seen, &seen_path, &report, wanted, held_since, window, failures,
+    )?;
     log(layout, label, &report, started);
     Ok(report)
+}
+
+/// Adds to why the run stopped what its fetch left unread.
+fn unread(report: &mut Report, unread: &[String]) {
+    if unread.is_empty() {
+        return;
+    }
+    let why = unread.join("; ");
+    report.stopped = Some(match report.stopped.take() {
+        Some(stopped) => format!("{stopped}; {why}"),
+        None => why,
+    });
+}
+
+/// Records what a windowed run leaves for the next: its window's end as the start of the last
+/// successful run when it applied every one of the `wanted` documents and read every record, its
+/// window's start as `pending_since` when it did not; `held_since` as this run computed it; and
+/// the child call failure counts.
+fn finish(
+    seen: &mut SeenState,
+    path: &std::path::Path,
+    report: &Report,
+    wanted: usize,
+    held_since: Option<i64>,
+    window: Option<Window>,
+    child_failures: BTreeMap<String, u32>,
+) -> Result<(), Failure> {
+    let Some(window) = window else {
+        return Ok(());
+    };
+    seen.held_since = held_since;
+    seen.child_failures = child_failures;
+    if report.stopped.is_none() && report.documents_applied == wanted as i64 {
+        seen.last_success_started_at = Some(window.until_ms);
+        seen.pending_since = None;
+    } else {
+        seen.pending_since = Some(
+            seen.pending_since
+                .map_or(window.since_ms, |p| p.min(window.since_ms)),
+        );
+    }
+    seen.save(path).map_err(Failure::Apply)
 }
 
 fn log(layout: &Layout, label: &str, report: &Report, started: i64) {
@@ -356,6 +498,14 @@ fn log(layout: &Layout, label: &str, report: &Report, started: i64) {
         "seconds": (now_ms() - started) as f64 / 1000.0,
         "stopped": report.stopped,
     });
+    // Present only when a document was cut: a run that cut nothing logs what it did before.
+    if report.truncated > 0 {
+        line["truncated"] = json!(report.truncated);
+    }
+    // Present only when a parent was skipped: a run that skipped none logs what it did before.
+    if !report.skipped.is_empty() {
+        line["skipped"] = json!(report.skipped);
+    }
     // Present only when the policy pseudonymises: a spec file without one logs what it did before.
     if let Some(redacted) = &report.redacted {
         line["redacted"] = json!(redacted);
@@ -424,6 +574,7 @@ fn pseudonymise(
                     description: d.description.as_deref().map(|t| p.replace(t)),
                     published: d.published.clone(),
                     text: p.replace_prefix(&full(d), d.text.len()),
+                    hash: d.hash.clone(),
                 },
             }
         })

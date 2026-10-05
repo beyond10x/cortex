@@ -24,10 +24,35 @@ pub struct Seen {
 pub struct SeenState {
     pub format: String,
     pub documents: BTreeMap<String, Seen>,
+    /// When the source's last successful run started, in milliseconds since the Unix epoch: the
+    /// `{since}` of its next run. Absent until a run succeeds, so a state file written before
+    /// reads as one that never had a successful run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_success_started_at: Option<i64>,
+    /// The earliest window start that covers every change the last run held back by
+    /// `refresh_after_days`, in milliseconds since the Unix epoch: the earliest last application
+    /// of those documents, less the overlap. Recomputed by every run; absent while nothing is held
+    /// back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held_since: Option<i64>,
+    /// The `{since}` of the first run since the last successful one that did not succeed, in
+    /// milliseconds since the Unix epoch: no later run's `{since}` is after it until a run
+    /// succeeds. Absent after a successful run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_since: Option<i64>,
+    /// Consecutive runs whose child call failed, per parent document key. A successful call
+    /// removes the key; absent when no call is failing.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub child_failures: BTreeMap<String, u32>,
 }
 
 pub fn text_hash(text: &str) -> String {
     hex(&Sha256::digest(text.as_bytes()))
+}
+
+/// The hash a document is remembered by: of its whole text when the run took it before the cut.
+pub fn doc_hash(doc: &Document) -> String {
+    doc.hash.clone().unwrap_or_else(|| text_hash(&doc.text))
 }
 
 pub fn hex(bytes: &[u8]) -> String {
@@ -45,6 +70,10 @@ impl SeenState {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self {
                 format: "cortex.seen/1".into(),
                 documents: BTreeMap::new(),
+                last_success_started_at: None,
+                held_since: None,
+                pending_since: None,
+                child_failures: BTreeMap::new(),
             }),
             Err(e) => Err(format!("cannot read {}: {e}", path.display())),
         }
@@ -65,15 +94,29 @@ impl SeenState {
         max: usize,
     ) -> Vec<Document> {
         docs.into_iter()
-            .filter(|d| match self.documents.get(&d.key) {
-                None => true,
-                Some(seen) => {
-                    now_ms - seen.applied_at >= refresh_after_days * DAY_MS
-                        && seen.hash != text_hash(&d.text)
-                }
-            })
+            .filter(|d| self.wants(d, now_ms, refresh_after_days))
             .take(max)
             .collect()
+    }
+
+    /// Whether a run should extract `doc`: its key is new, or its text changed past the refresh
+    /// window.
+    pub fn wants(&self, doc: &Document, now_ms: i64, refresh_after_days: i64) -> bool {
+        match self.documents.get(&doc.key) {
+            None => true,
+            Some(seen) => {
+                now_ms - seen.applied_at >= refresh_after_days * DAY_MS
+                    && seen.hash != doc_hash(doc)
+            }
+        }
+    }
+
+    /// Whether `doc` changed but is held back: its key was applied less than `refresh_after_days`
+    /// ago, with other text.
+    pub fn holds(&self, doc: &Document, now_ms: i64, refresh_after_days: i64) -> bool {
+        self.documents.get(&doc.key).is_some_and(|seen| {
+            now_ms - seen.applied_at < refresh_after_days * DAY_MS && seen.hash != doc_hash(doc)
+        })
     }
 
     /// The seen documents of `source`, as `cortex.instance.SeenDocument` declares them, in key
@@ -95,7 +138,7 @@ impl SeenState {
         self.documents.insert(
             doc.key.clone(),
             Seen {
-                hash: text_hash(&doc.text),
+                hash: doc_hash(doc),
                 applied_at: now_ms,
             },
         );
@@ -115,6 +158,7 @@ mod tests {
             description: None,
             published: None,
             text: text.into(),
+            hash: None,
         }
     }
 

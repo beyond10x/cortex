@@ -7,6 +7,12 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Added
 
+- Connectors sources walk every page (`Token`, `PageNumber`, `Keyset`), call a child operation
+  per parent and append its records, and read a window: `{since}`/`{until}` in the inputs open
+  at the last successful run (with a 5-minute overlap) and stay open for changes held back,
+  runs that stopped and child calls that failed, so no record is skipped. A child call that
+  fails on 3 runs in a row is skipped.
+- A seed directory that is a symlink, and symlinked files inside one, are copied as regular files.
 - An instance's store lives on the backend its spec names: SQLite as before, or PostgreSQL through
   an `ekr.postgres/1` file (`cortex create --postgres-schema-config` provisions the schema). A
   create refuses a tenant that already holds a store; refusals name fields, never their values.

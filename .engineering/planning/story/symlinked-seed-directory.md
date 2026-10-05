@@ -2,14 +2,19 @@
 format: aep.planning-md/3
 id: story:symlinked-seed-directory
 kind: story
-status: draft
+status: implemented
 title: A seed directory that is a symlink is copied, not refused
 relations:
 - decomposes: epic:standalone-1-0
+- serves: vision:self-updating-instances
 scope:
 - confidence: cited
   path: src/instance.rs
-revision: 3
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T13:10:50Z", actor: "agent:claude", revision: 4}
+- {from: "proposed", to: "active", at: "2026-10-05T13:10:51Z", actor: "agent:claude", revision: 5}
+- {from: "active", to: "implemented", at: "2026-10-05T14:10:03Z", actor: "agent:claude", revision: 7, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 
@@ -30,3 +35,10 @@ Found 2026-10-05 by the adversary of `story:seen-documents-modelled` (wave 20261
 ## Symlinked files inside a seed directory
 
 Also a symlinked **file** inside a seed directory: `copy_tree` does not copy it, while the seed digest (since `story:seen-documents-modelled`) reads it as its target, so such an instance answers `seed-change-refused` to an unchanged update. Reported by that unit's implementor, 2026-10-05. The Acceptance covers both: a symlinked directory and a symlinked file inside one are frozen as regular files and an unchanged update answers `updated`.
+
+## Scope
+
+Landed 2026-10-05 in `aa32a84` (wave 20261005d, merged `101d821`).
+
+- **Files:** `src/instance.rs` (`copy_tree` follows symlinks; a dangling or looping one below the root is left out, as before), `tests/seed_change.rs` (three cases)
+- **Review:** a small defect fix; the coordinator read the diff, no adversary pass

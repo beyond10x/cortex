@@ -256,3 +256,71 @@ fn a_removed_instance_whose_directory_was_deleted_is_not_active() {
         not_active.1
     );
 }
+
+/// The kind of `rel` in the instance's frozen copy, without following a symlink.
+fn frozen_kind(w: &World, rel: &str) -> std::fs::FileType {
+    std::fs::symlink_metadata(w.home.join("instances/t").join(rel))
+        .unwrap_or_else(|e| panic!("frozen {rel}: {e}"))
+        .file_type()
+}
+
+/// A seed directory that is a symlink is frozen as a regular directory holding regular files, and
+/// an update with nothing changed is applied.
+#[test]
+fn a_symlinked_seed_directory_is_frozen_as_a_regular_directory() {
+    let w = World::new();
+    let spec = spec_with_seed(&w, "docs");
+    std::fs::rename(w.root.join("docs"), w.root.join("real-docs")).unwrap();
+    std::os::unix::fs::symlink(w.root.join("real-docs"), w.root.join("docs")).unwrap();
+    create(&w, &spec);
+
+    assert!(frozen_kind(&w, "docs").is_dir(), "docs is not a directory");
+    assert!(frozen_kind(&w, "docs/a.md").is_file(), "docs/a.md");
+    assert_eq!(observed(&w).2, "Example Labs develops Widget.");
+
+    let same = update(&w, &spec);
+    assert_eq!(outcome(&same), (0, Some("updated")), "{}", same.1);
+}
+
+/// A symlinked file and a symlinked subdirectory inside a seed directory are frozen as a regular
+/// file and a regular directory, and an update with nothing changed is applied.
+#[test]
+fn symlinks_inside_a_seed_directory_are_frozen_as_regular_files_and_directories() {
+    let w = World::new();
+    let spec = spec_with_seed(&w, "docs");
+    let elsewhere = w.root.join("elsewhere");
+    std::fs::create_dir_all(elsewhere.join("sub")).unwrap();
+    std::fs::rename(w.root.join("docs/a.md"), elsewhere.join("a.md")).unwrap();
+    std::os::unix::fs::symlink(elsewhere.join("a.md"), w.root.join("docs/a.md")).unwrap();
+    std::fs::write(elsewhere.join("sub/b.md"), "Example Labs develops Gadget.").unwrap();
+    std::os::unix::fs::symlink(elsewhere.join("sub"), w.root.join("docs/sub")).unwrap();
+    create(&w, &spec);
+
+    assert!(frozen_kind(&w, "docs/a.md").is_file(), "docs/a.md");
+    assert_eq!(observed(&w).2, "Example Labs develops Widget.");
+    assert!(frozen_kind(&w, "docs/sub").is_dir(), "docs/sub");
+    assert!(frozen_kind(&w, "docs/sub/b.md").is_file(), "docs/sub/b.md");
+
+    let same = update(&w, &spec);
+    assert_eq!(outcome(&same), (0, Some("updated")), "{}", same.1);
+}
+
+/// A dangling symlink and a symlink to an enclosing directory inside a seed directory are left
+/// out of the frozen copy and of the seed digest alike, as before symlinks were followed: the
+/// instance is created and an update with nothing changed is applied.
+#[test]
+fn a_dangling_or_looping_symlink_inside_a_seed_directory_is_left_out() {
+    let w = World::new();
+    let spec = spec_with_seed(&w, "docs");
+    std::os::unix::fs::symlink(w.root.join("missing.md"), w.root.join("docs/dangling.md")).unwrap();
+    std::os::unix::fs::symlink(w.root.join("docs"), w.root.join("docs/loop")).unwrap();
+    create(&w, &spec);
+
+    let frozen = w.home.join("instances/t/docs");
+    assert!(std::fs::symlink_metadata(frozen.join("dangling.md")).is_err());
+    assert!(std::fs::symlink_metadata(frozen.join("loop")).is_err());
+    assert_eq!(observed(&w).2, "Example Labs develops Widget.");
+
+    let same = update(&w, &spec);
+    assert_eq!(outcome(&same), (0, Some("updated")), "{}", same.1);
+}
