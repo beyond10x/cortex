@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:build-into-tree-target
 kind: story
-status: active
+status: implemented
 title: Every cortex worktree builds into its own target/
 relations:
 - decomposes: epic:standalone-1-0
@@ -12,10 +12,11 @@ scope:
   path: AGENTS.md
 - confidence: cited
   path: Taskfile.yml
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-06T20:07:12Z", actor: "agent:claude", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-06T20:07:12Z", actor: "agent:claude", revision: 4}
+- {from: "active", to: "implemented", at: "2026-10-06T20:35:52Z", actor: "agent:claude", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

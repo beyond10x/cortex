@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-06T20:34:05Z",
+  "actor": "agent:claude",
+  "artifact": "story:build-into-tree-target",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check in CI on wave/20261006j (pass)",
+    "reference": "https://github.com/beyond10x/cortex/actions/runs/37524133336"
+  }
+}
