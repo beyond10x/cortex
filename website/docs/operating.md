@@ -15,6 +15,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `registry.json` | every instance and source with its state and counters |
 | `cortex.lock` | the lock every writing command holds, so two commands on one home never interleave |
 | `bin/cortex` | the copy of cortex the systemd units run |
+| `bin/cortex.version` | the version of that copy, recorded when it is placed |
 | `instances/<name>/instance.yaml` | the frozen spec file, beside copies of the seed files and instructions it names |
 | `instances/<name>/store.sqlite` | the instance's EKR store, unless its spec names `store.backend: postgres`; then the store is in PostgreSQL, opened through the spec's `ekr.postgres/1` file |
 | `instances/<name>/host.json` | the EKR host document the store is opened with |
@@ -55,13 +56,22 @@ either, `cortex update` writes the units again.
 The timers run only while your systemd user manager runs. To have them run while you are logged
 out, enable lingering once: `loginctl enable-linger`.
 
-The units run the copy at `<home>/bin/cortex`. Rebuilding cortex changes nothing for existing
-timers until a `create` or `update` installs the units again and copies the new binary.
+The units run the copy at `<home>/bin/cortex`, one for every instance of the home. Rebuilding
+cortex changes nothing for existing timers until a `create`, `update` or `adopt` installs the
+units again and places the new binary. That command replaces the copy when it is the same version
+or newer than the one recorded in `<home>/bin/cortex.version`, or when none is recorded. An older
+cortex keeps the newer copy, because replacing it would move every timer of the home to the older
+one; it writes the new instance's units all the same. Pass `--replace-binary` to replace it
+anyway. The command's `binary` detail says what happened: `replaced`, the `old` version recorded
+and the `new` one, and the `reason` when the copy was kept. `cortex list` shows the recorded
+version as `binary_version`. `--no-units`, and a spec with no source, leave the copy alone.
 
 ## What one run does
 
 1. **Fetch** the source's documents (web pages or records through `connectors`, or local files).
-2. **Mask** credential-shaped text in each document, then cut it to `max_chars_per_document`.
+2. **Mask** credential-shaped text in each document, then cut it to `max_chars_per_document`,
+   and further, at a character boundary, to what its evidence holds: EKR 0.0.30 takes an
+   evidence payload of at most 16,384 bytes, header included.
 3. **Keep** documents whose key was never applied, and documents whose text hash changed once
    their last application is `refresh_after_days` old, at most `max_documents_per_run`.
 4. **Issue evidence.** cortex mints one evidence item per document; the model never does.
@@ -74,6 +84,8 @@ timers until a `create` or `update` installs the units again and copies the new 
 6. **Merge.** A fact citing an evidence id cortex did not issue for that batch is refused; cortex
    adds the evidence items itself and records each web page as a `WebPage` node.
 7. **Apply** the document with `ekr apply-extraction`, then record the batch's documents as seen.
+   A document a part EKR rejected belongs to is seen too, since EKR would reject that part again
+   on the same text; the run names it, with EKR's refusal, in `rejected`.
    Before the run's first apply, a `sqlite` store and `state/` are copied, and kept as a
    snapshot once that apply commits (see [Undoing a run](#undoing-a-run)); a copy that cannot be
    taken fails the run with nothing applied.

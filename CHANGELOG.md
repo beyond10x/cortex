@@ -9,6 +9,10 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 - A `records` spec can map its author field and inline `<@id>` mentions through a JSON lookup file
   (`lookup`), and can name `fallback_text` templates used when `text` renders empty.
+- `<home>/bin/cortex`, the copy every timer of a home runs, has its version recorded beside it.
+  `create`, `update` and `adopt` replace it only with the same or a newer cortex and say so in
+  their `binary` detail; an older cortex keeps it, naming both versions, unless `--replace-binary`
+  is given. `cortex list` shows the version as `binary_version`.
 - The test harness no longer fails with `Text file busy`: stand-ins are written by a child
   shell, never held open for writing by a test process.
 - A run gate: `gate.checks` bound the run report's numbers or `ekr quality` measures, and a run
@@ -78,3 +82,12 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 - A release workflow: a published GitHub Release `v<version>` gets
   `cortex-<version>-x86_64-unknown-linux-gnu.tar.gz` and `SHA256SUMS` attached; a manual run
   builds the same two files as a workflow artifact.
+
+### Fixed
+
+- Evidence over 16 KB is no longer lost: each evidence payload is cut, at a character boundary, to
+  the 16,384 bytes EKR 0.0.30 takes, on a source run and on the seed alike, and the text the model
+  is shown is cut to what the payload holds. A structured record's evidence leads with its mapped
+  values, so the cut never takes a value its facts cite; a record whose mapped values alone are
+  over the bound is named in `skipped` and not applied. A run names each document a part EKR
+  rejected belongs to, with EKR's refusal, in `rejected`.

@@ -15,7 +15,7 @@ use cortex_cli::connectors::Connectors;
 use cortex_cli::home::Home;
 use cortex_cli::instance::{Layout, Meta};
 use cortex_cli::ports::{Ports, Shared, SharedRef};
-use cortex_cli::schedule::Systemd;
+use cortex_cli::schedule::{self, Systemd};
 use cortex_cli::snapshot::{self, Refusal, RestoreError};
 use cortex_cli::{ekr, home, instance, model_map, run, spec};
 
@@ -57,6 +57,10 @@ enum Command {
         /// Install no systemd units.
         #[arg(long)]
         no_units: bool,
+        /// Replace `<home>/bin/cortex` even when it is a newer cortex than this one. Every timer of
+        /// the home runs that binary; without this flag a newer one is kept.
+        #[arg(long)]
+        replace_binary: bool,
         /// For a `postgres` store: the `ekr.postgres/1` file of the schema-management role.
         /// `ekr postgres-schema` provisions the provider's tables with it before the seed. Without
         /// it the tables must already exist.
@@ -100,6 +104,10 @@ enum Command {
         /// Install no systemd units.
         #[arg(long)]
         no_units: bool,
+        /// Replace `<home>/bin/cortex` even when it is a newer cortex than this one. Every timer of
+        /// the home runs that binary; without this flag a newer one is kept.
+        #[arg(long)]
+        replace_binary: bool,
     },
     /// Change an instance's sources, model or serve settings (`cortex.instance.UpdateInstance`).
     Update {
@@ -108,6 +116,10 @@ enum Command {
         spec: PathBuf,
         #[arg(long)]
         no_units: bool,
+        /// Replace `<home>/bin/cortex` even when it is a newer cortex than this one. Every timer of
+        /// the home runs that binary; without this flag a newer one is kept.
+        #[arg(long)]
+        replace_binary: bool,
     },
     /// Remove an instance's timers and viewer; its directory and store stay
     /// (`cortex.instance.RemoveInstance`).
@@ -282,13 +294,14 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             spec,
             no_extract,
             no_units,
+            replace_binary,
             postgres_schema_config,
         } => create(
             app,
             ctx,
             &spec,
             no_extract,
-            no_units,
+            Units::of(no_units, replace_binary),
             postgres_schema_config.as_deref(),
         ),
         Command::Adopt {
@@ -297,6 +310,7 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             host,
             seen,
             no_units,
+            replace_binary,
         } => adopt(
             app,
             ctx,
@@ -305,14 +319,15 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
                 store: &store,
                 host: host.as_deref(),
                 seen: &seen,
-                no_units,
+                units: Units::of(no_units, replace_binary),
             },
         ),
         Command::Update {
             name,
             spec,
             no_units,
-        } => update(app, ctx, &name, &spec, no_units),
+            replace_binary,
+        } => update(app, ctx, &name, &spec, Units::of(no_units, replace_binary)),
         Command::Remove { name } => remove(app, ctx, &name),
         Command::Restore { name, snapshot } => restore(app, ctx, &name, &snapshot),
         Command::Run {
@@ -359,6 +374,8 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
         },
         Command::List => match app.instances() {
             Ok(rows) => {
+                // The version of `<home>/bin/cortex`, which every source unit of the home runs.
+                let binary_version = schedule::binary_version(&ctx.home.root);
                 for row in rows {
                     let layout = Layout::new(ctx.home.instance_dir(&row.name.0));
                     let port = layout.load_meta().map(|m| m.view_port).ok();
@@ -372,6 +389,7 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
                             "ekr_version": row.ekr_version,
                             "seed_digest": ctx.home.frozen_seed_digest(&row.name.0).ok(),
                             "view": port.map(|p| format!("http://127.0.0.1:{p}/")),
+                            "binary_version": binary_version,
                         })
                     );
                 }
@@ -553,12 +571,54 @@ fn store_refusal(spec: &m::InstanceSpec) -> Option<String> {
     }
 }
 
+/// Whether a command installs systemd units (`--no-units`), and whether it may replace a newer
+/// `<home>/bin/cortex` (`--replace-binary`).
+#[derive(Clone, Copy)]
+enum Units {
+    None,
+    Install { replace_binary: bool },
+}
+
+impl Units {
+    fn of(no_units: bool, replace_binary: bool) -> Self {
+        if no_units {
+            Self::None
+        } else {
+            Self::Install { replace_binary }
+        }
+    }
+}
+
+/// Places this cortex at `<home>/bin/cortex` ([`Systemd::place_binary`]), puts what that did in
+/// `detail["binary"]`, then installs each source's units. A spec with no source installs no unit
+/// that runs cortex, so it leaves the binary alone.
+fn install_sources(
+    ctx: &Ctx,
+    systemd: &Systemd,
+    name: &str,
+    spec: &m::InstanceSpec,
+    replace_binary: bool,
+    detail: &mut Value,
+) -> Result<(), String> {
+    if spec.sources.is_empty() {
+        return Ok(());
+    }
+    let placed = systemd.place_binary(replace_binary)?;
+    if let Some(reason) = placed.reason.as_ref().filter(|_| !placed.replaced) {
+        eprintln!("cortex: {reason}");
+    }
+    detail["binary"] = placed.json();
+    spec.sources
+        .iter()
+        .try_for_each(|s| systemd.install_source(name, &s.name, &s.schedule, &ctx.tools))
+}
+
 fn create(
     app: &mut App,
     ctx: &Ctx,
     path: &Path,
     no_extract: bool,
-    no_units: bool,
+    units: Units,
     schema_config: Option<&Path>,
 ) -> ExitCode {
     let loaded = match spec::load(path) {
@@ -716,13 +776,11 @@ fn create(
                     Err(e) => json!({"failed": format!("{e:?}")}),
                 };
             }
-            if !no_units {
+            if let Units::Install { replace_binary } = units {
                 let systemd = Systemd::from_env(&ctx.home.root);
                 let store = layout.store_handle(&spec);
                 let installed = systemd.install_view(&name, &store, port).and_then(|_| {
-                    spec.sources.iter().try_for_each(|s| {
-                        systemd.install_source(&name, &s.name, &s.schedule, &ctx.tools)
-                    })
+                    install_sources(ctx, &systemd, &name, &spec, replace_binary, &mut detail)
                 });
                 if let Err(e) = installed {
                     detail["units"] = json!({"failed": e});
@@ -754,7 +812,7 @@ struct Adoption<'a> {
     store: &'a Path,
     host: Option<&'a Path>,
     seen: &'a [(String, PathBuf)],
-    no_units: bool,
+    units: Units,
 }
 
 /// Why an adoption took no instance: a declared refusal, or a failure before any outcome.
@@ -1033,13 +1091,11 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                 "seen_documents": found.seen_documents,
                 "seen_without_evidence": found.seen_without_evidence,
             });
-            if !a.no_units {
+            if let Units::Install { replace_binary } = a.units {
                 let systemd = Systemd::from_env(&ctx.home.root);
                 let store = layout.store_handle(&spec);
                 let installed = systemd.install_view(&name, &store, port).and_then(|_| {
-                    spec.sources.iter().try_for_each(|s| {
-                        systemd.install_source(&name, &s.name, &s.schedule, &ctx.tools)
-                    })
+                    install_sources(ctx, &systemd, &name, &spec, replace_binary, &mut detail)
                 });
                 if let Err(e) = installed {
                     detail["units"] = json!({"failed": e});
@@ -1055,7 +1111,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
     print("adopt", &done)
 }
 
-fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, no_units: bool) -> ExitCode {
+fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> ExitCode {
     let loaded = match spec::load(path) {
         Ok(l) => l,
         Err(e) => return fail(e),
@@ -1148,11 +1204,11 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, no_units: bool) -> 
                 added.push(id);
             }
             let mut detail = json!({"name": instance_updated.name.0, "added_sources": added});
-            if !no_units {
+            if let Units::Install { replace_binary } = units {
                 let systemd = Systemd::from_env(&ctx.home.root);
-                if let Err(e) = spec.sources.iter().try_for_each(|s| {
-                    systemd.install_source(name, &s.name, &s.schedule, &ctx.tools)
-                }) {
+                if let Err(e) =
+                    install_sources(ctx, &systemd, name, &spec, replace_binary, &mut detail)
+                {
                     detail["units"] = json!({"failed": e});
                 }
             }
@@ -1326,6 +1382,14 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
             // Present only when a parent was skipped: a run that skipped none reports as before.
             if !report.skipped.is_empty() {
                 detail["skipped"] = json!(report.skipped);
+            }
+            // Present only when EKR rejected a part: a run that had none reports as before.
+            if !report.rejected.is_empty() {
+                detail["rejected"] = json!(report
+                    .rejected
+                    .iter()
+                    .map(run::Rejected::json)
+                    .collect::<Vec<_>>());
             }
             // Present only when the policy pseudonymises: a spec file without one reports as
             // before.
@@ -1524,6 +1588,7 @@ mod tests {
         "seen",
         "no_extract",
         "no_units",
+        "replace_binary",
         "postgres_schema_config",
         "record_failure",
         "help",
