@@ -4,7 +4,7 @@ id: specification:wave-20261006e-cortex-wave-12
 kind: specification
 status: approved
 title: 'Wave 20261006e: cortex 1.0 wave 12'
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-06T07:36:01Z", actor: "agent:claude", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-06T07:36:01Z", actor: "agent:claude", revision: 3}
@@ -31,3 +31,7 @@ Opened 2026-10-06 by the coordinating session, `aep:implementing` 0.19.2 wave mo
 ## Commits approval authorises
 
 One commit per unit through `b10x-gates bot`; the merges into `wave/20261006e`; coordinator commits for docs and the changelog; the closing planning-store commit; the pull request into `main` and its merge.
+
+## Unit b left the wave
+
+Unit b (`story:postgres-credential-from-connectors`) left the wave before any work: `upstream-blocker:ekr-postgres-password-file`. The story stays active and blocked.
