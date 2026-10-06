@@ -25,7 +25,7 @@ scope:
   path: tests/common/mod.rs
 - confidence: inferred
   path: tests/store_backend.rs
-revision: 3
+revision: 4
 ---
 ## Outcome
 
@@ -39,8 +39,9 @@ cortex story depends on both: its test needs a real `ekr` with `password_file`, 
 mimics only the Connectors verb.
 
 ## Work
+
 1. Spec: `cortex.instance.PostgresStore` gains `connection: {adapter: String, connection: String}`, and optionally `schema_connection` for provisioning. Regenerate the spec types.
-2. `ekr::Store` gains the connection reference. `Store::cmd()` builds `connectors connections launch --adapter A --connection C --consumer ekr -- <ekr args>` with the same `EKR_*` env, after `Connectors::ensure_ready(A, C)`. `provision()` launches through `schema_connection` when it is given.
+2. `ekr::Store` gains the connection reference. `Store::cmd()` builds `connectors connections launch --adapter A --connection C --consumer ekr --args '<JSON array of the ekr arguments>'`, after `Connectors::ensure_ready(A, C)`. The operator's `[consumers]` entry for `ekr` pins the `ekr` binary and lists `pass_env = ["EKR_"]`, so the `EKR_*` environment cortex sets reaches it; nothing else does. `provision()` launches through `schema_connection` when it is given. (Interface settled in Connectors 2026-10-06: `--args` and `pass_env` replaced the `-- <args>` passthrough.)
 3. `install_view` writes `environment()` and the `CORTEX_CONNECTORS` path into the viewer unit, and starts `ekr view` through the launch.
 4. `cortex instance check` refuses a postgres store whose `ekr.postgres/1` has no `password_file`, or whose connection is not listed. (Check: does `connections describe` expose `role@database`, so it can be compared with the DSN's user and database?)
 5. Record the design decision (Design B) in the story.
