@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:record-field-lookups
 kind: story
-status: proposed
+status: active
 title: A file record's fields can be mapped through a lookup file
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -27,9 +27,10 @@ scope:
   path: website/docs/spec-file.md
 - confidence: cited
   path: website/static/schemas/instance-spec.schema.json
-revision: 9
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-06T02:11:55Z", actor: "agent:claude", revision: 9, decided_on: {"recorded":{"review_outcome":5}}}
+- {from: "proposed", to: "active", at: "2026-10-06T02:15:00Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":5}}}
 ---
 ## Outcome
 
