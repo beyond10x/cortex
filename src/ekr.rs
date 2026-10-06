@@ -261,15 +261,50 @@ impl Store {
         proposer: &str,
         operations: &[Operation],
     ) -> Result<i64, String> {
+        match self.submit(path, proposer, operations, None)? {
+            Ok(revision) => Ok(revision),
+            Err(rejected) => {
+                let issues: Vec<String> = rejected
+                    .issues
+                    .iter()
+                    .map(|i| format!("{}: {}", i.code, i.message))
+                    .collect();
+                Err(format!(
+                    "ekr validate rejected transaction {}: {}",
+                    rejected.transaction,
+                    issues.join("; ")
+                ))
+            }
+        }
+    }
+
+    /// A fresh id of `kind` (`ekr mint <kind>`): `transaction`, `type`, `property`,
+    /// `schema-version`, ….
+    pub fn mint(&self, kind: &str) -> Result<String, String> {
         let mut mint = self.cmd();
-        mint.args(["mint", "transaction"]);
+        mint.args(["mint", kind]);
         let minted = json(&run(mint, "mint")?, "mint")?;
-        let id = minted["id"]
+        minted["id"]
             .as_str()
-            .ok_or("ekr mint answered no id")?
-            .to_string();
-        std::fs::write(path, transaction_document(&id, proposer, operations))
-            .map_err(|e| format!("{}: {e}", path.display()))?;
+            .map(str::to_string)
+            .ok_or_else(|| "ekr mint answered no id".to_string())
+    }
+
+    /// [`Store::transact`], answering a transaction validation rejects as its issues instead of an
+    /// error. With `schema_version`, the transaction is a schema change producing that version.
+    pub fn submit(
+        &self,
+        path: &Path,
+        proposer: &str,
+        operations: &[Operation],
+        schema_version: Option<&str>,
+    ) -> Result<Result<i64, Rejected>, String> {
+        let id = self.mint("transaction")?;
+        std::fs::write(
+            path,
+            transaction_document(&id, proposer, operations, schema_version),
+        )
+        .map_err(|e| format!("{}: {e}", path.display()))?;
         let mut propose = self.cmd();
         propose.arg("propose").arg(path);
         run(propose, "propose")?;
@@ -277,22 +312,19 @@ impl Store {
         validate.args(["validate", &id]);
         let validated = json(&run(validate, "validate")?, "validate")?;
         if validated["kind"] != "Validated" {
-            let issues: Vec<String> = validated["issues"]
+            let issues = validated["issues"]
                 .as_array()
                 .into_iter()
                 .flatten()
-                .map(|i| {
-                    format!(
-                        "{}: {}",
-                        i["code"].as_str().unwrap_or("?"),
-                        i["message"].as_str().unwrap_or_default()
-                    )
+                .map(|i| Issue {
+                    code: i["code"].as_str().unwrap_or("?").to_string(),
+                    message: i["message"].as_str().unwrap_or_default().to_string(),
                 })
                 .collect();
-            return Err(format!(
-                "ekr validate rejected transaction {id}: {}",
-                issues.join("; ")
-            ));
+            return Ok(Err(Rejected {
+                transaction: id,
+                issues,
+            }));
         }
         let mut commit = self.cmd();
         commit.args(["commit", &id]);
@@ -300,12 +332,73 @@ impl Store {
         match committed["kind"].as_str() {
             Some("Committed") => committed["result"]["revision"]
                 .as_i64()
+                .map(Ok)
                 .ok_or_else(|| "ekr commit answered no revision".to_string()),
             other => Err(format!(
                 "ekr commit of transaction {id} answered {}",
                 other.unwrap_or("nothing")
             )),
         }
+    }
+}
+
+/// One issue of a rejected transaction, as `ekr validate` names it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Issue {
+    pub code: String,
+    pub message: String,
+}
+
+/// A transaction validation rejected: nothing of it was applied.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Rejected {
+    pub transaction: String,
+    pub issues: Vec<Issue>,
+}
+
+/// A property as a schema change declares it (EKR `docs/cli.md`, "Property definitions").
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropertyDecl {
+    pub id: String,
+    pub name: String,
+    /// `{value_kind: …}`, with `parameters` for a compound kind, as `ekr ontology` prints it.
+    pub value_type: Value,
+    /// `One` or `Many`.
+    pub cardinality: String,
+    pub required: bool,
+    pub constraints: Vec<String>,
+}
+
+impl PropertyDecl {
+    /// The declaration as `ekr ontology` prints it.
+    pub fn json(&self) -> Value {
+        serde_json::json!({
+            "id": self.id,
+            "name": self.name,
+            "value_type": self.value_type,
+            "cardinality": self.cardinality,
+            "required": self.required,
+            "constraints": self.constraints,
+        })
+    }
+
+    fn yaml(&self) -> serde_yaml_ng::Value {
+        use serde_yaml_ng::{Mapping, Value as Yaml};
+        let s = |t: &str| Yaml::String(t.to_string());
+        let mut m = Mapping::new();
+        m.insert(s("id"), s(&self.id));
+        m.insert(s("name"), s(&self.name));
+        m.insert(
+            s("value_type"),
+            serde_yaml_ng::to_value(&self.value_type).expect("plain JSON"),
+        );
+        m.insert(s("cardinality"), s(&self.cardinality));
+        m.insert(s("required"), Yaml::Bool(self.required));
+        m.insert(
+            s("constraints"),
+            Yaml::Sequence(self.constraints.iter().map(|c| s(c)).collect()),
+        );
+        Yaml::Mapping(m)
     }
 }
 
@@ -322,6 +415,26 @@ pub enum Operation {
     Retract { assertion: String, reason: String },
     /// `!DeleteEdge`: the edge is removed.
     DeleteEdge(String),
+    /// `!DefineNodeType`, a schema change: a node type with no parents and `properties`.
+    DefineNodeType {
+        id: String,
+        name: String,
+        properties: Vec<PropertyDecl>,
+    },
+    /// `!DefineEdgeType`, a schema change: an edge type between the node type ids given, `Many`,
+    /// with no properties.
+    DefineEdgeType {
+        id: String,
+        name: String,
+        source_types: Vec<String>,
+        target_types: Vec<String>,
+    },
+    /// `!ModifyProperty`, a schema change: `property` added to the node or edge type `owner`, or
+    /// redeclared when `owner` declares its id.
+    ModifyProperty {
+        owner: String,
+        property: PropertyDecl,
+    },
 }
 
 impl Operation {
@@ -348,6 +461,50 @@ impl Operation {
                 ("RetractAssertion", Yaml::Mapping(m))
             }
             Operation::DeleteEdge(edge) => ("DeleteEdge", s(edge)),
+            Operation::DefineNodeType {
+                id,
+                name,
+                properties,
+            } => {
+                let mut props = Mapping::new();
+                for p in properties {
+                    props.insert(s(&p.id), p.yaml());
+                }
+                let mut m = Mapping::new();
+                m.insert(s("id"), s(id));
+                m.insert(s("name"), s(name));
+                m.insert(s("parents"), Yaml::Sequence(Vec::new()));
+                m.insert(s("properties"), Yaml::Mapping(props));
+                m.insert(s("abstract_type"), Yaml::Bool(false));
+                m.insert(s("lifecycle"), Yaml::Null);
+                m.insert(s("operations"), Yaml::Mapping(Mapping::new()));
+                ("DefineNodeType", Yaml::Mapping(m))
+            }
+            Operation::DefineEdgeType {
+                id,
+                name,
+                source_types,
+                target_types,
+            } => {
+                let ids = |v: &[String]| Yaml::Sequence(v.iter().map(|t| s(t)).collect());
+                let mut m = Mapping::new();
+                m.insert(s("id"), s(id));
+                m.insert(s("name"), s(name));
+                m.insert(s("source_types"), ids(source_types));
+                m.insert(s("target_types"), ids(target_types));
+                m.insert(s("cardinality"), s("Many"));
+                m.insert(s("properties"), Yaml::Mapping(Mapping::new()));
+                m.insert(s("inverse"), Yaml::Null);
+                m.insert(s("symmetric"), Yaml::Bool(false));
+                m.insert(s("transitive"), Yaml::Bool(false));
+                ("DefineEdgeType", Yaml::Mapping(m))
+            }
+            Operation::ModifyProperty { owner, property } => {
+                let mut m = Mapping::new();
+                m.insert(s("owner"), s(owner));
+                m.insert(s("property"), property.yaml());
+                ("ModifyProperty", Yaml::Mapping(m))
+            }
         };
         Yaml::Tagged(Box::new(TaggedValue {
             tag: Tag::new(tag),
@@ -357,9 +514,16 @@ impl Operation {
 }
 
 /// The `ekr.transaction-document/2` text of transaction `id`: `operations` in order, proposed by
-/// `proposer`, citing no evidence (none of them adds an assertion). The `format:` line comes
-/// first, on its own, as EKR reads the byte cap from it.
-fn transaction_document(id: &str, proposer: &str, operations: &[Operation]) -> String {
+/// `proposer`, citing no evidence (none of them adds an assertion, and a schema change cites none:
+/// EKR holds a transaction's evidence set to its assertions, `evidence-set-mismatch`), and naming
+/// the `schema_version` a schema change produces. The `format:` line comes first, on its own, as
+/// EKR reads the byte cap from it.
+fn transaction_document(
+    id: &str,
+    proposer: &str,
+    operations: &[Operation],
+    schema_version: Option<&str>,
+) -> String {
     use serde_yaml_ng::{Mapping, Value as Yaml};
     let s = |t: &str| Yaml::String(t.to_string());
     let mut tx = Mapping::new();
@@ -370,6 +534,9 @@ fn transaction_document(id: &str, proposer: &str, operations: &[Operation]) -> S
         Yaml::Sequence(operations.iter().map(Operation::yaml).collect()),
     );
     tx.insert(s("evidence"), Yaml::Sequence(Vec::new()));
+    if let Some(version) = schema_version {
+        tx.insert(s("schema_version"), s(version));
+    }
     let mut doc = Mapping::new();
     doc.insert(s("format"), s("ekr.transaction-document/2"));
     doc.insert(s("transaction"), Yaml::Mapping(tx));
@@ -402,7 +569,7 @@ mod tests {
     use std::ffi::OsStr;
     use std::path::PathBuf;
 
-    use super::{transaction_document, Backend, Operation, Store};
+    use super::{transaction_document, Backend, Operation, PropertyDecl, Store};
 
     #[test]
     fn a_transaction_document_names_its_format_first_and_tags_each_operation() {
@@ -421,7 +588,9 @@ mod tests {
                 },
                 Operation::DeleteEdge("e-1".into()),
             ],
+            None,
         );
+        assert!(!text.contains("schema_version"), "{text}");
         assert!(
             text.starts_with("format: ekr.transaction-document/2\n"),
             "{text}"
@@ -435,6 +604,65 @@ mod tests {
             "reason: 'P-2: gone'",
             "- !DeleteEdge e-1",
             "evidence: []",
+        ] {
+            assert!(text.contains(part), "{part} in {text}");
+        }
+    }
+
+    #[test]
+    fn a_schema_change_names_its_version_and_writes_each_kind_as_ekr_declares_it() {
+        let prop = |id: &str| PropertyDecl {
+            id: id.into(),
+            name: "founded".into(),
+            value_type: serde_json::json!({"value_kind": "Integer"}),
+            cardinality: "One".into(),
+            required: id == "p-2",
+            constraints: Vec::new(),
+        };
+        let text = transaction_document(
+            "t-1",
+            "op-1",
+            &[
+                Operation::DefineNodeType {
+                    id: "n-1".into(),
+                    name: "Maker".into(),
+                    properties: vec![prop("p-1")],
+                },
+                Operation::DefineEdgeType {
+                    id: "e-1".into(),
+                    name: "MADE_BY".into(),
+                    source_types: vec!["n-0".into()],
+                    target_types: vec!["n-1".into()],
+                },
+                Operation::ModifyProperty {
+                    owner: "n-0".into(),
+                    property: prop("p-2"),
+                },
+            ],
+            Some("v-1"),
+        );
+        let doc: serde_yaml_ng::Value = serde_yaml_ng::from_str(&text).unwrap();
+        let tx = &doc["transaction"];
+        assert_eq!(tx["schema_version"].as_str(), Some("v-1"), "{text}");
+        assert_eq!(
+            tx["evidence"].as_sequence().map(Vec::len),
+            Some(0),
+            "{text}"
+        );
+        for part in [
+            "- !DefineNodeType",
+            "parents: []",
+            "abstract_type: false",
+            "lifecycle: null",
+            "- !DefineEdgeType",
+            "cardinality: Many",
+            "symmetric: false",
+            "- !ModifyProperty",
+            "owner: n-0",
+            "value_kind: Integer",
+            "required: false",
+            "required: true",
+            "constraints: []",
         ] {
             assert!(text.contains(part), "{part} in {text}");
         }

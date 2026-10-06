@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:schema-emergence
 kind: story
-status: draft
+status: implemented
 title: An operator triggers schema emergence on demand
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -23,7 +23,11 @@ scope:
   path: src/schema.rs
 - confidence: inferred
   path: tests/schema.rs
-revision: 2
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-06T10:29:12Z", actor: "agent:claude", revision: 3}
+- {from: "proposed", to: "active", at: "2026-10-06T10:29:12Z", actor: "agent:claude", revision: 4}
+- {from: "active", to: "implemented", at: "2026-10-06T11:16:48Z", actor: "agent:claude", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Outcome
 
@@ -53,3 +57,11 @@ Operator requirement 2026-10-06: the instance runs remotely for readers, and the
 ## Depends on
 
 `story:quality-judge` (the sample draw, the lock release and the judge masking it reuses).
+
+## Scope
+
+Landed 2026-10-06 in `62f9f83` (wave 20261006h).
+
+- **Files:** `src/schema.rs` (new), `src/ekr.rs` (schema operations), `src/quality.rs` (shared sampling and masking), `src/main.rs`, `src/lib.rs`, `src/run.rs`, `spec/domains/instance.yaml`, `spec/components.yaml`, `generated/`, `tests/schema.rs` (new), `tests/conformance.rs`, `website/docs/commands.md`, `AGENTS.md`
+- **Review:** one adversary pass, 3 findings fixed (inherited property shadowing, redeclaration dropping required, placeholders in names), plus case-insensitive names
+- **Open:** EKR 0.0.31 takes no evidence on a schema transaction; `cost_usd` stays off the event, https://github.com/beyond10x/ess/issues/467

@@ -141,6 +141,21 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `timeout_s` — `Integer`
 - `instructions` — `Optional<String>`, which may be absent
 
+### `NewEdgeType`
+
+`cortex.instance.NewEdgeType` is a record of three fields:
+
+- `name` — `String`
+- `source_types` — `List<String>`
+- `target_types` — `List<String>`
+
+### `NewNodeType`
+
+`cortex.instance.NewNodeType` is a record of two fields:
+
+- `name` — `String`
+- `properties` — `List<cortex.instance.SchemaProperty>`
+
 ### `PageStyle`
 
 `cortex.instance.PageStyle` is one of `PageNumber`, `Token` and `Keyset`.
@@ -160,12 +175,35 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 
 - `config` — `String`
 
+### `PropertyChange`
+
+`cortex.instance.PropertyChange` is a record of two fields:
+
+- `owner` — `String`
+- `property` — `cortex.instance.SchemaProperty`
+
 ### `PropertyMapping`
 
 `cortex.instance.PropertyMapping` is a record of two fields:
 
 - `property` — `String`
 - `path` — `String`
+
+### `PropertyRemoval`
+
+`cortex.instance.PropertyRemoval` is a record of two fields:
+
+- `owner` — `String`
+- `property` — `String`
+
+### `ProposedSchemaChange`
+
+`cortex.instance.ProposedSchemaChange` is a record of four fields:
+
+- `change` — `cortex.instance.SchemaChange`
+- `reason` — `String`
+- `facts` — `List<String>`
+- `evidence` — `List<String>`
 
 ### `QualityVerdict`
 
@@ -238,6 +276,61 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 `cortex.instance.RunGate` is a record of one field:
 
 - `checks` — `List<cortex.instance.GateCheck>`
+
+### `SchemaCardinality`
+
+`cortex.instance.SchemaCardinality` is one of `One` and `Many`.
+
+### `SchemaChange`
+
+`cortex.instance.SchemaChange` is one of nine shapes, told apart by a `kind` field — tagged, so a decoder never has to guess which branch it is reading:
+
+- `add_edge_type` — `cortex.instance.NewEdgeType`
+- `add_node_type` — `cortex.instance.NewNodeType`
+- `add_property` — `cortex.instance.PropertyChange`
+- `merge_types` — `cortex.instance.TypeMerge`
+- `redeclare_property` — `cortex.instance.PropertyChange`
+- `remove_edge_type` — `cortex.instance.TypeRemoval`
+- `remove_node_type` — `cortex.instance.TypeRemoval`
+- `remove_property` — `cortex.instance.PropertyRemoval`
+- `split_type` — `cortex.instance.TypeSplit`
+
+### `SchemaProperty`
+
+`cortex.instance.SchemaProperty` is a record of three fields:
+
+- `name` — `String`
+- `value_kind` — `cortex.instance.SchemaValueKind`
+- `cardinality` — `cortex.instance.SchemaCardinality`
+
+### `SchemaProposal`
+
+`cortex.instance.SchemaProposal` is a record of 10 fields:
+
+- `format` — `String`
+- `change` — `cortex.instance.SchemaChange`
+- `reason` — `String`
+- `facts` — `List<String>`
+- `evidence` — `List<String>`
+- `status` — `cortex.instance.SchemaProposalStatus`
+- `codes` — `List<String>`
+- `note` — `Optional<String>`, which may be absent
+- `revision` — `Optional<Integer>`, which may be absent
+- `schema_version` — `Optional<String>`, which may be absent
+
+### `SchemaProposalStatus`
+
+`cortex.instance.SchemaProposalStatus` is one of `applied`, `refused`, `recorded-only`, `invalid` and `dry-run`.
+
+### `SchemaProposals`
+
+`cortex.instance.SchemaProposals` is a record of one field:
+
+- `proposals` — `List<cortex.instance.ProposedSchemaChange>`
+
+### `SchemaValueKind`
+
+`cortex.instance.SchemaValueKind` is one of `String`, `Integer`, `Decimal`, `Boolean` and `Timestamp`.
 
 ### `SearchInput`
 
@@ -366,6 +459,26 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 
 `cortex.instance.TimeRange` is one of `day`, `week`, `month` and `year`.
 
+### `TypeMerge`
+
+`cortex.instance.TypeMerge` is a record of two fields:
+
+- `types` — `List<String>`
+- `into` — `String`
+
+### `TypeRemoval`
+
+`cortex.instance.TypeRemoval` is a record of one field:
+
+- `name` — `String`
+
+### `TypeSplit`
+
+`cortex.instance.TypeSplit` is a record of two fields:
+
+- `name` — `String`
+- `into` — `List<String>`
+
 ### `WebInput`
 
 `cortex.instance.WebInput` is one of two shapes, told apart by a `input` field — tagged, so a decoder never has to guess which branch it is reading:
@@ -385,7 +498,7 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `connection` — `String`
 - `input` — `cortex.instance.WebInput`
 
-One of the types above is reached by nothing else in this system: `cortex.instance.QualityVerdict`. No entity, view, command, event, error or crossing names it, so it is either vocabulary something outside this specification uses or a leftover — and only a person can tell which.
+Three of the types above are reached by nothing else in this system: `cortex.instance.QualityVerdict`, `cortex.instance.SchemaProposal` and `cortex.instance.SchemaProposals`. No entity, view, command, event, error or crossing names them, so it is either vocabulary something outside this specification uses or a leftover — and only a person can tell which.
 
 ## Entities
 
@@ -663,6 +776,28 @@ It has four outcomes.
 
 **`no-such-instance`** — Nothing was measured. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
+### `ProposeSchemaChanges`
+
+`cortex.instance.ProposeSchemaChanges`, shown to a person as "Propose schema changes" and called `schema` on the wire.
+
+It takes:
+
+- `name` — `cortex.instance.InstanceName`
+- `sample` — `Integer`
+- `dry_run` — `Boolean`
+
+It has five outcomes.
+
+**`sample-failed`** — No model was asked and nothing was written. Decided outside the input: EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SampleFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`propose-failed`** — Nothing was applied and no `proposals.jsonl` was written. Decided outside the input: A model call fails, times out, answers no valid proposals or finds the budget spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ProposeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`proposed`** — A dry run: every proposal not dropped is recorded and none is applied; `applied` and `refused` are 0, and a change EKR would be asked to apply is `dry-run`. Taken when `dry_run` holds of the input. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaChangesProposed`. A test reaches it by constructing an input that satisfies that condition.
+
+**`applied`** — Every proposal EKR accepted is committed, each as its own schema transaction and schema version; `applied` counts them, 0 when it accepted none. `revision` is the head the sample was drawn at, so `ekr ontology --at <revision>` still answers the schema before. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaChangesProposed`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+
+**`no-such-instance`** — Nothing was proposed. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
+
 ### `RecordFailure`
 
 `cortex.instance.RecordFailure`, shown to a person as "Record a failed run" and called `record-failure` on the wire.
@@ -849,6 +984,26 @@ Emitted by `cortex.instance.RecordFailure` on its `counted` outcome.
 
 Nothing in this system reacts to it.
 
+### `SchemaChangesProposed`
+
+`cortex.instance.SchemaChangesProposed`.
+
+It carries:
+
+- `name` — `cortex.instance.InstanceName`
+- `stamp` — `String`
+- `revision` — `Integer`
+- `proposed` — `Integer`
+- `applied` — `Integer`
+- `refused` — `Integer`
+- `recorded_only` — `Integer`
+- `invalid` — `Integer`
+- `dropped` — `Integer`
+
+Emitted by `cortex.instance.ProposeSchemaChanges` on its `proposed` and `applied` outcomes.
+
+Nothing in this system reacts to it.
+
 ### `SnapshotRestored`
 
 `cortex.instance.SnapshotRestored`.
@@ -999,6 +1154,8 @@ It carries:
 
 Reported by `cortex.instance.MeasureQuality` on its `no-such-instance` outcome.
 
+Reported by `cortex.instance.ProposeSchemaChanges` on its `no-such-instance` outcome.
+
 Reported by `cortex.instance.RemoveInstance` on its `no-such-instance` outcome.
 
 Reported by `cortex.instance.RestoreSnapshot` on its `no-such-instance` outcome.
@@ -1027,6 +1184,16 @@ Reported by `cortex.instance.AdoptInstance` on its `name-taken` outcome.
 
 Reported by `cortex.instance.CreateInstance` on its `name-taken` outcome.
 
+### `ProposeFailed`
+
+A model call for schema proposals failed, timed out, answered no valid proposals or found the budget spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.ProposeSchemaChanges` on its `propose-failed` outcome.
+
 ### `RestoreUnsupported`
 
 The instance's store is on the postgres backend: its snapshot is the operator's database backup, which cortex neither takes nor restores.
@@ -1046,6 +1213,8 @@ It carries:
 - `reason` — `String`
 
 Reported by `cortex.instance.MeasureQuality` on its `sample-failed` outcome.
+
+Reported by `cortex.instance.ProposeSchemaChanges` on its `sample-failed` outcome.
 
 ### `SeedChangeRefused`
 
@@ -1151,7 +1320,7 @@ An actor is who may ask this context for something. Every grant below points at 
 
 `cortex.instance.Operator`, shown to a person as "Operator".
 
-It may invoke [`AddSource`](#addsource), [`AdoptInstance`](#adoptinstance), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`MeasureQuality`](#measurequality), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot) and [`UpdateInstance`](#updateinstance).
+It may invoke [`AddSource`](#addsource), [`AdoptInstance`](#adoptinstance), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`MeasureQuality`](#measurequality), [`ProposeSchemaChanges`](#proposeschemachanges), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot) and [`UpdateInstance`](#updateinstance).
 
 ### `Scheduler`
 
@@ -1162,4 +1331,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e` · contract digest `slice-sha256/2:4ccfd55371704938bf0eee933501df17665487def4b8ad6c2faac061972da933`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17` · contract digest `slice-sha256/2:8d562b038cb06e2577e6a148e341c1535923c082eabdc3385792c367302f8fcc`. Do not edit this file; change the specification and regenerate it with `task generate`.

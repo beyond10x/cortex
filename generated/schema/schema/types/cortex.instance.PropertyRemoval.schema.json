@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.PropertyRemoval",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17",
+    "contract_digest": "slice-sha256/2:7ee8a9c6606755e9d032775a1aab34f2c1606e75995113d5e90a996adcd42ada",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.PropertyRemoval": {
+      "title": "PropertyRemoval",
+      "x-ess-name": "cortex.instance.PropertyRemoval",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "owner": {
+          "type": "string"
+        },
+        "property": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner",
+        "property"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

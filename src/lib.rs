@@ -14,6 +14,7 @@ pub mod quality;
 pub mod redact;
 pub mod run;
 pub mod schedule;
+pub mod schema;
 pub mod snapshot;
 pub mod sources;
 pub mod spec;

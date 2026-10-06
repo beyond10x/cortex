@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e",
-    "contract_digest": "4ccfd55371704938bf0eee933501df17665487def4b8ad6c2faac061972da933"
+    "source_digest": "80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17",
+    "contract_digest": "8d562b038cb06e2577e6a148e341c1535923c082eabdc3385792c367302f8fcc"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -124,6 +124,20 @@
     },
     {
       "kind": "domain_type",
+      "source": "cortex.instance.NewEdgeType",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.NewNodeType",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
       "source": "cortex.instance.PageStyle",
       "disposition": {
         "disposition": "generated"
@@ -145,7 +159,28 @@
     },
     {
       "kind": "domain_type",
+      "source": "cortex.instance.PropertyChange",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
       "source": "cortex.instance.PropertyMapping",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.PropertyRemoval",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.ProposedSchemaChange",
       "disposition": {
         "disposition": "generated"
       }
@@ -216,6 +251,55 @@
     {
       "kind": "domain_type",
       "source": "cortex.instance.RunGate",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.SchemaCardinality",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.SchemaChange",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.SchemaProperty",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.SchemaProposal",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.SchemaProposalStatus",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.SchemaProposals",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.SchemaValueKind",
       "disposition": {
         "disposition": "generated"
       }
@@ -362,6 +446,27 @@
     },
     {
       "kind": "domain_type",
+      "source": "cortex.instance.TypeMerge",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.TypeRemoval",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.TypeSplit",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
       "source": "cortex.instance.WebInput",
       "disposition": {
         "disposition": "generated"
@@ -468,6 +573,20 @@
     {
       "kind": "command_behavior",
       "source": "cortex.instance.MeasureQuality",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_contract",
+      "source": "cortex.instance.ProposeSchemaChanges",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_behavior",
+      "source": "cortex.instance.ProposeSchemaChanges",
       "disposition": {
         "disposition": "generated"
       }
@@ -596,6 +715,13 @@
     },
     {
       "kind": "event_type",
+      "source": "cortex.instance.SchemaChangesProposed",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "event_type",
       "source": "cortex.instance.SnapshotRestored",
       "disposition": {
         "disposition": "generated"
@@ -695,6 +821,13 @@
     {
       "kind": "error_type",
       "source": "cortex.instance.NameTaken",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.instance.ProposeFailed",
       "disposition": {
         "disposition": "generated"
       }
@@ -811,7 +944,7 @@
         "disposition": "refused",
         "reason": "needs_caller_identity",
         "stage": "planning",
-        "detail": "may invoke `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.UpdateInstance`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry"
+        "detail": "may invoke `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.ProposeSchemaChanges`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.UpdateInstance`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry"
       }
     },
     {

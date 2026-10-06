@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e
-// contract digest 4ccfd55371704938bf0eee933501df17665487def4b8ad6c2faac061972da933
+// model digest 80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17
+// contract digest 8d562b038cb06e2577e6a148e341c1535923c082eabdc3385792c367302f8fcc
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -222,6 +222,26 @@ pub struct ModelSpec {
     pub instructions: Option<String>,
 }
 
+/// NewEdgeType — `cortex.instance.NewEdgeType`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewEdgeType {
+    /// `name` — `String`.
+    pub name: String,
+    /// `source_types` — `List<String>`.
+    pub source_types: Vec<String>,
+    /// `target_types` — `List<String>`.
+    pub target_types: Vec<String>,
+}
+
+/// NewNodeType — `cortex.instance.NewNodeType`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewNodeType {
+    /// `name` — `String`.
+    pub name: String,
+    /// `properties` — `List<cortex.instance.SchemaProperty>`.
+    pub properties: Vec<SchemaProperty>,
+}
+
 /// PageStyle — `cortex.instance.PageStyle`: one of a closed set of names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageStyle {
@@ -253,6 +273,15 @@ pub struct PostgresStore {
     pub config: String,
 }
 
+/// PropertyChange — `cortex.instance.PropertyChange`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PropertyChange {
+    /// `owner` — `String`.
+    pub owner: String,
+    /// `property` — `cortex.instance.SchemaProperty`.
+    pub property: SchemaProperty,
+}
+
 /// PropertyMapping — `cortex.instance.PropertyMapping`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PropertyMapping {
@@ -260,6 +289,28 @@ pub struct PropertyMapping {
     pub property: String,
     /// `path` — `String`.
     pub path: String,
+}
+
+/// PropertyRemoval — `cortex.instance.PropertyRemoval`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PropertyRemoval {
+    /// `owner` — `String`.
+    pub owner: String,
+    /// `property` — `String`.
+    pub property: String,
+}
+
+/// ProposedSchemaChange — `cortex.instance.ProposedSchemaChange`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProposedSchemaChange {
+    /// `change` — `cortex.instance.SchemaChange`.
+    pub change: SchemaChange,
+    /// `reason` — `String`.
+    pub reason: String,
+    /// `facts` — `List<String>`.
+    pub facts: Vec<String>,
+    /// `evidence` — `List<String>`.
+    pub evidence: Vec<String>,
 }
 
 /// QualityVerdict — `cortex.instance.QualityVerdict`.
@@ -386,6 +437,111 @@ pub struct RelationMapping {
 pub struct RunGate {
     /// `checks` — `List<cortex.instance.GateCheck>`.
     pub checks: Vec<GateCheck>,
+}
+
+/// SchemaCardinality — `cortex.instance.SchemaCardinality`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SchemaCardinality {
+    /// `One`.
+    One,
+    /// `Many`.
+    Many,
+}
+
+/// SchemaChange — `cortex.instance.SchemaChange`: one of a fixed set of shapes, tagged on the wire by `kind`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SchemaChange {
+    /// Tagged `add_edge_type` — `cortex.instance.NewEdgeType`.
+    AddEdgeType(NewEdgeType),
+    /// Tagged `add_node_type` — `cortex.instance.NewNodeType`.
+    AddNodeType(NewNodeType),
+    /// Tagged `add_property` — `cortex.instance.PropertyChange`.
+    AddProperty(PropertyChange),
+    /// Tagged `merge_types` — `cortex.instance.TypeMerge`.
+    MergeTypes(TypeMerge),
+    /// Tagged `redeclare_property` — `cortex.instance.PropertyChange`.
+    RedeclareProperty(PropertyChange),
+    /// Tagged `remove_edge_type` — `cortex.instance.TypeRemoval`.
+    RemoveEdgeType(TypeRemoval),
+    /// Tagged `remove_node_type` — `cortex.instance.TypeRemoval`.
+    RemoveNodeType(TypeRemoval),
+    /// Tagged `remove_property` — `cortex.instance.PropertyRemoval`.
+    RemoveProperty(PropertyRemoval),
+    /// Tagged `split_type` — `cortex.instance.TypeSplit`.
+    SplitType(TypeSplit),
+}
+
+/// SchemaProperty — `cortex.instance.SchemaProperty`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaProperty {
+    /// `name` — `String`.
+    pub name: String,
+    /// `value_kind` — `cortex.instance.SchemaValueKind`.
+    pub value_kind: SchemaValueKind,
+    /// `cardinality` — `cortex.instance.SchemaCardinality`.
+    pub cardinality: SchemaCardinality,
+}
+
+/// SchemaProposal — `cortex.instance.SchemaProposal`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaProposal {
+    /// `format` — `String`.
+    pub format: String,
+    /// `change` — `cortex.instance.SchemaChange`.
+    pub change: SchemaChange,
+    /// `reason` — `String`.
+    pub reason: String,
+    /// `facts` — `List<String>`.
+    pub facts: Vec<String>,
+    /// `evidence` — `List<String>`.
+    pub evidence: Vec<String>,
+    /// `status` — `cortex.instance.SchemaProposalStatus`.
+    pub status: SchemaProposalStatus,
+    /// `codes` — `List<String>`.
+    pub codes: Vec<String>,
+    /// `note` — `Optional<String>`.
+    pub note: Option<String>,
+    /// `revision` — `Optional<Integer>`.
+    pub revision: Option<i64>,
+    /// `schema_version` — `Optional<String>`.
+    pub schema_version: Option<String>,
+}
+
+/// SchemaProposalStatus — `cortex.instance.SchemaProposalStatus`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SchemaProposalStatus {
+    /// `applied`.
+    Applied,
+    /// `refused`.
+    Refused,
+    /// `recorded-only`.
+    RecordedOnly,
+    /// `invalid`.
+    Invalid,
+    /// `dry-run`.
+    DryRun,
+}
+
+/// SchemaProposals — `cortex.instance.SchemaProposals`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaProposals {
+    /// `proposals` — `List<cortex.instance.ProposedSchemaChange>`.
+    pub proposals: Vec<ProposedSchemaChange>,
+}
+
+/// SchemaValueKind — `cortex.instance.SchemaValueKind`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SchemaValueKind {
+    /// `String`.
+    String,
+    /// `Integer`.
+    Integer,
+    /// `Decimal`.
+    Decimal,
+    /// `Boolean`.
+    Boolean,
+    /// `Timestamp`.
+    Timestamp,
 }
 
 /// SearchInput — `cortex.instance.SearchInput`.
@@ -599,6 +755,31 @@ pub enum TimeRange {
     Month,
     /// `year`.
     Year,
+}
+
+/// TypeMerge — `cortex.instance.TypeMerge`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeMerge {
+    /// `types` — `List<String>`.
+    pub types: Vec<String>,
+    /// `into` — `String`.
+    pub into: String,
+}
+
+/// TypeRemoval — `cortex.instance.TypeRemoval`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeRemoval {
+    /// `name` — `String`.
+    pub name: String,
+}
+
+/// TypeSplit — `cortex.instance.TypeSplit`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeSplit {
+    /// `name` — `String`.
+    pub name: String,
+    /// `into` — `List<String>`.
+    pub into: Vec<String>,
 }
 
 /// WebInput — `cortex.instance.WebInput`: one of a fixed set of shapes, tagged on the wire by `input`.
@@ -1403,6 +1584,63 @@ pub enum MeasureQualityOutcome {
     },
 }
 
+/// Propose schema changes — the input of `cortex.instance.ProposeSchemaChanges`.
+///
+/// Everything it can result in is [`ProposeSchemaChangesOutcome`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProposeSchemaChanges {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `sample` — `Integer`.
+    pub sample: i64,
+    /// `dry_run` — `Boolean`.
+    pub dry_run: bool,
+}
+
+/// Everything `cortex.instance.ProposeSchemaChanges` can result in — one variant per declared outcome.
+///
+/// An infrastructure failure is deliberately not in here: a refusal is a fact about the domain,
+/// a transport fault is a fact about the run, and conflating the two is what the declared
+/// outcomes exist to prevent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProposeSchemaChangesOutcome {
+    /// `sample-failed` — externally decided (EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read).
+    ///
+    /// No model was asked and nothing was written.
+    SampleFailed {
+        /// Why it was refused: `cortex.instance.SampleFailed`.
+        error: SampleFailed,
+    },
+    /// `propose-failed` — externally decided (A model call fails, times out, answers no valid proposals or finds the budget spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology).
+    ///
+    /// Nothing was applied and no `proposals.jsonl` was written.
+    ProposeFailed {
+        /// Why it was refused: `cortex.instance.ProposeFailed`.
+        error: ProposeFailed,
+    },
+    /// `proposed` — when `dry_run`.
+    ///
+    /// A dry run: every proposal not dropped is recorded and none is applied; `applied` and `refused` are 0, and a change EKR would be asked to apply is `dry-run`.
+    Proposed {
+        /// The `cortex.instance.SchemaChangesProposed` this outcome publishes.
+        schema_changes_proposed: SchemaChangesProposed,
+    },
+    /// `applied` — otherwise.
+    ///
+    /// Every proposal EKR accepted is committed, each as its own schema transaction and schema version; `applied` counts them, 0 when it accepted none. `revision` is the head the sample was drawn at, so `ekr ontology --at <revision>` still answers the schema before.
+    Applied {
+        /// The `cortex.instance.SchemaChangesProposed` this outcome publishes.
+        schema_changes_proposed: SchemaChangesProposed,
+    },
+    /// `no-such-instance` — for an identity no record carries.
+    ///
+    /// Nothing was proposed.
+    NoSuchInstance {
+        /// Why it was refused: `cortex.instance.InstanceNotFound`.
+        error: InstanceNotFound,
+    },
+}
+
 /// Record a failed run — the input of `cortex.instance.RecordFailure`.
 ///
 /// Everything it can result in is [`RecordFailureOutcome`].
@@ -1725,6 +1963,29 @@ pub struct RunFailed {
     pub reason: String,
 }
 
+/// SchemaChangesProposed — the event `cortex.instance.SchemaChangesProposed`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaChangesProposed {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `stamp` — `String`.
+    pub stamp: String,
+    /// `revision` — `Integer`.
+    pub revision: i64,
+    /// `proposed` — `Integer`.
+    pub proposed: i64,
+    /// `applied` — `Integer`.
+    pub applied: i64,
+    /// `refused` — `Integer`.
+    pub refused: i64,
+    /// `recorded_only` — `Integer`.
+    pub recorded_only: i64,
+    /// `invalid` — `Integer`.
+    pub invalid: i64,
+    /// `dropped` — `Integer`.
+    pub dropped: i64,
+}
+
 /// SnapshotRestored — the event `cortex.instance.SnapshotRestored`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SnapshotRestored {
@@ -1860,6 +2121,15 @@ pub struct JudgeFailed {
 pub struct NameTaken {
     /// `name` — `cortex.instance.InstanceName`.
     pub name: InstanceName,
+}
+
+/// The declared error `cortex.instance.ProposeFailed`.
+///
+/// A model call for schema proposals failed, timed out, answered no valid proposals or found the budget spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProposeFailed {
+    /// `reason` — `String`.
+    pub reason: String,
 }
 
 /// The declared error `cortex.instance.RestoreUnsupported`.
@@ -2066,6 +2336,17 @@ pub mod obligations {
         ///
         /// `Err` is the typed refusal of a request the model declares no outcome for.
         fn measure_quality(&mut self, input: super::MeasureQuality) -> Result<super::MeasureQualityOutcome, crate::obligation::UnmetObligation>;
+    }
+
+    /// The behaviour `cortex.instance.ProposeSchemaChanges` — generated.
+    ///
+    /// The specification fully determines it: [`crate::behaviour::Generated`] implements it
+    /// over the storage and context ports. Implement it yourself to replace that behaviour.
+    pub trait ProposeSchemaChangesBehavior {
+        /// Decides and enacts exactly one declared outcome of `cortex.instance.ProposeSchemaChanges`.
+        ///
+        /// `Err` is the typed refusal of a request the model declares no outcome for.
+        fn propose_schema_changes(&mut self, input: super::ProposeSchemaChanges) -> Result<super::ProposeSchemaChangesOutcome, crate::obligation::UnmetObligation>;
     }
 
     /// The behaviour `cortex.instance.RecordFailure` — an implementation obligation.

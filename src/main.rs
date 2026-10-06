@@ -18,7 +18,7 @@ use cortex_cli::instance::{Layout, Meta};
 use cortex_cli::ports::{Ports, Shared, SharedRef};
 use cortex_cli::schedule::{self, Systemd};
 use cortex_cli::snapshot::{self, Refusal, RestoreError};
-use cortex_cli::{ekr, home, instance, model_map, quality, run, spec};
+use cortex_cli::{ekr, home, instance, model_map, quality, run, schema, spec};
 
 /// Spin up EKR knowledge brains from a spec, fed on a schedule by Connectors data sources.
 #[derive(Parser)]
@@ -165,8 +165,22 @@ enum Command {
         #[arg(long, default_value = "0.0.31")]
         ekr_version: String,
     },
-    /// Print the JSON Schema of the spec file (`cortex.instance.InstanceSpec`).
-    Schema,
+    /// Without an instance, print the JSON Schema of the spec file (`cortex.instance.InstanceSpec`).
+    ///
+    /// With one, have the instance's model propose ontology changes from a sample of the store's
+    /// facts and their evidence, in batches of 20, and apply each change EKR applies as a schema
+    /// transaction of its own; every proposal is written to `schema/<UTC stamp>/proposals.jsonl`
+    /// (`cortex.instance.ProposeSchemaChanges`).
+    #[command(verbatim_doc_comment)]
+    Schema {
+        name: Option<String>,
+        /// How many facts to draw, 1 to 1000.
+        #[arg(long, default_value_t = 40, requires = "name")]
+        sample: i64,
+        /// Record the proposals without applying any.
+        #[arg(long, requires = "name")]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -229,7 +243,7 @@ fn main() -> ExitCode {
         return fail(reason);
     }
     match cli.command {
-        Command::Schema => {
+        Command::Schema { name: None, .. } => {
             println!("{SPEC_SCHEMA}");
             ExitCode::SUCCESS
         }
@@ -349,6 +363,11 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
         Command::Remove { name } => remove(app, ctx, &name),
         Command::Restore { name, snapshot } => restore(app, ctx, &name, &snapshot),
         Command::Quality { name, sample } => quality(app, ctx, &name, sample),
+        Command::Schema {
+            name: Some(name),
+            sample,
+            dry_run,
+        } => propose_schema(app, ctx, &name, sample, dry_run),
         Command::Run {
             source_id,
             record_failure,
@@ -435,7 +454,7 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             }
             Err(e) => fail(e),
         },
-        Command::Schema | Command::Setup { .. } | Command::McpLine { .. } => {
+        Command::Schema { name: None, .. } | Command::Setup { .. } | Command::McpLine { .. } => {
             unreachable!("handled before the lock")
         }
     }
@@ -1524,6 +1543,123 @@ fn quality(app: &mut App, ctx: &Ctx, name: &str, sample: i64) -> ExitCode {
         },
     };
     print("quality", &done)
+}
+
+fn propose_schema(app: &mut App, ctx: &Ctx, name: &str, sample: i64, dry_run: bool) -> ExitCode {
+    const CMD: &str = "cortex.instance.ProposeSchemaChanges";
+    // An unknown name proposes nothing; the generated behaviour answers `no-such-instance`.
+    let known = ctx.shared.borrow().registry.instances.contains_key(name);
+    let mut proposed = None;
+    if known {
+        let layout = Layout::new(ctx.home.instance_dir(name));
+        // As `quality`: only the draw reads the store; the model calls need no lock, so scheduled
+        // runs do not wait behind them. Applying takes the lock again, and decides each proposal
+        // against the ontology at the head then.
+        let drawn = schema::draw(&layout, sample);
+        drop(ctx.lock.borrow_mut().take());
+        let asked = drawn.and_then(|d| schema::ask(&layout, &ctx.tools, d));
+        let result = match asked {
+            Err(e) => Err(e),
+            Ok(asked) if dry_run => schema::record(asked, None),
+            Ok(asked) => {
+                // Held only while applying; the registry loaded before the model calls is not
+                // written back (`main`), as another command may have written it since.
+                let _lock = match ctx.home.lock() {
+                    Ok(lock) => lock,
+                    Err(e) => return fail(format!("cannot lock {}: {e}", ctx.home.root.display())),
+                };
+                match schema::target_of(&layout) {
+                    Ok((store, operator)) => schema::record(
+                        asked,
+                        Some(schema::Target {
+                            store: &store,
+                            operator: &operator,
+                        }),
+                    ),
+                    Err(e) => Err(schema::Failure::Propose(e)),
+                }
+            }
+        };
+        let mut shared = ctx.shared.borrow_mut();
+        match result {
+            Ok(p) => {
+                shared.strings.push_back(p.stamp.clone());
+                shared.integers.extend([
+                    p.revision,
+                    p.proposed,
+                    p.applied,
+                    p.refused,
+                    p.recorded_only,
+                    p.invalid,
+                    p.dropped,
+                ]);
+                proposed = Some(p);
+            }
+            Err(schema::Failure::Sample(reason)) => {
+                shared.external.insert((CMD, "sample-failed"), true);
+                shared.strings.push_back(reason);
+            }
+            Err(schema::Failure::Propose(reason)) => {
+                shared.external.insert((CMD, "propose-failed"), true);
+                shared.strings.push_back(reason);
+            }
+        }
+    }
+    let detail = |e: &m::SchemaChangesProposed| {
+        let mut detail = json!({
+            "name": e.name.0,
+            "stamp": e.stamp,
+            "revision": e.revision,
+            "proposed": e.proposed,
+            "applied": e.applied,
+            "refused": e.refused,
+            "recorded_only": e.recorded_only,
+            "invalid": e.invalid,
+            "dropped": e.dropped,
+        });
+        // Not on the event (`spec/domains/instance.yaml`, `UNMAPPED:` on `proposed`).
+        if let (Some(p), Some(o)) = (&proposed, detail.as_object_mut()) {
+            o.extend(schema::extra(p));
+        }
+        detail
+    };
+    let done = match app.propose_schema_changes(m::ProposeSchemaChanges {
+        name: m::InstanceName(name.to_string()),
+        sample,
+        dry_run,
+    }) {
+        Err(e) => return fail(e),
+        Ok(m::ProposeSchemaChangesOutcome::Proposed {
+            schema_changes_proposed: e,
+        }) => Done {
+            outcome: "proposed",
+            ok: true,
+            detail: detail(&e),
+        },
+        Ok(m::ProposeSchemaChangesOutcome::Applied {
+            schema_changes_proposed: e,
+        }) => Done {
+            outcome: "applied",
+            ok: true,
+            detail: detail(&e),
+        },
+        Ok(m::ProposeSchemaChangesOutcome::SampleFailed { error }) => Done {
+            outcome: "sample-failed",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
+        Ok(m::ProposeSchemaChangesOutcome::ProposeFailed { error }) => Done {
+            outcome: "propose-failed",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
+        Ok(m::ProposeSchemaChangesOutcome::NoSuchInstance { error }) => Done {
+            outcome: "no-such-instance",
+            ok: false,
+            detail: json!({"name": error.name.0}),
+        },
+    };
+    print("schema", &done)
 }
 
 fn split(source_id: &str) -> (&str, &str) {

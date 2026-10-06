@@ -124,6 +124,20 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "upper": e.upper.0,
             }),
         ),
+        PublishedEvent::SchemaChangesProposed(e) => (
+            "SchemaChangesProposed",
+            json!({
+                "name": e.name.0,
+                "stamp": e.stamp,
+                "revision": e.revision,
+                "proposed": e.proposed,
+                "applied": e.applied,
+                "refused": e.refused,
+                "recorded_only": e.recorded_only,
+                "invalid": e.invalid,
+                "dropped": e.dropped,
+            }),
+        ),
         PublishedEvent::SourceRan(e) => (
             "SourceRan",
             json!({
@@ -442,6 +456,32 @@ impl Scenario {
                     Some(("InstanceNotFound", json!({"name": error.name.0}))),
                 ),
             },
+            "cortex.instance.ProposeSchemaChanges" => match app
+                .propose_schema_changes(m::ProposeSchemaChanges {
+                    name: m::InstanceName(s("name")),
+                    sample: input.get("sample").and_then(Value::as_i64).unwrap_or(1),
+                    dry_run: input
+                        .get("dry_run")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                })
+                .unwrap()
+            {
+                m::ProposeSchemaChangesOutcome::Proposed { .. } => ("proposed", None),
+                m::ProposeSchemaChangesOutcome::Applied { .. } => ("applied", None),
+                m::ProposeSchemaChangesOutcome::SampleFailed { error } => (
+                    "sample-failed",
+                    Some(("SampleFailed", json!({"reason": error.reason}))),
+                ),
+                m::ProposeSchemaChangesOutcome::ProposeFailed { error } => (
+                    "propose-failed",
+                    Some(("ProposeFailed", json!({"reason": error.reason}))),
+                ),
+                m::ProposeSchemaChangesOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+            },
             other => panic!("unknown command {other}"),
         };
         let events: Vec<_> = self.app.drain_outbox().into_iter().map(event).collect();
@@ -696,7 +736,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        50,
+        55,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

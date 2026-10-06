@@ -70,15 +70,16 @@ pub struct Measurement {
 
 /// One sampled fact as the judge is shown it, before redaction: `kind` is written as it is, the
 /// subject, predicate and object pass through the redaction policy.
-struct Fact {
-    id: String,
+pub(crate) struct Fact {
+    /// The EKR assertion id.
+    pub(crate) id: String,
     /// `Property (Node)`, `Relation (Node)`, …
     kind: String,
     subject: String,
     predicate: String,
     object: String,
     /// Indexes into the batch's evidence list.
-    cites: Vec<usize>,
+    pub(crate) cites: Vec<usize>,
 }
 
 impl Fact {
@@ -90,7 +91,9 @@ impl Fact {
 /// One evidence entry as the judge is shown it, before redaction: the fields of the payload's
 /// header (`Source:`, then `Title:`, `Published:`, `Description:` as the payload holds them) and
 /// the text after it, as [`crate::evidence`] wrote them.
-struct Evidence {
+pub(crate) struct Evidence {
+    /// The EKR evidence id.
+    pub(crate) id: String,
     /// `Source` first, then the header's other fields, each with its label.
     fields: Vec<(&'static str, String)>,
     /// The text after the header; `None` when the evidence bytes are not UTF-8.
@@ -101,9 +104,10 @@ struct Evidence {
 }
 
 /// The facts of one model call and the evidence they cite, each entry once.
-struct Batch {
-    facts: Vec<Fact>,
-    evidence: Vec<Evidence>,
+pub(crate) struct Batch {
+    pub(crate) facts: Vec<Fact>,
+    /// Shown as `E1`, `E2`, … in this order.
+    pub(crate) evidence: Vec<Evidence>,
 }
 
 /// The JSON Schema the judge's answer is held to.
@@ -227,11 +231,13 @@ const LABELS: [&str; 3] = ["Title", "Published", "Description"];
 /// [`crate::evidence`] wrote. A payload with no such header is all text. Masked for credential
 /// shapes, as fetched text is before it is stored.
 fn evidence(entry: &Value) -> Evidence {
+    let id = entry["id"].as_str().unwrap_or_default().to_string();
     let locator = entry["locator"].as_str().unwrap_or_default();
     let mut fields = vec![("Source", mask_key(locator).0)];
     let file_record = locator.starts_with("file:") && locator.contains('#');
     let Some(text) = entry["text"].as_str() else {
         return Evidence {
+            id,
             fields,
             body: None,
             file_record,
@@ -267,6 +273,7 @@ fn evidence(entry: &Value) -> Evidence {
         None => text,
     };
     Evidence {
+        id,
         fields,
         body: Some(body),
         file_record,
@@ -274,7 +281,7 @@ fn evidence(entry: &Value) -> Evidence {
 }
 
 /// The sample's items in batches of [`BATCH`], each citing its evidence by index.
-fn batches(items: &[Value]) -> Vec<Batch> {
+pub(crate) fn batches(items: &[Value]) -> Vec<Batch> {
     items
         .chunks(BATCH)
         .map(|chunk| {
@@ -311,7 +318,7 @@ fn batches(items: &[Value]) -> Vec<Batch> {
 /// a record read from a file counts its own text only, not its header or thread context; and the
 /// fact's names, like the known entity names, count nothing. `Published`, which a run does not
 /// show, counts nothing either.
-fn reserve(p: &mut redact::Batch<'_>, batch: &Batch) {
+pub(crate) fn reserve(p: &mut redact::Batch<'_>, batch: &Batch) {
     for e in &batch.evidence {
         for (label, value) in &e.fields {
             if e.file_record || *label == "Published" {
@@ -350,10 +357,18 @@ fn shown_texts(batch: &Batch) -> Vec<&str> {
     texts
 }
 
-/// The request text for `batch`, every text [`shown_texts`] names passed through `shown`; the
-/// labels around them are written as they are.
-fn prompt(batch: &Batch, mut shown: impl FnMut(&str) -> String) -> String {
+/// The judge's request text for `batch`: its instruction, then [`batch_text`].
+fn prompt(batch: &Batch, shown: impl FnMut(&str) -> String) -> String {
     let mut p = String::from("Judge whether the evidence each fact cites supports it.\n");
+    p.push_str(&batch_text(batch, shown));
+    p
+}
+
+/// `batch` as a model is shown it: each evidence entry as `E<n>`, then each fact with the labels
+/// of the evidence it cites. Every text [`shown_texts`] names passes through `shown`; the labels
+/// around them are written as they are.
+pub(crate) fn batch_text(batch: &Batch, mut shown: impl FnMut(&str) -> String) -> String {
+    let mut p = String::new();
     for (n, e) in batch.evidence.iter().enumerate() {
         p.push_str(&format!("\n=== Evidence E{} ===\n", n + 1));
         for (label, value) in &e.fields {
@@ -382,9 +397,9 @@ fn prompt(batch: &Batch, mut shown: impl FnMut(&str) -> String) -> String {
     p
 }
 
-/// Why `refuse_if_left` refuses `batch`: the classes still detected in what the judge would be
-/// shown. Names the classes, never a value.
-fn refused(r: &Redactor, batch: &Batch) -> Option<String> {
+/// Why `refuse_if_left` refuses `batch`: the classes still detected in what `who` (`the judge`)
+/// would be shown. Names the classes, never a value.
+pub(crate) fn refused(r: &Redactor, batch: &Batch, who: &str) -> Option<String> {
     let mut p = r.batch();
     reserve(&mut p, batch);
     let shown: Vec<String> = shown_texts(batch)
@@ -397,8 +412,8 @@ fn refused(r: &Redactor, batch: &Batch) -> Option<String> {
     }
     (!left.is_empty()).then(|| {
         format!(
-            "redaction refused a batch: {} still detected after masking in what the judge would \
-             be shown (refuse_if_left); nothing was sent",
+            "redaction refused a batch: {} still detected after masking in what {who} would be \
+             shown (refuse_if_left); nothing was sent",
             left.into_iter().collect::<Vec<_>>().join(", ")
         )
     })
@@ -426,10 +441,14 @@ pub fn utc_stamp(ms: i64) -> String {
     )
 }
 
-/// A new directory `quality/<stamp>` under the instance, `-2`, `-3`, … appended when a measurement
-/// of the same second holds the name.
-fn new_dir(layout: &Layout, stamp: &str) -> Result<(String, PathBuf), String> {
-    let root = layout.dir.join("quality");
+/// A new directory `<under>/<stamp>` under the instance (`quality`, `schema`), `-2`, `-3`, …
+/// appended when one of the same second holds the name.
+pub(crate) fn new_dir(
+    layout: &Layout,
+    under: &str,
+    stamp: &str,
+) -> Result<(String, PathBuf), String> {
+    let root = layout.dir.join(under);
     std::fs::create_dir_all(&root).map_err(|e| format!("{}: {e}", root.display()))?;
     for n in 1.. {
         let name = if n == 1 {
@@ -506,14 +525,14 @@ fn fact_quality(bin: &Path, judgements: &Value) -> Result<Vec<u8>, String> {
 /// A sample drawn from the instance's store, with what judging it needs: [`draw`] reads the store
 /// under the home's lock, [`judge`] needs neither.
 pub struct Drawn {
-    spec: m::InstanceSpec,
+    pub(crate) spec: m::InstanceSpec,
     /// The pinned `ekr`, for `ekr fact-quality`, which opens no store.
     ekr: PathBuf,
     /// The measurement's start in Unix milliseconds: the sample's seed and the directory's stamp.
-    seed: i64,
-    revision: i64,
+    pub(crate) seed: i64,
+    pub(crate) revision: i64,
     size: Value,
-    items: Vec<Value>,
+    pub(crate) items: Vec<Value>,
 }
 
 /// Draws `size` facts of the instance's store at its head (`ekr sample`). The caller holds the
@@ -559,12 +578,12 @@ pub fn judge(layout: &Layout, tools: &Tools, drawn: Drawn) -> Result<Measurement
     // `refuse_if_left`: every batch is checked as the judge would be shown it before the first
     // call, so a refusal sends nothing and writes nothing.
     if let Some(r) = redactor.as_ref().filter(|r| r.refuses()) {
-        if let Some(why) = batches.iter().find_map(|b| refused(r, b)) {
+        if let Some(why) = batches.iter().find_map(|b| refused(r, b, "the judge")) {
             return Err(Failure::Judge(why));
         }
     }
 
-    let (stamp, dir) = new_dir(layout, &utc_stamp(seed)).map_err(Failure::Judge)?;
+    let (stamp, dir) = new_dir(layout, "quality", &utc_stamp(seed)).map_err(Failure::Judge)?;
     let verdicts_path = dir.join("verdicts.jsonl");
     std::fs::write(&verdicts_path, "").map_err(|e| Failure::Judge(e.to_string()))?;
     let model = Model {

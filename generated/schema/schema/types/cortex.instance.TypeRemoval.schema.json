@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.TypeRemoval",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17",
+    "contract_digest": "slice-sha256/2:6f00fcb51f94de33fba2f94c82cccec3cb796ac871c0fd7a59f40bb317781519",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.TypeRemoval": {
+      "title": "TypeRemoval",
+      "x-ess-name": "cortex.instance.TypeRemoval",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
