@@ -61,7 +61,9 @@ timers until a `create` or `update` installs the units again and copies the new 
 ## What one run does
 
 1. **Fetch** the source's documents (web pages or records through `connectors`, or local files).
-2. **Mask** credential-shaped text in each document, then cut it to `max_chars_per_document`.
+2. **Mask** credential-shaped text in each document, then cut it to `max_chars_per_document`,
+   and further, at a character boundary, to what its evidence holds: EKR 0.0.30 takes an
+   evidence payload of at most 16,384 bytes, header included.
 3. **Keep** documents whose key was never applied, and documents whose text hash changed once
    their last application is `refresh_after_days` old, at most `max_documents_per_run`.
 4. **Issue evidence.** cortex mints one evidence item per document; the model never does.
@@ -73,7 +75,9 @@ timers until a `create` or `update` installs the units again and copies the new 
    placeholder in the answer is put back before merging; the mapping exists for that one call.
 6. **Merge.** A fact citing an evidence id cortex did not issue for that batch is refused; cortex
    adds the evidence items itself and records each web page as a `WebPage` node.
-7. **Apply** the document with `ekr apply-extraction`, then record the batch's documents as seen.
+7. **Apply** the document with `ekr apply-extraction`, then record the batch's documents as seen,
+   except a document a fact EKR rejected cites: it is not counted in `documents_applied`, and
+   the next run tries it again.
    Before the run's first apply, a `sqlite` store and `state/` are copied, and kept as a
    snapshot once that apply commits (see [Undoing a run](#undoing-a-run)); a copy that cannot be
    taken fails the run with nothing applied.

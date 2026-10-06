@@ -321,7 +321,8 @@ named by the target text. The mapping's node type, its properties, the target ty
 relations are added to the store's ontology where it does not hold them yet.
 
 **Evidence and rejections.** Each record is stored as the evidence every fact from it cites: a
-`Source:` header and the record's JSON. Before that, every string in the record has credential
+`Source:` header and the record's JSON, cut at a character boundary to 16,384 bytes (EKR 0.0.30's
+bound on one evidence payload). Before that, every string in the record has credential
 shapes masked and the `redaction` policy's rules with a `replacement` applied; no model sees a
 record, so nothing is replaced by a placeholder. `max_chars_per_document` does not cut a record,
 and EKR rejects a text value over 65,536 bytes (EKR 0.0.30's string limit). A record with any part
@@ -337,7 +338,7 @@ applies. Shorten or unmap the value at the source to clear it. Change detection,
 | `refresh_after_days` | a document whose text changed is extracted again only when it was last applied at least this many days ago; 0 or more |
 | `change` | how a change is detected; `ContentHash` is the only value |
 | `max_documents_per_run` | the most documents one run extracts; above 0 |
-| `max_chars_per_document` | longer text is cut to this many characters; above 0. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |
+| `max_chars_per_document` | longer text is cut to this many characters; above 0. Text is also cut, at a character boundary, to what a 16,384-byte evidence payload holds after its header (EKR 0.0.30's bound), so about 5,400 characters of a three-byte script such as Chinese fit. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |
 
 ## `redaction`
 

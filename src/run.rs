@@ -99,6 +99,13 @@ fn truncate(text: &mut String, max: usize) -> bool {
     true
 }
 
+/// Cuts `d`'s text to `max` characters, then to what its evidence payload holds within EKR's bound
+/// ([`evidence::fit`]); answers whether it cut anything.
+fn cut_text(d: &mut sources::Document, max: usize) -> bool {
+    let chars = truncate(&mut d.text, max);
+    evidence::fit(d) || chars
+}
+
 fn load_entities(layout: &Layout) -> BTreeMap<String, Vec<String>> {
     std::fs::read(layout.entities())
         .ok()
@@ -290,7 +297,7 @@ fn process(
             }
             let Some(r) = &redactor else {
                 d.hash = Some(text_hash(&d.text));
-                if truncate(&mut d.text, policy.max_chars_per_document as usize) {
+                if cut_text(&mut d, policy.max_chars_per_document as usize) {
                     cut.insert(d.key.clone());
                 }
                 return Some(d);
@@ -313,7 +320,7 @@ fn process(
             let (text, hits) = r.scrub(&d.text);
             d.text = text.clone();
             d.hash = Some(text_hash(&d.text));
-            if truncate(&mut d.text, policy.max_chars_per_document as usize) {
+            if cut_text(&mut d, policy.max_chars_per_document as usize) {
                 cut.insert(d.key.clone());
             }
             for (name, at) in hits {
@@ -527,7 +534,14 @@ fn process(
             );
         }
         report.parts_rejected += crate::ekr::applied(&applied).rejected;
+        // A document a rejected fact cites is neither applied nor seen: the next run tries it
+        // again, as `apply_records` does for a record.
+        let rejected = extract::cited_by_rejected(&doc, &applied);
         for issued in &batch {
+            if rejected.contains(&issued.id) {
+                continue;
+            }
+            report.documents_applied += 1;
             seen.record(&issued.doc, applied_at);
         }
         for (ty, name) in extract::entity_names(&restored) {
@@ -536,7 +550,6 @@ fn process(
                 names.push(name);
             }
         }
-        report.documents_applied += batch.len() as i64;
         seen.save(&seen_path).map_err(Failure::Apply)?;
         let _ = crate::home::write_atomic(
             &layout.entities(),

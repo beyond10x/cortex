@@ -392,6 +392,33 @@ pub fn merge(model: &Value, batch: &[Issued]) -> (Yaml, usize) {
     (Yaml::Mapping(doc), refused)
 }
 
+/// The evidence ids the facts of `doc` (a merged document) that `report` (an
+/// `ekr.integrate.ExtractionReport`) lists as `rejected` cite. A rejected part that is not a fact
+/// names no evidence.
+pub fn cited_by_rejected(doc: &Yaml, report: &Value) -> BTreeSet<String> {
+    let facts = doc["facts"].as_sequence().map_or(&[][..], Vec::as_slice);
+    report["rejected"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|part| {
+            part["item"]
+                .as_str()?
+                .strip_prefix("facts[")?
+                .split(']')
+                .next()?
+                .parse::<usize>()
+                .ok()
+        })
+        .filter_map(|i| match facts.get(i)? {
+            Yaml::Tagged(fact) => fact.value["evidence"].as_sequence(),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|id| id.as_str().map(str::to_string))
+        .collect()
+}
+
 /// Entity names per node type in a merged document, for the next run's prompt.
 pub fn entity_names(model: &Value) -> Vec<(String, String)> {
     model["entities"]
@@ -411,6 +438,24 @@ pub fn entity_names(model: &Value) -> Vec<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_rejected_fact_names_the_evidence_it_cites_and_another_part_names_none() {
+        let doc = tagged(&json!({"facts": [
+            {"!Relation": {"relation": "R", "evidence": ["e1"]}},
+            {"!Property": {"property": "p", "evidence": ["e2", "e3"]}},
+        ]}));
+        let report = json!({"rejected": [
+            {"item": "facts[1]", "refusal": "transaction document limit"},
+            {"item": "entities[0]", "refusal": "r"},
+            {"item": "facts[9]", "refusal": "r"},
+        ]});
+        assert_eq!(
+            cited_by_rejected(&doc, &report),
+            BTreeSet::from(["e2".to_string(), "e3".to_string()])
+        );
+        assert!(cited_by_rejected(&doc, &json!({"rejected": []})).is_empty());
+    }
 
     #[test]
     fn bang_keys_become_yaml_tags() {

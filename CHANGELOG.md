@@ -76,3 +76,10 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 - A release workflow: a published GitHub Release `v<version>` gets
   `cortex-<version>-x86_64-unknown-linux-gnu.tar.gz` and `SHA256SUMS` attached; a manual run
   builds the same two files as a workflow artifact.
+
+### Fixed
+
+- Evidence over 16 KB is no longer lost: each evidence payload is cut, at a character boundary, to
+  the 16,384 bytes EKR 0.0.30 takes, on a source run and on the seed alike, and the text the model
+  is shown is cut to what the payload holds. A document a rejected fact cites is no longer recorded
+  as seen or counted in `documents_applied`, so the next run tries it again.
