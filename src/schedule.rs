@@ -173,10 +173,41 @@ impl Owner {
     }
 }
 
-/// `KEY=value` for systemd's `Environment=`, quoted.
+/// `KEY=value` for systemd's `Environment=`, quoted: systemd unquotes `\\` and `\"` there and
+/// expands `%` specifiers, so those are escaped.
 fn env_line(key: &str, value: &str) -> String {
-    let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('%', "%%");
     format!("Environment=\"{key}={escaped}\"\n")
+}
+
+/// One `ExecStart=` word, double-quoted: systemd unquotes `\\` and `\"`, and expands `%` specifiers
+/// and `$` variables, so those are escaped too.
+fn exec_quote(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('%', "%%")
+        .replace('$', "$$");
+    format!("\"{escaped}\"")
+}
+
+/// `bin` as an `ExecStart=` program: systemd does not search the unit's `PATH`, so a bare name is
+/// looked up on this process's `PATH`, and a relative path is made absolute. A bare name found
+/// nowhere is written as it is.
+fn on_path(bin: &Path) -> PathBuf {
+    if bin.components().count() == 1 && bin.is_relative() {
+        std::env::var_os("PATH")
+            .iter()
+            .flat_map(std::env::split_paths)
+            .map(|dir| dir.join(bin))
+            .find(|candidate| candidate.is_file())
+            .unwrap_or_else(|| bin.to_path_buf())
+    } else {
+        std::path::absolute(bin).unwrap_or_else(|_| bin.to_path_buf())
+    }
 }
 
 /// The variables a unit needs so `connectors` and `claude` find their configuration and sign-in:
@@ -458,10 +489,10 @@ impl Systemd {
                 (
                     format!("{unit}.service"),
                     format!(
-                        "[Unit]\nDescription=cortex: run {instance}/{source}\n\n[Service]\nType=oneshot\n{}{tools}ExecStart=\"{}\" --home \"{}\" run {instance}/{source} --record-failure\n",
+                        "[Unit]\nDescription=cortex: run {instance}/{source}\n\n[Service]\nType=oneshot\n{}{tools}ExecStart={} --home {} run {instance}/{source} --record-failure\n",
                         environment(),
-                        exe.display(),
-                        self.home_root.display()
+                        exec_quote(&exe.display().to_string()),
+                        exec_quote(&self.home_root.display().to_string())
                     ),
                 ),
                 (
@@ -489,16 +520,61 @@ impl Systemd {
             ("the ekr binary", store.bin.display().to_string()),
             ("the cortex home", self.home_root.display().to_string()),
         ])?;
+        let store_env = [
+            env_line("EKR_HOST", &store.host.display().to_string()),
+            env_line("EKR_BACKEND", store.backend.name()),
+            env_line("EKR_STORE", &store.store.display().to_string()),
+        ]
+        .concat();
+        // A launched store's viewer is `ekr view` started by `connectors connections launch`,
+        // which needs the variables a source unit gives `connectors`.
+        let (env, exec) = match &store.launch {
+            None => (
+                store_env,
+                format!(
+                    "{} view --port {port}",
+                    exec_quote(&store.bin.display().to_string())
+                ),
+            ),
+            Some(launch) => {
+                let connectors = on_path(&launch.connectors);
+                single_line(
+                    [
+                        ("the connectors binary", connectors.display().to_string()),
+                        ("the adapter", launch.connection.adapter.clone()),
+                        ("the connection", launch.connection.connection.clone()),
+                    ]
+                    .into_iter()
+                    .map(|(what, value)| (what.to_string(), value))
+                    .chain(
+                        environment_values()
+                            .map(|(key, value)| (format!("{key} in the environment"), value)),
+                    ),
+                )?;
+                let args = serde_json::json!(["view", "--port", port.to_string()]).to_string();
+                (
+                    format!(
+                        "{}{}{store_env}",
+                        environment(),
+                        env_line("CORTEX_CONNECTORS", &connectors.display().to_string())
+                    ),
+                    format!(
+                        "{} connections launch --adapter {} --connection {} --consumer {} --args {}",
+                        exec_quote(&connectors.display().to_string()),
+                        exec_quote(&launch.connection.adapter),
+                        exec_quote(&launch.connection.connection),
+                        crate::ekr::CONSUMER,
+                        exec_quote(&args)
+                    ),
+                )
+            }
+        };
         self.write(
             instance,
             &[(
                 format!("{unit}.service"),
                 format!(
-                    "[Unit]\nDescription=cortex: viewer of {instance}\n\n[Service]\n{}{}{}ExecStart=\"{}\" view --port {port}\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n",
-                    env_line("EKR_HOST", &store.host.display().to_string()),
-                    env_line("EKR_BACKEND", store.backend.name()),
-                    env_line("EKR_STORE", &store.store.display().to_string()),
-                    store.bin.display()
+                    "[Unit]\nDescription=cortex: viewer of {instance}\n\n[Service]\n{env}ExecStart={exec}\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n",
                 ),
             )],
         )?;
@@ -586,7 +662,45 @@ impl Systemd {
 mod tests {
     use std::cmp::Ordering::{Equal, Greater, Less};
 
-    use super::compare;
+    use super::{compare, exec_quote, Systemd};
+
+    /// Every value cortex writes into a unit is read back by systemd as written: `ExecStart=` words
+    /// are unquoted with `\\` and `\"` and expand `%` and `$`; `Environment=` values are unquoted
+    /// the same way and expand `%`.
+    #[test]
+    fn a_source_unit_quotes_its_exec_start_words_and_its_environment_values() {
+        let tmp = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+        let home = tmp.path().join("h o\"m%e$X");
+        let units = tmp.path().join("units");
+        let systemd = Systemd {
+            systemctl: std::path::PathBuf::from("true"),
+            unit_dir: units.clone(),
+            home_root: home.clone(),
+            taken_over: Default::default(),
+        };
+        let tools = crate::run::Tools {
+            connectors: crate::connectors::Connectors {
+                bin: tmp.path().join("c%h/connectors"),
+            },
+            claude: "claude".into(),
+            codex: "codex".into(),
+        };
+        systemd
+            .install_source("q", "news", "daily", &tools)
+            .unwrap();
+        let unit = std::fs::read_to_string(units.join("cortex-q-news.service")).unwrap();
+        let exec = format!(
+            "ExecStart={} --home {} run q/news --record-failure\n",
+            exec_quote(&home.join("bin/cortex").display().to_string()),
+            exec_quote(&home.display().to_string())
+        );
+        assert!(unit.contains(&exec), "{exec} in\n{unit}");
+        let connectors = format!(
+            "Environment=\"CORTEX_CONNECTORS={}/c%%h/connectors\"\n",
+            tmp.path().display()
+        );
+        assert!(unit.contains(&connectors), "{connectors} in\n{unit}");
+    }
 
     #[test]
     fn versions_are_ordered_as_semver_orders_them() {

@@ -6,8 +6,6 @@
 //! decimal places, the precision cortex prints a cost at. `run.rs` then restores the snapshot
 //! taken before the run.
 
-use std::process::Command;
-
 use cortex_model::instance as m;
 use serde_json::{json, Value};
 
@@ -116,11 +114,8 @@ fn at_path(doc: &Value, path: &str) -> Option<f64> {
 
 /// `ekr quality` for `store` at its newest revision.
 pub fn quality(store: &Store) -> Result<Value, String> {
-    let out = Command::new(&store.bin)
-        .arg("quality")
-        .env("EKR_HOST", &store.host)
-        .env("EKR_BACKEND", store.backend.name())
-        .env("EKR_STORE", &store.store)
+    let out = store
+        .command(&[std::ffi::OsStr::new("quality")])?
         .output()
         .map_err(|e| format!("cannot run ekr quality: {e}"))?;
     if !out.status.success() {

@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17
-  contract digest 8d562b038cb06e2577e6a148e341c1535923c082eabdc3385792c367302f8fcc
+  model digest a5cdddd9e44c55f5312801a678ef3ff218957a546f5dc3e857e490a3aa3cca15
+  contract digest b5c1fffcca71606fe8e9c44e881856b37ae97c97a68cba6165d2449bad664144
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-134 capabilities: **130 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+135 capabilities: **131 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -16,6 +16,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | --- | --- |
 | domain type | `cortex.instance.ChangeDetection` |
 | domain type | `cortex.instance.ChildCall` |
+| domain type | `cortex.instance.ConnectionRef` |
 | domain type | `cortex.instance.ConnectorsSource` |
 | domain type | `cortex.instance.CrawlPolicy` |
 | domain type | `cortex.instance.DocumentId` |

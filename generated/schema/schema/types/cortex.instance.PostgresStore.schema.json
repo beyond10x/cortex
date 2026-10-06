@@ -4,11 +4,30 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17",
-    "contract_digest": "slice-sha256/2:c94087b9775093caa35a2506c460775c7a4e28ad9b1a3243e6e3bce10441d6ae",
+    "source_digest": "a5cdddd9e44c55f5312801a678ef3ff218957a546f5dc3e857e490a3aa3cca15",
+    "contract_digest": "slice-sha256/2:4a1317099c14f33fef45054ac44a335604212dfbb48ec9614ccb09f5eb3cbfb9",
     "regenerate": "ess generate"
   },
   "$defs": {
+    "cortex.instance.ConnectionRef": {
+      "title": "ConnectionRef",
+      "x-ess-name": "cortex.instance.ConnectionRef",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "adapter",
+        "connection"
+      ],
+      "additionalProperties": false
+    },
     "cortex.instance.PostgresStore": {
       "title": "PostgresStore",
       "x-ess-name": "cortex.instance.PostgresStore",
@@ -17,6 +36,12 @@
       "properties": {
         "config": {
           "type": "string"
+        },
+        "connection": {
+          "$ref": "#/$defs/cortex.instance.ConnectionRef"
+        },
+        "schema_connection": {
+          "$ref": "#/$defs/cortex.instance.ConnectionRef"
         }
       },
       "required": [

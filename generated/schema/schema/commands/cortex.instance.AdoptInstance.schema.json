@@ -40,8 +40,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17",
-    "contract_digest": "slice-sha256/2:f8e3aa50174335206230f7e82c90b4f9c3e2bdca20ec644395f4478032f7a0eb",
+    "source_digest": "a5cdddd9e44c55f5312801a678ef3ff218957a546f5dc3e857e490a3aa3cca15",
+    "contract_digest": "slice-sha256/2:e04e6a1c62bbc76405b66072a398810b66b34b47dabc384c8703fdeba32ce135",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -75,6 +75,25 @@
         "operation",
         "input",
         "records"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.ConnectionRef": {
+      "title": "ConnectionRef",
+      "x-ess-name": "cortex.instance.ConnectionRef",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "adapter",
+        "connection"
       ],
       "additionalProperties": false
     },
@@ -480,6 +499,12 @@
       "properties": {
         "config": {
           "type": "string"
+        },
+        "connection": {
+          "$ref": "#/$defs/cortex.instance.ConnectionRef"
+        },
+        "schema_connection": {
+          "$ref": "#/$defs/cortex.instance.ConnectionRef"
         }
       },
       "required": [

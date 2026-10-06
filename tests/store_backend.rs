@@ -167,6 +167,10 @@ struct Postgres {
     owner: PathBuf,
     /// The application role's password, which must appear nowhere cortex writes.
     password: String,
+    /// The published port, the CA file and the directory of the configurations.
+    port: String,
+    ca: PathBuf,
+    cfg: PathBuf,
 }
 
 impl Drop for Postgres {
@@ -280,11 +284,14 @@ impl Postgres {
             ]),
             "docker run",
         );
-        let pg = Self {
+        let mut pg = Self {
             name,
             app: cfg.join("app.json"),
             owner: cfg.join("owner.json"),
             password: format!("app-secret-{stamp}"),
+            port: String::new(),
+            ca: tls.join("ca.crt"),
+            cfg: cfg.clone(),
         };
         // The entrypoint's initialisation server listens on no TCP port; a TCP answer is the real one.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
@@ -368,8 +375,126 @@ impl Postgres {
             });
             std::fs::write(config, document.to_string()).unwrap();
         }
+        pg.port = port;
         pg
     }
+
+    /// The application and schema-management `ekr.postgres/1` files of a store whose `ekr` is
+    /// started by `connectors connections launch`: their connection strings carry no password,
+    /// and `password_file` is descriptor 3. Each role's `{"password": …}` document is written
+    /// only into `state`, the stand-in `connectors`' own directory, as `<connection>.json`.
+    fn launched(&self, state: &Path) -> (PathBuf, PathBuf) {
+        std::fs::create_dir_all(state).unwrap();
+        let mut out = Vec::new();
+        for (role, password, connection) in [
+            ("ekr_app", self.password.as_str(), "app"),
+            ("ekr_owner", "owner-secret", "owner"),
+        ] {
+            std::fs::write(
+                state.join(format!("{connection}.json")),
+                serde_json::json!({ "password": password }).to_string(),
+            )
+            .unwrap();
+            let dsn = self.cfg.join(format!("{connection}-fd3.dsn"));
+            std::fs::write(
+                &dsn,
+                format!("postgres://{role}@localhost:{}/ekr\n", self.port),
+            )
+            .unwrap();
+            let config = self.cfg.join(format!("{connection}-fd3.json"));
+            let document = serde_json::json!({
+                "format": "ekr.postgres/1",
+                "connection_file": dsn.file_name().unwrap().to_str().unwrap(),
+                "password_file": "/proc/self/fd/3",
+                "ca_file": self.ca,
+                "schema": "ekr",
+                "database_connections": 100,
+                "replicas": 1,
+                "reserved_connections": 10,
+            });
+            std::fs::write(&config, document.to_string()).unwrap();
+            out.push(config);
+        }
+        (out.remove(0), out.remove(0))
+    }
+}
+
+/// An `ekr` at `<root>/bin/ekr` that logs its arguments to `<root>/ekr-argv.log` and runs the real
+/// one: the spec's `ekr.bin`, and the binary the stand-in `connectors` launches.
+fn logging_ekr(w: &World) -> PathBuf {
+    let path = w.bin.join("ekr");
+    common::executable(
+        &path,
+        &format!(
+            "printf '%s\\n' \"$*\" >> \"{root}/ekr-argv.log\"\nexec \"{ekr}\" \"$@\"\n",
+            root = w.root.display(),
+            ekr = ekr().display()
+        ),
+    );
+    path
+}
+
+/// A stand-in `connectors` for a launched store, replacing the world's. It logs every argument
+/// list to `<root>/connectors-argv.log`; `connections list` answers every `<state>/<id>.json` as a
+/// ready connection; `connections launch --consumer ekr --args '<JSON>'` opens
+/// `<state>/<connection>.json` on descriptor 3 and runs `ekr` (the operator's pinned consumer) with
+/// the JSON array's elements as its arguments and only the `EKR_*` variables (`pass_env`).
+fn launching_connectors(w: &World, state: &Path, ekr: &Path) {
+    common::executable(
+        &w.bin.join("connectors"),
+        &format!(
+            r#"R="{root}"; STATE="{state}"; EKR="{ekr}"
+printf '%s\n' "$*" >> "$R/connectors-argv.log"
+case "$1 $2" in
+  "connections list")
+    L=""
+    for f in "$STATE"/*.json; do
+      c=$(basename "$f" .json)
+      L="$L{{\"adapter\":\"postgres\",\"connection\":\"$c\",\"state\":\"ready\",\"revision\":\"r1\"}},"
+    done
+    printf '{{"ok":true,"result":{{"connections":[%s]}}}}' "${{L%,}}" ;;
+  "connections launch")
+    shift 2; C=""; CONSUMER=""; ARGS="[]"
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --adapter) shift ;;
+        --connection) C="$2"; shift ;;
+        --consumer) CONSUMER="$2"; shift ;;
+        --args) ARGS="$2"; shift ;;
+        *) echo "unexpected $1" >&2; exit 2 ;;
+      esac
+      shift
+    done
+    [ "$CONSUMER" = ekr ] && [ -e "$STATE/$C.json" ] || {{ echo "no consumer ekr for $C" >&2; exit 2; }}
+    case "$ARGS" in *\\*) echo "escapes are not handled here: $ARGS" >&2; exit 2 ;; esac
+    exec 3<"$STATE/$C.json"
+    L=$(printf '%s' "$ARGS" | sed -e 's/^\["//' -e 's/"\]$//' -e 's/","/\n/g')
+    set --
+    for v in $(env | sed -n 's/^\(EKR_[A-Za-z0-9_]*\)=.*/\1/p'); do set -- "$@" "$v=$(printenv "$v")"; done
+    set -- "$@" "$EKR"
+    if [ "$ARGS" != "[]" ]; then
+      while IFS= read -r a; do set -- "$@" "$a"; done <<EOF
+$L
+EOF
+    fi
+    exec env -i "$@" ;;
+  *) echo '{{"ok":false}}'; exit 2 ;;
+esac
+"#,
+            root = w.root.display(),
+            state = state.display(),
+            ekr = ekr.display()
+        ),
+    );
+}
+
+/// The store form of a launched store over `config`, through connection `app`, provisioned
+/// through connection `owner`.
+fn launched_store(config: &Path) -> String {
+    format!(
+        "{{backend: postgres, value: {{config: \"{}\", connection: {{adapter: postgres, connection: app}}, schema_connection: {{adapter: postgres, connection: owner}}}}}}",
+        config.display()
+    )
 }
 
 /// `ekr head` of tenant `tenant` on PostgreSQL, read by `ekr` directly: the head, or its error.
@@ -442,11 +567,18 @@ fn a_postgres_instance_is_provisioned_seeded_run_and_served_from_postgres() {
     }
     let w = World::new();
     let pg = Postgres::start(&w.root);
-    let store = format!(
-        "{{backend: postgres, value: {{config: \"{}\"}}}}",
-        pg.app.display()
+    // The passwords are only in the stand-in `connectors`' state directory; the configurations
+    // cortex is given name descriptor 3.
+    let state = w.root.join("connectors-state");
+    let (app, owner) = pg.launched(&state);
+    let logged_ekr = logging_ekr(&w);
+    launching_connectors(&w, &state, &logged_ekr);
+    let spec = write_spec(&w, "pg", &launched_store(&app));
+    let text = std::fs::read_to_string(&spec).unwrap().replace(
+        &format!("bin: \"{}\"", ekr().display()),
+        &format!("bin: \"{}\"", logged_ekr.display()),
     );
-    let spec = write_spec(&w, "pg", &store);
+    std::fs::write(&spec, text).unwrap();
 
     let (code, out, err) = cortex(
         &w,
@@ -455,7 +587,7 @@ fn a_postgres_instance_is_provisioned_seeded_run_and_served_from_postgres() {
             "--spec",
             spec.to_str().unwrap(),
             "--postgres-schema-config",
-            pg.owner.to_str().unwrap(),
+            owner.to_str().unwrap(),
         ],
     );
     let created = last_json(&out);
@@ -485,37 +617,237 @@ fn a_postgres_instance_is_provisioned_seeded_run_and_served_from_postgres() {
         "the run committed nothing to PostgreSQL: {head}"
     );
 
-    // The viewer and the MCP line read the same store.
+    // Every `ekr` that opened the store was launched through its connection: the schema through
+    // `owner`, everything else through `app`.
+    let launches = std::fs::read_to_string(w.root.join("connectors-argv.log")).unwrap();
+    let launch = |connection: &str, args: &str| {
+        format!(
+            "connections launch --adapter postgres --connection {connection} --consumer ekr --args {args}"
+        )
+    };
+    for expected in [
+        launch(
+            "owner",
+            &format!(r#"["postgres-schema","--config","{}"]"#, owner.display()),
+        ),
+        launch("app", r#"["head"]"#),
+        launch("app", r#"["seed","#),
+        launch("app", r#"["apply-extraction","#),
+    ] {
+        assert!(launches.contains(&expected), "{expected} in {launches}");
+    }
+
+    // The viewer and the MCP line read the same store, through the same launch.
     let unit = std::fs::read_to_string(w.units.join("cortex-pg-view.service")).unwrap();
-    assert!(
-        unit.contains("Environment=\"EKR_BACKEND=postgres\""),
-        "{unit}"
-    );
-    assert!(
-        unit.contains(&format!("Environment=\"EKR_STORE={}\"", pg.app.display())),
-        "{unit}"
-    );
+    for part in [
+        "Environment=\"EKR_BACKEND=postgres\"".to_string(),
+        format!("Environment=\"EKR_STORE={}\"", app.display()),
+        format!(
+            "Environment=\"CORTEX_CONNECTORS={}\"",
+            w.bin.join("connectors").display()
+        ),
+        format!(
+            r#"ExecStart="{}" connections launch --adapter "postgres" --connection "app" --consumer ekr --args "[\"view\",\"--port\",\"18996\"]""#,
+            w.bin.join("connectors").display()
+        ),
+    ] {
+        assert!(unit.contains(&part), "{part} in {unit}");
+    }
     let (code, line, err) = cortex(&w, &["mcp-line", "pg"]);
     assert_eq!(code, Some(0), "{err}");
     assert!(
         line.contains(&format!(
-            "EKR_BACKEND=postgres EKR_STORE={} ",
-            pg.app.display()
+            "EKR_BACKEND=postgres EKR_STORE={} {} connections launch --adapter postgres \
+             --connection app --consumer ekr --args '[\"mcp\"]'",
+            app.display(),
+            w.bin.join("connectors").display()
         )),
         "{line}"
     );
 
-    // cortex passed file references only: the credential is nowhere it wrote.
+    // cortex passed file references only: neither password is anywhere it wrote, nor in the
+    // arguments of any process it started.
+    let argv = [
+        "connectors-argv.log",
+        "ekr-argv.log",
+        "claude-args.log",
+        "systemctl.log",
+    ]
+    .map(|log| {
+        (
+            log,
+            std::fs::read_to_string(w.root.join(log)).unwrap_or_default(),
+        )
+    });
+    assert!(!argv[1].1.is_empty(), "no ekr was started");
     for (place, text) in [
-        ("the instance directory", all_text(&dir)),
+        ("the home", all_text(&w.home)),
         ("the units", all_text(&w.units)),
         ("the MCP line", line),
-    ] {
+    ]
+    .into_iter()
+    .chain(argv.map(|(log, text)| (log, text)))
+    {
+        for password in [pg.password.as_str(), "owner-secret"] {
+            assert!(
+                !text.contains(password),
+                "the database credential is in {place}"
+            );
+        }
+    }
+}
+
+/// A store that names a connection is refused unless its `ekr.postgres/1` file takes the password
+/// from descriptor 3 and Connectors lists the connection; a schema connection needs a connection.
+/// No refusal prints a value of the configuration.
+#[test]
+fn a_launched_postgres_store_needs_a_password_file_and_a_listed_connection() {
+    const MARK: &str = "mark-3b9e";
+    let w = World::new();
+    let config = w.root.join("pg/app.json");
+    std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+    let no_password_file = serde_json::json!({
+        "format": "ekr.postgres/1",
+        "connection_file": format!("{MARK}.dsn"),
+        "schema": "ekr",
+        "database_connections": 100,
+        "replicas": 1,
+        "reserved_connections": 10,
+    });
+    let store = |connection: &str| {
+        format!(
+            "{{backend: postgres, value: {{config: \"{}\", connection: {{adapter: postgres, connection: {connection}}}}}}}",
+            config.display()
+        )
+    };
+    let create = |name: &str, store: &str| {
+        let spec = write_spec(&w, name, store);
+        let (code, out, err) = cortex(
+            &w,
+            &["create", "--spec", spec.to_str().unwrap(), "--no-units"],
+        );
         assert!(
-            !text.contains(&pg.password),
-            "the database credential is in {place}"
+            !out.contains(MARK) && !err.contains(MARK),
+            "the refusal prints the configuration: {out}{err}"
+        );
+        assert!(!w.home.join("instances").join(name).exists(), "{out}{err}");
+        (code, last_json(&out), format!("{out}{err}"))
+    };
+
+    // The world's `connectors` lists only `conn_test`.
+    std::fs::write(&config, no_password_file.to_string()).unwrap();
+    let (code, refused, all) = create("unlisted", &store("elsewhere"));
+    assert_eq!(
+        (code, refused["outcome"].as_str()),
+        (Some(1), Some("connection-missing")),
+        "{all}"
+    );
+    assert_eq!(
+        refused["detail"]["connection"].as_str(),
+        Some("postgres:elsewhere"),
+        "{all}"
+    );
+
+    for (name, document) in [
+        ("nofile", no_password_file.clone()),
+        (
+            "otherfile",
+            serde_json::json!({"format": "ekr.postgres/1", "password_file": format!("/srv/{MARK}.json")}),
+        ),
+    ] {
+        std::fs::write(&config, document.to_string()).unwrap();
+        let (code, refused, all) = create(name, &store("conn_test"));
+        assert_eq!(
+            (code, refused["outcome"].as_str()),
+            (Some(1), Some("seed-refused")),
+            "{all}"
+        );
+        let reason = refused["detail"]["reason"].as_str().unwrap_or_default();
+        assert!(
+            reason.contains("store.value.config") && reason.contains("/proc/self/fd/3"),
+            "{reason}"
         );
     }
+
+    let (code, refused, all) = create(
+        "schemaonly",
+        &format!(
+            "{{backend: postgres, value: {{config: \"{}\", schema_connection: {{adapter: postgres, connection: conn_test}}}}}}",
+            config.display()
+        ),
+    );
+    assert_eq!(
+        (code, refused["outcome"].as_str()),
+        (Some(1), Some("seed-refused")),
+        "{all}"
+    );
+    let reason = refused["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.contains("store.value.schema_connection")
+            && reason.contains("store.value.connection"),
+        "{reason}"
+    );
+}
+
+/// The viewer unit and the MCP line of a store that names a connection start `ekr` through
+/// `connectors connections launch`, with the unit carrying the variables `connectors` needs.
+#[test]
+fn a_launched_store_is_viewed_and_served_through_connectors() {
+    let w = World::new();
+    let config = w.root.join("pg/app.json");
+    let dir = w.home.join("instances/pgl");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("instance.yaml"),
+        spec_text("pgl", &launched_store(&config)),
+    )
+    .unwrap();
+    let connectors = w.bin.join("connectors");
+
+    let (code, line, err) = cortex(&w, &["mcp-line", "pgl"]);
+    assert_eq!(code, Some(0), "{err}");
+    assert!(
+        line.trim_end().ends_with(&format!(
+            "EKR_BACKEND=postgres EKR_STORE={} {} connections launch --adapter postgres \
+             --connection app --consumer ekr --args '[\"mcp\"]'",
+            config.display(),
+            connectors.display()
+        )),
+        "{line}"
+    );
+
+    let layout = Layout::new(dir.clone());
+    let spec = layout.load_spec().unwrap();
+    let mut store = layout.store_handle(&spec);
+    store
+        .launch
+        .as_mut()
+        .expect("a store with a connection is launched")
+        .connectors = connectors.clone();
+    let systemd = Systemd {
+        systemctl: w.bin.join("systemctl"),
+        unit_dir: w.units.clone(),
+        home_root: w.home.clone(),
+        taken_over: Default::default(),
+    };
+    systemd.install_view("pgl", &store, 18996).unwrap();
+    let unit = std::fs::read_to_string(w.units.join("cortex-pgl-view.service")).unwrap();
+    for part in [
+        "Environment=\"HOME=".to_string(),
+        "Environment=\"EKR_BACKEND=postgres\"".to_string(),
+        format!("Environment=\"EKR_STORE={}\"", config.display()),
+        format!("Environment=\"CORTEX_CONNECTORS={}\"", connectors.display()),
+        format!(
+            r#"ExecStart="{}" connections launch --adapter "postgres" --connection "app" --consumer ekr --args "[\"view\",\"--port\",\"18996\"]""#,
+            connectors.display()
+        ),
+    ] {
+        assert!(unit.contains(&part), "{part} in {unit}");
+    }
+    assert!(
+        !unit.contains(&format!("{} view", ekr().display())),
+        "{unit}"
+    );
 }
 
 #[test]
@@ -1090,4 +1422,407 @@ fn an_update_does_not_freeze_a_refused_store_when_the_frozen_spec_is_unreadable(
         code != Some(0) && !now.contains("config: pg.json"),
         "update accepted and froze a store create refuses: exit {code:?} {out}{err} frozen:\n{now}"
     );
+}
+
+// Security review, wave 20261006i unit a: conformance checks of the launched-store contract that
+// need no database. A stand-in `ekr` answers a `postgres` store from a SQLite file.
+
+/// An `ekr` at `<bin>/ekr-pg` that answers a `postgres` store from `<root>/pg-as-sqlite.sqlite`
+/// through the real `ekr`: `head` before that file exists answers PostgreSQL's "the lineage has no
+/// seed", and `postgres-schema` answers ready. Every invocation is logged to `<root>/ekr-argv.log`
+/// as `<EKR_BACKEND>|<arguments>`.
+fn sqlite_backed_ekr(w: &World) -> PathBuf {
+    let path = w.bin.join("ekr-pg");
+    common::executable(
+        &path,
+        &format!(
+            r#"R="{root}"; EKR="{ekr}"; DB="$R/pg-as-sqlite.sqlite"
+printf '%s|%s\n' "$EKR_BACKEND" "$*" >> "$R/ekr-argv.log"
+if [ "$1" = postgres-schema ]; then echo '{{"format":"ekr.postgres-schema/1","ready":true}}'; exit 0; fi
+if [ "$EKR_BACKEND" = postgres ]; then
+  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "the lineage has no seed" >&2; exit 1; fi
+  EKR_BACKEND=sqlite; EKR_STORE="$DB"; export EKR_BACKEND EKR_STORE
+fi
+exec "$EKR" "$@"
+"#,
+            root = w.root.display(),
+            ekr = ekr().display()
+        ),
+    );
+    path
+}
+
+/// [`write_spec`] with `ekr.bin` replaced by `bin`.
+fn spec_with_ekr(w: &World, name: &str, store: &str, bin: &Path) -> PathBuf {
+    let spec = write_spec(w, name, store);
+    let text = std::fs::read_to_string(&spec).unwrap().replace(
+        &format!("bin: \"{}\"", ekr().display()),
+        &format!("bin: \"{}\"", bin.display()),
+    );
+    std::fs::write(&spec, text).unwrap();
+    spec
+}
+
+/// An `ekr.postgres/1` file at `path` whose `password_file` is `password_file`.
+fn pg_config(path: &Path, password_file: &str) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let document = serde_json::json!({
+        "format": "ekr.postgres/1",
+        "connection_file": "app.dsn",
+        "password_file": password_file,
+        "schema": "ekr",
+        "database_connections": 100,
+        "replicas": 1,
+        "reserved_connections": 10,
+    });
+    std::fs::write(path, document.to_string()).unwrap();
+}
+
+/// A fake database password, assembled at run time.
+fn review_password() -> String {
+    [
+        "review",
+        "pw",
+        &std::process::id().to_string(),
+        &now_s().to_string(),
+    ]
+    .join("-")
+}
+
+fn direct_store(config: &Path) -> String {
+    format!(
+        "{{backend: postgres, value: {{config: \"{}\"}}}}",
+        config.display()
+    )
+}
+
+/// A store launched through connection `app`, with no schema connection.
+fn app_launched_store(config: &Path) -> String {
+    format!(
+        "{{backend: postgres, value: {{config: \"{}\", connection: {{adapter: postgres, connection: app}}}}}}",
+        config.display()
+    )
+}
+
+/// The world's `systemd`, for calling `install_view` directly.
+fn world_systemd(w: &World) -> Systemd {
+    Systemd {
+        systemctl: w.bin.join("systemctl"),
+        unit_dir: w.units.clone(),
+        home_root: w.home.clone(),
+        taken_over: Default::default(),
+    }
+}
+
+/// One `ExecStart=` word as systemd.syntax(7) reads it back as `value`: inside double quotes `\\`
+/// and `\"` are unescaped, and in `ExecStart=` `%` starts a specifier and `$` a variable, so the
+/// doubled `%%` and `$$` stand for themselves.
+fn systemd_word(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('%', "%%")
+        .replace('$', "$$");
+    format!("\"{escaped}\"")
+}
+
+/// Invariants 2 and 6: an update that gives an existing store a `connection` leaves no `ekr` of
+/// the store started without `connectors connections launch`. Runs pick the launch up; the viewer
+/// unit `create` wrote must too.
+#[test]
+fn review_an_update_that_names_a_connection_starts_the_viewer_through_the_launch() {
+    let w = World::new();
+    let ekr_pg = sqlite_backed_ekr(&w);
+    let config = w.root.join("pg/app.json");
+    let password = review_password();
+    let held = w.root.join("pg/password.txt");
+    std::fs::create_dir_all(held.parent().unwrap()).unwrap();
+    std::fs::write(&held, &password).unwrap();
+    pg_config(&config, held.to_str().unwrap());
+    let spec = spec_with_ekr(&w, "pg", &direct_store(&config), &ekr_pg);
+    let (code, out, err) = cortex(
+        &w,
+        &["create", "--spec", spec.to_str().unwrap(), "--no-extract"],
+    );
+    assert_eq!(code, Some(0), "{out}{err}");
+    let unit_path = w.units.join("cortex-pg-view.service");
+    let before = std::fs::read_to_string(&unit_path).unwrap();
+    assert!(before.contains(" view --port 18996"), "{before}");
+
+    // The operator moves the password into Connectors and names the connection.
+    let state = w.root.join("connectors-state");
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(
+        state.join("app.json"),
+        serde_json::json!({ "password": password }).to_string(),
+    )
+    .unwrap();
+    std::fs::remove_file(&held).unwrap();
+    pg_config(&config, "/proc/self/fd/3");
+    launching_connectors(&w, &state, &ekr_pg);
+    let spec = spec_with_ekr(&w, "pg", &app_launched_store(&config), &ekr_pg);
+    let (code, out, err) = cortex(&w, &["update", "pg", "--spec", spec.to_str().unwrap()]);
+    assert_eq!(
+        (code, last_json(&out)["outcome"].as_str()),
+        (Some(0), Some("updated")),
+        "{out}{err}"
+    );
+    let (code, out, err) = cortex(&w, &["run", "pg/docs"]);
+    assert_eq!(code, Some(0), "{out}{err}");
+    let launches = std::fs::read_to_string(w.root.join("connectors-argv.log")).unwrap_or_default();
+    assert!(
+        launches.contains("--connection app --consumer ekr --args [\"apply-extraction\""),
+        "a run after the update did not launch ekr: {launches}"
+    );
+
+    let unit = std::fs::read_to_string(&unit_path).unwrap();
+    assert!(
+        unit.contains("connections launch"),
+        "after the update names store.value.connection, the viewer unit still starts ekr \
+         without the launch:\n{unit}"
+    );
+}
+
+/// Invariant 6, back: an update that drops the `connection` leaves no password in anything cortex
+/// wrote, and the viewer unit no longer goes through a connection the spec no longer names.
+#[test]
+fn review_an_update_that_drops_the_connection_starts_the_viewer_without_the_launch() {
+    let w = World::new();
+    let ekr_pg = sqlite_backed_ekr(&w);
+    let config = w.root.join("pg/app.json");
+    let password = review_password();
+    let state = w.root.join("connectors-state");
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(
+        state.join("app.json"),
+        serde_json::json!({ "password": password }).to_string(),
+    )
+    .unwrap();
+    pg_config(&config, "/proc/self/fd/3");
+    launching_connectors(&w, &state, &ekr_pg);
+    let spec = spec_with_ekr(&w, "pg", &app_launched_store(&config), &ekr_pg);
+    let (code, out, err) = cortex(
+        &w,
+        &["create", "--spec", spec.to_str().unwrap(), "--no-extract"],
+    );
+    assert_eq!(code, Some(0), "{out}{err}");
+    let unit_path = w.units.join("cortex-pg-view.service");
+    let before = std::fs::read_to_string(&unit_path).unwrap();
+    assert!(before.contains("connections launch"), "{before}");
+
+    // The operator takes the store back to a password file of its own.
+    let held = w.root.join("pg/password.txt");
+    std::fs::write(&held, &password).unwrap();
+    pg_config(&config, held.to_str().unwrap());
+    let spec = spec_with_ekr(&w, "pg", &direct_store(&config), &ekr_pg);
+    let (code, out, err) = cortex(&w, &["update", "pg", "--spec", spec.to_str().unwrap()]);
+    assert_eq!(
+        (code, last_json(&out)["outcome"].as_str()),
+        (Some(0), Some("updated")),
+        "{out}{err}"
+    );
+    let logs = ["connectors-argv.log", "ekr-argv.log", "systemctl.log"].map(|log| {
+        (
+            log,
+            std::fs::read_to_string(w.root.join(log)).unwrap_or_default(),
+        )
+    });
+    for (place, text) in [
+        ("the home", all_text(&w.home)),
+        ("the units", all_text(&w.units)),
+    ]
+    .into_iter()
+    .chain(logs)
+    {
+        assert!(
+            !text.contains(&password),
+            "the database password is in {place}"
+        );
+    }
+
+    let unit = std::fs::read_to_string(&unit_path).unwrap();
+    assert!(
+        !unit.contains("connections launch") && unit.contains(" view --port 18996"),
+        "after the update drops store.value.connection, the viewer unit still launches through \
+         it:\n{unit}"
+    );
+}
+
+/// Invariant 2, as the coordinator decided F3 (wave 20261006i): with `connection` set, `cortex
+/// create --postgres-schema-config` starts `ekr postgres-schema` through the launch of
+/// `schema_connection` when the spec names one, and without it starts it directly with the
+/// operator's own schema-role file, the one direct start `operating.md` documents.
+#[test]
+fn review_provisioning_a_store_with_a_connection_launches_the_schema_ekr() {
+    for schema_connection in [true, false] {
+        let w = World::new();
+        let ekr_pg = sqlite_backed_ekr(&w);
+        let config = w.root.join("pg/app.json");
+        let owner = w.root.join("pg/owner.json");
+        let state = w.root.join("connectors-state");
+        std::fs::create_dir_all(&state).unwrap();
+        for connection in ["app", "owner"] {
+            std::fs::write(
+                state.join(format!("{connection}.json")),
+                serde_json::json!({ "password": review_password() }).to_string(),
+            )
+            .unwrap();
+        }
+        pg_config(&config, "/proc/self/fd/3");
+        pg_config(&owner, "/proc/self/fd/3");
+        launching_connectors(&w, &state, &ekr_pg);
+        let store = if schema_connection {
+            launched_store(&config)
+        } else {
+            app_launched_store(&config)
+        };
+        let spec = spec_with_ekr(&w, "pg", &store, &ekr_pg);
+        let (code, out, err) = cortex(
+            &w,
+            &[
+                "create",
+                "--spec",
+                spec.to_str().unwrap(),
+                "--no-units",
+                "--no-extract",
+                "--postgres-schema-config",
+                owner.to_str().unwrap(),
+            ],
+        );
+        assert_eq!(code, Some(0), "{out}{err}");
+        let ekrs = std::fs::read_to_string(w.root.join("ekr-argv.log")).unwrap_or_default();
+        let schema_args = format!("postgres-schema --config {}", owner.display());
+        assert!(ekrs.contains(&schema_args), "{ekrs}");
+        let launches =
+            std::fs::read_to_string(w.root.join("connectors-argv.log")).unwrap_or_default();
+        let launched = format!(
+            "connections launch --adapter postgres --connection owner --consumer ekr --args \
+             [\"postgres-schema\",\"--config\",\"{}\"]",
+            owner.display()
+        );
+        if schema_connection {
+            assert!(
+                launches.contains(&launched),
+                "with store.value.schema_connection, ekr postgres-schema started without the \
+                 launch.\nlaunches:\n{launches}\nekr invocations:\n{ekrs}"
+            );
+        } else {
+            assert!(
+                !launches.contains("postgres-schema"),
+                "without store.value.schema_connection, ekr postgres-schema went through a \
+                 launch.\nlaunches:\n{launches}"
+            );
+            // Started directly: no store variables, so the stand-in logs an empty backend.
+            assert!(ekrs.contains(&format!("|{schema_args}")), "{ekrs}");
+        }
+    }
+}
+
+/// Invariant 3: the MCP line is a shell command; the launch's words in it must stay one word each
+/// when the shell reads it, a `connectors` path with a space included.
+#[test]
+fn review_the_mcp_line_keeps_a_connectors_path_with_a_space_one_word() {
+    let w = World::new();
+    let config = w.root.join("pg/app.json");
+    let dir = w.home.join("instances/pgl");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("instance.yaml"),
+        spec_text("pgl", &app_launched_store(&config)),
+    )
+    .unwrap();
+    let connectors = w.root.join("my tools/connectors");
+    let out = Command::new(env!("CARGO_BIN_EXE_cortex"))
+        .args(["mcp-line", "pgl"])
+        .env("CORTEX_HOME", &w.home)
+        .env("CORTEX_CONNECTORS", &connectors)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    let line = String::from_utf8_lossy(&out.stdout).trim().to_string();
+
+    let stub = w.root.join("mcp-bin");
+    std::fs::create_dir_all(&stub).unwrap();
+    common::executable(
+        &stub.join("claude"),
+        &format!(
+            "printf '%s\\n' \"$@\" > \"{}/mcp-argv.log\"\n",
+            w.root.display()
+        ),
+    );
+    let path = format!(
+        "{}:{}",
+        stub.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let status = Command::new("sh")
+        .arg("-c")
+        .arg(&line)
+        .env("PATH", path)
+        .status()
+        .unwrap();
+    assert!(status.success(), "{line}");
+    let argv: Vec<String> = std::fs::read_to_string(w.root.join("mcp-argv.log"))
+        .unwrap()
+        .lines()
+        .map(String::from)
+        .collect();
+    assert!(
+        argv.iter().any(|a| a == connectors.to_str().unwrap()),
+        "the shell splits the connectors path of the MCP line: {argv:?}\nline: {line}"
+    );
+}
+
+/// Invariant 4, a store without a connection: the viewer's `ExecStart` keeps an `ekr` path with a
+/// space, a double quote and a `%` one word, read back as written.
+#[test]
+fn review_the_direct_viewer_exec_start_quotes_the_ekr_path() {
+    let w = World::new();
+    let bin = w.root.join("e k\"r%h/ekr");
+    let store = cortex_cli::ekr::Store {
+        bin: bin.clone(),
+        host: w.root.join("host.json"),
+        backend: cortex_cli::ekr::Backend::Postgres,
+        store: w.root.join("pg/app.json"),
+        launch: None,
+    };
+    world_systemd(&w).install_view("q", &store, 18996).unwrap();
+    let unit = std::fs::read_to_string(w.units.join("cortex-q-view.service")).unwrap();
+    let expected = format!(
+        "ExecStart={} view --port 18996\n",
+        systemd_word(bin.to_str().unwrap())
+    );
+    assert!(unit.contains(&expected), "{expected} in\n{unit}");
+}
+
+/// Invariant 4, a launched store: every word of the launch in `ExecStart` is quoted so systemd
+/// reads it back as written, with spaces, quotes, `%`, `$` and `\` in it.
+#[test]
+fn review_the_launched_viewer_exec_start_quotes_every_word() {
+    let w = World::new();
+    let connectors = w.root.join("c o\"n%h$X\\y/connectors");
+    let store = cortex_cli::ekr::Store {
+        bin: w.root.join("ekr"),
+        host: w.root.join("host.json"),
+        backend: cortex_cli::ekr::Backend::Postgres,
+        store: w.root.join("pg/app.json"),
+        launch: Some(cortex_cli::ekr::Launch {
+            connectors: connectors.clone(),
+            connection: cortex_cli::ekr::Connection {
+                adapter: "pg $A".into(),
+                connection: "a\"b %i".into(),
+            },
+            schema_connection: None,
+        }),
+    };
+    world_systemd(&w).install_view("q", &store, 18996).unwrap();
+    let unit = std::fs::read_to_string(w.units.join("cortex-q-view.service")).unwrap();
+    let expected = format!(
+        "ExecStart={} connections launch --adapter {} --connection {} --consumer ekr --args {}\n",
+        systemd_word(connectors.to_str().unwrap()),
+        systemd_word("pg $A"),
+        systemd_word("a\"b %i"),
+        systemd_word(r#"["view","--port","18996"]"#),
+    );
+    assert!(unit.contains(&expected), "{expected} in\n{unit}");
 }

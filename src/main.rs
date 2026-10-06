@@ -238,6 +238,7 @@ fn fail(message: impl std::fmt::Display) -> ExitCode {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    cortex_cli::connectors::set_bin(cli.connectors.clone());
     let home = Home::new(cli.home.clone().unwrap_or_else(Home::default_root));
     if let Some(reason) = schedule::home_refusal(&home.root) {
         return fail(reason);
@@ -460,10 +461,20 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
     }
 }
 
-/// Every connection the spec names that Connectors does not list, or lists as revoked.
+/// Every connection the spec names, its sources' and its `postgres` store's, that Connectors does
+/// not list, or lists as revoked.
 fn missing_connection(ctx: &Ctx, spec: &m::InstanceSpec) -> Result<Option<String>, String> {
     let tools = &ctx.tools;
-    for (adapter, connection) in spec::connections(spec) {
+    let mut named = spec::connections(spec);
+    if let Some(m::StoreSpec::Postgres(p)) = &spec.store {
+        named.extend(
+            [&p.connection, &p.schema_connection]
+                .into_iter()
+                .flatten()
+                .map(|c| (c.adapter.clone(), c.connection.clone())),
+        );
+    }
+    for (adapter, connection) in named {
         match tools.connectors.connection_state(&adapter, &connection) {
             Ok(Some(state)) if state != "revoked" => {}
             Ok(_) => return Ok(Some(format!("{adapter}:{connection}"))),
@@ -532,6 +543,7 @@ fn seed_instance(
         host: store.host.clone(),
         backend: ekr::Backend::Sqlite,
         store: layout.dir.join("seed-check.sqlite"),
+        launch: None,
     };
     let checked = seed_and_apply(&scratch, &seed_path, schema.as_deref());
     remove_scratch(&layout.dir, "seed-check.sqlite");
@@ -605,7 +617,7 @@ fn store_refusal(spec: &m::InstanceSpec) -> Option<String> {
              instance directory; remove the path"
                 .into(),
         ),
-        _ => None,
+        _ => instance::launch_refusal(spec),
     }
 }
 
@@ -1226,7 +1238,7 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
     if spec.name.0 != name {
         return fail(format!("the spec names {:?}, not {name:?}", spec.name.0));
     }
-    if let Some(reason) = foreign_units(ctx, name, &spec, units, false) {
+    if let Some(reason) = foreign_units(ctx, name, &spec, units, true) {
         return fail(reason);
     }
     let layout = Layout::new(ctx.home.instance_dir(name));
@@ -1315,8 +1327,15 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
             let mut detail = json!({"name": instance_updated.name.0, "added_sources": added});
             if let Units::Install { replace_binary } = units {
                 let systemd = Systemd::from_env(&ctx.home.root);
-                let installed =
-                    install_sources(ctx, &systemd, name, &spec, replace_binary, &mut detail);
+                // The viewer opens the store as the new spec does: through the launch exactly
+                // when it names a `connection`. It keeps the port it runs on.
+                let store = layout.store_handle(&spec);
+                let installed = layout
+                    .load_meta()
+                    .and_then(|meta| systemd.install_view(name, &store, meta.view_port))
+                    .and_then(|_| {
+                        install_sources(ctx, &systemd, name, &spec, replace_binary, &mut detail)
+                    });
                 units_detail(&systemd, installed, &mut detail);
             }
             Done {
@@ -1850,14 +1869,48 @@ fn mcp_line(home: &Home, name: &str) -> ExitCode {
         Err(e) => return fail(e),
     };
     let store = layout.store_handle(&spec);
+    let mut words = vec![
+        format!("EKR_HOST={}", store.host.display()),
+        format!("EKR_BACKEND={}", store.backend.name()),
+        format!("EKR_STORE={}", store.store.display()),
+    ];
+    // A launched store's `ekr` gets its password from Connectors, as every other `ekr` of it does.
+    match &store.launch {
+        Some(launch) => words.extend([
+            launch.connectors.display().to_string(),
+            "connections".into(),
+            "launch".into(),
+            "--adapter".into(),
+            launch.connection.adapter.clone(),
+            "--connection".into(),
+            launch.connection.connection.clone(),
+            "--consumer".into(),
+            ekr::CONSUMER.into(),
+            "--args".into(),
+            json!(["mcp"]).to_string(),
+        ]),
+        None => words.extend([store.bin.display().to_string(), "mcp".into()]),
+    }
+    let words: Vec<String> = words.iter().map(|w| shell_word(w)).collect();
     println!(
-        "claude mcp add --transport stdio cortex-{name} -- env EKR_HOST={} EKR_BACKEND={} EKR_STORE={} {} mcp",
-        store.host.display(),
-        store.backend.name(),
-        store.store.display(),
-        store.bin.display()
+        "claude mcp add --transport stdio cortex-{name} -- env {}",
+        words.join(" ")
     );
     ExitCode::SUCCESS
+}
+
+/// `word` as one POSIX shell word: as it is when every byte is plain, else in single quotes, each
+/// `'` written `'\''`.
+fn shell_word(word: &str) -> String {
+    let plain = !word.is_empty()
+        && word
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"_-./:=@%+,".contains(&b));
+    if plain {
+        word.to_string()
+    } else {
+        format!("'{}'", word.replace('\'', "'\\''"))
+    }
 }
 
 #[cfg(test)]
