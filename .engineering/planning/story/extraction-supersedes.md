@@ -7,12 +7,19 @@ title: Extraction supersedes the value a newer document replaces
 relations:
 - decomposes: epic:organisation-scale-instance
 - serves: vision:self-updating-instances
+- depends_on: story:document-time-as-valid-time
 scope:
+- confidence: inferred
+  path: .github/workflows/check.yml
+- confidence: inferred
+  path: AGENTS.md
 - confidence: inferred
   path: src/extract.rs
 - confidence: inferred
+  path: src/main.rs
+- confidence: inferred
   path: tests/supersession.rs
-revision: 2
+revision: 4
 ---
 ## Outcome
 
@@ -29,8 +36,8 @@ Two documents a day apart give one property two values; after both runs exactly 
 
 ## Depends on
 
-The EKR release that ships `story:extraction-supersession` (EKR store); cortex pins it.
+The EKR release that ships `story:extraction-supersession` (recorded as `upstream-blocker:ekr-extraction-supersession`), and `story:document-time-as-valid-time`, which edits the same prompt and fact merge in `src/extract.rs` and moves the EKR pin first.
 
 ## Files (from the inventory, unverified)
 
-`src/extract.rs` (prompt and schema), `tests/supersession.rs`.
+`src/extract.rs` (`SYSTEM_PROMPT`, `admitted_facts`, `merge`), `tests/supersession.rs`; the EKR pin sites `src/main.rs`, `examples/*.yaml`, `.github/workflows/check.yml`, `AGENTS.md`.

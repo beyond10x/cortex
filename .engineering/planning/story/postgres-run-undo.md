@@ -7,14 +7,20 @@ title: A run on a PostgreSQL store can be undone
 relations:
 - decomposes: epic:organisation-scale-instance
 - serves: vision:self-updating-instances
+- depends_on: story:run-snapshots
+- depends_on: story:run-gate
+- depends_on: story:store-backend-per-instance
+- depends_on: story:postgres-credential-from-connectors
 scope:
+- confidence: inferred
+  path: src/ekr.rs
 - confidence: inferred
   path: src/run.rs
 - confidence: inferred
   path: src/snapshot.rs
 - confidence: inferred
   path: tests/store_backend.rs
-revision: 2
+revision: 4
 ---
 ## Outcome
 
@@ -29,10 +35,14 @@ Snapshots and the gate's undo are SQLite-only (`src/snapshot.rs`); a PostgreSQL-
 
 In the docker PostgreSQL case of `tests/store_backend.rs`, a run that fails `facts_refused max 0` leaves `ekr head` equal to the head before the run and the seen state unchanged.
 
+## Depends on
+
+`story:run-snapshots`, `story:run-gate`, `story:store-backend-per-instance`, and `story:postgres-credential-from-connectors` (it rewrites the same docker case and `Store::cmd()`; this one lands after it).
+
 ## Open
 
-Whether EKR has, or needs, a revert or a provider-level restore point for this: unknown.
+Whether EKR has, or needs, a revert or a provider-level restore point for this: unknown. If it needs one, an EKR story comes first.
 
 ## Files (from the inventory, unverified)
 
-`src/snapshot.rs`, `src/run.rs`, `tests/store_backend.rs`.
+`src/snapshot.rs`, `src/run.rs`, `src/ekr.rs`, `tests/store_backend.rs`.
