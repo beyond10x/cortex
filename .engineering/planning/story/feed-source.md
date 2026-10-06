@@ -7,6 +7,9 @@ title: A source names a connection and cortex reads it through the feed family
 relations:
 - decomposes: epic:organisation-scale-instance
 - serves: vision:self-updating-instances
+- depends_on: story:record-field-lookups
+- depends_on: story:connectors-source-walks
+- depends_on: story:structured-from-files-and-drops
 scope:
 - confidence: inferred
   path: generated
@@ -19,8 +22,10 @@ scope:
 - confidence: inferred
   path: src/sources.rs
 - confidence: inferred
+  path: src/spec.rs
+- confidence: inferred
   path: tests/feed_source.rs
-revision: 2
+revision: 4
 ---
 ## Outcome
 
@@ -48,3 +53,13 @@ Operator requirement 2026-10-06: cortex supports any connector whose provider im
 ## Depends on
 
 Outside this store: Connectors `story:feed-contract` and `story:feed-bindings-discoverable`, recorded as `upstream-blocker:connectors-feed-family`.
+
+## Revised 2026-10-06 (plan review round 1)
+
+## Revised 2026-10-06 (plan review round 1)
+
+- **Scope of the requirement.** "Any datasource contract" is delivered as the feed family: `datasource.feed/v1alpha1` is the contract for incremental documents. `logs` and `series` are not knowledge sources and are out of scope; a provider without a feed binding stays readable through the existing `connectors` kind, which is kept and coexists.
+- **Coexistence.** `create` and `update` refuse a `feed` source and a `connectors` source that read the same connection, naming both, because they would cite the same content under different identities.
+- **Deleted items.** A feed item's evidence identity is `feed:<connection>:<container>:<id>`. With `dropped: Supersede`, an item reported `deleted` ends every active assertion whose every cited evidence item is that item's (retract, or supersede when the item's new revision carries a replacing value), through the generalized `end_dropped` of `story:structured-from-files-and-drops`. Values that also cite other evidence are kept.
+- **Discovery.** cortex finds the family by its fixed operation ids `feed.containers` and `feed.items` on the named connection.
+- **Acceptance, added:** 5. Against the first released Connectors binding, a recorded real-CLI transcript (containers, a first items page, a resumed page) is replayed by the stand-in, so the stand-in cannot drift from the real CLI unobserved.
