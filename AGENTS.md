@@ -162,8 +162,10 @@ this repository and published by the organisation's reusable workflow.
 - `tests/conformance.rs` runs every scenario of `spec/suite.json` (55) in process; `tests/e2e.rs`
   drives the binary end to end; the clap ⇔ spec test in `src/main.rs` holds the command line to
   the commands, inputs and views `spec/` puts on it.
-- Builds use `CARGO_TARGET_DIR=$HOME/.cache/b10x-target/cortex`. Check `df -h /` first; do not
-  start a build with less than 10 GB free.
+- Build into this tree's own `target/` (leave `CARGO_TARGET_DIR` unset), and end each tree with
+  `worktree finish --discard-cache --archive <tree>`, so its build cache goes with it. Check
+  `df -h /` first; do not start a build with less than 10 GB free. Before a test run counts as
+  evidence for a tree, check that the test names it printed exist there (`cargo test -- --list`).
 - The end-to-end tests run a real `ekr` (`CORTEX_TEST_EKR`, default the 0.0.31 binary under
   `~/.cache/company-brain-v3/bin/0.0.31/bin/ekr`) with stand-in `connectors`, `claude` and
   `systemctl`. A missing `ekr` fails them; it never skips them.
