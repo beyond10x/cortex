@@ -10,7 +10,6 @@ relations:
 - depends_on: story:store-backend-per-instance
 - depends_on: story:redaction-before-model
 - depends_on: story:structured-source
-- depends_on: story:codex-model-backend
 - depends_on: story:run-snapshots
 - depends_on: story:adopt-existing-store
 - depends_on: story:release-pipeline
@@ -29,7 +28,7 @@ scope:
   path: website/docs/spec-file.md
 - confidence: inferred
   path: website/docs/use-cases.md
-revision: 11
+revision: 12
 ---
 ## Outcome
 
@@ -190,3 +189,7 @@ From wave 20261005a (`story:spec-standalone-types`, landed `b628e4d`): `website/
  ## Setup
  
 ```
+
+## Codex is not in 1.0
+
+Decided 2026-10-06 by the coordinating session under the operator's standing wave approval: `story:codex-model-backend` stays open behind `decision-blocker:codex-exec-keeps-shell` (codex exec keeps a shell tool), and no longer holds back 1.0. `story:docs-for-1-0` documents the Codex backend as unavailable until that blocker clears; `story:document-time-as-valid-time` never needed it (it waits on EKR valid time).
