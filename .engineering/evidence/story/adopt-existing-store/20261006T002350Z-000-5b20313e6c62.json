@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-06T00:23:50Z",
+  "actor": "agent:claude",
+  "artifact": "story:adopt-existing-store",
+  "kind": "story",
+  "revision": 17,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261006a (EXIT=0, 337 tests)"
+  }
+}
