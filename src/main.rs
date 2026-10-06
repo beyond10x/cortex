@@ -641,6 +641,9 @@ fn create(
         .registry
         .instances
         .contains_key(&name);
+    // The seed documents' extraction, run before the instance is recorded so that a seed that
+    // stops early is the declared `partial`.
+    let mut seeded: Option<Result<run::Report, run::Failure>> = None;
     if !taken {
         match missing_connection(ctx, &spec) {
             Ok(Some(missing)) => {
@@ -684,6 +687,15 @@ fn create(
                         .external
                         .insert((CMD, "seed-refused"), true);
                     ctx.shared.borrow_mut().strings.push_back(reason);
+                } else if !no_extract && !spec.seed.documents.is_empty() {
+                    let ran = run::seed(&layout, &ctx.tools);
+                    if !seed_finished(&ran) {
+                        ctx.shared
+                            .borrow_mut()
+                            .external
+                            .insert((CMD, "partial"), true);
+                    }
+                    seeded = Some(ran);
                 }
             }
             Err(e) => return fail(e),
@@ -729,13 +741,16 @@ fn create(
             ok: false,
             detail: json!({"reason": error.reason}),
         },
-        m::CreateInstanceOutcome::Created { instance_created } => {
+        m::CreateInstanceOutcome::Created { instance_created }
+        | m::CreateInstanceOutcome::Partial { instance_created } => {
+            let partial = seeded.as_ref().is_some_and(|ran| !seed_finished(ran));
             let port = instance_created.view_port as u16;
             let meta = Meta {
                 format: "cortex.instance-meta/1".into(),
                 spec_dir: std::fs::canonicalize(&loaded.dir).unwrap_or(loaded.dir.clone()),
                 view_port: port,
                 lineage,
+                adopted: false,
             };
             if let Err(e) = layout.save_meta(&meta) {
                 return fail(e);
@@ -758,14 +773,21 @@ fn create(
                 "view": format!("http://127.0.0.1:{port}/"),
                 "sources": spec.sources.iter().map(|s| format!("{name}/{}", s.name)).collect::<Vec<_>>(),
             });
-            if !no_extract && !spec.seed.documents.is_empty() {
-                let tools = &ctx.tools;
-                detail["seed"] = match run::seed(&layout, tools) {
+            if let Some(ran) = &seeded {
+                detail["seed"] = match ran {
                     Ok(r) => {
                         let mut seed = json!({
                             "documents_applied": r.documents_applied,
                             "cost_usd": r.cost_usd,
                         });
+                        // A seed that stopped early says what it left and why; one that finished
+                        // reports as before.
+                        if partial {
+                            seed["documents_new"] = json!(r.documents_new);
+                            seed["stopped"] = json!(r.stopped);
+                            seed["facts_refused"] = json!(r.facts_refused);
+                            seed["parts_rejected"] = json!(r.parts_rejected);
+                        }
                         // As `cortex run` reports it: present only when the policy pseudonymises.
                         if let Some(redacted) = &r.redacted {
                             seed["redacted"] = json!(redacted);
@@ -775,6 +797,12 @@ fn create(
                     }
                     Err(e) => json!({"failed": format!("{e:?}")}),
                 };
+            }
+            if partial {
+                eprintln!(
+                    "cortex: the seed stopped before every seed document was extracted; \
+                     `cortex run {name}/seed` extracts the rest"
+                );
             }
             if let Units::Install { replace_binary } = units {
                 let systemd = Systemd::from_env(&ctx.home.root);
@@ -787,13 +815,19 @@ fn create(
                 }
             }
             Done {
-                outcome: "created",
+                outcome: if partial { "partial" } else { "created" },
                 ok: true,
                 detail,
             }
         }
     };
     print("create", &done)
+}
+
+/// Whether a seed extraction extracted every seed document it wanted: it failed, or stopped
+/// before the last batch (the budget spent, a model call or an apply failed), when not.
+fn seed_finished(ran: &Result<run::Report, run::Failure>) -> bool {
+    matches!(ran, Ok(r) if r.documents_applied >= r.documents_new)
 }
 
 /// `--seen <source>=<file>`.
@@ -1065,6 +1099,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                 spec_dir: std::fs::canonicalize(&loaded.dir).unwrap_or(loaded.dir.clone()),
                 view_port: port,
                 lineage: found.lineage,
+                adopted: true,
             };
             if let Err(e) = layout.save_meta(&meta) {
                 return fail(e);

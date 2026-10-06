@@ -189,6 +189,7 @@ pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Rep
             &source_spec.policy,
             Some(window),
             structured_source,
+            true,
         )
     });
     if ran.is_err() {
@@ -208,8 +209,21 @@ pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Rep
 }
 
 /// The seed documents of a new instance: every file under the spec's `seed.documents`, through
-/// the same pipeline a source run uses, recorded as the pseudo-source `seed`.
+/// the same pipeline a source run uses, recorded as the pseudo-source `seed`. The seed of a new
+/// store takes no snapshot and is held to no gate.
 pub fn seed(layout: &Layout, tools: &Tools) -> Result<Report, Failure> {
+    seed_documents(layout, tools, false)
+}
+
+/// The seed documents of a live instance (`cortex run <name>/seed`): those no seed extraction
+/// applied yet, as [`seed`] extracts them, but undoable as a source run is: the store and `state/`
+/// are kept as a snapshot named `seed` before the first apply, and the run is held to the spec's
+/// `gate`.
+pub fn rerun_seed(layout: &Layout, tools: &Tools) -> Result<Report, Failure> {
+    seed_documents(layout, tools, true)
+}
+
+fn seed_documents(layout: &Layout, tools: &Tools, undoable: bool) -> Result<Report, Failure> {
     let spec = layout.load_spec().map_err(Failure::Fetch)?;
     if spec.seed.documents.is_empty() {
         return Ok(Report::default());
@@ -247,6 +261,7 @@ pub fn seed(layout: &Layout, tools: &Tools) -> Result<Report, Failure> {
         &policy,
         None,
         None,
+        undoable,
     )
 }
 
@@ -263,6 +278,10 @@ pub fn seed(layout: &Layout, tools: &Tools) -> Result<Report, Failure> {
 /// identity, every string in it is masked and scrubbed instead of the text as a whole, it is never
 /// cut, and the documents are applied as `src/structured.rs` maps them, with no model call (see
 /// [`apply_records`]).
+///
+/// `undoable`: a run into a live store (a source run, or `cortex run <name>/seed`) keeps a
+/// snapshot before its first apply and is held to the spec's `gate`; the seed of a new store does
+/// neither.
 #[allow(clippy::too_many_arguments)]
 fn process(
     layout: &Layout,
@@ -273,6 +292,7 @@ fn process(
     policy: &m::FetchPolicy,
     window: Option<Window>,
     structured_source: Option<&m::StructuredSource>,
+    undoable: bool,
 ) -> Result<Report, Failure> {
     let started = now_ms();
     let applied_at = window.map_or(started, |w| w.until_ms);
@@ -408,12 +428,13 @@ fn process(
     }
 
     let store = layout.store_handle(spec);
-    // A source run copies the store and `state/` once, before its first `apply-extraction`, and
-    // keeps the copy, named by the run's start, once that apply commits; the seed of a new store
-    // takes none.
-    let mut before = Undo::new(match window {
-        Some(_) => BeforeApply::new(layout, &store, label, started, snapshot::keep(spec)),
-        None => BeforeApply::none(),
+    // A run into a live store copies the store and `state/` once, before its first
+    // `apply-extraction`, and keeps the copy, named by the run's start and label, once that apply
+    // commits; the seed of a new store takes none.
+    let mut before = Undo::new(if undoable {
+        BeforeApply::new(layout, &store, label, started, snapshot::keep(spec))
+    } else {
+        BeforeApply::none()
     });
     let host = std::fs::read_to_string(layout.host()).map_err(|e| Failure::Apply(e.to_string()))?;
     let operator = crate::ekr::operator(&host).map_err(Failure::Apply)?;
@@ -437,7 +458,7 @@ fn process(
             &mut before,
         )?;
         unread(&mut report, &fetched.unread, redactor.as_ref());
-        if window.is_some() {
+        if undoable {
             held_to_gate(layout, spec, &store, label, &report, &before, started)?;
         }
         let failures = fetched.child_failures.clone();
@@ -601,7 +622,7 @@ fn process(
         );
     }
     unread(&mut report, &fetched.unread, redactor.as_ref());
-    if window.is_some() {
+    if undoable {
         held_to_gate(layout, spec, &store, label, &report, &before, started)?;
     }
     let failures = fetched.child_failures.clone();

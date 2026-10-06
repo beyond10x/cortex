@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/12",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "46d14b665108bd7bba685ab525d1afaab8b67265939b431046efa7b3486ad936",
-    "contract_digest": "0eb8f43114995eccfc97b658bb6867cfa0e0f38338a4021148894c7d43c3f33a"
+    "spec_digest": "3f41e7bfa05fd6d8ef1f3aed9bf4d87dd1ac06eadb402b333aab6ff0e0193c73",
+    "contract_digest": "d3fc64a1257346e9b746fe7ef224384e0838ec0291c85560075fcf2f917faf53"
   },
   "scenarios": {
     "cortex.instance.AddSource/outcome/added": {
@@ -3456,6 +3456,13 @@
       "purpose": "`cortex.instance.CreateInstance` sent twice for one identity takes `name-taken` the second time, on every creating path, and leaves the row as the first call made it",
       "steps": [
         {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "partial"
+          }
+        },
+        {
           "step": "execute_command",
           "command": "cortex.instance.CreateInstance",
           "actor": "cortex.instance.Operator",
@@ -3533,7 +3540,7 @@
           "step": "expect_outcome",
           "outcome": {
             "command": "cortex.instance.CreateInstance",
-            "outcome": "created"
+            "outcome": "partial"
           }
         },
         {
@@ -3734,6 +3741,286 @@
         {
           "step": "expect_complete_subject_unchanged",
           "view": "cortex.instance.Instances"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.CreateInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description-1048595"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version-1048595"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model-1048595"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name-1048595"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest-1048595"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description-1048595",
+                "ekr": {
+                  "bin": "spec.ekr.bin-1048595",
+                  "version": "spec.ekr.version-1048595"
+                },
+                "format": "spec.format-1048595",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Codex",
+                  "budget_usd": 1048596.0,
+                  "instructions": "spec.model.instructions-1048595",
+                  "model": "spec.model.model-1048595",
+                  "timeout_s": 1048596.0
+                },
+                "name": "spec.name-1048595",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1048596.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed-1048595",
+                  "schema": "spec.seed.schema-1048595"
+                },
+                "serve": {
+                  "view_port": 1048596.0
+                },
+                "snapshots": {
+                  "keep": 1048596.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config-1048595"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "created"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance-1048596",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceCreated",
+          "field": "name"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Instances"
+        },
+        {
+          "step": "snapshot_complete_subject",
+          "view": "cortex.instance.Instances",
+          "subject": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance-1048596"
+            }
+          },
+          "shape": {
+            "identity_field": "name",
+            "fields": [
+              {
+                "name": "name",
+                "type": "cortex.instance.InstanceName"
+              },
+              {
+                "name": "description",
+                "type": "String"
+              },
+              {
+                "name": "model",
+                "type": "String"
+              },
+              {
+                "name": "ekr_version",
+                "type": "String"
+              },
+              {
+                "name": "seed_digest",
+                "type": "String"
+              },
+              {
+                "name": "state",
+                "type": "cortex.instance.Instance.State"
+              }
+            ],
+            "declarations": {
+              "cortex.instance.Instance.State": {
+                "kind": "enum",
+                "variants": [
+                  "Active",
+                  "Removed"
+                ]
+              },
+              "cortex.instance.InstanceName": {
+                "kind": "newtype",
+                "of": "String"
+              }
+            }
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.CreateInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name-1048595"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "budget_usd": 1.0,
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "name-taken"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.NameTaken",
+          "fields": {
+            "name": "name-1048595"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Instances"
+        },
+        {
+          "step": "expect_complete_subject_unchanged",
+          "view": "cortex.instance.Instances"
         }
       ],
       "source": [
@@ -3757,6 +4044,13 @@
           "name": {
             "command": "cortex.instance.CreateInstance",
             "outcome": "name-taken"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "partial"
           }
         },
         {
@@ -3802,6 +4096,435 @@
         {
           "kind": "error",
           "name": "cortex.instance.NameTaken"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Instances"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.CreateInstance/outcome/partial": {
+      "purpose": "`cortex.instance.CreateInstance` answers `partial` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "partial"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.CreateInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name-1048592"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "budget_usd": 1.0,
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "partial"
+          }
+        },
+        {
+          "step": "expect_event",
+          "event": "cortex.instance.InstanceCreated",
+          "payload": {
+            "name": "name-1048592"
+          },
+          "shape": {
+            "name": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "view_port": {
+              "holds": "primitive",
+              "kind": "integer"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Instances"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Instances",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "description": {
+                "kind": "literal",
+                "value": "description"
+              },
+              "ekr_version": {
+                "kind": "literal",
+                "value": "ekr_version"
+              },
+              "model": {
+                "kind": "literal",
+                "value": "model"
+              },
+              "name": {
+                "kind": "observed",
+                "event": "cortex.instance.InstanceCreated",
+                "field": "name"
+              },
+              "seed_digest": {
+                "kind": "literal",
+                "value": "seed_digest"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Active"
+              }
+            }
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.ChangeDetection"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectorsSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CrawlPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.DropPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.EkrPin"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FetchPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FileRecords"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.GateCheck"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ModelBackend"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ModelSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PageStyle"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.Paging"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PostgresStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PropertyMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFilter"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFormat"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionClass"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RelationMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchTopic"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SeedSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ServeSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SitesInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SnapshotPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceSettings"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredConnectors"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredFiles"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.TimeRange"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebMode"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebSource"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.CreateInstance"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "partial"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
         },
         {
           "kind": "view",
