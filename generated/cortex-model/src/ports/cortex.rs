@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 3f41e7bfa05fd6d8ef1f3aed9bf4d87dd1ac06eadb402b333aab6ff0e0193c73
-// contract digest d3fc64a1257346e9b746fe7ef224384e0838ec0291c85560075fcf2f917faf53
+// model digest 752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e
+// contract digest 4ccfd55371704938bf0eee933501df17665487def4b8ad6c2faac061972da933
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -26,6 +26,8 @@ pub enum PublishedEvent {
     InstanceRemoved(crate::instance::InstanceRemoved),
     /// `cortex.instance.InstanceUpdated`.
     InstanceUpdated(crate::instance::InstanceUpdated),
+    /// `cortex.instance.QualityMeasured`.
+    QualityMeasured(crate::instance::QualityMeasured),
     /// `cortex.instance.RunFailed`.
     RunFailed(crate::instance::RunFailed),
     /// `cortex.instance.SnapshotRestored`.
@@ -70,7 +72,7 @@ impl<B> Cortex<B> {
 
 impl<B> Cortex<B>
 where
-    B: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    B: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
 {
     /// Accepts `cortex.instance.AddSource`: runs the behaviour obligation, then publishes the declared events
     /// the outcome carries.
@@ -141,6 +143,24 @@ where
             }
             crate::instance::EnableSourceOutcome::WrongState { .. } => {}
             crate::instance::EnableSourceOutcome::NoSuchSource { .. } => {}
+        }
+        Ok(outcome)
+    }
+
+    /// Accepts `cortex.instance.MeasureQuality`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn measure_quality(&mut self, input: crate::instance::MeasureQuality) -> Result<crate::instance::MeasureQualityOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.measure_quality(input)?;
+        match &outcome {
+            crate::instance::MeasureQualityOutcome::SampleFailed { .. } => {}
+            crate::instance::MeasureQualityOutcome::JudgeFailed { .. } => {}
+            crate::instance::MeasureQualityOutcome::Measured { quality_measured, .. } => {
+                self.outbox.push(PublishedEvent::QualityMeasured(quality_measured.clone()));
+            }
+            crate::instance::MeasureQualityOutcome::NoSuchInstance { .. } => {}
         }
         Ok(outcome)
     }

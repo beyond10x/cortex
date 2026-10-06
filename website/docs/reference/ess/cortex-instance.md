@@ -167,6 +167,19 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `property` — `String`
 - `path` — `String`
 
+### `QualityVerdict`
+
+`cortex.instance.QualityVerdict` is a record of four fields:
+
+- `format` — `String`
+- `fact` — `String`
+- `verdict` — `cortex.instance.QualityVerdictKind`
+- `reason` — `String`
+
+### `QualityVerdictKind`
+
+`cortex.instance.QualityVerdictKind` is one of `yes`, `no` and `unclear`.
+
 ### `RecordFilter`
 
 `cortex.instance.RecordFilter` is a record of three fields:
@@ -371,6 +384,8 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `adapter` — `Optional<String>`, which may be absent
 - `connection` — `String`
 - `input` — `cortex.instance.WebInput`
+
+One of the types above is reached by nothing else in this system: `cortex.instance.QualityVerdict`. No entity, view, command, event, error or crossing names it, so it is either vocabulary something outside this specification uses or a leftover — and only a person can tell which.
 
 ## Entities
 
@@ -629,6 +644,25 @@ It has three outcomes.
 
 **`no-such-source`** — Nothing changed. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.SourceNotFound`, carrying `source_id`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
+### `MeasureQuality`
+
+`cortex.instance.MeasureQuality`, shown to a person as "Measure fact quality" and called `quality` on the wire.
+
+It takes:
+
+- `name` — `cortex.instance.InstanceName`
+- `sample` — `Integer`
+
+It has four outcomes.
+
+**`sample-failed`** — No model was asked and nothing was written. Decided outside the input: EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SampleFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`judge-failed`** — No pass rate was written; the verdicts of the batches judged before stay. Decided outside the input: A judge's model call fails, times out, answers no valid verdicts or finds the budget spent, or the redaction policy refuses what the judge would be shown. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.JudgeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`measured`** — Every sampled fact was judged. `judged` counts them, `passed` those judged `yes` and `unclear` those the judge could not tell, which count as failed. `lower` and `upper` are the Wilson interval of the pass rate at 95 %, 0 and 1 when the store holds no fact to draw. `revision` and `seed` draw the same sample again. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.QualityMeasured`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+
+**`no-such-instance`** — Nothing was measured. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
+
 ### `RecordFailure`
 
 `cortex.instance.RecordFailure`, shown to a person as "Record a failed run" and called `record-failure` on the wire.
@@ -779,6 +813,26 @@ It carries:
 - `name` — `cortex.instance.InstanceName`
 
 Emitted by `cortex.instance.UpdateInstance` on its `updated` outcome.
+
+Nothing in this system reacts to it.
+
+### `QualityMeasured`
+
+`cortex.instance.QualityMeasured`.
+
+It carries:
+
+- `name` — `cortex.instance.InstanceName`
+- `stamp` — `String`
+- `revision` — `Integer`
+- `seed` — `Integer`
+- `judged` — `Integer`
+- `passed` — `Integer`
+- `unclear` — `Integer`
+- `lower` — `Decimal`
+- `upper` — `Decimal`
+
+Emitted by `cortex.instance.MeasureQuality` on its `measured` outcome.
 
 Nothing in this system reacts to it.
 
@@ -943,11 +997,23 @@ It carries:
 
 - `name` — `cortex.instance.InstanceName`
 
+Reported by `cortex.instance.MeasureQuality` on its `no-such-instance` outcome.
+
 Reported by `cortex.instance.RemoveInstance` on its `no-such-instance` outcome.
 
 Reported by `cortex.instance.RestoreSnapshot` on its `no-such-instance` outcome.
 
 Reported by `cortex.instance.UpdateInstance` on its `no-such-instance` outcome.
+
+### `JudgeFailed`
+
+A judge's model call failed, timed out, answered no valid verdicts or found the budget spent, or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was written.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.MeasureQuality` on its `judge-failed` outcome.
 
 ### `NameTaken`
 
@@ -970,6 +1036,16 @@ It carries:
 - `name` — `cortex.instance.InstanceName`
 
 Reported by `cortex.instance.RestoreSnapshot` on its `backend-unsupported` outcome.
+
+### `SampleFailed`
+
+EKR could not draw the sample (`ekr sample`): the size is outside 1 to 1000, or the store cannot be read under the instance's host. No model was asked and nothing was written.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.MeasureQuality` on its `sample-failed` outcome.
 
 ### `SeedChangeRefused`
 
@@ -1075,7 +1151,7 @@ An actor is who may ask this context for something. Every grant below points at 
 
 `cortex.instance.Operator`, shown to a person as "Operator".
 
-It may invoke [`AddSource`](#addsource), [`AdoptInstance`](#adoptinstance), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot) and [`UpdateInstance`](#updateinstance).
+It may invoke [`AddSource`](#addsource), [`AdoptInstance`](#adoptinstance), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`MeasureQuality`](#measurequality), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot) and [`UpdateInstance`](#updateinstance).
 
 ### `Scheduler`
 
@@ -1086,4 +1162,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `3f41e7bfa05fd6d8ef1f3aed9bf4d87dd1ac06eadb402b333aab6ff0e0193c73` · contract digest `slice-sha256/2:d3fc64a1257346e9b746fe7ef224384e0838ec0291c85560075fcf2f917faf53`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e` · contract digest `slice-sha256/2:4ccfd55371704938bf0eee933501df17665487def4b8ad6c2faac061972da933`. Do not edit this file; change the specification and regenerate it with `task generate`.

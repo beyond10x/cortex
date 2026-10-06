@@ -33,10 +33,38 @@ errors and events.
 | `cortex update <name> --spec <file> [--no-units] [--replace-binary]` | replace the instance's spec: sources, model and serve settings. New sources are added and every source's timer is (re)installed; the seed cannot change | `updated`, `seed-change-refused`, `not-active`, `no-such-instance` |
 | `cortex remove <name>` | stop and delete the instance's timers and viewer that its home wrote (`units.kept` names any of the same name another home wrote); its directory and store stay | `removed`, `wrong-state`, `no-such-instance` |
 | `cortex restore <name> <snapshot>` | put a `sqlite` store and the instance's `state/` back to a snapshot a run took before it applied anything (see [Operating](./operating.md#undoing-a-run)). It snapshots what it replaces as `<ms>-before-restore` and reports the name as `before_restore`, and `state_restored`; a running viewer is stopped and started again. It does not wait for the home's lock | `restored`, `busy`, `no-such-snapshot`, `backend-unsupported`, `no-such-instance` |
+| `cortex quality <name> --sample <n>` | measure how often the instance's facts are supported by the evidence they cite (see [Measuring fact quality](#measuring-fact-quality)). It reads the store and writes nothing to it, so a removed instance is measured too. It holds the home's lock only while it draws the sample, so the timers' runs do not wait behind the model calls | `measured`, `sample-failed`, `judge-failed`, `no-such-instance` |
 | `cortex list` | instances: name, state, description, model, EKR version, seed digest, viewer address, and the version of `<home>/bin/cortex` their timers run (`binary_version`, null when none is recorded) | |
 | `cortex mcp-line <name>` | print the `claude mcp add` line that serves the instance's store through `ekr mcp` | |
 
 `cortex update` refuses a spec whose `name` is not `<name>`. `create`, `adopt` and `update` name each unit they took over from a home that no longer holds the instance in `units.taken_over` (see [Operating](./operating.md#systemd-units)). Every command refuses a home whose path holds a line break.
+
+### Measuring fact quality
+
+`cortex quality <name> --sample <n>` draws `n` (1 to 1000) of the store's active facts with
+`ekr sample`, each with the evidence it cites, seeded with the measurement's start in Unix
+milliseconds. Each batch of 20 goes to the instance's model with no tools and a judge's own system
+prompt, called as a run's extraction is, and shown as the spec's `redaction` policy shows a run's
+documents. The model answers `yes`, `no` or `unclear`, with a reason, for each fact. `ekr
+fact-quality` turns the verdicts into a pass rate with its Wilson interval at 95 %; `yes` counts as
+passed, and `no` and `unclear` as failed. The measurement spends at most the spec's
+`model.budget_usd`.
+
+It writes two files under `quality/<UTC stamp>/` in the instance directory (the stamp is
+`YYYYMMDDTHHMMSSZ`):
+
+| file | holds |
+|---|---|
+| `verdicts.jsonl` | one `cortex.quality-verdict/1` object per fact: `fact` (the EKR assertion id), `verdict` and `reason`. A fact the model gave no verdict for is `unclear`; a verdict for a fact the batch did not hold is dropped |
+| `fact-quality.json` | the `ekr.fact-quality/1` document as `ekr fact-quality` printed it: `judged`, `passed`, `failed`, `rate`, `lower`, `upper` |
+
+A `measured` line's detail carries `stamp`, `revision` and `seed` (which draw the same sample
+again), `judged`, `passed`, `unclear`, `rate` (null when the store holds no fact), `lower`,
+`upper`, `cost_usd` (as a run reports it: null when an answer carried no cost) and `dir`.
+`sample-failed` (EKR refused the size or could not read the store) asks no model and writes
+nothing. `judge-failed` (a model call failed or found the budget spent, or `refuse_if_left`
+refused what the judge would be shown) writes no `fact-quality.json`; `verdicts.jsonl` keeps the
+verdicts of the batches judged before, and a failed model call's reason states the cost so far.
 
 ## Sources
 

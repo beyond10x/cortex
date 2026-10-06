@@ -10,6 +10,7 @@ pub mod instance;
 pub mod mask;
 pub mod model_map;
 pub mod ports;
+pub mod quality;
 pub mod redact;
 pub mod run;
 pub mod schedule;

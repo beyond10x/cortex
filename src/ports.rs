@@ -27,6 +27,7 @@ pub struct Shared {
     /// Values for `{generated: true}` fields, taken in the order the behaviour asks.
     pub strings: VecDeque<String>,
     pub integers: VecDeque<i64>,
+    pub decimals: VecDeque<Decimal>,
     /// The report of the last run, for the caller to print.
     pub last_run: Option<Report>,
 }
@@ -124,6 +125,13 @@ impl Context for Ports {
     }
     fn generate_integer(&mut self) -> i64 {
         self.shared.borrow_mut().integers.pop_front().unwrap_or(0)
+    }
+    fn generate_decimal(&mut self) -> Decimal {
+        self.shared
+            .borrow_mut()
+            .decimals
+            .pop_front()
+            .unwrap_or_else(|| Decimal("0".into()))
     }
     fn generate_string(&mut self) -> String {
         self.shared
