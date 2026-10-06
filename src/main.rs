@@ -621,7 +621,7 @@ fn create(
     units: Units,
     schema_config: Option<&Path>,
 ) -> ExitCode {
-    let loaded = match spec::load(path) {
+    let loaded = match spec::load_given(path) {
         Ok(l) => l,
         Err(e) => return fail(e),
     };
@@ -989,7 +989,7 @@ fn adopt_into(
 
 fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
     const CMD: &str = "cortex.instance.AdoptInstance";
-    let loaded = match spec::load(a.spec) {
+    let loaded = match spec::load_given(a.spec) {
         Ok(l) => l,
         Err(e) => return fail(e),
     };
@@ -1147,7 +1147,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
 }
 
 fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> ExitCode {
-    let loaded = match spec::load(path) {
+    let loaded = match spec::load_given(path) {
         Ok(l) => l,
         Err(e) => return fail(e),
     };

@@ -45,6 +45,34 @@ pub fn load(path: &Path) -> Result<Loaded, String> {
     Ok(Loaded { dir, text, model })
 }
 
+/// Reads a spec file an operator gives to `create`, `update` or `adopt`: [`load`], then the
+/// refusal of a source named after a state file cortex keeps for itself
+/// ([`crate::instance::RESERVED_STATE_NAMES`]). An instance's frozen copy is read with [`load`]
+/// alone, so an instance created before the rule keeps loading and can be updated to a new name.
+pub fn load_given(path: &Path) -> Result<Loaded, String> {
+    let loaded = load(path)?;
+    if let Some(reason) = reserved_refusal(&loaded.model) {
+        return Err(format!("{}: {reason}", path.display()));
+    }
+    Ok(loaded)
+}
+
+/// Why a source name of `spec` cannot be used: it is one of the state file names cortex keeps.
+pub fn reserved_refusal(spec: &m::InstanceSpec) -> Option<String> {
+    spec.sources
+        .iter()
+        .find(|s| crate::instance::RESERVED_STATE_NAMES.contains(&s.name.as_str()))
+        .map(|s| {
+            format!(
+                "source name {:?} is reserved: cortex keeps its own state/{}.json; \
+                 rename the source (reserved: {})",
+                s.name,
+                s.name,
+                crate::instance::RESERVED_STATE_NAMES.join(", ")
+            )
+        })
+}
+
 /// Parses spec text. YAML is read into a JSON value first: the generated types decode from JSON.
 pub fn parse(text: &str) -> Result<m::InstanceSpec, String> {
     let value: serde_json::Value =

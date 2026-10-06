@@ -85,6 +85,10 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Fixed
 
+- A source named `entities` or `seed` is refused by `create`, `update` and `adopt`, naming the
+  reserved name. Its seen documents would have shared `state/entities.json` with the known entity
+  names, or `state/seed.json` with the seed, and a source named `entities` was disabled after
+  another source ran.
 - Evidence over 16 KB is no longer lost: each evidence payload is cut, at a character boundary, to
   the 16,384 bytes EKR 0.0.30 takes, on a source run and on the seed alike, and the text the model
   is shown is cut to what the payload holds. A structured record's evidence leads with its mapped

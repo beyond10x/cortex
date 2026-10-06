@@ -253,7 +253,15 @@ fn seed_documents(layout: &Layout, tools: &Tools, undoable: bool) -> Result<Repo
         FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
     })?;
     process(
-        layout, tools, &spec, "seed", fetched, &policy, None, None, undoable,
+        layout,
+        tools,
+        &spec,
+        crate::instance::SEED,
+        fetched,
+        &policy,
+        None,
+        None,
+        undoable,
     )
 }
 
