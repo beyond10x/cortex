@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-06T07:31:44Z",
+  "actor": "agent:claude",
+  "artifact": "story:document-time-as-valid-time",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check in CI on wave/20261006d (pass)",
+    "reference": "https://github.com/beyond10x/cortex/actions/runs/37429472912"
+  }
+}

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:document-time-as-valid-time
 kind: story
-status: active
+status: implemented
 title: A fact is dated by when its source said it
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -40,10 +40,11 @@ scope:
   path: website/docs/quickstart.md
 - confidence: cited
   path: website/docs/spec-file.md
-revision: 10
+revision: 12
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-06T07:13:58Z", actor: "agent:claude", revision: 6, decided_on: {"recorded":{"review_outcome":1}}}
 - {from: "proposed", to: "active", at: "2026-10-06T07:13:59Z", actor: "agent:claude", revision: 7, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "active", to: "implemented", at: "2026-10-06T07:33:13Z", actor: "agent:claude", revision: 12, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Outcome
 
@@ -70,7 +71,11 @@ the fact's valid-from time.
 
 ## Scope
 
-`src/evidence.rs`, `src/extract.rs`, `tests/document_time.rs` (new).
+Landed 2026-10-06 in `70dbdd9` (wave 20261006d).
+
+- **Files:** `src/evidence.rs` (`observed_at`, the date parser), `tests/document_time.rs` (new), `tests/adopt.rs`; the EKR 0.0.31 pin in `src/main.rs`, `examples/*.yaml`, `.github/workflows/check.yml`, `AGENTS.md`, `tests/common/mod.rs`, `tests/agent_tooling.rs`, `tests/spec_compat.rs`, `tests/fixtures/spec_compat/example.json`, `tests/conformance.rs`; docs `operating.md`, `spec-file.md`, `commands.md`, `quickstart.md`
+- **Not changed:** `src/extract.rs` (EKR 0.0.31 dates facts from evidence)
+- **Review:** coordinator review; one correction (epoch seconds need 9 to 11 digits; nothing before 1970)
 
 ## Design decisions (2026-10-06)
 
