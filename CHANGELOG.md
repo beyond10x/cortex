@@ -7,6 +7,8 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Added
 
+- The test harness no longer fails with `Text file busy`: stand-ins are written by a child
+  shell, never held open for writing by a test process.
 - A run gate: `gate.checks` bound the run report's numbers or `ekr quality` measures, and a run
   that fails its gate is undone from the snapshot taken before it. A restore now writes into the
   live store, so an attached `ekr mcp` reader no longer blocks it.
