@@ -63,6 +63,44 @@ enum Command {
         #[arg(long)]
         postgres_schema_config: Option<PathBuf>,
     },
+    /// Make an existing EKR store an instance, with its whole revision history, without seeding,
+    /// extracting or writing to it (`cortex.instance.AdoptInstance`).
+    ///
+    /// A SQLite store is copied into the instance directory through SQLite's online backup, with
+    /// the revisions still in its `-wal`, and the instance grows the copy. The database named is
+    /// not written; SQLite may leave a `-shm` (and an empty `-wal`) beside it. The copy needs the
+    /// store's size plus 64 MiB free under the home. A PostgreSQL store is used where it is:
+    /// `--store` names the `ekr.postgres/1` file the spec's `store.value.config` names, and no
+    /// other active instance may already grow that file's lineage under the same tenant.
+    /// Every node and edge type of the spec's `seed.ekr_seed` and `seed.schema` must be in the
+    /// store; the seed documents are not extracted.
+    ///
+    /// Each source starts from the `cortex.seen/1` document `--seen` names for it, or empty. An
+    /// empty one has the first run fetch every document and apply each whose content hash it has
+    /// not seen, which re-extracts the documents the store already holds: a second set of
+    /// assertions and evidence for them, at the model's cost. A seen document is not extracted
+    /// again even when the store holds no evidence of it; `adopted` counts those as
+    /// `seen_without_evidence`.
+    #[command(verbatim_doc_comment)]
+    Adopt {
+        #[arg(long)]
+        spec: PathBuf,
+        /// The SQLite database file, or for a `postgres` spec its `ekr.postgres/1` file.
+        #[arg(long)]
+        store: PathBuf,
+        /// The `ekr.cli-host/1` document the store was seeded under, copied as the instance's
+        /// host. EKR opens a store only under the tenant and authority it was seeded with. Without
+        /// it, cortex writes its own host for tenant `<name>`, which opens a store cortex created.
+        #[arg(long)]
+        host: Option<PathBuf>,
+        /// `<source>=<file>`: the seen documents the source starts from, a `cortex.seen/1`
+        /// document. Repeat it for each source, once per source.
+        #[arg(long, value_parser = seen_arg)]
+        seen: Vec<(String, PathBuf)>,
+        /// Install no systemd units.
+        #[arg(long)]
+        no_units: bool,
+    },
     /// Change an instance's sources, model or serve settings (`cortex.instance.UpdateInstance`).
     Update {
         name: String,
@@ -252,6 +290,23 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             no_extract,
             no_units,
             postgres_schema_config.as_deref(),
+        ),
+        Command::Adopt {
+            spec,
+            store,
+            host,
+            seen,
+            no_units,
+        } => adopt(
+            app,
+            ctx,
+            &Adoption {
+                spec: &spec,
+                store: &store,
+                host: host.as_deref(),
+                seen: &seen,
+                no_units,
+            },
         ),
         Command::Update {
             name,
@@ -517,6 +572,7 @@ fn create(
     let name = spec.name.0.clone();
     let layout = Layout::new(ctx.home.instance_dir(&name));
     const CMD: &str = "cortex.instance.CreateInstance";
+    let lineage = instance::Lineage::for_tenant(&spec, &name);
 
     // `name-taken` is the generated behaviour's own lookup; a taken name skips the checks below.
     let taken = ctx
@@ -535,7 +591,24 @@ fn create(
                 ctx.shared.borrow_mut().strings.push_back(missing);
             }
             Ok(None) => {
-                if layout.dir.exists() {
+                // A `postgres` store's tenant is the instance's name; another instance (one
+                // adopted under that tenant) may already grow that lineage.
+                let held = lineage.as_ref().and_then(|l| {
+                    held_lineages(ctx)
+                        .into_iter()
+                        .find(|(_, h)| h == l)
+                        .map(|(holder, _)| holder)
+                });
+                if let Some(holder) = held {
+                    ctx.shared
+                        .borrow_mut()
+                        .external
+                        .insert((CMD, "seed-refused"), true);
+                    ctx.shared.borrow_mut().strings.push_back(format!(
+                        "instance {holder:?} already grows this PostgreSQL lineage: the same \
+                         store.value.config and tenant {name:?}"
+                    ));
+                } else if layout.dir.exists() {
                     ctx.shared
                         .borrow_mut()
                         .external
@@ -602,6 +675,7 @@ fn create(
                 format: "cortex.instance-meta/1".into(),
                 spec_dir: std::fs::canonicalize(&loaded.dir).unwrap_or(loaded.dir.clone()),
                 view_port: port,
+                lineage,
             };
             if let Err(e) = layout.save_meta(&meta) {
                 return fail(e);
@@ -662,6 +736,323 @@ fn create(
         }
     };
     print("create", &done)
+}
+
+/// `--seen <source>=<file>`.
+fn seen_arg(text: &str) -> Result<(String, PathBuf), String> {
+    match text.split_once('=') {
+        Some((source, file)) if !source.is_empty() && !file.is_empty() => {
+            Ok((source.to_string(), PathBuf::from(file)))
+        }
+        _ => Err("write <source>=<file>".into()),
+    }
+}
+
+/// The arguments of `cortex adopt`.
+struct Adoption<'a> {
+    spec: &'a Path,
+    store: &'a Path,
+    host: Option<&'a Path>,
+    seen: &'a [(String, PathBuf)],
+    no_units: bool,
+}
+
+/// Why an adoption took no instance: a declared refusal, or a failure before any outcome.
+enum NotAdopted {
+    Refused(&'static str, String),
+    Failed(String),
+}
+
+/// What an adoption found in the store.
+struct Adopted {
+    revision: i64,
+    lineage: Option<instance::Lineage>,
+    /// Every document the `--seen` files name.
+    seen_documents: usize,
+    /// Those of them the store holds no evidence of: they are not extracted again all the same.
+    seen_without_evidence: usize,
+}
+
+/// The PostgreSQL lineage of every active instance of the home, by instance name.
+fn held_lineages(ctx: &Ctx) -> Vec<(String, instance::Lineage)> {
+    let names: Vec<String> = ctx
+        .shared
+        .borrow()
+        .registry
+        .instances
+        .values()
+        .filter(|i| i.state == m::InstanceState::Active)
+        .map(|i| i.data.name.0.clone())
+        .collect();
+    names
+        .into_iter()
+        .filter_map(|n| {
+            let lineage = Layout::new(ctx.home.instance_dir(&n)).lineage()?;
+            Some((n, lineage))
+        })
+        .collect()
+}
+
+/// Fills a new instance directory from an existing store: the frozen spec, the host, the store's
+/// copy (SQLite) and each source's seen state. Nothing is written to the store named, beyond the
+/// side files SQLite writes beside a database it opens, and no seed or extraction runs.
+fn adopt_into(
+    layout: &Layout,
+    loaded: &spec::Loaded,
+    a: &Adoption,
+    seen: &[(String, cortex_cli::state::SeenState)],
+    ctx: &Ctx,
+) -> Result<Adopted, NotAdopted> {
+    use instance::{AdoptRefusal, CopyError};
+    let spec = &loaded.model;
+    // Every check below reads the file `--store` resolves to, never a symlink beside it.
+    let from = std::fs::canonicalize(a.store).map_err(|e| {
+        NotAdopted::Refused("store-unreadable", format!("cannot read --store: {e}"))
+    })?;
+    let backend = instance::adopt_backend(spec, &from).map_err(|r| match r {
+        AdoptRefusal::BackendMismatch(reason) => NotAdopted::Refused("backend-mismatch", reason),
+        AdoptRefusal::StoreUnreadable(reason) => NotAdopted::Refused("store-unreadable", reason),
+    })?;
+    let failed = NotAdopted::Failed;
+    let bin = ekr::resolve_bin(&spec.ekr.version, spec.ekr.bin.as_deref());
+    if !bin.is_file() {
+        return Err(failed(format!(
+            "ekr {} is not at {} (run `cortex setup --ekr-version {}`)",
+            spec.ekr.version,
+            bin.display(),
+            spec.ekr.version
+        )));
+    }
+    let host = match a.host {
+        Some(path) => std::fs::read_to_string(path)
+            .map_err(|e| failed(format!("cannot read --host {}: {e}", path.display())))?,
+        None => ekr::Binary(bin).host_json(&spec.name.0).map_err(failed)?,
+    };
+    // Every run names the host's operator as the evidence's `extracted_by`.
+    ekr::operator(&host).map_err(|e| failed(format!("--host: {e}")))?;
+    let lineage = instance::Lineage::of(spec, &host);
+    if let Some(lineage) = &lineage {
+        if let Some((holder, _)) = held_lineages(ctx).into_iter().find(|(_, l)| l == lineage) {
+            return Err(NotAdopted::Refused("store-held", holder));
+        }
+    }
+    if backend == ekr::Backend::Sqlite {
+        let need = instance::copy_needs(&from).map_err(|e| {
+            NotAdopted::Refused("store-unreadable", format!("cannot read --store: {e}"))
+        })?;
+        let free = instance::free_bytes(&ctx.home.root)
+            .map_err(|e| failed(format!("cannot read free space under the home: {e}")))?;
+        if let Some(refusal) = instance::space_refusal(&ctx.home.root, need, free) {
+            return Err(failed(refusal));
+        }
+    }
+    std::fs::create_dir_all(&layout.dir).map_err(|e| failed(e.to_string()))?;
+    layout.freeze(loaded).map_err(failed)?;
+    home::write_atomic(&layout.host(), host.as_bytes()).map_err(failed)?;
+    let store = layout.store_handle(spec);
+    if backend == ekr::Backend::Sqlite {
+        instance::copy_store(&from, &store.store).map_err(|e| match e {
+            CopyError::Source(reason) => NotAdopted::Refused("store-unreadable", reason),
+            CopyError::Destination(reason) => failed(reason),
+        })?;
+    }
+    let ontology = store
+        .ontology()
+        .map_err(|e| NotAdopted::Refused("store-unreadable", e))?;
+    let revision = ontology["revision"].as_i64().ok_or_else(|| {
+        NotAdopted::Refused(
+            "store-unreadable",
+            "ekr ontology answered no revision".into(),
+        )
+    })?;
+    let types = instance::seed_types(&layout.dir, spec).map_err(failed)?;
+    let missing = instance::missing_types(&types, &ontology);
+    if !missing.is_empty() {
+        return Err(NotAdopted::Refused(
+            "seed-types-missing",
+            missing.join(", "),
+        ));
+    }
+    let seen_documents: usize = seen.iter().map(|(_, s)| s.documents.len()).sum();
+    let mut seen_without_evidence = 0;
+    if seen_documents > 0 {
+        let identities = instance::evidence_identities(&store)
+            .map_err(|e| NotAdopted::Refused("store-unreadable", e))?;
+        seen_without_evidence = seen
+            .iter()
+            .flat_map(|(_, s)| s.documents.keys())
+            .filter(|key| !instance::has_evidence(key, &identities))
+            .count();
+    }
+    for (source, state) in seen {
+        state.save(&layout.seen(source)).map_err(failed)?;
+    }
+    Ok(Adopted {
+        revision,
+        lineage,
+        seen_documents,
+        seen_without_evidence,
+    })
+}
+
+fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
+    const CMD: &str = "cortex.instance.AdoptInstance";
+    let loaded = match spec::load(a.spec) {
+        Ok(l) => l,
+        Err(e) => return fail(e),
+    };
+    let spec = loaded.model.clone();
+    if let Some(reason) = store_refusal(&spec).or_else(|| home::seed_path_refusal(&spec)) {
+        return fail(reason);
+    }
+    let mut seen: Vec<(String, cortex_cli::state::SeenState)> = Vec::new();
+    for (source, file) in a.seen {
+        if seen.iter().any(|(s, _)| s == source) {
+            return fail(format!(
+                "--seen {source}: given twice; name one cortex.seen/1 file per source"
+            ));
+        }
+        if !spec.sources.iter().any(|s| &s.name == source) {
+            return fail(format!(
+                "--seen {source}: the spec has no source {source:?}"
+            ));
+        }
+        match cortex_cli::state::SeenState::read_document(file) {
+            Ok(state) => seen.push((source.clone(), state)),
+            Err(e) => return fail(format!("--seen {source}: {e}")),
+        }
+    }
+    let name = spec.name.0.clone();
+    let layout = Layout::new(ctx.home.instance_dir(&name));
+
+    // `name-taken` is the generated behaviour's own lookup; a taken name skips the checks below.
+    let taken = ctx.shared.borrow().registry.instances.contains_key(&name);
+    let mut adopted = None;
+    if !taken {
+        if layout.dir.exists() {
+            return fail(format!(
+                "{} exists and is no registered instance",
+                layout.dir.display()
+            ));
+        }
+        match adopt_into(&layout, &loaded, a, &seen, ctx) {
+            Ok(found) => {
+                ctx.shared.borrow_mut().integers.push_back(found.revision);
+                adopted = Some(found);
+            }
+            Err(not) => {
+                let _ = std::fs::remove_dir_all(&layout.dir);
+                match not {
+                    NotAdopted::Failed(e) => return fail(e),
+                    NotAdopted::Refused(outcome, reason) => {
+                        let mut shared = ctx.shared.borrow_mut();
+                        shared.external.insert((CMD, outcome), true);
+                        shared.strings.push_back(reason);
+                    }
+                }
+            }
+        }
+    }
+    let port = match spec.serve.view_port {
+        Some(p) => p,
+        None => instance::free_port(18900).map(i64::from).unwrap_or(0),
+    };
+    ctx.shared.borrow_mut().integers.push_back(port);
+    let input = m::AdoptInstance {
+        name: spec.name.clone(),
+        description: spec.description.clone(),
+        model: spec.model.model.clone(),
+        ekr_version: spec.ekr.version.clone(),
+        seed_digest: home::seed_digest(&loaded.dir, &spec),
+        spec: spec.clone(),
+        store: a.store.display().to_string(),
+    };
+    let outcome = match app.adopt_instance(input) {
+        Ok(o) => o,
+        Err(e) => return fail(e),
+    };
+    let done = match outcome {
+        m::AdoptInstanceOutcome::NameTaken { error } => Done {
+            outcome: "name-taken",
+            ok: false,
+            detail: json!({"name": error.name.0}),
+        },
+        m::AdoptInstanceOutcome::BackendMismatch { error } => Done {
+            outcome: "backend-mismatch",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
+        m::AdoptInstanceOutcome::StoreUnreadable { error } => Done {
+            outcome: "store-unreadable",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
+        m::AdoptInstanceOutcome::StoreHeld { error } => Done {
+            outcome: "store-held",
+            ok: false,
+            detail: json!({"name": error.name}),
+        },
+        m::AdoptInstanceOutcome::SeedTypesMissing { error } => Done {
+            outcome: "seed-types-missing",
+            ok: false,
+            detail: json!({"types": error.types}),
+        },
+        m::AdoptInstanceOutcome::Adopted { instance_adopted } => {
+            let Some(found) = adopted else {
+                return fail("adopted without reading the store");
+            };
+            let port = instance_adopted.view_port as u16;
+            let meta = Meta {
+                format: "cortex.instance-meta/1".into(),
+                spec_dir: std::fs::canonicalize(&loaded.dir).unwrap_or(loaded.dir.clone()),
+                view_port: port,
+                lineage: found.lineage,
+            };
+            if let Err(e) = layout.save_meta(&meta) {
+                return fail(e);
+            }
+            for source in &spec.sources {
+                let input = m::AddSource {
+                    instance_name: spec.name.clone(),
+                    source_id: m::SourceId(format!("{name}/{}", source.name)),
+                    name: source.name.clone(),
+                    kind: model_map::kind(&source.settings),
+                    schedule: source.schedule.clone(),
+                };
+                if let Err(e) = app.add_source(input) {
+                    return fail(e);
+                }
+            }
+            let mut detail = json!({
+                "name": name,
+                "dir": layout.dir,
+                "revision": instance_adopted.revision,
+                "view": format!("http://127.0.0.1:{port}/"),
+                "sources": spec.sources.iter().map(|s| format!("{name}/{}", s.name)).collect::<Vec<_>>(),
+                "seen": seen.iter().map(|(s, _)| format!("{name}/{s}")).collect::<Vec<_>>(),
+                "seen_documents": found.seen_documents,
+                "seen_without_evidence": found.seen_without_evidence,
+            });
+            if !a.no_units {
+                let systemd = Systemd::from_env(&ctx.home.root);
+                let store = layout.store_handle(&spec);
+                let installed = systemd.install_view(&name, &store, port).and_then(|_| {
+                    spec.sources.iter().try_for_each(|s| {
+                        systemd.install_source(&name, &s.name, &s.schedule, &ctx.tools)
+                    })
+                });
+                if let Err(e) = installed {
+                    detail["units"] = json!({"failed": e});
+                }
+            }
+            Done {
+                outcome: "adopted",
+                ok: true,
+                detail,
+            }
+        }
+    };
+    print("adopt", &done)
 }
 
 fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, no_units: bool) -> ExitCode {
@@ -1114,10 +1505,23 @@ mod tests {
             "cortex.instance.UpdateInstance",
             &["description", "model", "spec", "seed_digest"],
         ),
+        (
+            "cortex.instance.AdoptInstance",
+            &[
+                "name",
+                "description",
+                "model",
+                "ekr_version",
+                "seed_digest",
+                "spec",
+            ],
+        ),
     ];
     /// Flags that steer the implementation and are no command input.
     const STEERING: &[&str] = &[
         "spec",
+        "host",
+        "seen",
         "no_extract",
         "no_units",
         "postgres_schema_config",

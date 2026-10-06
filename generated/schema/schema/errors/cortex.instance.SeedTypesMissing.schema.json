@@ -1,24 +1,24 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "InstanceBusy payload",
-  "description": "Another cortex command holds the home's lock, or a process other than the viewer holds the store open; nothing was restored.",
-  "x-ess-name": "cortex.instance.InstanceBusy",
+  "title": "SeedTypesMissing payload",
+  "description": "A node or edge type the spec's seed declares is not in the store's ontology. `types` lists them, separated by a comma and a space.",
+  "x-ess-name": "cortex.instance.SeedTypesMissing",
   "x-ess-kind": "error-payload",
   "type": "object",
   "properties": {
-    "reason": {
+    "types": {
       "type": "string"
     }
   },
   "required": [
-    "reason"
+    "types"
   ],
   "additionalProperties": false,
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
     "source_digest": "074694b024679ddcf3d3bcddb5b3ad9a6149da9dcdf53cfd7604ac031fb75e27",
-    "contract_digest": "slice-sha256/2:7f405c642d120c582cc81a6683b609bc532934bf468a959d4dc70854202a27f0",
+    "contract_digest": "slice-sha256/2:e6228176a28f5e2f95ca413e3ff046ea882528b6a586dd42928a08ca3fabf51e",
     "regenerate": "ess generate"
   }
 }

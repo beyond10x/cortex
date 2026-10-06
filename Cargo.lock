@@ -168,6 +168,7 @@ dependencies = [
  "globset",
  "regex",
  "rusqlite",
+ "rustix",
  "serde",
  "serde_json",
  "serde_yaml_ng",
