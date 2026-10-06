@@ -30,6 +30,10 @@ Rules:
   entity and state a relation to it instead of a property.
 - Also extract the properties the documents state about each entity (versions, dates, licenses,
   websites, figures). A relation never replaces a property whose value is a plain value.
+- When a document says a property's value changed — a new owner, status, version or figure takes
+  the place of an earlier one — mark that `!Property` fact `replaces: true`, so the earlier value
+  stops being current. Leave it out when the value adds to others, or the document does not say
+  the value changed.
 - Reuse the existing node types, properties and relations listed in the request wherever they fit.
   Declare a new node type, property or edge type in `ontology` only when nothing existing fits:
   node types in PascalCase, properties in snake_case, relations in UPPER_SNAKE_CASE.
@@ -392,11 +396,25 @@ pub fn merge(model: &Value, batch: &[Issued]) -> (Yaml, usize) {
     (Yaml::Mapping(doc), refused)
 }
 
-/// EKR's refusal of one `rejected` part of an extraction report, as text.
+/// EKR's refusal of one `rejected` part of an extraction report, as text: its `refusal`, or for a
+/// part validation rejected the codes of its `issues` (`invalid-supersession`). An issue's message
+/// can quote a value from the store, so only its code is kept.
 pub fn refusal(part: &Value) -> String {
     match &part["refusal"] {
         Value::String(t) => t.clone(),
-        Value::Null => "rejected".to_string(),
+        Value::Null => {
+            let codes: Vec<&str> = part["issues"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|i| i["code"].as_str())
+                .collect();
+            if codes.is_empty() {
+                "rejected".to_string()
+            } else {
+                codes.join("; ")
+            }
+        }
         other => other.to_string(),
     }
 }
@@ -465,6 +483,46 @@ mod tests {
             BTreeMap::from([("e2".to_string(), limit.clone()), ("e3".to_string(), limit)])
         );
         assert!(cited_by_rejected(&doc, &json!({"rejected": []})).is_empty());
+    }
+
+    #[test]
+    fn the_prompt_has_a_changed_property_value_marked_as_replacing_the_earlier_one() {
+        let rule = SYSTEM_PROMPT
+            .split("\n- ")
+            .find(|rule| rule.contains("`replaces: true`"))
+            .unwrap_or_default();
+        assert!(rule.contains("`!Property`"), "{SYSTEM_PROMPT}");
+        assert!(rule.contains("changed"), "{SYSTEM_PROMPT}");
+    }
+
+    #[test]
+    fn a_part_validation_rejected_names_its_issue_codes() {
+        let part = json!({"item": "facts[1]", "transaction_id": "t", "issues": [
+            {"validator": "v", "code": "invalid-supersession", "message": "a value: Alice"},
+            {"validator": "v", "code": "assertion-lifecycle-state", "message": "m"},
+        ]});
+        assert_eq!(
+            refusal(&part),
+            "invalid-supersession; assertion-lifecycle-state"
+        );
+        assert_eq!(
+            refusal(&json!({"item": "facts[0]", "refusal": "x: y"})),
+            "x: y"
+        );
+        assert_eq!(refusal(&json!({"item": "facts[0]"})), "rejected");
+    }
+
+    #[test]
+    fn a_replacing_fact_keeps_its_mark_through_the_merge() {
+        let issued: BTreeSet<String> = ["a".to_string()].into();
+        let fact = json!({"!Property": {"property": "owner", "replaces": true, "evidence": ["a"]}});
+        let (kept, refused) = admitted_facts(&json!({"facts": [fact.clone()]}), &issued);
+        assert_eq!((kept, refused), (vec![fact], 0));
+        let text = serde_yaml_ng::to_string(&tagged(&json!({"facts": [
+            {"!Property": {"property": "owner", "replaces": true, "evidence": ["a"]}},
+        ]})))
+        .unwrap();
+        assert!(text.contains("replaces: true"), "{text}");
     }
 
     #[test]
