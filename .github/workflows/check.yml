@@ -18,7 +18,7 @@ env:
   CARGO_TARGET_DIR: ${{ github.workspace }}/target
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
-  EKR_VERSION: "0.0.30"
+  EKR_VERSION: "0.0.31"
 
 jobs:
   check:

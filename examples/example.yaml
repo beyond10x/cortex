@@ -2,7 +2,7 @@ format: cortex.instance/1
 name: example
 description: Developments in open-source vector databases and the companies behind them.
 ekr:
-  version: "0.0.30"
+  version: "0.0.31"
 seed:
   schema: seed/schema.yaml
   documents: []
