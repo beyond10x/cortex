@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:extraction-supersedes
 kind: story
-status: draft
+status: active
 title: Extraction supersedes the value a newer document replaces
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -19,7 +19,10 @@ scope:
   path: src/main.rs
 - confidence: inferred
   path: tests/supersession.rs
-revision: 5
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-06T07:36:01Z", actor: "agent:claude", revision: 6, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-10-06T07:36:01Z", actor: "agent:claude", revision: 7, decided_on: {"recorded":{"review_outcome":3}}}
 ---
 ## Outcome
 
