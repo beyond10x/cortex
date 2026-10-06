@@ -34,6 +34,7 @@ errors and events.
 | `cortex remove <name>` | stop and delete the instance's timers and viewer that its home wrote (`units.kept` names any of the same name another home wrote); its directory and store stay | `removed`, `wrong-state`, `no-such-instance` |
 | `cortex restore <name> <snapshot>` | put a `sqlite` store and the instance's `state/` back to a snapshot a run took before it applied anything (see [Operating](./operating.md#undoing-a-run)). It snapshots what it replaces as `<ms>-before-restore` and reports the name as `before_restore`, and `state_restored`; a running viewer is stopped and started again. It does not wait for the home's lock | `restored`, `busy`, `no-such-snapshot`, `backend-unsupported`, `no-such-instance` |
 | `cortex quality <name> --sample <n>` | measure how often the instance's facts are supported by the evidence they cite (see [Measuring fact quality](#measuring-fact-quality)). It reads the store and writes nothing to it, so a removed instance is measured too. It holds the home's lock only while it draws the sample, so the timers' runs do not wait behind the model calls | `measured`, `sample-failed`, `judge-failed`, `no-such-instance` |
+| `cortex schema <name> [--sample <n>] [--dry-run]` | have the instance's model propose changes to the store's ontology from a sample of its facts (default 40) and apply each one EKR applies as a schema transaction of its own (see [Proposing schema changes](#proposing-schema-changes)). `--dry-run` records the proposals and applies none. It holds the home's lock while it draws the sample and while it applies, not during the model calls | `applied`, `proposed` (a dry run), `sample-failed`, `propose-failed`, `no-such-instance` |
 | `cortex list` | instances: name, state, description, model, EKR version, seed digest, viewer address, and the version of `<home>/bin/cortex` their timers run (`binary_version`, null when none is recorded) | |
 | `cortex mcp-line <name>` | print the `claude mcp add` line that serves the instance's store through `ekr mcp` | |
 
@@ -66,6 +67,56 @@ nothing. `judge-failed` (a model call failed or found the budget spent, or `refu
 refused what the judge would be shown) writes no `fact-quality.json`; `verdicts.jsonl` keeps the
 verdicts of the batches judged before, and a failed model call's reason states the cost so far.
 
+### Proposing schema changes
+
+`cortex schema <name> [--sample <n>]` draws `n` (1 to 1000, default 40) of the store's active facts
+with `ekr sample`, each with the evidence it cites, and reads the ontology in force with `ekr
+ontology`. Each batch of 20 goes to the instance's model with no tools and its own system prompt,
+shown as `cortex quality` shows it to the judge (the spec's `redaction` policy applied), beside the
+ontology's type and property names. The model answers a list of proposals, each one change with a
+reason, the ids of the facts it rests on and the labels (`E1`, `E2`, …) of the evidence it rests
+on. A proposal citing a fact or a label its batch does not hold, citing no fact, or not in that form, is dropped.
+The round spends at most the spec's `model.budget_usd`.
+
+The changes the model may propose are a closed list:
+
+| change | what cortex does |
+|---|---|
+| `add_node_type`, `add_edge_type`, `add_property` | asks EKR to apply it (`DefineNodeType`, `DefineEdgeType`, `ModifyProperty`). Every property cortex declares is optional, so no node the store holds becomes invalid |
+| `redeclare_property` | asks EKR to apply a new value kind or cardinality to a property the type declares itself (`ModifyProperty`); whether it is required and its constraints stay as declared. EKR refuses one the values the store holds do not fit |
+| `remove_node_type`, `remove_edge_type`, `remove_property`, `merge_types`, `split_type` | records it for review: EKR removes, merges and splits nothing |
+
+Without `--dry-run`, cortex takes the home's lock again and decides each proposal in order against
+the ontology at the head: each one cortex can write is its own schema transaction and its own
+schema version, so `ekr ontology --at <revision>`, with the `revision` the detail reports, still
+answers the schema before. It writes `schema/<UTC stamp>/proposals.jsonl` in the instance
+directory, one `cortex.schema-proposal/1` object per proposal not dropped: `change`, `reason`,
+`facts` (EKR assertion ids), `evidence` (the EKR evidence ids the proposal and its facts cite) and
+`status`:
+
+| status | means |
+|---|---|
+| `applied` | committed; `revision` and `schema_version` say where |
+| `refused` | EKR's validation refused it; `codes` holds EKR's issue codes and `note` its messages |
+| `recorded-only` | a remove, merge or split, recorded and not applied |
+| `invalid` | cortex could not write it against the ontology, and `note` says why: a type or property it names is not there; a type it adds already is, in any case; a property it adds is one the type, a type it inherits from or a type inheriting from it already declares, in any case; a property it redeclares is inherited; or a name it gives holds a placeholder of the `redaction` policy |
+| `dry-run` | `--dry-run`: a change EKR would have been asked to apply |
+
+Of the model's answer, only each proposal's `reason` has the `redaction` policy's placeholders
+put back. A masked value never becomes a type or property name, which every later round would
+show the model as it is; such a proposal is kept as the model wrote it.
+
+EKR holds a transaction's evidence to its assertions, so a schema transaction cites none; the line
+in `proposals.jsonl` is where an applied change's evidence is recorded. Each transaction cortex
+wrote stays beside it as `schema-<nnnn>.yaml`, numbered by the proposal's line from `0000`.
+
+An `applied` or `proposed` line's detail carries `stamp`, `revision` (the head the sample was drawn
+at), `proposed`, `applied`, `refused`, `recorded_only`, `invalid`, `dropped`, `cost_usd` (as a run
+reports it) and `dir`. `sample-failed` asks no model and writes nothing. `propose-failed` (a model
+call failed or found the budget spent, `refuse_if_left` refused what the model would be shown, or
+EKR could not read the ontology) applies nothing and writes no `proposals.jsonl`; its reason states
+the cost so far.
+
 ## Sources
 
 A source id is `<instance>/<source>`.
@@ -90,4 +141,4 @@ value to put back).
 | command | does |
 |---|---|
 | `cortex setup [--ekr-version <v>]` | install `ekr` at the version (default 0.0.31) with `cargo install` when it is missing |
-| `cortex schema` | print the spec file's JSON Schema |
+| `cortex schema` | print the spec file's JSON Schema (with an instance name it proposes schema changes instead, see [Proposing schema changes](#proposing-schema-changes)) |

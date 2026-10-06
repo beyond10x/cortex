@@ -1,0 +1,447 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.SchemaProposal",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17",
+    "contract_digest": "slice-sha256/2:a25f3874bd16322490890404fe417998f69fdfff1c4b56a0213e8863756809a7",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.NewEdgeType": {
+      "title": "NewEdgeType",
+      "x-ess-name": "cortex.instance.NewEdgeType",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "target_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "source_types",
+        "target_types"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.NewNodeType": {
+      "title": "NewNodeType",
+      "x-ess-name": "cortex.instance.NewNodeType",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.SchemaProperty"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "properties"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.PropertyChange": {
+      "title": "PropertyChange",
+      "x-ess-name": "cortex.instance.PropertyChange",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "owner": {
+          "type": "string"
+        },
+        "property": {
+          "$ref": "#/$defs/cortex.instance.SchemaProperty"
+        }
+      },
+      "required": [
+        "owner",
+        "property"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.PropertyRemoval": {
+      "title": "PropertyRemoval",
+      "x-ess-name": "cortex.instance.PropertyRemoval",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "owner": {
+          "type": "string"
+        },
+        "property": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner",
+        "property"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.SchemaCardinality": {
+      "title": "SchemaCardinality",
+      "x-ess-name": "cortex.instance.SchemaCardinality",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "One",
+        "Many"
+      ]
+    },
+    "cortex.instance.SchemaChange": {
+      "title": "SchemaChange",
+      "x-ess-name": "cortex.instance.SchemaChange",
+      "x-ess-kind": "union",
+      "oneOf": [
+        {
+          "title": "add_edge_type",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "add_edge_type"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.NewEdgeType"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "add_node_type",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "add_node_type"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.NewNodeType"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "add_property",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "add_property"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.PropertyChange"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "merge_types",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "merge_types"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.TypeMerge"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "redeclare_property",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "redeclare_property"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.PropertyChange"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "remove_edge_type",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "remove_edge_type"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.TypeRemoval"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "remove_node_type",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "remove_node_type"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.TypeRemoval"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "remove_property",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "remove_property"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.PropertyRemoval"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "split_type",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "split_type"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.TypeSplit"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "x-ess-union-tag": "kind"
+    },
+    "cortex.instance.SchemaProperty": {
+      "title": "SchemaProperty",
+      "x-ess-name": "cortex.instance.SchemaProperty",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value_kind": {
+          "$ref": "#/$defs/cortex.instance.SchemaValueKind"
+        },
+        "cardinality": {
+          "$ref": "#/$defs/cortex.instance.SchemaCardinality"
+        }
+      },
+      "required": [
+        "name",
+        "value_kind",
+        "cardinality"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.SchemaProposal": {
+      "title": "SchemaProposal",
+      "x-ess-name": "cortex.instance.SchemaProposal",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "change": {
+          "$ref": "#/$defs/cortex.instance.SchemaChange"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "$ref": "#/$defs/cortex.instance.SchemaProposalStatus"
+        },
+        "codes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "note": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer"
+        },
+        "schema_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "change",
+        "reason",
+        "facts",
+        "evidence",
+        "status",
+        "codes"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.SchemaProposalStatus": {
+      "title": "SchemaProposalStatus",
+      "x-ess-name": "cortex.instance.SchemaProposalStatus",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "applied",
+        "refused",
+        "recorded-only",
+        "invalid",
+        "dry-run"
+      ]
+    },
+    "cortex.instance.SchemaValueKind": {
+      "title": "SchemaValueKind",
+      "x-ess-name": "cortex.instance.SchemaValueKind",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "String",
+        "Integer",
+        "Decimal",
+        "Boolean",
+        "Timestamp"
+      ]
+    },
+    "cortex.instance.TypeMerge": {
+      "title": "TypeMerge",
+      "x-ess-name": "cortex.instance.TypeMerge",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "into": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "types",
+        "into"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.TypeRemoval": {
+      "title": "TypeRemoval",
+      "x-ess-name": "cortex.instance.TypeRemoval",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.TypeSplit": {
+      "title": "TypeSplit",
+      "x-ess-name": "cortex.instance.TypeSplit",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "into": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "into"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
