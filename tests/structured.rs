@@ -1002,12 +1002,14 @@ sources:
         );
     }
 
-    /// A 200 000-character value is over EKR's 65 536-byte string limit, so EKR rejects the fact. The
-    /// run reports the rejected part, does not count the record as applied and does not mark it seen:
-    /// the next run reads and tries it again. Its other records apply. Re-scoped by the coordinator's
-    /// decision 5 from "the value applies", which EKR 0.0.30 refuses.
+    /// A 200 000-character mapped value is over the 16,384 bytes of evidence EKR takes in one
+    /// payload (and over its 65,536-byte string limit), so no evidence can hold every value the
+    /// record's facts cite. The record is not applied: the run names it in `skipped` with the
+    /// reason and records it as seen, so it is not read again until it changes. Its other records
+    /// apply. Re-scoped by the coordinator's decision on PR #30 (finding 3) from "rejected,
+    /// reported and retried".
     #[test]
-    fn a_value_over_ekrs_string_limit_is_rejected_reported_and_retried() {
+    fn a_record_whose_mapped_values_exceed_the_evidence_bound_is_skipped_and_named() {
         let w = world();
         let long = "y".repeat(200_000);
         let json = serde_json::json!([
@@ -1018,8 +1020,19 @@ sources:
         people(&w, "vl", "");
         let ran = run(&w, "vl/people");
         assert_eq!(ran["detail"]["documents_new"], 2, "{ran}");
-        assert_eq!(ran["detail"]["parts_rejected"], 1, "{ran}");
+        assert_eq!(ran["detail"]["parts_rejected"], 0, "{ran}");
         assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
+        let skipped = ran["detail"]["skipped"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(skipped.len(), 1, "{ran}");
+        assert!(
+            skipped[0].as_str().is_some_and(
+                |s| s.starts_with("directory:people.list:P-1: ") && s.contains("16384")
+            ),
+            "{ran}"
+        );
         let facts = stored_facts(&w, "vl");
         let roles: Vec<_> = quads(&facts)
             .into_iter()
@@ -1035,16 +1048,19 @@ sources:
             "{facts:#?}"
         );
 
-        // Nothing changed upstream: the rejected record is read and tried again, the applied one is not.
+        // Nothing changed upstream: neither record is read again.
         let again = run(&w, "vl/people");
-        assert_eq!(again["detail"]["documents_new"], 1, "{again}");
-        assert_eq!(again["detail"]["parts_rejected"], 1, "{again}");
-        assert_eq!(again["detail"]["documents_applied"], 0, "{again}");
+        assert_eq!(again["detail"]["documents_new"], 0, "{again}");
+        assert_eq!(
+            again["detail"]["skipped"],
+            serde_json::Value::Null,
+            "{again}"
+        );
     }
 
     /// Hostile and unusual values: YAML syntax, tag-looking text, unicode, a number and a boolean all
     /// round-trip as text onto the right node. The 200 000-character value this case also carried is
-    /// over EKR's string limit; `a_value_over_ekrs_string_limit_is_rejected_reported_and_retried`
+    /// over EKR's evidence bound; `a_record_whose_mapped_values_exceed_the_evidence_bound_is_skipped_and_named`
     /// holds it (decision 5).
     #[test]
     fn hostile_and_unusual_values_round_trip_as_text() {

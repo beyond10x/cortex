@@ -54,12 +54,26 @@ fn head(doc: &Document) -> String {
 }
 
 /// The bytes retained as the document's evidence: a header naming it, then its text, cut at a
-/// character boundary to at most [`PAYLOAD_MAX_BYTES`].
+/// character boundary to at most [`PAYLOAD_MAX_BYTES`]. The cut keeps whole characters, not
+/// grapheme clusters: a letter may lose a combining mark that follows it. The model is shown the
+/// text cut at the same byte ([`fit`]), so what a fact cites is what the evidence holds.
 pub fn payload(doc: &Document) -> Vec<u8> {
+    payload_led(doc, "")
+}
+
+/// [`payload`] with `lead` written between the header and the text, so the cut reaches it last.
+fn payload_led(doc: &Document, lead: &str) -> Vec<u8> {
     let mut bytes = head(doc);
+    bytes.push_str(lead);
     bytes.push_str(&doc.text);
     bytes.truncate(bytes.floor_char_boundary(PAYLOAD_MAX_BYTES));
     bytes.into_bytes()
+}
+
+/// How many bytes `doc`'s header and `lead` take in its payload: over [`PAYLOAD_MAX_BYTES`], the
+/// cut would reach into `lead`.
+pub fn lead_bytes(doc: &Document, lead: &str) -> usize {
+    head(doc).len() + lead.len()
 }
 
 /// Cuts `doc`'s text, at a character boundary, to what its payload holds within
@@ -79,8 +93,14 @@ fn key(k: &str) -> Yaml {
 }
 
 pub fn issue(doc: Document, operator: &str, observed_at_ms: i64) -> Issued {
+    issue_led(doc, "", operator, observed_at_ms)
+}
+
+/// [`issue`], with `lead` written first in the payload after the header (a structured record's
+/// mapped values), so the cut at [`PAYLOAD_MAX_BYTES`] takes the document's text before it.
+pub fn issue_led(doc: Document, lead: &str, operator: &str, observed_at_ms: i64) -> Issued {
     let id = uuid::Uuid::now_v7().to_string();
-    let bytes = payload(&doc);
+    let bytes = payload_led(&doc, lead);
     let mut source = Mapping::new();
     source.insert(key("identity"), Yaml::String(identity(&doc)));
     let mut evidence = Mapping::new();

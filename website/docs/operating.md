@@ -83,9 +83,9 @@ version as `binary_version`. `--no-units`, and a spec with no source, leave the 
    placeholder in the answer is put back before merging; the mapping exists for that one call.
 6. **Merge.** A fact citing an evidence id cortex did not issue for that batch is refused; cortex
    adds the evidence items itself and records each web page as a `WebPage` node.
-7. **Apply** the document with `ekr apply-extraction`, then record the batch's documents as seen,
-   except a document a fact EKR rejected cites: it is not counted in `documents_applied`, and
-   the next run tries it again.
+7. **Apply** the document with `ekr apply-extraction`, then record the batch's documents as seen.
+   A document a part EKR rejected belongs to is seen too, since EKR would reject that part again
+   on the same text; the run names it, with EKR's refusal, in `rejected`.
    Before the run's first apply, a `sqlite` store and `state/` are copied, and kept as a
    snapshot once that apply commits (see [Undoing a run](#undoing-a-run)); a copy that cannot be
    taken fails the run with nothing applied.

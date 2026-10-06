@@ -161,10 +161,11 @@ fn a_seed_document_over_the_bound_is_cut_and_applied() {
 }
 
 /// A fact EKR rejects (a 70,000-byte value, over its string limit) cites the first document of
-/// the batch: that document is neither counted as applied nor recorded as seen, so the next run
-/// asks the model about it again; the other document is applied once.
+/// the batch. EKR would reject it again on the same text, so the document is recorded as seen and
+/// not tried again (a retry would cost a model call and a `max_documents_per_run` slot on every
+/// run); the run report names it with EKR's refusal, so nothing is lost silently.
 #[test]
-fn a_document_a_rejected_fact_cites_is_not_recorded_as_seen_and_is_tried_again() {
+fn a_document_a_rejected_fact_cites_is_seen_and_named_in_the_report() {
     let w = World::new();
     let spec = spec(&w, 5_000);
     let root = w.root.display();
@@ -197,21 +198,26 @@ EOF
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
     assert_eq!(ran["detail"]["documents_new"], 2, "{ran}");
     assert_eq!(ran["detail"]["parts_rejected"], 1, "{ran}");
-    assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
+    let rejected = ran["detail"]["rejected"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(rejected.len(), 1, "{ran}");
+    assert!(rejected[0]["document"]
+        .as_str()
+        .is_some_and(|d| d.starts_with("https://example.org/")));
+    assert!(
+        rejected[0]["refusal"]
+            .as_str()
+            .is_some_and(|r| r.contains("string_bytes")),
+        "{ran}"
+    );
+    assert_eq!(log_line(&w, "news")["rejected"], ran["detail"]["rejected"]);
 
-    // Nothing changed upstream: the document the rejected fact cites is tried again.
+    // Nothing changed upstream: nothing is tried again.
     let (_, again) = w.cortex(&["run", "t/news"]);
-    assert_eq!(again["detail"]["documents_new"], 1, "{again}");
-    assert_eq!(again["detail"]["documents_applied"], 0, "{again}");
-    assert_eq!(w.lines("claude-calls.log").len(), 2);
-
-    // Once its facts apply, it is seen and not tried again.
-    std::fs::remove_file(w.root.join("long")).unwrap();
-    let (_, applied) = w.cortex(&["run", "t/news"]);
-    assert_eq!(applied["detail"]["documents_new"], 1, "{applied}");
-    assert_eq!(applied["detail"]["documents_applied"], 1, "{applied}");
-    assert_eq!(applied["detail"]["parts_rejected"], 0, "{applied}");
-    let (_, done) = w.cortex(&["run", "t/news"]);
-    assert_eq!(done["detail"]["documents_new"], 0, "{done}");
-    assert_eq!(w.lines("claude-calls.log").len(), 3);
+    assert_eq!(again["detail"]["documents_new"], 0, "{again}");
+    assert_eq!(again["detail"]["rejected"], Value::Null, "{again}");
+    assert_eq!(w.lines("claude-calls.log").len(), 1);
 }

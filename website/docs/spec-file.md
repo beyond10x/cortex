@@ -321,12 +321,16 @@ named by the target text. The mapping's node type, its properties, the target ty
 relations are added to the store's ontology where it does not hold them yet.
 
 **Evidence and rejections.** Each record is stored as the evidence every fact from it cites: a
-`Source:` header and the record's JSON, cut at a character boundary to 16,384 bytes (EKR 0.0.30's
-bound on one evidence payload). Before that, every string in the record has credential
+`Source:` header, its mapped values (`Mapped values:`, one `<label>: <value>` line each for its
+id, name, aliases, properties and relation targets), then the record's JSON, cut at a character
+boundary to 16,384 bytes (EKR 0.0.30's bound on one evidence payload). The mapped values come
+first, so the cut never takes a value a fact cites. A record whose header and mapped values alone
+are over the bound is not applied: the run names it in `skipped` with the reason and records it as
+seen, so it is read again only once it changes. Before that, every string in the record has credential
 shapes masked and the `redaction` policy's rules with a `replacement` applied; no model sees a
 record, so nothing is replaced by a placeholder. `max_chars_per_document` does not cut a record,
 and EKR rejects a text value over 65,536 bytes (EKR 0.0.30's string limit). A record with any part
-EKR rejects is counted in `parts_rejected`, is not counted in `documents_applied` and is not marked
+EKR rejects is counted in `parts_rejected`, named in `rejected` with EKR's refusal, is not counted in `documents_applied` and is not marked
 seen; the run is then not successful, so later runs read the record and try it again until it
 applies. Shorten or unmap the value at the source to clear it. Change detection,
 `refresh_after_days` and `max_documents_per_run` work as for any source.

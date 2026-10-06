@@ -392,31 +392,40 @@ pub fn merge(model: &Value, batch: &[Issued]) -> (Yaml, usize) {
     (Yaml::Mapping(doc), refused)
 }
 
+/// EKR's refusal of one `rejected` part of an extraction report, as text.
+pub fn refusal(part: &Value) -> String {
+    match &part["refusal"] {
+        Value::String(t) => t.clone(),
+        Value::Null => "rejected".to_string(),
+        other => other.to_string(),
+    }
+}
+
 /// The evidence ids the facts of `doc` (a merged document) that `report` (an
-/// `ekr.integrate.ExtractionReport`) lists as `rejected` cite. A rejected part that is not a fact
-/// names no evidence.
-pub fn cited_by_rejected(doc: &Yaml, report: &Value) -> BTreeSet<String> {
+/// `ekr.integrate.ExtractionReport`) lists as `rejected` cite, each with the refusals of those
+/// facts. A rejected part that is not a fact names no evidence.
+pub fn cited_by_rejected(doc: &Yaml, report: &Value) -> BTreeMap<String, Vec<String>> {
     let facts = doc["facts"].as_sequence().map_or(&[][..], Vec::as_slice);
-    report["rejected"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|part| {
-            part["item"]
-                .as_str()?
-                .strip_prefix("facts[")?
-                .split(']')
-                .next()?
-                .parse::<usize>()
-                .ok()
-        })
-        .filter_map(|i| match facts.get(i)? {
-            Yaml::Tagged(fact) => fact.value["evidence"].as_sequence(),
-            _ => None,
-        })
-        .flatten()
-        .filter_map(|id| id.as_str().map(str::to_string))
-        .collect()
+    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for part in report["rejected"].as_array().into_iter().flatten() {
+        let Some(i) = part["item"]
+            .as_str()
+            .and_then(|item| item.strip_prefix("facts["))
+            .and_then(|rest| rest.split(']').next())
+            .and_then(|n| n.parse::<usize>().ok())
+        else {
+            continue;
+        };
+        let Some(Yaml::Tagged(fact)) = facts.get(i) else {
+            continue;
+        };
+        for id in fact.value["evidence"].as_sequence().into_iter().flatten() {
+            if let Some(id) = id.as_str() {
+                out.entry(id.to_string()).or_default().push(refusal(part));
+            }
+        }
+    }
+    out
 }
 
 /// Entity names per node type in a merged document, for the next run's prompt.
@@ -450,9 +459,10 @@ mod tests {
             {"item": "entities[0]", "refusal": "r"},
             {"item": "facts[9]", "refusal": "r"},
         ]});
+        let limit = vec!["transaction document limit".to_string()];
         assert_eq!(
             cited_by_rejected(&doc, &report),
-            BTreeSet::from(["e2".to_string(), "e3".to_string()])
+            BTreeMap::from([("e2".to_string(), limit.clone()), ("e3".to_string(), limit)])
         );
         assert!(cited_by_rejected(&doc, &json!({"rejected": []})).is_empty());
     }

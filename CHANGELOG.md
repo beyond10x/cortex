@@ -85,5 +85,7 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 - Evidence over 16 KB is no longer lost: each evidence payload is cut, at a character boundary, to
   the 16,384 bytes EKR 0.0.30 takes, on a source run and on the seed alike, and the text the model
-  is shown is cut to what the payload holds. A document a rejected fact cites is no longer recorded
-  as seen or counted in `documents_applied`, so the next run tries it again.
+  is shown is cut to what the payload holds. A structured record's evidence leads with its mapped
+  values, so the cut never takes a value its facts cite; a record whose mapped values alone are
+  over the bound is named in `skipped` and not applied. A run names each document a part EKR
+  rejected belongs to, with EKR's refusal, in `rejected`.

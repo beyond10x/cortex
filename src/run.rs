@@ -56,8 +56,37 @@ pub struct Report {
     /// Documents the model was shown cut at the policy's `max_chars_per_document`.
     pub truncated: usize,
     /// Parents left out without holding the window: their child call failed on
-    /// [`sources::CHILD_FAILURE_LIMIT`] or more consecutive runs.
+    /// [`sources::CHILD_FAILURE_LIMIT`] or more consecutive runs; and structured records refused
+    /// because their mapped values alone are over EKR's evidence bound.
     pub skipped: Vec<String>,
+    /// Applied documents a part EKR rejected belongs to, each with EKR's refusal.
+    pub rejected: Vec<Rejected>,
+}
+
+/// An applied document a part EKR rejected belongs to: its key and EKR's refusals, joined.
+#[derive(Debug)]
+pub struct Rejected {
+    pub document: String,
+    pub refusal: String,
+}
+
+impl Rejected {
+    fn new(document: &str, refusals: &[String]) -> Self {
+        let mut unique: Vec<&str> = Vec::new();
+        for r in refusals {
+            if !unique.contains(&r.as_str()) {
+                unique.push(r);
+            }
+        }
+        Self {
+            document: document.to_string(),
+            refusal: unique.join("; "),
+        }
+    }
+
+    pub fn json(&self) -> serde_json::Value {
+        json!({"document": self.document, "refusal": self.refusal})
+    }
 }
 
 impl Default for Report {
@@ -75,6 +104,7 @@ impl Default for Report {
             stopped: None,
             truncated: 0,
             skipped: Vec::new(),
+            rejected: Vec::new(),
         }
     }
 }
@@ -534,16 +564,19 @@ fn process(
             );
         }
         report.parts_rejected += crate::ekr::applied(&applied).rejected;
-        // A document a rejected fact cites is neither applied nor seen: the next run tries it
-        // again, as `apply_records` does for a record.
+        // A document a rejected fact cites is seen all the same: EKR would reject the fact again
+        // on the same text, and a retry would cost a model call and a slot of the run on every
+        // run. The report names it with EKR's refusal.
         let rejected = extract::cited_by_rejected(&doc, &applied);
         for issued in &batch {
-            if rejected.contains(&issued.id) {
-                continue;
+            if let Some(refusals) = rejected.get(&issued.id) {
+                report
+                    .rejected
+                    .push(Rejected::new(&issued.doc.key, refusals));
             }
-            report.documents_applied += 1;
             seen.record(&issued.doc, applied_at);
         }
+        report.documents_applied += batch.len() as i64;
         for (ty, name) in extract::entity_names(&restored) {
             let names = entities.entry(ty).or_default();
             if !names.contains(&name) && names.len() < KNOWN_PER_TYPE {
@@ -735,8 +768,12 @@ struct Records<'a> {
 /// extraction document mapped by `src/structured.rs`, written to the run's batch directory as
 /// `extraction.yaml` and applied; the report keeps its cost of `0`. A batch that fails to apply
 /// fails the run when nothing was applied yet and stops it otherwise, as on the model path. A
-/// record with a part EKR rejected is counted in `parts_rejected` but neither applied nor marked
-/// seen, so the run is not successful and the record is read and tried again.
+/// record with a part EKR rejected is counted in `parts_rejected`, named in `rejected` with EKR's
+/// refusal, and neither applied nor marked seen, so the run is not successful and the record is
+/// read and tried again. Each record's evidence leads with its mapped values
+/// ([`structured::Source::lead`]) before the cut at [`evidence::PAYLOAD_MAX_BYTES`]; a record whose
+/// mapped values alone are over that bound is not applied, but named in `skipped` and recorded as
+/// seen, as its next run would refuse it again.
 fn apply_records(
     layout: &Layout,
     r: &Records<'_>,
@@ -747,10 +784,22 @@ fn apply_records(
     before: &mut Undo,
 ) -> Result<(), Failure> {
     let mut entities = load_entities(layout);
-    let issued: Vec<_> = selected
-        .into_iter()
-        .map(|d| evidence::issue(d, r.operator, r.started))
-        .collect();
+    let mut issued = Vec::new();
+    for d in selected {
+        let lead = r.source.lead(&d.text);
+        let bytes = evidence::lead_bytes(&d, &lead);
+        if bytes > evidence::PAYLOAD_MAX_BYTES {
+            report.skipped.push(format!(
+                "{}: its mapped values take {bytes} bytes of evidence, over the {} bytes EKR \
+                 takes in one payload; the record was not applied",
+                d.key,
+                evidence::PAYLOAD_MAX_BYTES
+            ));
+            seen.record(&d, r.applied_at);
+            continue;
+        }
+        issued.push(evidence::issue_led(d, &lead, r.operator, r.started));
+    }
     let index = r.source.index(&issued);
     for (n, batch) in batches(issued).into_iter().enumerate() {
         let mapped = r.source.document(&batch, &index);
@@ -778,7 +827,10 @@ fn apply_records(
         report.parts_rejected += crate::ekr::applied(&applied).rejected;
         let rejected = mapped.rejected(&applied);
         for issued in &batch {
-            if rejected.contains(&issued.id) {
+            if let Some(refusals) = rejected.get(&issued.id) {
+                report
+                    .rejected
+                    .push(Rejected::new(&issued.doc.key, refusals));
                 continue;
             }
             report.documents_applied += 1;
@@ -921,6 +973,14 @@ fn log_line(label: &str, report: &Report, started: i64) -> serde_json::Value {
     // Present only when a parent was skipped: a run that skipped none logs what it did before.
     if !report.skipped.is_empty() {
         line["skipped"] = json!(report.skipped);
+    }
+    // Present only when EKR rejected a part: a run that had none logs what it did before.
+    if !report.rejected.is_empty() {
+        line["rejected"] = json!(report
+            .rejected
+            .iter()
+            .map(Rejected::json)
+            .collect::<Vec<_>>());
     }
     // Present only when the policy pseudonymises: a spec file without one logs what it did before.
     if let Some(redacted) = &report.redacted {
