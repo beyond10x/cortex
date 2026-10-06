@@ -61,6 +61,10 @@ pub struct Report {
     pub skipped: Vec<String>,
     /// Applied documents a part EKR rejected belongs to, each with EKR's refusal.
     pub rejected: Vec<Rejected>,
+    /// Assertions of a structured source with `dropped: Supersede` this run superseded by a
+    /// changed value, and retracted as no longer listed.
+    pub superseded: usize,
+    pub retracted: usize,
 }
 
 /// An applied document a part EKR rejected belongs to: its key and EKR's refusals, joined.
@@ -105,6 +109,8 @@ impl Default for Report {
             truncated: 0,
             skipped: Vec::new(),
             rejected: Vec::new(),
+            superseded: 0,
+            retracted: 0,
         }
     }
 }
@@ -395,6 +401,11 @@ fn process(
         })
         .collect();
 
+    // With `dropped: Supersede`, every record the run read, so the values the store holds of this
+    // source can be compared with what it lists now ([`end_dropped`]).
+    let listed: Option<Vec<sources::Document>> = structured_source
+        .filter(|st| st.dropped == Some(m::DropPolicy::Supersede))
+        .map(|_| docs.clone());
     let seen_path = layout.seen(label);
     let mut seen = SeenState::load(&seen_path).map_err(Failure::Fetch)?;
     let wanted = docs
@@ -417,7 +428,9 @@ fn process(
     );
     report.documents_new = selected.len() as i64;
     let run_dir = layout.runs().join(format!("{started}-{}", label));
-    if selected.is_empty() {
+    // A run with nothing new still compares the store with what the source lists, when it ends
+    // what the source no longer lists.
+    if selected.is_empty() && listed.is_none() {
         unread(&mut report, &fetched.unread, redactor.as_ref());
         let failures = fetched.child_failures.clone();
         finish(
@@ -457,6 +470,10 @@ fn process(
             &mut report,
             &mut before,
         )?;
+        // A fetch that left records unread lists only part of the source: nothing is ended.
+        if let Some(listed) = listed.as_deref().filter(|_| fetched.unread.is_empty()) {
+            end_dropped(&records, listed, &seen, &mut report, &mut before)?;
+        }
         unread(&mut report, &fetched.unread, redactor.as_ref());
         if undoable {
             held_to_gate(layout, spec, &store, label, &report, &before, started)?;
@@ -830,6 +847,9 @@ fn apply_records(
         }
         issued.push(evidence::issue_led(d, &lead, r.operator, r.started));
     }
+    if issued.is_empty() {
+        return Ok(());
+    }
     let index = r.source.index(&issued);
     for (n, batch) in batches(issued).into_iter().enumerate() {
         let mapped = r.source.document(&batch, &index);
@@ -886,6 +906,75 @@ fn apply_records(
                 .unwrap_or_default()
                 .as_bytes(),
         );
+    }
+    Ok(())
+}
+
+/// Operations of one transaction that ends values: well inside EKR's 10,000 per transaction.
+const ENDS_PER_TRANSACTION: usize = 1_000;
+
+/// `dropped: Supersede`: after a structured run applied its records, ends each value the store
+/// holds of this source that the source no longer lists ([`structured::Source::ended`]): read from
+/// the store (`ekr snapshot`, `ekr ontology`), not from `state/`, and compared with `listed`, every
+/// record the run read. A record whose current text `seen` does not hold (held back, rejected,
+/// or beyond `max_documents_per_run`), or whose mapped values are over the evidence bound, keeps
+/// its values; a run that lists no record ends nothing. The operations are committed as
+/// transactions of their own (`runs/<run>/ends-<n>.yaml`), after the run's snapshot is taken; one
+/// that fails fails the run when nothing was applied yet and stops it otherwise.
+fn end_dropped(
+    r: &Records<'_>,
+    listed: &[sources::Document],
+    seen: &SeenState,
+    report: &mut Report,
+    before: &mut Undo,
+) -> Result<(), Failure> {
+    // A source that lists no record at all ends nothing: an empty list is read as a list that
+    // failed, so a source cannot drop its last record.
+    if listed.is_empty() {
+        return Ok(());
+    }
+    // A record whose mapped values are over the evidence bound is recorded as seen but never
+    // applied ([`apply_records`]): on every run it stays too large, it keeps its values.
+    let unsettled: BTreeSet<String> = listed
+        .iter()
+        .filter(|d| {
+            seen.documents
+                .get(&d.key)
+                .is_none_or(|s| s.hash != crate::state::doc_hash(d))
+                || evidence::lead_bytes(d, &r.source.lead(&d.text)) > evidence::PAYLOAD_MAX_BYTES
+        })
+        .map(|d| d.key.clone())
+        .collect();
+    let snapshot = r.store.snapshot().map_err(Failure::Apply)?;
+    let ontology = r.store.ontology().map_err(Failure::Apply)?;
+    let ops = r
+        .source
+        .ended(&snapshot, &ontology, &r.source.listed(listed), &unsettled);
+    if ops.is_empty() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(r.run_dir).map_err(|e| Failure::Apply(e.to_string()))?;
+    for (n, chunk) in ops.chunks(ENDS_PER_TRANSACTION).enumerate() {
+        before.take()?;
+        let path = r.run_dir.join(format!("ends-{n}.yaml"));
+        match r.store.transact(&path, r.operator, chunk) {
+            Ok(_) => before.committed(),
+            Err(e) if !before.applied => return Err(Failure::Apply(e)),
+            Err(e) => {
+                report.stopped = Some(match report.stopped.take() {
+                    Some(stopped) => format!("{stopped}; {e}"),
+                    None => e,
+                });
+                return Ok(());
+            }
+        }
+        for op in chunk {
+            match op {
+                crate::ekr::Operation::Supersede { .. } => report.superseded += 1,
+                crate::ekr::Operation::Retract { .. } => report.retracted += 1,
+                crate::ekr::Operation::DeleteEdge(_) => {}
+            }
+        }
     }
     Ok(())
 }
@@ -1016,6 +1105,11 @@ fn log_line(label: &str, report: &Report, started: i64) -> serde_json::Value {
     if let Some(redacted) = &report.redacted {
         line["redacted"] = json!(redacted);
         line["unrestored"] = json!(report.unrestored);
+    }
+    // Present only when the run ended a value: a run that ended none logs what it did before.
+    if report.superseded + report.retracted > 0 {
+        line["superseded"] = json!(report.superseded);
+        line["retracted"] = json!(report.retracted);
     }
     line
 }

@@ -335,8 +335,11 @@ fn credentials_and_irreversible_rules_in_a_record_never_reach_the_store() {
     assert!(!evidence.contains("AK-1234ABCD"));
 }
 
+/// Reading files runs (`story:structured-from-files-and-drops`, `tests/structured_files.rs`): a
+/// directory with no matching file fails the fetch, naming the root and the glob, so it is never
+/// read as a source that lists nobody.
 #[test]
-fn a_structured_source_reading_files_fails_naming_the_story_that_builds_it() {
+fn a_structured_source_reading_an_empty_directory_fails_its_fetch_naming_the_glob() {
     let w = world(PEOPLE);
     std::fs::create_dir_all(w.root.join("records")).unwrap();
     create_from(
@@ -355,7 +358,7 @@ fn a_structured_source_reading_files_fails_naming_the_story_that_builds_it() {
         ran["detail"]["reason"]
             .as_str()
             .unwrap_or_default()
-            .contains("story:structured-from-files-and-drops"),
+            .contains("no file matches glob \"**/*.json\""),
         "{ran}"
     );
     assert!(w.lines("claude-calls.log").is_empty());
