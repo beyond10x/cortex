@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 46d14b665108bd7bba685ab525d1afaab8b67265939b431046efa7b3486ad936
-// contract digest 0eb8f43114995eccfc97b658bb6867cfa0e0f38338a4021148894c7d43c3f33a
+// model digest 3f41e7bfa05fd6d8ef1f3aed9bf4d87dd1ac06eadb402b333aab6ff0e0193c73
+// contract digest d3fc64a1257346e9b746fe7ef224384e0838ec0291c85560075fcf2f917faf53
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -1275,6 +1275,13 @@ pub enum CreateInstanceOutcome {
     SeedRefused {
         /// Why it was refused: `cortex.instance.SeedRefused`.
         error: SeedRefused,
+    },
+    /// `partial` — externally decided (The seed extraction stops before every seed document is extracted: the budget is spent, or a model call or an apply fails).
+    ///
+    /// As `created`, but some seed documents were not extracted. They are not recorded as seen, so `cortex run <name>/seed` extracts them.
+    Partial {
+        /// The `cortex.instance.InstanceCreated` this outcome publishes.
+        instance_created: InstanceCreated,
     },
     /// `created` — otherwise.
     ///

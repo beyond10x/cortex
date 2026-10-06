@@ -212,6 +212,7 @@ impl Scenario {
                     Some(("SeedRefused", json!({"reason": error.reason}))),
                 ),
                 m::CreateInstanceOutcome::Created { .. } => ("created", None),
+                m::CreateInstanceOutcome::Partial { .. } => ("partial", None),
             },
             "cortex.instance.AdoptInstance" => match app
                 .adopt_instance(m::AdoptInstance {
@@ -660,7 +661,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        45,
+        46,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

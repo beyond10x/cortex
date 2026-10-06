@@ -103,3 +103,9 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   values, so the cut never takes a value its facts cite; a record whose mapped values alone are
   over the bound is named in `skipped` and not applied. A run names each document a part EKR
   rejected belongs to, with EKR's refusal, in `rejected`.
+- A seed extraction that stops before every seed document is extracted (its budget spent, a model
+  call or an apply failed) makes `create` answer `partial` instead of `created`, with the seed's
+  `documents_new`, `documents_applied`, `stopped`, `facts_refused` and `parts_rejected`, or
+  `failed`. The documents it left are not recorded as seen, and `cortex run <name>/seed` extracts
+  them, keeping a snapshot first and held to the gate as a source run is; it refuses an adopted
+  instance. A seed that finishes still answers `created`.

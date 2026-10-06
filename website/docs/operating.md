@@ -149,7 +149,9 @@ names) to hidden temporary files. Once that apply commits, the copies become the
 `<time>-<source>`, where `<time>` is the run's start in Unix milliseconds, the same time that
 names the run's directory under `runs/` and its `at` in `cortex.log`:
 `instances/<name>/snapshots/<time>-<source>.sqlite` and
-`instances/<name>/snapshots-state/<time>-<source>.json`. A run that applies nothing, or whose
+`instances/<name>/snapshots-state/<time>-<source>.json`. `cortex run <name>/seed` is a run too,
+and its snapshot is `<time>-seed`; the seed `create` extracts into a new store takes none. A run
+that applies nothing, or whose
 first apply is refused, keeps no snapshot. A copy a killed run left behind is removed by the next
 snapshot.
 
@@ -195,7 +197,8 @@ A `postgres` store has no snapshot; its backup is the operator's database backup
 
 `cortex adopt --spec <file> --store <file>` makes an EKR store that cortex did not create an
 instance, with its whole revision history. Nothing is seeded, no seed document is extracted and
-nothing is written to the store named. The spec's sources are added, and the units installed, as
+nothing is written to the store named; `cortex run <name>/seed` refuses an adopted instance, whose
+seed belongs to the store's earlier life. The spec's sources are added, and the units installed, as
 `create` does.
 
 - **SQLite.** The spec names no `store`, or `store.backend: sqlite`, and `--store` is the database
