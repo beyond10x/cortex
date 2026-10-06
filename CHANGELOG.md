@@ -7,6 +7,8 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Added
 
+- `cortex schema <instance> [--sample N] [--dry-run]` proposes ontology changes from a sample of facts
+  and evidence and applies the ones EKR accepts; every proposal is recorded under `schema/<stamp>/`.
 - `cortex quality <instance> --sample N` judges a sample of facts against their evidence with the
   instance's model and reports a pass rate with its interval under `quality/<stamp>/`.
 - A `structured` source reads JSON files, and `dropped: Supersede` ends what a source no longer
