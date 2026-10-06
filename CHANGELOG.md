@@ -80,3 +80,11 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 - A release workflow: a published GitHub Release `v<version>` gets
   `cortex-<version>-x86_64-unknown-linux-gnu.tar.gz` and `SHA256SUMS` attached; a manual run
   builds the same two files as a workflow artifact.
+
+### Fixed
+
+- A second home no longer takes over or deletes another home's systemd units for an instance of
+  the same name. Each unit records its home as `X-CortexHome=`; `create`, `update` and `adopt`
+  refuse a unit another home wrote, naming that home, and `remove`, `restore`, `source enable` and
+  `--record-failure` leave it alone. Units written by an earlier cortex are read as belonging to
+  the home their service runs.

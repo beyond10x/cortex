@@ -85,6 +85,40 @@ pub fn view_unit(instance: &str) -> String {
     format!("cortex-{instance}-view")
 }
 
+/// The `[Unit]` key a unit names the home that wrote it with. systemd ignores a key that starts
+/// with `X-`.
+const HOME_KEY: &str = "X-CortexHome=";
+
+/// The home `text`, a unit file, was written for: its `X-CortexHome=` line, or for a unit an
+/// earlier cortex wrote, the `--home` of a source service's `ExecStart` or the home of a viewer's
+/// `EKR_HOST` (`<home>/instances/<name>/host.json`). `None` for a unit that names neither.
+fn home_of(text: &str) -> Option<PathBuf> {
+    if let Some(home) = text.lines().find_map(|l| l.strip_prefix(HOME_KEY)) {
+        return Some(PathBuf::from(home));
+    }
+    text.lines().find_map(|line| {
+        if let Some(exec) = line.strip_prefix("ExecStart=") {
+            let (_, after) = exec.split_once(" --home \"")?;
+            return after.split_once('"').map(|(home, _)| PathBuf::from(home));
+        }
+        let host = line
+            .strip_prefix("Environment=\"EKR_HOST=")?
+            .strip_suffix('"')?
+            .replace("\\\"", "\"")
+            .replace("\\\\", "\\");
+        Path::new(&host).ancestors().nth(3).map(Path::to_path_buf)
+    })
+}
+
+/// Whether `a` and `b` name one home.
+fn same_home(a: &Path, b: &Path) -> bool {
+    a == b
+        || matches!(
+            (std::fs::canonicalize(a), std::fs::canonicalize(b)),
+            (Ok(a), Ok(b)) if a == b
+        )
+}
+
 /// `KEY=value` for systemd's `Environment=`, quoted.
 fn env_line(key: &str, value: &str) -> String {
     let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
@@ -178,11 +212,60 @@ impl Systemd {
             .map_err(|e| format!("cannot run {}: {e}", self.systemctl.display()))
     }
 
+    /// The other home the unit file `name` belongs to, when it exists and another home wrote it. A
+    /// timer that names no home belongs to its service's.
+    fn foreign(&self, name: &str) -> Option<PathBuf> {
+        let read = |name: &str| std::fs::read_to_string(self.unit_dir.join(name)).ok();
+        let home = home_of(&read(name)?).or_else(|| {
+            let service = name.strip_suffix(".timer")?;
+            home_of(&read(&format!("{service}.service"))?)
+        })?;
+        (!same_home(&home, &self.home_root)).then_some(home)
+    }
+
+    /// The refusal of the unit file `name`, which `home` wrote.
+    fn refusal(&self, name: &str, home: &Path) -> String {
+        format!(
+            "{} belongs to the cortex home {}, which has an instance of the same name; cortex \
+             changes no unit of another home. Remove the instance there, or pass --no-units",
+            self.unit_dir.join(name).display(),
+            home.display()
+        )
+    }
+
+    /// Why the units of `instance`'s `sources` (and its viewer, when `view`) cannot be written:
+    /// another home wrote one of them.
+    pub fn foreign_units(&self, instance: &str, sources: &[String], view: bool) -> Option<String> {
+        let mut names: Vec<String> = sources
+            .iter()
+            .flat_map(|s| {
+                let unit = source_unit(instance, s);
+                [format!("{unit}.service"), format!("{unit}.timer")]
+            })
+            .collect();
+        if view {
+            names.push(format!("{}.service", view_unit(instance)));
+        }
+        names
+            .iter()
+            .find_map(|n| self.foreign(n).map(|home| self.refusal(n, &home)))
+    }
+
+    /// Writes the unit file `name`, `text` with this home recorded under its `[Unit]` line. A unit
+    /// another home wrote is refused, naming that home.
     fn write(&self, name: &str, text: &str) -> Result<(), String> {
+        if let Some(home) = self.foreign(name) {
+            return Err(self.refusal(name, &home));
+        }
+        let text = text.replacen(
+            "[Unit]\n",
+            &format!("[Unit]\n{HOME_KEY}{}\n", self.home_root.display()),
+            1,
+        );
         std::fs::create_dir_all(&self.unit_dir)
             .map_err(|e| format!("{}: {e}", self.unit_dir.display()))?;
         let path = self.unit_dir.join(name);
-        std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))
+        std::fs::write(&path, &text).map_err(|e| format!("{}: {e}", path.display()))
     }
 
     /// Places this cortex at `<home>/bin/cortex`, which every source unit of the home runs, and
@@ -292,7 +375,11 @@ impl Systemd {
         stopped: impl FnOnce() -> T,
     ) -> Result<(T, Option<String>), String> {
         let service = format!("{}.service", view_unit(instance));
-        if !self.unit_dir.join(&service).is_file() || !self.active(&service)? {
+        // Another home's viewer of an instance of the same name is not this instance's.
+        if !self.unit_dir.join(&service).is_file()
+            || self.foreign(&service).is_some()
+            || !self.active(&service)?
+        {
             return Ok((stopped(), None));
         }
         self.systemctl(&["stop", &service])?;
@@ -302,6 +389,9 @@ impl Systemd {
 
     pub fn set_source_timer(&self, instance: &str, source: &str, on: bool) -> Result<(), String> {
         let timer = format!("{}.timer", source_unit(instance, source));
+        if let Some(home) = self.foreign(&timer) {
+            return Err(self.refusal(&timer, &home));
+        }
         if on {
             self.systemctl(&["enable", "--now", &timer])
         } else {
@@ -309,27 +399,41 @@ impl Systemd {
         }
     }
 
-    /// Stops and deletes every unit of `instance`.
-    pub fn remove_instance(&self, instance: &str, sources: &[String]) -> Result<(), String> {
-        let mut units: Vec<String> = sources
+    /// Stops and deletes every unit of `instance` this home wrote. A unit of the same name another
+    /// home wrote is left running and in place; the answer names each, with its home.
+    pub fn remove_instance(
+        &self,
+        instance: &str,
+        sources: &[String],
+    ) -> Result<Vec<String>, String> {
+        let mut files: Vec<String> = sources
             .iter()
-            .map(|s| format!("{}.timer", source_unit(instance, s)))
+            .flat_map(|s| {
+                let unit = source_unit(instance, s);
+                [format!("{unit}.timer"), format!("{unit}.service")]
+            })
             .collect();
-        units.push(format!("{}.service", view_unit(instance)));
-        for unit in &units {
-            let _ = self.systemctl(&["disable", "--now", unit]);
-        }
-        for source in sources {
-            let base = source_unit(instance, source);
-            for ext in ["timer", "service"] {
-                let _ = std::fs::remove_file(self.unit_dir.join(format!("{base}.{ext}")));
+        let view = format!("{}.service", view_unit(instance));
+        files.push(view.clone());
+        let (kept, own): (Vec<_>, Vec<_>) = files
+            .into_iter()
+            .map(|f| (self.foreign(&f), f))
+            .partition(|(home, _)| home.is_some());
+        // The timers and the viewer are what is enabled; a source's service only runs from its
+        // timer.
+        for (_, file) in &own {
+            if file.ends_with(".timer") || *file == view {
+                let _ = self.systemctl(&["disable", "--now", file]);
             }
         }
-        let _ = std::fs::remove_file(
-            self.unit_dir
-                .join(format!("{}.service", view_unit(instance))),
-        );
-        self.systemctl(&["daemon-reload"])
+        for (_, file) in &own {
+            let _ = std::fs::remove_file(self.unit_dir.join(file));
+        }
+        self.systemctl(&["daemon-reload"])?;
+        Ok(kept
+            .into_iter()
+            .map(|(home, file)| format!("{file} (home {})", home.unwrap_or_default().display()))
+            .collect())
     }
 }
 

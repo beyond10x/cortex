@@ -37,6 +37,15 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
   `<home>/bin/cortex --home <home> run <instance>/<source> --record-failure`.
 - `cortex-<instance>-view.service`, which runs `ekr view` on the store at the instance's port.
 
+Unit names carry no home, and every home of one user shares the unit directory. So each unit
+records the home that wrote it as `X-CortexHome=<home>` in its `[Unit]` section (a unit an earlier
+cortex wrote is read as belonging to the `--home` its service runs, or for a viewer the home of
+its `EKR_HOST`). A home never changes another home's unit: `create`, `update` and `adopt` refuse,
+before changing anything, when a unit they would write belongs to another home, and name that
+home; pass `--no-units` to try a spec in a second home. `remove` deletes only its own home's units
+and names any it kept in its `units.kept` detail, and `restore`, `source enable` and a source
+disabled by `--record-failure` leave another home's viewer and timers alone.
+
 A unit runs with the systemd user manager's environment, not your shell's: its `PATH` holds no
 user tool directory such as `~/.local/bin` or `~/.cargo/bin`, and its working directory is your
 home directory. So the source services carry, from the shell that ran `cortex create` or

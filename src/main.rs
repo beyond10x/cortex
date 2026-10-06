@@ -589,6 +589,24 @@ impl Units {
     }
 }
 
+/// Why `units` cannot be installed for `name`: another home wrote a unit of the same name
+/// ([`Systemd::foreign_units`]). Checked before a command changes anything.
+fn foreign_units(
+    ctx: &Ctx,
+    name: &str,
+    spec: &m::InstanceSpec,
+    units: Units,
+    view: bool,
+) -> Option<String> {
+    match units {
+        Units::None => None,
+        Units::Install { .. } => {
+            let sources: Vec<String> = spec.sources.iter().map(|s| s.name.clone()).collect();
+            Systemd::from_env(&ctx.home.root).foreign_units(name, &sources, view)
+        }
+    }
+}
+
 /// Places this cortex at `<home>/bin/cortex` ([`Systemd::place_binary`]), puts what that did in
 /// `detail["binary"]`, then installs each source's units. A spec with no source installs no unit
 /// that runs cortex, so it leaves the binary alone.
@@ -630,6 +648,9 @@ fn create(
         return fail("--postgres-schema-config needs `store.backend: postgres` in the spec");
     }
     let name = spec.name.0.clone();
+    if let Some(reason) = foreign_units(ctx, &name, &spec, units, true) {
+        return fail(reason);
+    }
     let layout = Layout::new(ctx.home.instance_dir(&name));
     const CMD: &str = "cortex.instance.CreateInstance";
     let lineage = instance::Lineage::for_tenant(&spec, &name);
@@ -981,6 +1002,9 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
         }
     }
     let name = spec.name.0.clone();
+    if let Some(reason) = foreign_units(ctx, &name, &spec, a.units, true) {
+        return fail(reason);
+    }
     let layout = Layout::new(ctx.home.instance_dir(&name));
 
     // `name-taken` is the generated behaviour's own lookup; a taken name skips the checks below.
@@ -1120,6 +1144,9 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
     if spec.name.0 != name {
         return fail(format!("the spec names {:?}, not {name:?}", spec.name.0));
     }
+    if let Some(reason) = foreign_units(ctx, name, &spec, units, false) {
+        return fail(reason);
+    }
     let layout = Layout::new(ctx.home.instance_dir(name));
     // A store the spec cannot use, another store than the instance's (its history is in the store
     // it has), or a seed or instructions path `create` would refuse is a seed change. The input then
@@ -1239,8 +1266,10 @@ fn remove(app: &mut App, ctx: &Ctx, name: &str) -> ExitCode {
                 .collect();
             let mut detail =
                 json!({"name": instance_removed.name.0, "dir": ctx.home.instance_dir(name)});
-            if let Err(e) = Systemd::from_env(&ctx.home.root).remove_instance(name, &sources) {
-                detail["units"] = json!({"failed": e});
+            match Systemd::from_env(&ctx.home.root).remove_instance(name, &sources) {
+                Ok(kept) if !kept.is_empty() => detail["units"] = json!({"kept": kept}),
+                Ok(_) => {}
+                Err(e) => detail["units"] = json!({"failed": e}),
             }
             Done {
                 outcome: "removed",
