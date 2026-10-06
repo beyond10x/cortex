@@ -6,6 +6,7 @@ status: open
 title: EKR extraction cannot supersede an earlier assertion
 relations:
 - blocks: story:structured-from-files-and-drops
+- blocks: story:extraction-supersedes
 revision: 1
 ---
 ## What would clear it

@@ -15,6 +15,7 @@ relations:
 - depends_on: story:docs-for-1-0
 - depends_on: story:document-time-as-valid-time
 - depends_on: story:quality-judge
+- depends_on: story:extraction-supersedes
 scope:
 - confidence: cited
   path: .github/workflows/check.yml

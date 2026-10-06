@@ -11,6 +11,7 @@ relations:
 - depends_on: story:adopt-existing-store
 - depends_on: story:run-gate
 - depends_on: story:document-time-as-valid-time
+- depends_on: story:extraction-supersedes
 scope:
 - confidence: cited
   path: src/extract.rs
