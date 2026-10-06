@@ -667,6 +667,27 @@ commands:
             reason: {generated: true}
         summary: Nothing was created.
 
+      - name: partial
+        external: >-
+          The seed extraction stops before every seed document is extracted: the budget is spent,
+          or a model call or an apply fails
+        creates: cortex.instance.Instance
+        instance: name
+        sets:
+          description: input.description
+          model: input.model
+          ekr_version: input.ekr_version
+          seed_digest: input.seed_digest
+        emits:
+          - cortex.instance.InstanceCreated
+        payload:
+          cortex.instance.InstanceCreated:
+            name: input.name
+            view_port: {generated: true}
+        summary: >-
+          As `created`, but some seed documents were not extracted. They are not recorded as seen,
+          so `cortex run <name>/seed` extracts them.
+
       - name: created
         creates: cortex.instance.Instance
         instance: name
@@ -828,6 +849,10 @@ commands:
             reason: {generated: true}
         summary: Nothing was applied; the scheduler then sends RecordFailure.
 
+      # UNMAPPED: `<instance>/seed`, when the instance is active and has no source named `seed`,
+      # names the instance's seed documents: it extracts those no seed extraction applied yet (what
+      # a `partial` create left) and answers these outcomes with no Source to update. ESS has no
+      # input that names either a record or a pseudo-record; tests/seed_partial.rs holds it.
       # UNMAPPED: `ran` records a SeenDocument of the source (content hash, time applied) for every
       # document it applied, and a run extracts only documents whose key no SeenDocument of the
       # source carries, or whose hash differs once `refresh_after_days` have passed. ESS has no

@@ -194,6 +194,52 @@ impl RecordFailureBehavior for Ports {
     }
 }
 
+impl Ports {
+    /// The active instance `<instance>/seed` names, when the instance has no source of that name:
+    /// its seed documents, which `create` extracts as the pseudo-source `seed`.
+    fn seed_of(&self, source_id: &m::SourceId) -> Option<m::InstanceName> {
+        let (instance, source) = source_id.0.split_once('/')?;
+        let name = m::InstanceName(instance.to_string());
+        let held = InstanceStorage::get(self, &name)?;
+        (source == SEED && held.state == m::InstanceState::Active).then_some(name)
+    }
+
+    /// Extracts the instance's seed documents no earlier seed extraction applied: those a seed that
+    /// stopped early left, and none once every one is applied. Answered as a run of a source is,
+    /// with no source to count the run against.
+    fn run_seed(
+        &mut self,
+        instance: &m::InstanceName,
+        source_id: m::SourceId,
+    ) -> m::RunSourceOutcome {
+        let layout = Layout::new(self.home.instance_dir(&instance.0));
+        match run::seed(&layout, &self.tools) {
+            Err(Failure::Fetch(reason)) => m::RunSourceOutcome::FetchFailed {
+                error: m::FetchFailed { reason },
+            },
+            Err(Failure::Extract(reason)) => m::RunSourceOutcome::ExtractionFailed {
+                error: m::ExtractionFailed { reason },
+            },
+            Err(Failure::Apply(reason)) => m::RunSourceOutcome::ApplyRefused {
+                error: m::ApplyRefused { reason },
+            },
+            Ok(report) => {
+                let ran = m::SourceRan {
+                    source_id,
+                    documents_new: report.documents_new,
+                    documents_applied: report.documents_applied,
+                    cost_usd: report.cost_usd.map(|c| Decimal(format!("{c:.4}"))),
+                };
+                self.shared.borrow_mut().last_run = Some(report);
+                m::RunSourceOutcome::Ran { source_ran: ran }
+            }
+        }
+    }
+}
+
+/// The name `create` records the seed documents under, as a source of the instance.
+const SEED: &str = "seed";
+
 impl RunSourceBehavior for Ports {
     fn run_source(&mut self, input: m::RunSource) -> Result<m::RunSourceOutcome, UnmetObligation> {
         // As the generated behaviours do: an external branch the context has already decided is
@@ -219,6 +265,9 @@ impl RunSourceBehavior for Ports {
             });
         }
         let Some(found) = SourceStorage::get(self, &input.source_id) else {
+            if let Some(instance) = self.seed_of(&input.source_id) {
+                return Ok(self.run_seed(&instance, input.source_id));
+            }
             return Ok(m::RunSourceOutcome::NoSuchSource {
                 error: m::SourceNotFound {
                     source_id: input.source_id,

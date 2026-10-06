@@ -58,7 +58,7 @@ directory, so the instance keeps working when the originals move.
 |---|---|
 | `schema` | optional `ekr.extraction-document/1` file applied right after the store is seeded, usually the starting ontology (`examples/seed/schema.yaml`). A rejected part refuses the whole create |
 | `ekr_seed` | optional EKR seed file; without it, cortex seeds an empty ontology and an empty graph at revision 0 |
-| `documents` | directories whose files are extracted once when the instance is created, through the same pipeline as a source run (recorded as the source `seed`), unless `cortex create --no-extract` is given |
+| `documents` | directories whose files are extracted once when the instance is created, through the same pipeline as a source run (recorded as the source `seed`), unless `cortex create --no-extract` is given. A seed that stops before every document is extracted (its budget spent, a model call or an apply failed) makes `create` answer `partial`; `cortex run <name>/seed` extracts the documents it left |
 
 The seed of an existing store cannot change: `cortex update` with a different `seed` section or
 different seed files answers `seed-change-refused`.

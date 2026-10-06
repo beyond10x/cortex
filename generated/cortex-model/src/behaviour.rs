@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 0fc580942f295d0f5dc09e702a75e70eee57d08233671d7934b03e104c73ab85
-// contract digest 7942f8a668be6af9ca8b312816fa1ae3c7611158d27d675feb1728f83b6d8cbc
+// model digest 31795f723c86656bf6d6a74e26d2d9bb4f157af48aec0e473f81b5d27fe09b0d
+// contract digest 67460d1c95616f7c92518f66c1009b48d221b2f65c56c9a886db3de45a1d2732
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -188,6 +188,19 @@ where
         // `seed-refused`: an external branch, where the context takes it.
         if self.ports.external("cortex.instance.CreateInstance", "seed-refused") {
             return Ok(crate::instance::CreateInstanceOutcome::SeedRefused { error: crate::instance::SeedRefused { reason: self.ports.generate_string() } });
+        }
+        // `partial`: an external branch, where the context takes it.
+        if self.ports.external("cortex.instance.CreateInstance", "partial") {
+            let identity: crate::instance::InstanceName = input.name.clone();
+            let data = crate::instance::InstanceData {
+                name: identity.clone(),
+                description: input.description.clone(),
+                model: input.model.clone(),
+                ekr_version: input.ekr_version.clone(),
+                seed_digest: input.seed_digest.clone(),
+            };
+            InstanceStorage::put(&mut self.ports, crate::instance::AnyInstance::Active(crate::instance::Instance::new(data)).snapshot());
+            return Ok(crate::instance::CreateInstanceOutcome::Partial { instance_created: crate::instance::InstanceCreated { name: identity.clone(), view_port: self.ports.generate_integer() } });
         }
         // `created`: the default.
         let identity: crate::instance::InstanceName = input.name.clone();
