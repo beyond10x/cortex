@@ -750,6 +750,7 @@ fn create(
                 spec_dir: std::fs::canonicalize(&loaded.dir).unwrap_or(loaded.dir.clone()),
                 view_port: port,
                 lineage,
+                adopted: false,
             };
             if let Err(e) = layout.save_meta(&meta) {
                 return fail(e);
@@ -1098,6 +1099,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                 spec_dir: std::fs::canonicalize(&loaded.dir).unwrap_or(loaded.dir.clone()),
                 view_port: port,
                 lineage: found.lineage,
+                adopted: true,
             };
             if let Err(e) = layout.save_meta(&meta) {
                 return fail(e);

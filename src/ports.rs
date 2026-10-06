@@ -206,14 +206,26 @@ impl Ports {
 
     /// Extracts the instance's seed documents no earlier seed extraction applied: those a seed that
     /// stopped early left, and none once every one is applied. Answered as a run of a source is,
-    /// with no source to count the run against.
+    /// with no source to count the run against; kept as a snapshot and held to the gate as a
+    /// source run is ([`run::rerun_seed`]). An adopted instance is refused as `fetch-failed`.
     fn run_seed(
         &mut self,
         instance: &m::InstanceName,
         source_id: m::SourceId,
     ) -> m::RunSourceOutcome {
         let layout = Layout::new(self.home.instance_dir(&instance.0));
-        match run::seed(&layout, &self.tools) {
+        if layout.load_meta().is_ok_and(|meta| meta.adopted) {
+            return m::RunSourceOutcome::FetchFailed {
+                error: m::FetchFailed {
+                    reason: format!(
+                        "{} was adopted from an existing store: its seed documents belong to the \
+                         store's earlier life, so `run {}/seed` extracts nothing into it",
+                        instance.0, instance.0
+                    ),
+                },
+            };
+        }
+        match run::rerun_seed(&layout, &self.tools) {
             Err(Failure::Fetch(reason)) => m::RunSourceOutcome::FetchFailed {
                 error: m::FetchFailed { reason },
             },

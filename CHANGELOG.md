@@ -95,4 +95,5 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   call or an apply failed) makes `create` answer `partial` instead of `created`, with the seed's
   `documents_new`, `documents_applied`, `stopped`, `facts_refused` and `parts_rejected`, or
   `failed`. The documents it left are not recorded as seen, and `cortex run <name>/seed` extracts
-  them. A seed that finishes still answers `created`.
+  them, keeping a snapshot first and held to the gate as a source run is; it refuses an adopted
+  instance. A seed that finishes still answers `created`.

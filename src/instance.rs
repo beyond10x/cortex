@@ -25,6 +25,10 @@ pub struct Meta {
     /// Absent for a `sqlite` store, and in a meta file written before it was recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lineage: Option<Lineage>,
+    /// Whether `adopt` took the instance from an existing store. Its seed documents then belong to
+    /// the store's earlier life, so `cortex run <name>/seed` refuses to extract them.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub adopted: bool,
 }
 
 impl Layout {

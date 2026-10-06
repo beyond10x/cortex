@@ -44,7 +44,7 @@ A source id is `<instance>/<source>`.
 
 | command | does | outcomes |
 |---|---|---|
-| `cortex run <instance>/<source> [--record-failure]` | run one source once. With `--record-failure`, which the timers pass, a failed run is also counted. `<instance>/seed`, for an instance with no source of that name, extracts the seed documents no seed extraction applied yet, such as those a `partial` create left | `ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `disabled`, `no-such-source` |
+| `cortex run <instance>/<source> [--record-failure]` | run one source once. With `--record-failure`, which the timers pass, a failed run is also counted. `<instance>/seed`, for an instance with no source of that name, extracts the seed documents no seed extraction applied yet, such as those a `partial` create left. Like a source run it keeps a snapshot named `<time>-seed` before it applies and is held to the spec's `gate`; on an adopted instance it answers `fetch-failed`, because the seed belongs to the store's earlier life | `ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `disabled`, `no-such-source` |
 | `cortex source enable <instance>/<source>` | enable a source that two failed runs in a row disabled, and its timer | `enabled`, `wrong-state`, `no-such-source` |
 | `cortex source record-failure <instance>/<source> --reason <text>` | count one failed run; the second in a row disables the source and its timer | `counted`, `disabled`, `already-disabled`, `no-such-source` |
 | `cortex source add --instance-name <name> --source-id <id> --name <name> --kind <Web\|Connectors\|Files> --schedule <calendar>` | register a source in the registry; `create` and `update` do this for the spec's sources | `added` |
