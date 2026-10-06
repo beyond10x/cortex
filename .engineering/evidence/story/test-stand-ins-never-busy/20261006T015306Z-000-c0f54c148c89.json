@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-06T01:53:06Z",
+  "actor": "agent:claude",
+  "artifact": "story:test-stand-ins-never-busy",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261006b (EXIT=0, 339 tests)"
+  }
+}

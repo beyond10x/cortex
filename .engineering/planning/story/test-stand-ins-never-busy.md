@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:test-stand-ins-never-busy
 kind: story
-status: active
+status: implemented
 title: The test harness never fails with Text file busy
 relations:
 - decomposes: epic:standalone-1-0
@@ -10,10 +10,11 @@ relations:
 scope:
 - confidence: cited
   path: tests/common/mod.rs
-revision: 4
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-06T01:11:25Z", actor: "agent:claude", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-06T01:11:25Z", actor: "agent:claude", revision: 4}
+- {from: "active", to: "implemented", at: "2026-10-06T01:53:06Z", actor: "agent:claude", revision: 6, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 
@@ -30,3 +31,11 @@ Write each stand-in to a temporary name, close it, then rename it into place bef
 ## Acceptance
 
 `cargo test --workspace` run 20 times in a loop under load shows no ETXTBSY.
+
+## Scope
+
+Landed 2026-10-06 in `335f41c` (wave 20261006b, merged `d7ace25`).
+
+- **Files:** `tests/common/mod.rs` (a child `/bin/sh` writes and chmods each stand-in), `tests/stand_ins.rs` (new: a 16-thread probe and a check that every stand-in goes through `executable`)
+- **Measured:** the base harness failed the probe in 3 of 3 runs (9, 7, 7 of 2400 busy); the story's suggested rename failed 3 of 3 (4, 4, 2); the fix passed 20 of 20. `cargo test --workspace` under `stress --cpu 16`: 20 of 20 runs exit 0, 339 passed each.
+- **Review:** a test-harness fix; coordinator review, no adversary pass
