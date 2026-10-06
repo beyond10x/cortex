@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:structured-from-files-and-drops
 kind: story
-status: draft
+status: active
 title: Structured imports read files and supersede what a source dropped
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -22,7 +22,10 @@ scope:
   path: src/structured.rs
 - confidence: inferred
   path: tests/structured_files.rs
-revision: 10
+revision: 12
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-06T07:46:33Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":4}}}
+- {from: "proposed", to: "active", at: "2026-10-06T07:46:33Z", actor: "agent:claude", revision: 12, decided_on: {"recorded":{"review_outcome":4}}}
 ---
 ## Outcome
 
