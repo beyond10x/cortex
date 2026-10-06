@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:postgres-credential-from-connectors
 kind: story
-status: draft
+status: active
 title: A PostgreSQL store's credential comes from a Connectors connection
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -25,7 +25,10 @@ scope:
   path: tests/common/mod.rs
 - confidence: inferred
   path: tests/store_backend.rs
-revision: 4
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-06T07:36:01Z", actor: "agent:claude", revision: 5}
+- {from: "proposed", to: "active", at: "2026-10-06T07:36:01Z", actor: "agent:claude", revision: 6}
 ---
 ## Outcome
 

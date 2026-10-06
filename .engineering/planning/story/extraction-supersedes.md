@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:extraction-supersedes
 kind: story
-status: draft
+status: implemented
 title: Extraction supersedes the value a newer document replaces
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -19,7 +19,11 @@ scope:
   path: src/main.rs
 - confidence: inferred
   path: tests/supersession.rs
-revision: 5
+revision: 9
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-06T07:36:01Z", actor: "agent:claude", revision: 6, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-10-06T07:36:01Z", actor: "agent:claude", revision: 7, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "active", to: "implemented", at: "2026-10-06T07:43:44Z", actor: "agent:claude", revision: 9, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 
@@ -47,3 +51,12 @@ The EKR release that ships `story:extraction-supersession` (recorded as `upstrea
 ## Files (from the inventory, unverified)
 
 `src/extract.rs` (`SYSTEM_PROMPT`, `admitted_facts`, `merge`), `tests/supersession.rs`; the EKR pin sites `src/main.rs`, `examples/*.yaml`, `.github/workflows/check.yml`, `AGENTS.md`.
+
+## Scope
+
+Landed 2026-10-06 in the unit commit of wave 20261006e.
+
+- **Files:** `src/extract.rs` (`SYSTEM_PROMPT` rule, `refusal()` issue codes), `tests/supersession.rs` (new), `website/docs/operating.md`, `website/docs/commands.md`
+- **Not needed:** `admitted_facts`, `merge` and the answer schema already carry `replaces`; the pin was already 0.0.31
+- **Left open:** a `replaces: true` fact with nothing active to replace is rejected and its value is lost; retrying it without `replaces` needs a second apply in `src/run.rs`
+- **Review:** coordinator review (prompt and reporting change)

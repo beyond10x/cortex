@@ -105,11 +105,20 @@ version as `binary_version`. `--no-units`, and a spec with no source, leave the 
    entity names per type. When the spec has a `redaction` policy, every value it finds in the
    documents and the known names is shown to the model as a placeholder (`[Email-1]`), and each
    placeholder in the answer is put back before merging; the mapping exists for that one call.
+   When a document says a property's value changed (a new owner, a new status), the model marks
+   that fact `replaces: true`, and EKR supersedes every active value of the same entity and
+   property from the new one's time on, so one value stays current and the older one is kept,
+   superseded by it. EKR rejects such a fact when there is no current value to replace
+   (`replacement-without-active-assertion`), and the value is then not stored; and when the
+   current value is dated later than the replacement (`invalid-supersession`), as when an older
+   document is read after a newer one, and the newer value then stays current. Either rejection is
+   listed in the run's `rejected` and the rest of the document applies.
 6. **Merge.** A fact citing an evidence id cortex did not issue for that batch is refused; cortex
    adds the evidence items itself and records each web page as a `WebPage` node.
 7. **Apply** the document with `ekr apply-extraction`, then record the batch's documents as seen.
    A document a part EKR rejected belongs to is seen too, since EKR would reject that part again
-   on the same text; the run names it, with EKR's refusal, in `rejected`.
+   on the same text; the run names it in `rejected`, with EKR's refusal or the codes of the issues
+   validation raised.
    Before the run's first apply, a `sqlite` store and `state/` are copied, and kept as a
    snapshot once that apply commits (see [Undoing a run](#undoing-a-run)); a copy that cannot be
    taken fails the run with nothing applied.
