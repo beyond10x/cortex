@@ -552,6 +552,7 @@ fn the_viewer_unit_and_the_mcp_line_name_the_postgres_store() {
         systemctl: w.bin.join("systemctl"),
         unit_dir: w.units.clone(),
         home_root: w.home.clone(),
+        taken_over: Default::default(),
     };
     systemd
         .install_view("pgline", &layout.store_handle(&spec), 18996)

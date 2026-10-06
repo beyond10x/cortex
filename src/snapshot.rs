@@ -821,6 +821,7 @@ mod tests {
             systemctl: PathBuf::from("systemctl-unused"),
             unit_dir: tmp.join("no-units"),
             home_root: tmp.to_path_buf(),
+            taken_over: Default::default(),
         }
     }
 
@@ -903,6 +904,7 @@ mod tests {
             systemctl: PathBuf::from("systemctl-unused"),
             unit_dir: tmp.path().join("no-units"),
             home_root: tmp.path().to_path_buf(),
+            taken_over: Default::default(),
         };
         let restored = restore_held(&layout, "t", &name, &systemd).unwrap();
         assert!(restored.viewer_failed.is_none());

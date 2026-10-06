@@ -1161,6 +1161,7 @@ mod tests {
             systemctl: PathBuf::from("systemctl-unused"),
             unit_dir: tmp.path().join("no-units"),
             home_root: tmp.path().to_path_buf(),
+            taken_over: Default::default(),
         };
         let (restored, why) = undo(&layout, "t", Some(&name), &systemd);
         assert_eq!(restored, None, "{why}");

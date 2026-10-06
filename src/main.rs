@@ -215,6 +215,9 @@ fn fail(message: impl std::fmt::Display) -> ExitCode {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let home = Home::new(cli.home.clone().unwrap_or_else(Home::default_root));
+    if let Some(reason) = schedule::home_refusal(&home.root) {
+        return fail(reason);
+    }
     match cli.command {
         Command::Schema => {
             println!("{SPEC_SCHEMA}");
@@ -589,6 +592,37 @@ impl Units {
     }
 }
 
+/// Why `units` cannot be installed for `name`: another home wrote a unit of the same name
+/// ([`Systemd::foreign_units`]). Checked before a command changes anything.
+fn foreign_units(
+    ctx: &Ctx,
+    name: &str,
+    spec: &m::InstanceSpec,
+    units: Units,
+    view: bool,
+) -> Option<String> {
+    match units {
+        Units::None => None,
+        Units::Install { .. } => {
+            let sources: Vec<String> = spec.sources.iter().map(|s| s.name.clone()).collect();
+            Systemd::from_env(&ctx.home.root).foreign_units(name, &sources, view)
+        }
+    }
+}
+
+/// Puts what installing the units did in `detail["units"]`: each unit taken over from a home that
+/// holds no instance of the name ([`Systemd::taken_over`]), and why the install failed, when it
+/// did.
+fn units_detail(systemd: &Systemd, installed: Result<(), String>, detail: &mut Value) {
+    let taken = systemd.taken_over.take();
+    if !taken.is_empty() {
+        detail["units"]["taken_over"] = json!(taken);
+    }
+    if let Err(e) = installed {
+        detail["units"]["failed"] = json!(e);
+    }
+}
+
 /// Places this cortex at `<home>/bin/cortex` ([`Systemd::place_binary`]), puts what that did in
 /// `detail["binary"]`, then installs each source's units. A spec with no source installs no unit
 /// that runs cortex, so it leaves the binary alone.
@@ -630,6 +664,9 @@ fn create(
         return fail("--postgres-schema-config needs `store.backend: postgres` in the spec");
     }
     let name = spec.name.0.clone();
+    if let Some(reason) = foreign_units(ctx, &name, &spec, units, true) {
+        return fail(reason);
+    }
     let layout = Layout::new(ctx.home.instance_dir(&name));
     const CMD: &str = "cortex.instance.CreateInstance";
     let lineage = instance::Lineage::for_tenant(&spec, &name);
@@ -810,9 +847,7 @@ fn create(
                 let installed = systemd.install_view(&name, &store, port).and_then(|_| {
                     install_sources(ctx, &systemd, &name, &spec, replace_binary, &mut detail)
                 });
-                if let Err(e) = installed {
-                    detail["units"] = json!({"failed": e});
-                }
+                units_detail(&systemd, installed, &mut detail);
             }
             Done {
                 outcome: if partial { "partial" } else { "created" },
@@ -1015,6 +1050,9 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
         }
     }
     let name = spec.name.0.clone();
+    if let Some(reason) = foreign_units(ctx, &name, &spec, a.units, true) {
+        return fail(reason);
+    }
     let layout = Layout::new(ctx.home.instance_dir(&name));
 
     // `name-taken` is the generated behaviour's own lookup; a taken name skips the checks below.
@@ -1132,9 +1170,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                 let installed = systemd.install_view(&name, &store, port).and_then(|_| {
                     install_sources(ctx, &systemd, &name, &spec, replace_binary, &mut detail)
                 });
-                if let Err(e) = installed {
-                    detail["units"] = json!({"failed": e});
-                }
+                units_detail(&systemd, installed, &mut detail);
             }
             Done {
                 outcome: "adopted",
@@ -1154,6 +1190,9 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
     let spec = loaded.model.clone();
     if spec.name.0 != name {
         return fail(format!("the spec names {:?}, not {name:?}", spec.name.0));
+    }
+    if let Some(reason) = foreign_units(ctx, name, &spec, units, false) {
+        return fail(reason);
     }
     let layout = Layout::new(ctx.home.instance_dir(name));
     // A store the spec cannot use, another store than the instance's (its history is in the store
@@ -1241,11 +1280,9 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
             let mut detail = json!({"name": instance_updated.name.0, "added_sources": added});
             if let Units::Install { replace_binary } = units {
                 let systemd = Systemd::from_env(&ctx.home.root);
-                if let Err(e) =
-                    install_sources(ctx, &systemd, name, &spec, replace_binary, &mut detail)
-                {
-                    detail["units"] = json!({"failed": e});
-                }
+                let installed =
+                    install_sources(ctx, &systemd, name, &spec, replace_binary, &mut detail);
+                units_detail(&systemd, installed, &mut detail);
             }
             Done {
                 outcome: "updated",
@@ -1274,8 +1311,10 @@ fn remove(app: &mut App, ctx: &Ctx, name: &str) -> ExitCode {
                 .collect();
             let mut detail =
                 json!({"name": instance_removed.name.0, "dir": ctx.home.instance_dir(name)});
-            if let Err(e) = Systemd::from_env(&ctx.home.root).remove_instance(name, &sources) {
-                detail["units"] = json!({"failed": e});
+            match Systemd::from_env(&ctx.home.root).remove_instance(name, &sources) {
+                Ok(kept) if !kept.is_empty() => detail["units"] = json!({"kept": kept}),
+                Ok(_) => {}
+                Err(e) => detail["units"] = json!({"failed": e}),
             }
             Done {
                 outcome: "removed",

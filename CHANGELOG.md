@@ -85,6 +85,14 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Fixed
 
+- A second home no longer takes over or deletes another home's systemd units for an instance of
+  the same name. Each unit records its home as `X-CortexHome=`; `create`, `update` and `adopt`
+  refuse a unit another home wrote, naming that home, and `remove`, `restore`, `source enable` and
+  `--record-failure` leave it alone. Units written by an earlier cortex are read as belonging to
+  the home their service runs. A unit whose home was deleted, or holds no active instance of that
+  name, is taken over by the next `create`, `update` or `adopt` and named in `units.taken_over`.
+  A home path holding a line break is refused by every command, and no unit is written with a
+  value holding one.
 - A source named `entities` or `seed` is refused by `create`, `update` and `adopt`, naming the
   reserved name. Its seen documents would have shared `state/entities.json` with the known entity
   names, or `state/seed.json` with the seed, and a source named `entities` was disabled after
