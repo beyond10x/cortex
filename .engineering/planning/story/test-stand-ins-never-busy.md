@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:test-stand-ins-never-busy
 kind: story
-status: draft
+status: active
 title: The test harness never fails with Text file busy
 relations:
 - decomposes: epic:standalone-1-0
@@ -10,7 +10,10 @@ relations:
 scope:
 - confidence: cited
   path: tests/common/mod.rs
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-06T01:11:25Z", actor: "agent:claude", revision: 3}
+- {from: "proposed", to: "active", at: "2026-10-06T01:11:25Z", actor: "agent:claude", revision: 4}
 ---
 ## Outcome
 
