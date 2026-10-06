@@ -77,6 +77,8 @@ timers until a `create` or `update` installs the units again and copies the new 
    Before the run's first apply, a `sqlite` store and `state/` are copied, and kept as a
    snapshot once that apply commits (see [Undoing a run](#undoing-a-run)); a copy that cannot be
    taken fails the run with nothing applied.
+8. **Check** the run against the spec's [`gate`](./spec-file.md#gate), when it applied
+   something. A failed check undoes the run (see [Failures](#failures)).
 
 A `structured` source skips steps 5 and 6: each batch of records is mapped to an extraction
 document by the source's `mapping` and applied without a model call, at a cost of 0 (see
@@ -93,6 +95,19 @@ A run that fails (`fetch-failed`, `extraction-failed`, `apply-refused`) applies 
 the source's seen state where it was. The timers pass `--record-failure`, so a failure is counted;
 the second failure in a row disables the source and stops its timer. A successful run resets the
 count. `cortex source enable <instance>/<source>` switches it back on.
+
+A run that fails a check of the spec's `gate` fails as `apply-refused` and is counted the same
+way. Its `reason` names each failed check with its measure and value
+(`facts_refused = 1 (max 0)`). On a `sqlite` store the run is undone first: the store and
+`state/` are put back to the snapshot taken before it, as `cortex restore` does (a running viewer
+is stopped and started again, an attached reader such as `ekr mcp` does not stop it, and the store
+as the run left it is kept as `<now>-before-restore`), and the `reason` names that snapshot. If
+the store's restore is refused (another connection held its write lock for 5 seconds) or fails,
+`state/` is still put back, so the next run fetches the run's documents again; the `reason` says
+the store still holds the run. `cortex.log` records the run's line with `gate.failed`, each
+failed check's measure, bounds and value, `gate.restored`, the snapshot restored (`null` when the
+store was not), and `gate.reason`. A run with no snapshot (a `postgres` store,
+`snapshots.keep: 0`) cannot be undone: it still fails, and its `reason` says it was not undone.
 
 If Connectors refuses a read because a connection's validation lapsed, cortex revalidates the
 connection once and retries.
@@ -119,13 +134,16 @@ followed it and every later run, of every source. `<snapshot>` is the name of an
 in `snapshots/`, without the extension. To undo the last run, restore the newest snapshot:
 
 1. It refuses as `busy` while another cortex command holds the home's lock; it does not wait.
-2. If the viewer (`cortex-<name>-view.service`) is running, it stops it. It refuses as `busy` if
-   another process still holds the store open, such as an `ekr mcp` session, and then starts the
-   viewer again.
+2. If the viewer (`cortex-<name>-view.service`) is running, it stops it. It waits up to 5
+   seconds for the store's write lock and refuses as `busy` if another connection held it all
+   that time, then starts the viewer again. A reader that holds the store open, such as an
+   `ekr mcp` session, does not hold the write lock and does not stop the restore.
 3. It snapshots the store and `state/` as they are, as `<now>-before-restore`, which counts
    toward `keep`, and reports the name as `before_restore`.
-4. It copies the snapshot over the store and puts `state/` back to the snapshot's copy, then
-   starts the viewer if it was running. The snapshot stays.
+4. It writes the snapshot into the live store through SQLite's online backup, in one
+   transaction, and puts `state/` back to the snapshot's copy, then starts the viewer if it was
+   running. The snapshot stays: a restore never removes the snapshot it restored from, so with
+   `snapshots.keep: 1` two remain until the next run's snapshot.
 
 Because `state/` is put back, the next runs apply again what the undone runs applied, at the
 cost of their model calls. A snapshot with no copy of `state/` in `snapshots-state/` (one you
@@ -133,9 +151,13 @@ copied without it) puts back the store only, and the restore reports `state_rest
 
 To undo a restore, restore its `before_restore` snapshot.
 
-The check for another process holding the store reads `/proc`: it does not see a process of
-another user or one `/proc` hides, and a process can open the store after the check. SQLite's
-locking keeps such a reader consistent, but it reads the restored store from then on.
+A reader attached during a restore keeps a consistent view: a read it has started finishes on
+the store as it was, and its next read sees the restored store. After the copy, cortex waits up
+to 5 seconds for such reads to finish and writes SQLite's write-ahead log back into the store
+file, because until then EKR 0.0.30 refuses to open the store (`store-replaced`). A connection that
+keeps one read transaction open for longer delays that: the restore still succeeds, cortex says
+so on stderr, and EKR opens the store again once that reader lets go and the next connection to
+close the store writes the log back.
 
 A `postgres` store has no snapshot; its backup is the operator's database backup, and
 `cortex restore` answers `backend-unsupported`.

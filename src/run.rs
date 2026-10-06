@@ -10,10 +10,12 @@ use serde_json::json;
 use crate::connectors::Connectors;
 use crate::evidence;
 use crate::extract::{self, Known, Model};
+use crate::gate;
 use crate::instance::{now_ms, Layout};
 use crate::mask::{mask, mask_key};
 use crate::redact::{self, Redactor};
-use crate::snapshot::{self, BeforeApply};
+use crate::schedule::Systemd;
+use crate::snapshot::{self, BeforeApply, RestoreError};
 use crate::sources::{self, FetchError, Window};
 use crate::state::{text_hash, SeenState};
 use crate::structured;
@@ -363,10 +365,10 @@ fn process(
     // A source run copies the store and `state/` once, before its first `apply-extraction`, and
     // keeps the copy, named by the run's start, once that apply commits; the seed of a new store
     // takes none.
-    let mut before = match window {
+    let mut before = Undo::new(match window {
         Some(_) => BeforeApply::new(layout, &store, label, started, snapshot::keep(spec)),
         None => BeforeApply::none(),
-    };
+    });
     let host = std::fs::read_to_string(layout.host()).map_err(|e| Failure::Apply(e.to_string()))?;
     let operator = crate::ekr::operator(&host).map_err(Failure::Apply)?;
     if let Some(source) = &structured {
@@ -389,6 +391,9 @@ fn process(
             &mut before,
         )?;
         unread(&mut report, &fetched.unread, redactor.as_ref());
+        if window.is_some() {
+            held_to_gate(layout, spec, &store, label, &report, &before, started)?;
+        }
         let failures = fetched.child_failures.clone();
         finish(
             &mut seen, &seen_path, &report, wanted, held_since, window, failures,
@@ -505,7 +510,7 @@ fn process(
             );
         }
         std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
-        before.take().map_err(Failure::Apply)?;
+        before.take()?;
         let applied = match store.apply(&path) {
             Ok(r) => r,
             Err(e) if report.documents_applied == 0 => return Err(Failure::Apply(e)),
@@ -514,7 +519,7 @@ fn process(
                 break;
             }
         };
-        keep_snapshot(&mut before);
+        before.committed();
         if !pseudonymised {
             let _ = std::fs::write(
                 dir.join("report.json"),
@@ -541,6 +546,9 @@ fn process(
         );
     }
     unread(&mut report, &fetched.unread, redactor.as_ref());
+    if window.is_some() {
+        held_to_gate(layout, spec, &store, label, &report, &before, started)?;
+    }
     let failures = fetched.child_failures.clone();
     finish(
         &mut seen, &seen_path, &report, wanted, held_since, window, failures,
@@ -549,12 +557,137 @@ fn process(
     Ok(report)
 }
 
-/// Keeps the run's snapshot once its first `apply-extraction` committed. The run's answer stays
-/// what the store did; a snapshot that cannot be kept is said on stderr.
-fn keep_snapshot(before: &mut BeforeApply) {
-    if let Err(e) = before.publish() {
-        eprintln!("cortex: the snapshot taken before this run was not kept: {e}");
+/// The run's snapshot ([`BeforeApply`]), the name it was kept under, and whether an apply
+/// committed: what the run gate needs to undo the run.
+struct Undo {
+    before: BeforeApply,
+    /// The snapshot's name, once the first `apply-extraction` committed and it was kept.
+    kept: Option<String>,
+    applied: bool,
+}
+
+impl Undo {
+    fn new(before: BeforeApply) -> Self {
+        Self {
+            before,
+            kept: None,
+            applied: false,
+        }
     }
+
+    /// Copies the store and `state/` before the run's first `apply-extraction`.
+    fn take(&mut self) -> Result<(), Failure> {
+        self.before.take().map_err(Failure::Apply)
+    }
+
+    /// After an `apply-extraction` committed: keeps the run's snapshot the first time. The run's
+    /// answer stays what the store did; a snapshot that cannot be kept is said on stderr.
+    fn committed(&mut self) {
+        self.applied = true;
+        match self.before.publish() {
+            Ok(Some(name)) => self.kept = Some(name),
+            Ok(None) => {}
+            Err(e) => eprintln!("cortex: the snapshot taken before this run was not kept: {e}"),
+        }
+    }
+}
+
+/// Holds a source run that applied something to the spec's `gate`. A failed check fails the run
+/// as `apply-refused`, so the scheduler counts it as a failed run of the source: the run is undone
+/// ([`undo`]), and `cortex.log` records each failed check with its measure and value, the snapshot
+/// restored, and the failure's reason.
+fn held_to_gate(
+    layout: &Layout,
+    spec: &m::InstanceSpec,
+    store: &crate::ekr::Store,
+    label: &str,
+    report: &Report,
+    before: &Undo,
+    started: i64,
+) -> Result<(), Failure> {
+    let Some(checks) = spec.gate.as_ref().filter(|g| !g.checks.is_empty()) else {
+        return Ok(());
+    };
+    if !before.applied {
+        return Ok(());
+    }
+    let failed = gate::evaluate(checks, report, || gate::quality(store));
+    if failed.is_empty() {
+        return Ok(());
+    }
+    // `<home>/instances/<name>`: the units live with the home, not the instance.
+    let home = layout
+        .dir
+        .parent()
+        .and_then(std::path::Path::parent)
+        .unwrap_or(&layout.dir);
+    let (restored, undone) = undo(
+        layout,
+        &spec.name.0,
+        before.kept.as_deref(),
+        &Systemd::from_env(home),
+    );
+    let why = format!("{}; {undone}", gate::reason(&failed));
+    let mut line = log_line(label, report, started);
+    line["gate"] = json!({
+        "failed": failed.iter().map(gate::Failed::json).collect::<Vec<_>>(),
+        "restored": restored,
+        "reason": why,
+    });
+    layout.log_line(&line);
+    Err(Failure::Apply(why))
+}
+
+/// Undoes a run that failed its gate from `kept`, the snapshot taken before it: the store and
+/// `state/` are restored (`snapshot::restore_held`; the command holds the home's lock). Answers
+/// the snapshot restored, and what was done, for the failure's reason. A restore that is refused or
+/// fails still puts `state/` back, so the run's documents are fetched again, and the reason says
+/// the store still holds the run. Without a kept snapshot (`postgres`, `snapshots.keep` 0)
+/// nothing is undone.
+fn undo(
+    layout: &Layout,
+    instance: &str,
+    kept: Option<&str>,
+    systemd: &Systemd,
+) -> (Option<String>, String) {
+    let Some(name) = kept else {
+        return (
+            None,
+            "the run was not undone: no snapshot was kept before it (a postgres store, \
+             snapshots.keep 0, or a snapshot that could not be kept)"
+                .into(),
+        );
+    };
+    let refused = match snapshot::restore_held(layout, instance, name, systemd) {
+        Ok(done) => {
+            if let Some(e) = done.viewer_failed {
+                eprintln!("cortex: the viewer did not start again after the undo: {e}");
+            }
+            return (
+                Some(name.to_string()),
+                format!("the run was undone: the store and state/ are back at snapshot {name}"),
+            );
+        }
+        Err(RestoreError::Refused(snapshot::Refusal::Unsupported)) => {
+            "the store's backend has no snapshot to restore".to_string()
+        }
+        Err(RestoreError::Refused(snapshot::Refusal::Busy(reason))) => reason,
+        Err(RestoreError::Refused(snapshot::Refusal::NoSuchSnapshot)) => {
+            format!("snapshot {name} is gone")
+        }
+        Err(RestoreError::Failed(e)) => e,
+    };
+    let state = match snapshot::rewind_state(layout, name) {
+        Ok(true) => {
+            format!("state/ is back at snapshot {name}, so its documents are fetched again")
+        }
+        Ok(false) => format!("snapshot {name} holds no copy of state/ to put back"),
+        Err(e) => format!("state/ was not put back either: {e}"),
+    };
+    (
+        None,
+        format!("the store still holds the run, its restore was refused: {refused}; {state}"),
+    )
 }
 
 /// `issued` in batches of at most [`BATCH_CHARS`] characters of text, a longer document alone.
@@ -598,7 +731,7 @@ fn apply_records(
     seen: &mut SeenState,
     seen_path: &std::path::Path,
     report: &mut Report,
-    before: &mut BeforeApply,
+    before: &mut Undo,
 ) -> Result<(), Failure> {
     let mut entities = load_entities(layout);
     let issued: Vec<_> = selected
@@ -615,7 +748,7 @@ fn apply_records(
         let path = dir.join("extraction.yaml");
         let text = serde_yaml_ng::to_string(&doc).expect("YAML");
         std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
-        before.take().map_err(Failure::Apply)?;
+        before.take()?;
         let applied = match r.store.apply(&path) {
             Ok(applied) => applied,
             Err(e) if report.documents_applied == 0 => return Err(Failure::Apply(e)),
@@ -624,7 +757,7 @@ fn apply_records(
                 break;
             }
         };
-        keep_snapshot(before);
+        before.committed();
         let _ = std::fs::write(
             dir.join("report.json"),
             serde_json::to_string_pretty(&applied).unwrap_or_default(),
@@ -751,6 +884,11 @@ fn finish(
 }
 
 fn log(layout: &Layout, label: &str, report: &Report, started: i64) {
+    layout.log_line(&log_line(label, report, started));
+}
+
+/// The `cortex.log` line of a run.
+fn log_line(label: &str, report: &Report, started: i64) -> serde_json::Value {
     let mut line = json!({
         "at": started,
         "source": label,
@@ -776,7 +914,7 @@ fn log(layout: &Layout, label: &str, report: &Report, started: i64) {
         line["redacted"] = json!(redacted);
         line["unrestored"] = json!(report.unrestored);
     }
-    layout.log_line(&line);
+    line
 }
 
 /// A document's masked and scrubbed text before the cut, and what the irreversible rules
@@ -883,5 +1021,56 @@ mod tests {
             .into_iter()
             .fold(Report::default().cost_usd, add_cost);
         assert_eq!(one_uncosted, None);
+    }
+
+    #[test]
+    fn an_undo_whose_store_restore_is_refused_still_rewinds_state() {
+        let tmp = tempfile::tempdir().unwrap();
+        let layout = Layout::new(tmp.path().to_path_buf());
+        std::fs::write(
+            layout.spec(),
+            "format: cortex.instance/1\nname: t\ndescription: d\nekr: {version: \"0.0.30\"}\n\
+             seed: {documents: []}\nmodel: {model: m, budget_usd: \"1\", timeout_s: 60}\n\
+             sources: []\nserve: {}\n",
+        )
+        .unwrap();
+        let db = rusqlite::Connection::open(layout.store()).unwrap();
+        db.execute_batch("CREATE TABLE t (v TEXT); INSERT INTO t VALUES ('before');")
+            .unwrap();
+        std::fs::create_dir_all(layout.seen("news").parent().unwrap()).unwrap();
+        std::fs::write(layout.seen("news"), "seen before").unwrap();
+        let store = crate::ekr::Store {
+            bin: PathBuf::from("ekr-unused"),
+            host: layout.host(),
+            backend: crate::ekr::Backend::Sqlite,
+            store: layout.store(),
+        };
+        let mut before = BeforeApply::new(&layout, &store, "news", 1000, 3);
+        before.take().unwrap();
+        let name = before.publish().unwrap().expect("a snapshot");
+        db.execute_batch("INSERT INTO t VALUES ('the run');")
+            .unwrap();
+        std::fs::write(layout.seen("news"), "seen by the run").unwrap();
+
+        // Another connection holds the write lock past the restore's retries.
+        db.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let systemd = Systemd {
+            systemctl: PathBuf::from("systemctl-unused"),
+            unit_dir: tmp.path().join("no-units"),
+            home_root: tmp.path().to_path_buf(),
+        };
+        let (restored, why) = undo(&layout, "t", Some(&name), &systemd);
+        assert_eq!(restored, None, "{why}");
+        assert!(why.contains("the store still holds the run"), "{why}");
+        assert_eq!(
+            std::fs::read_to_string(layout.seen("news")).unwrap(),
+            "seen before",
+            "state/ is put back so the run's documents are fetched again: {why}"
+        );
+        db.execute_batch("ROLLBACK").unwrap();
+        let rows: i64 = db
+            .query_row("SELECT count(*) FROM t", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(rows, 2, "the store still holds the run");
     }
 }

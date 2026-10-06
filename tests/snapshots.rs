@@ -203,9 +203,10 @@ fn a_run_that_applies_nothing_takes_no_snapshot() {
 }
 
 #[test]
-fn a_restore_is_refused_while_the_lock_or_a_reader_holds_the_store() {
+fn a_restore_is_refused_while_the_lock_or_a_writer_holds_the_store_but_not_for_a_reader() {
     let w = World::new();
     let dir = create(&w);
+    let seeded = w.head("t");
     run_applying(&w, 0);
     let [snapshot] = names(&dir);
     run_applying(&w, 1);
@@ -233,9 +234,10 @@ fn a_restore_is_refused_while_the_lock_or_a_reader_holds_the_store() {
     }
     assert_eq!(w.head("t"), head, "nothing was restored");
 
-    // A process other than the viewer holds the store open.
+    // Another connection holds the store's write lock for longer than the restore retries.
     {
-        let _reader = std::fs::File::open(dir.join("store.sqlite")).unwrap();
+        let writer = rusqlite::Connection::open(dir.join("store.sqlite")).unwrap();
+        writer.execute_batch("BEGIN IMMEDIATE").unwrap();
         let views_before = w.lines("systemctl.log").len();
         let (code, busy) = w.cortex(&["restore", "t", &snapshot]);
         assert_eq!(
@@ -246,10 +248,10 @@ fn a_restore_is_refused_while_the_lock_or_a_reader_holds_the_store() {
         assert!(
             busy["detail"]["reason"]
                 .as_str()
-                .is_some_and(|r| r.contains("open")),
+                .is_some_and(|r| r.contains("write lock")),
             "{busy}"
         );
-        // The viewer, stopped to look for other readers, runs again.
+        // The viewer, stopped for the restore, runs again.
         assert_eq!(systemctl_since(&w, views_before), view_restarted());
     }
     assert_eq!(w.head("t"), head, "nothing was restored");
@@ -259,11 +261,34 @@ fn a_restore_is_refused_while_the_lock_or_a_reader_holds_the_store() {
         "a refused restore snapshots nothing"
     );
 
+    // A reader that holds the store open, as an attached `ekr mcp` does between requests, does
+    // not block the restore: the snapshot is written into the live store through SQLite's online
+    // backup, not swapped in, and the reader sees it on its next read.
+    let reader = rusqlite::Connection::open_with_flags(
+        dir.join("store.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let events = |db: &rusqlite::Connection| -> i64 {
+        db.query_row("SELECT count(*) FROM ekr_events", [], |r| r.get(0))
+            .unwrap()
+    };
+    let read_before = events(&reader);
     let (code, restored) = w.cortex(&["restore", "t", &snapshot]);
     assert_eq!(
         (code, restored["outcome"].as_str()),
         (0, Some("restored")),
         "{restored}"
+    );
+    assert_eq!(
+        w.head("t"),
+        seeded,
+        "the store is back before the first run, and EKR opens it with the reader attached"
+    );
+    let read_after = events(&reader);
+    assert!(
+        read_after < read_before,
+        "the reader's next read sees the restored store: {read_before} -> {read_after}"
     );
 }
 
