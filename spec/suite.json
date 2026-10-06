@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/12",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "3f41e7bfa05fd6d8ef1f3aed9bf4d87dd1ac06eadb402b333aab6ff0e0193c73",
-    "contract_digest": "d3fc64a1257346e9b746fe7ef224384e0838ec0291c85560075fcf2f917faf53"
+    "spec_digest": "752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e",
+    "contract_digest": "4ccfd55371704938bf0eee933501df17665487def4b8ad6c2faac061972da933"
   },
   "scenarios": {
     "cortex.instance.AddSource/outcome/added": {
@@ -171,6 +171,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -290,6 +294,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -445,6 +453,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
         },
         {
           "step": "expect_no_event",
@@ -723,6 +735,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -869,6 +885,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
         },
         {
           "step": "expect_no_event",
@@ -1102,6 +1122,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -1398,6 +1422,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -1467,6 +1495,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -1623,6 +1655,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -1856,6 +1892,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -2002,6 +2042,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
         },
         {
           "step": "expect_no_event",
@@ -2235,6 +2279,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -2387,6 +2435,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -2620,6 +2672,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -2762,6 +2818,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
         },
         {
           "step": "expect_no_event",
@@ -2998,6 +3058,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -3142,6 +3206,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
         },
         {
           "step": "expect_no_event",
@@ -3417,6 +3485,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -3712,6 +3784,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -3992,6 +4068,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -4068,6 +4148,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -4226,6 +4310,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
         },
         {
           "step": "expect_no_event",
@@ -4504,6 +4592,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -4646,6 +4738,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
         },
         {
           "step": "expect_no_event",
@@ -4879,6 +4975,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -5196,6 +5296,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -5338,6 +5442,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -5416,6 +5524,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -5470,6 +5582,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -5714,6 +5830,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -5797,6 +5917,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -5973,6 +6097,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -6082,6 +6210,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -6107,6 +6239,777 @@
         {
           "kind": "view",
           "name": "cortex.instance.Instances"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.MeasureQuality/outcome/judge-failed": {
+      "purpose": "`cortex.instance.MeasureQuality` answers `judge-failed` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.MeasureQuality",
+            "outcome": "judge-failed"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.MeasureQuality",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "sample": {
+              "kind": "literal",
+              "value": 1.0
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.MeasureQuality",
+            "outcome": "judge-failed"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.JudgeFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.MeasureQuality"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.MeasureQuality",
+            "outcome": "judge-failed"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.JudgeFailed"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.MeasureQuality/outcome/measured": {
+      "purpose": "`cortex.instance.MeasureQuality` answers `measured` for an input no other branch's guard claims",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "budget_usd": 1.0,
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config"
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.MeasureQuality",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "sample": {
+              "kind": "literal",
+              "value": 1.0
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.MeasureQuality",
+            "outcome": "measured"
+          }
+        },
+        {
+          "step": "expect_event",
+          "event": "cortex.instance.QualityMeasured",
+          "shape": {
+            "judged": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "lower": {
+              "holds": "primitive",
+              "kind": "decimal"
+            },
+            "name": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "passed": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "revision": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "seed": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "stamp": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "unclear": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "upper": {
+              "holds": "primitive",
+              "kind": "decimal"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Instances"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Instances",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "description": {
+                "kind": "literal",
+                "value": "description"
+              },
+              "ekr_version": {
+                "kind": "literal",
+                "value": "ekr_version"
+              },
+              "model": {
+                "kind": "literal",
+                "value": "model"
+              },
+              "name": {
+                "kind": "instance",
+                "instance": "instance"
+              },
+              "seed_digest": {
+                "kind": "literal",
+                "value": "seed_digest"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Active"
+              }
+            }
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.MeasureQuality"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.MeasureQuality",
+            "outcome": "measured"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Instances"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.MeasureQuality/outcome/no-such-instance": {
+      "purpose": "`cortex.instance.MeasureQuality` for an identity no record carries takes `no-such-instance` and reports `cortex.instance.InstanceNotFound`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.MeasureQuality",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name-1048576"
+            },
+            "sample": {
+              "kind": "literal",
+              "value": 1.0
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.MeasureQuality",
+            "outcome": "no-such-instance"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.InstanceNotFound",
+          "fields": {
+            "name": "name-1048576"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.MeasureQuality"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.MeasureQuality",
+            "outcome": "no-such-instance"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.InstanceNotFound"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.MeasureQuality/outcome/sample-failed": {
+      "purpose": "`cortex.instance.MeasureQuality` answers `sample-failed` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.MeasureQuality",
+            "outcome": "sample-failed"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.MeasureQuality",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "sample": {
+              "kind": "literal",
+              "value": 1.0
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.MeasureQuality",
+            "outcome": "sample-failed"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.SampleFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.MeasureQuality"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.MeasureQuality",
+            "outcome": "sample-failed"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.SampleFailed"
         },
         {
           "kind": "actor",
@@ -6335,6 +7238,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -6481,6 +7388,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -6787,6 +7698,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -6943,6 +7858,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -7025,6 +7944,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -7079,6 +8002,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -7160,6 +8087,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -7214,6 +8145,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -7386,6 +8321,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -7495,6 +8434,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -7584,6 +8527,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -7638,6 +8585,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -7727,6 +8678,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -7781,6 +8736,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -7866,6 +8825,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -7920,6 +8883,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -8012,6 +8979,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -8066,6 +9037,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -8253,6 +9228,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -8358,6 +9337,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -8440,6 +9423,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -8494,6 +9481,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -8914,6 +9905,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -9011,6 +10006,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -9097,6 +10096,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -9151,6 +10154,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -9236,6 +10243,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -9290,6 +10301,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -9371,6 +10386,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -9425,6 +10444,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -9697,6 +10720,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -9818,6 +10845,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -11654,6 +12685,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -11755,6 +12790,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -12477,6 +13516,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -12571,6 +13614,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -12881,6 +13928,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -13034,6 +14085,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -13351,6 +14406,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -13493,6 +14552,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -13630,6 +14693,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
         },
         {
@@ -13684,6 +14751,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",
@@ -13807,6 +14878,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
         },
         {
           "step": "expect_no_event",
@@ -14080,6 +15155,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
         },
         {
           "step": "expect_no_event",
@@ -14367,6 +15446,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -14491,6 +15574,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
         },
         {
           "step": "expect_no_event",
@@ -14746,6 +15833,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
         },
         {
           "step": "expect_no_event",
@@ -15018,6 +16109,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.RunFailed"
         },
         {
@@ -15275,6 +16370,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
         },
         {
           "step": "expect_no_event",
@@ -15585,6 +16684,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
         },
         {
           "kind": "event",

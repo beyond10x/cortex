@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-06T10:01:56Z",
+  "actor": "agent:claude",
+  "artifact": "story:quality-judge",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check in CI on wave/20261006g (pass)",
+    "reference": "https://github.com/beyond10x/cortex/actions/runs/37446837709"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.QualityVerdict",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e",
+    "contract_digest": "slice-sha256/2:254b00010a41553d4c7e720571778a2a0f3bd79f39cd444b22a0e62948d863de",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.QualityVerdict": {
+      "title": "QualityVerdict",
+      "x-ess-name": "cortex.instance.QualityVerdict",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "fact": {
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/cortex.instance.QualityVerdictKind"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "fact",
+        "verdict",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.QualityVerdictKind": {
+      "title": "QualityVerdictKind",
+      "x-ess-name": "cortex.instance.QualityVerdictKind",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "yes",
+        "no",
+        "unclear"
+      ]
+    }
+  }
+}

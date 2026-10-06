@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "3f41e7bfa05fd6d8ef1f3aed9bf4d87dd1ac06eadb402b333aab6ff0e0193c73",
-    "contract_digest": "d3fc64a1257346e9b746fe7ef224384e0838ec0291c85560075fcf2f917faf53"
+    "source_digest": "752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e",
+    "contract_digest": "4ccfd55371704938bf0eee933501df17665487def4b8ad6c2faac061972da933"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -146,6 +146,20 @@
     {
       "kind": "domain_type",
       "source": "cortex.instance.PropertyMapping",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.QualityVerdict",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.QualityVerdictKind",
       "disposition": {
         "disposition": "generated"
       }
@@ -446,6 +460,20 @@
     },
     {
       "kind": "command_contract",
+      "source": "cortex.instance.MeasureQuality",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_behavior",
+      "source": "cortex.instance.MeasureQuality",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_contract",
       "source": "cortex.instance.RecordFailure",
       "disposition": {
         "disposition": "generated"
@@ -554,6 +582,13 @@
     },
     {
       "kind": "event_type",
+      "source": "cortex.instance.QualityMeasured",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "event_type",
       "source": "cortex.instance.RunFailed",
       "disposition": {
         "disposition": "generated"
@@ -652,6 +687,13 @@
     },
     {
       "kind": "error_type",
+      "source": "cortex.instance.JudgeFailed",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
       "source": "cortex.instance.NameTaken",
       "disposition": {
         "disposition": "generated"
@@ -660,6 +702,13 @@
     {
       "kind": "error_type",
       "source": "cortex.instance.RestoreUnsupported",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.instance.SampleFailed",
       "disposition": {
         "disposition": "generated"
       }
@@ -762,7 +811,7 @@
         "disposition": "refused",
         "reason": "needs_caller_identity",
         "stage": "planning",
-        "detail": "may invoke `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.UpdateInstance`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry"
+        "detail": "may invoke `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.UpdateInstance`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry"
       }
     },
     {

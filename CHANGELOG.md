@@ -7,6 +7,8 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Added
 
+- `cortex quality <instance> --sample N` judges a sample of facts against their evidence with the
+  instance's model and reports a pass rate with its interval under `quality/<stamp>/`.
 - A `structured` source reads JSON files, and `dropped: Supersede` ends what a source no longer
   lists: a changed value is superseded, a value no longer listed is retracted.
 - The model marks a property value a document says changed as `replaces: true`, so the older value is

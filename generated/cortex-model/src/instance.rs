@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 3f41e7bfa05fd6d8ef1f3aed9bf4d87dd1ac06eadb402b333aab6ff0e0193c73
-// contract digest d3fc64a1257346e9b746fe7ef224384e0838ec0291c85560075fcf2f917faf53
+// model digest 752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e
+// contract digest 4ccfd55371704938bf0eee933501df17665487def4b8ad6c2faac061972da933
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -260,6 +260,30 @@ pub struct PropertyMapping {
     pub property: String,
     /// `path` — `String`.
     pub path: String,
+}
+
+/// QualityVerdict — `cortex.instance.QualityVerdict`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QualityVerdict {
+    /// `format` — `String`.
+    pub format: String,
+    /// `fact` — `String`.
+    pub fact: String,
+    /// `verdict` — `cortex.instance.QualityVerdictKind`.
+    pub verdict: QualityVerdictKind,
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
+/// QualityVerdictKind — `cortex.instance.QualityVerdictKind`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QualityVerdictKind {
+    /// `yes`.
+    Yes,
+    /// `no`.
+    No,
+    /// `unclear`.
+    Unclear,
 }
 
 /// RecordFilter — `cortex.instance.RecordFilter`.
@@ -1331,6 +1355,54 @@ pub enum EnableSourceOutcome {
     },
 }
 
+/// Measure fact quality — the input of `cortex.instance.MeasureQuality`.
+///
+/// Everything it can result in is [`MeasureQualityOutcome`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MeasureQuality {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `sample` — `Integer`.
+    pub sample: i64,
+}
+
+/// Everything `cortex.instance.MeasureQuality` can result in — one variant per declared outcome.
+///
+/// An infrastructure failure is deliberately not in here: a refusal is a fact about the domain,
+/// a transport fault is a fact about the run, and conflating the two is what the declared
+/// outcomes exist to prevent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MeasureQualityOutcome {
+    /// `sample-failed` — externally decided (EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read).
+    ///
+    /// No model was asked and nothing was written.
+    SampleFailed {
+        /// Why it was refused: `cortex.instance.SampleFailed`.
+        error: SampleFailed,
+    },
+    /// `judge-failed` — externally decided (A judge's model call fails, times out, answers no valid verdicts or finds the budget spent, or the redaction policy refuses what the judge would be shown).
+    ///
+    /// No pass rate was written; the verdicts of the batches judged before stay.
+    JudgeFailed {
+        /// Why it was refused: `cortex.instance.JudgeFailed`.
+        error: JudgeFailed,
+    },
+    /// `measured` — otherwise.
+    ///
+    /// Every sampled fact was judged. `judged` counts them, `passed` those judged `yes` and `unclear` those the judge could not tell, which count as failed. `lower` and `upper` are the Wilson interval of the pass rate at 95 %, 0 and 1 when the store holds no fact to draw. `revision` and `seed` draw the same sample again.
+    Measured {
+        /// The `cortex.instance.QualityMeasured` this outcome publishes.
+        quality_measured: QualityMeasured,
+    },
+    /// `no-such-instance` — for an identity no record carries.
+    ///
+    /// Nothing was measured.
+    NoSuchInstance {
+        /// Why it was refused: `cortex.instance.InstanceNotFound`.
+        error: InstanceNotFound,
+    },
+}
+
 /// Record a failed run — the input of `cortex.instance.RecordFailure`.
 ///
 /// Everything it can result in is [`RecordFailureOutcome`].
@@ -1621,6 +1693,29 @@ pub struct InstanceUpdated {
     pub name: InstanceName,
 }
 
+/// QualityMeasured — the event `cortex.instance.QualityMeasured`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QualityMeasured {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `stamp` — `String`.
+    pub stamp: String,
+    /// `revision` — `Integer`.
+    pub revision: i64,
+    /// `seed` — `Integer`.
+    pub seed: i64,
+    /// `judged` — `Integer`.
+    pub judged: i64,
+    /// `passed` — `Integer`.
+    pub passed: i64,
+    /// `unclear` — `Integer`.
+    pub unclear: i64,
+    /// `lower` — `Decimal`.
+    pub lower: crate::primitives::Decimal,
+    /// `upper` — `Decimal`.
+    pub upper: crate::primitives::Decimal,
+}
+
 /// RunFailed — the event `cortex.instance.RunFailed`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunFailed {
@@ -1749,6 +1844,15 @@ pub struct InstanceNotFound {
     pub name: InstanceName,
 }
 
+/// The declared error `cortex.instance.JudgeFailed`.
+///
+/// A judge's model call failed, timed out, answered no valid verdicts or found the budget spent, or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JudgeFailed {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
 /// The declared error `cortex.instance.NameTaken`.
 ///
 /// The home already holds an instance with this name.
@@ -1765,6 +1869,15 @@ pub struct NameTaken {
 pub struct RestoreUnsupported {
     /// `name` — `cortex.instance.InstanceName`.
     pub name: InstanceName,
+}
+
+/// The declared error `cortex.instance.SampleFailed`.
+///
+/// EKR could not draw the sample (`ekr sample`): the size is outside 1 to 1000, or the store cannot be read under the instance's host. No model was asked and nothing was written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SampleFailed {
+    /// `reason` — `String`.
+    pub reason: String,
 }
 
 /// The declared error `cortex.instance.SeedChangeRefused`.
@@ -1942,6 +2055,17 @@ pub mod obligations {
         ///
         /// `Err` is the typed refusal of a request the model declares no outcome for.
         fn enable_source(&mut self, input: super::EnableSource) -> Result<super::EnableSourceOutcome, crate::obligation::UnmetObligation>;
+    }
+
+    /// The behaviour `cortex.instance.MeasureQuality` — generated.
+    ///
+    /// The specification fully determines it: [`crate::behaviour::Generated`] implements it
+    /// over the storage and context ports. Implement it yourself to replace that behaviour.
+    pub trait MeasureQualityBehavior {
+        /// Decides and enacts exactly one declared outcome of `cortex.instance.MeasureQuality`.
+        ///
+        /// `Err` is the typed refusal of a request the model declares no outcome for.
+        fn measure_quality(&mut self, input: super::MeasureQuality) -> Result<super::MeasureQualityOutcome, crate::obligation::UnmetObligation>;
     }
 
     /// The behaviour `cortex.instance.RecordFailure` — an implementation obligation.

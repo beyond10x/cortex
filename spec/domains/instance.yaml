@@ -342,6 +342,23 @@ types:
       - {name: snapshots, type: Optional<cortex.instance.SnapshotPolicy>}
       - {name: gate, type: Optional<cortex.instance.RunGate>}
 
+  # A judge's answer on one sampled fact: `yes` when the evidence the fact cites supports it, `no`
+  # when it does not, `unclear` when the judge cannot tell. EKR's `ekr.fact-judgements/1` knows only
+  # `Pass` and `Fail`: `yes` is `Pass`, `no` and `unclear` are `Fail`.
+  - name: cortex.instance.QualityVerdictKind
+    kind: enum
+    variants: [yes, no, unclear]
+
+  # One line of `quality/<stamp>/verdicts.jsonl`, `format` `cortex.quality-verdict/1`: the EKR
+  # assertion id of the sampled fact, the judge's verdict and its reason.
+  - name: cortex.instance.QualityVerdict
+    kind: struct
+    fields:
+      - {name: format, type: String}
+      - {name: fact, type: String}
+      - {name: verdict, type: cortex.instance.QualityVerdictKind}
+      - {name: reason, type: String}
+
 entities:
   - name: cortex.instance.Instance
     identity:
@@ -428,6 +445,7 @@ actors:
       - cortex.instance.AddSource
       - cortex.instance.EnableSource
       - cortex.instance.RestoreSnapshot
+      - cortex.instance.MeasureQuality
     naming:
       display: Operator
 
@@ -550,6 +568,21 @@ errors:
 
   - name: cortex.instance.ApplyRefused
     summary: EKR refused the merged extraction document; nothing was applied.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.SampleFailed
+    summary: >-
+      EKR could not draw the sample (`ekr sample`): the size is outside 1 to 1000, or the store
+      cannot be read under the instance's host. No model was asked and nothing was written.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.JudgeFailed
+    summary: >-
+      A judge's model call failed, timed out, answered no valid verdicts or found the budget spent,
+      or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the
+      verdicts of the batches judged before; no `fact-quality.json` was written.
     fields:
       - {name: reason, type: String}
 
@@ -1045,6 +1078,74 @@ commands:
             name: input.name
         summary: Nothing was restored.
 
+  - name: cortex.instance.MeasureQuality
+    naming:
+      wire: quality
+      display: Measure fact quality
+    # `ekr sample` draws `sample` of the store's active facts at its head, each with the evidence it
+    # cites, seeded with the measurement's start in Unix milliseconds. Each batch of 20 goes to the
+    # instance's model with no tools and the judge's own system prompt, shown as the redaction
+    # policy shows a run's documents; the model answers a `cortex.instance.QualityVerdict` per fact.
+    # `ekr fact-quality` turns the verdicts into a pass rate with its Wilson interval at 95 %. The
+    # measurement writes `quality/<UTC stamp>/verdicts.jsonl` and `quality/<UTC stamp>/
+    # fact-quality.json` (the `ekr.fact-quality/1` document, as EKR printed it) under the instance
+    # directory, and spends at most the spec's `model.budget_usd`. It reads the store and writes
+    # nothing to it, so a removed instance's store, which stays, is measured too.
+    input:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: sample, type: Integer}
+    outcomes:
+      - name: sample-failed
+        external: EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read
+        error: cortex.instance.SampleFailed
+        payload:
+          cortex.instance.SampleFailed:
+            reason: {generated: true}
+        summary: No model was asked and nothing was written.
+
+      - name: judge-failed
+        external: A judge's model call fails, times out, answers no valid verdicts or finds the budget spent, or the redaction policy refuses what the judge would be shown
+        error: cortex.instance.JudgeFailed
+        payload:
+          cortex.instance.JudgeFailed:
+            reason: {generated: true}
+        summary: No pass rate was written; the verdicts of the batches judged before stay.
+
+      # UNMAPPED: the measurement's `rate` (null when nothing was judged) and `cost_usd` (null as
+      # soon as one answer carried no cost, never 0) are not on QualityMeasured: ESS 0.52.0
+      # synthesis answers an `Optional` `{generated: true}` payload field with a constant `None`,
+      # so the event could not carry them. The command line prints both beside the event's fields,
+      # `fact-quality.json` holds `rate`, and tests/quality.rs holds both. https://github.com/beyond10x/ess/issues/467
+      - name: measured
+        updates: cortex.instance.Instance
+        instance: name
+        emits:
+          - cortex.instance.QualityMeasured
+        payload:
+          cortex.instance.QualityMeasured:
+            name: input.name
+            stamp: {generated: true}
+            revision: {generated: true}
+            seed: {generated: true}
+            judged: {generated: true}
+            passed: {generated: true}
+            unclear: {generated: true}
+            lower: {generated: true}
+            upper: {generated: true}
+        summary: >-
+          Every sampled fact was judged. `judged` counts them, `passed` those judged `yes` and
+          `unclear` those the judge could not tell, which count as failed. `lower` and `upper` are
+          the Wilson interval of the pass rate at 95 %, 0 and 1 when the store holds no fact to
+          draw. `revision` and `seed` draw the same sample again.
+
+      - name: no-such-instance
+        unknown_instance: true
+        error: cortex.instance.InstanceNotFound
+        payload:
+          cortex.instance.InstanceNotFound:
+            name: input.name
+        summary: Nothing was measured.
+
 events:
   - name: cortex.instance.InstanceCreated
     fields:
@@ -1095,6 +1196,18 @@ events:
     fields:
       - {name: name, type: cortex.instance.InstanceName}
       - {name: snapshot, type: String}
+
+  - name: cortex.instance.QualityMeasured
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: stamp, type: String}
+      - {name: revision, type: Integer}
+      - {name: seed, type: Integer}
+      - {name: judged, type: Integer}
+      - {name: passed, type: Integer}
+      - {name: unclear, type: Integer}
+      - {name: lower, type: Decimal}
+      - {name: upper, type: Decimal}
 
 views:
   - name: cortex.instance.Instances

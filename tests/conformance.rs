@@ -110,6 +110,20 @@ fn event(e: PublishedEvent) -> (String, Value) {
             "SnapshotRestored",
             json!({"name": e.name.0, "snapshot": e.snapshot}),
         ),
+        PublishedEvent::QualityMeasured(e) => (
+            "QualityMeasured",
+            json!({
+                "name": e.name.0,
+                "stamp": e.stamp,
+                "revision": e.revision,
+                "seed": e.seed,
+                "judged": e.judged,
+                "passed": e.passed,
+                "unclear": e.unclear,
+                "lower": e.lower.0,
+                "upper": e.upper.0,
+            }),
+        ),
         PublishedEvent::SourceRan(e) => (
             "SourceRan",
             json!({
@@ -407,6 +421,27 @@ impl Scenario {
                     Some(("InstanceNotFound", json!({"name": error.name.0}))),
                 ),
             },
+            "cortex.instance.MeasureQuality" => match app
+                .measure_quality(m::MeasureQuality {
+                    name: m::InstanceName(s("name")),
+                    sample: input.get("sample").and_then(Value::as_i64).unwrap_or(1),
+                })
+                .unwrap()
+            {
+                m::MeasureQualityOutcome::Measured { .. } => ("measured", None),
+                m::MeasureQualityOutcome::SampleFailed { error } => (
+                    "sample-failed",
+                    Some(("SampleFailed", json!({"reason": error.reason}))),
+                ),
+                m::MeasureQualityOutcome::JudgeFailed { error } => (
+                    "judge-failed",
+                    Some(("JudgeFailed", json!({"reason": error.reason}))),
+                ),
+                m::MeasureQualityOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+            },
             other => panic!("unknown command {other}"),
         };
         let events: Vec<_> = self.app.drain_outbox().into_iter().map(event).collect();
@@ -661,7 +696,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        46,
+        50,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

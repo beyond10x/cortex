@@ -9,6 +9,7 @@ use clap::{Parser, Subcommand};
 use cortex_model::behaviour::Generated;
 use cortex_model::instance as m;
 use cortex_model::ports::cortex::Cortex;
+use cortex_model::primitives::Decimal;
 use serde_json::{json, Value};
 
 use cortex_cli::connectors::Connectors;
@@ -17,7 +18,7 @@ use cortex_cli::instance::{Layout, Meta};
 use cortex_cli::ports::{Ports, Shared, SharedRef};
 use cortex_cli::schedule::{self, Systemd};
 use cortex_cli::snapshot::{self, Refusal, RestoreError};
-use cortex_cli::{ekr, home, instance, model_map, run, spec};
+use cortex_cli::{ekr, home, instance, model_map, quality, run, spec};
 
 /// Spin up EKR knowledge brains from a spec, fed on a schedule by Connectors data sources.
 #[derive(Parser)]
@@ -138,6 +139,15 @@ enum Command {
         name: String,
         /// A file name under `<instance>/snapshots/`, without `.sqlite`.
         snapshot: String,
+    },
+    /// Measure how often the instance's facts are supported by the evidence they cite: draw a
+    /// sample, have the instance's model judge it in batches of 20 and write the pass rate with
+    /// its Wilson interval under `quality/<UTC stamp>/` (`cortex.instance.MeasureQuality`).
+    Quality {
+        name: String,
+        /// How many facts to draw and judge, 1 to 1000.
+        #[arg(long)]
+        sample: i64,
     },
     /// One data source of an instance.
     Source {
@@ -268,9 +278,12 @@ fn main() -> ExitCode {
                 shared: shared.clone(),
                 tools: tools(),
                 locked: lock.is_some(),
+                lock: RefCell::new(lock),
             };
             let result = dispatch(&mut app, &ctx, command);
-            if ctx.locked {
+            // A command that let the lock go early (`quality`) writes no registry: another command
+            // may have written it since.
+            if ctx.lock.borrow().is_some() {
                 if let Err(e) = home.save_registry(&shared.borrow().registry) {
                     return fail(e);
                 }
@@ -287,8 +300,10 @@ struct Ctx<'a> {
     home: &'a Home,
     shared: SharedRef,
     tools: run::Tools,
-    /// Whether this command holds the home's lock; only `restore` runs without it.
+    /// Whether this command took the home's lock; only `restore` runs without it.
     locked: bool,
+    /// The home's lock while this command holds it. `quality` lets it go once its sample is drawn.
+    lock: RefCell<Option<std::fs::File>>,
 }
 
 fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
@@ -333,6 +348,7 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
         } => update(app, ctx, &name, &spec, Units::of(no_units, replace_binary)),
         Command::Remove { name } => remove(app, ctx, &name),
         Command::Restore { name, snapshot } => restore(app, ctx, &name, &snapshot),
+        Command::Quality { name, sample } => quality(app, ctx, &name, sample),
         Command::Run {
             source_id,
             record_failure,
@@ -1423,6 +1439,91 @@ fn restore(app: &mut App, ctx: &Ctx, name: &str, snapshot: &str) -> ExitCode {
         },
     };
     print("restore", &done)
+}
+
+fn quality(app: &mut App, ctx: &Ctx, name: &str, sample: i64) -> ExitCode {
+    const CMD: &str = "cortex.instance.MeasureQuality";
+    // An unknown name measures nothing; the generated behaviour answers `no-such-instance`.
+    let known = ctx.shared.borrow().registry.instances.contains_key(name);
+    let mut measured = None;
+    if known {
+        let layout = Layout::new(ctx.home.instance_dir(name));
+        // Only the draw reads the store, at one revision; the model calls and the files under
+        // `quality/<stamp>/` need no lock, so scheduled runs do not wait behind the judge.
+        let drawn = quality::draw(&layout, sample);
+        drop(ctx.lock.borrow_mut().take());
+        let result = drawn.and_then(|d| quality::judge(&layout, &ctx.tools, d));
+        let mut shared = ctx.shared.borrow_mut();
+        match result {
+            Ok(q) => {
+                shared.strings.push_back(q.stamp.clone());
+                shared
+                    .integers
+                    .extend([q.revision, q.seed, q.judged, q.passed, q.unclear]);
+                shared
+                    .decimals
+                    .extend([Decimal(q.lower.clone()), Decimal(q.upper.clone())]);
+                measured = Some(q);
+            }
+            Err(quality::Failure::Sample(reason)) => {
+                shared.external.insert((CMD, "sample-failed"), true);
+                shared.strings.push_back(reason);
+            }
+            Err(quality::Failure::Judge(reason)) => {
+                shared.external.insert((CMD, "judge-failed"), true);
+                shared.strings.push_back(reason);
+            }
+        }
+    }
+    let number = |d: &Decimal| serde_json::from_str::<Value>(&d.0).unwrap_or(Value::Null);
+    let done = match app.measure_quality(m::MeasureQuality {
+        name: m::InstanceName(name.to_string()),
+        sample,
+    }) {
+        Err(e) => return fail(e),
+        Ok(m::MeasureQualityOutcome::Measured {
+            quality_measured: e,
+        }) => {
+            let mut detail = json!({
+                "name": e.name.0,
+                "stamp": e.stamp,
+                "revision": e.revision,
+                "seed": e.seed,
+                "judged": e.judged,
+                "passed": e.passed,
+                "unclear": e.unclear,
+                "lower": number(&e.lower),
+                "upper": number(&e.upper),
+            });
+            // Not on the event (`spec/domains/instance.yaml`, `UNMAPPED:` on `measured`).
+            if let Some(q) = measured {
+                detail["rate"] = q.rate;
+                detail["cost_usd"] = json!(q.cost_usd.map(|c| format!("{c:.4}")));
+                detail["dir"] = json!(q.dir);
+            }
+            Done {
+                outcome: "measured",
+                ok: true,
+                detail,
+            }
+        }
+        Ok(m::MeasureQualityOutcome::SampleFailed { error }) => Done {
+            outcome: "sample-failed",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
+        Ok(m::MeasureQualityOutcome::JudgeFailed { error }) => Done {
+            outcome: "judge-failed",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
+        Ok(m::MeasureQualityOutcome::NoSuchInstance { error }) => Done {
+            outcome: "no-such-instance",
+            ok: false,
+            detail: json!({"name": error.name.0}),
+        },
+    };
+    print("quality", &done)
 }
 
 fn split(source_id: &str) -> (&str, &str) {

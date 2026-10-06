@@ -17,6 +17,7 @@ components:
         - cortex.instance.RecordFailure
         - cortex.instance.EnableSource
         - cortex.instance.RestoreSnapshot
+        - cortex.instance.MeasureQuality
     publishes:
       events:
         - cortex.instance.InstanceCreated
@@ -29,6 +30,7 @@ components:
         - cortex.instance.SourceDisabled
         - cortex.instance.SourceEnabled
         - cortex.instance.SnapshotRestored
+        - cortex.instance.QualityMeasured
     reached_by: command_line
     cli:
       binary: cortex
@@ -39,6 +41,7 @@ components:
         - cortex.instance.RemoveInstance
         - cortex.instance.RunSource
         - cortex.instance.RestoreSnapshot
+        - cortex.instance.MeasureQuality
       groups:
         - name: source
           summary: One data source of an instance

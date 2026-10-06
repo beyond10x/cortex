@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:quality-judge
 kind: story
-status: draft
+status: implemented
 title: An operator can measure how well facts are supported by their evidence
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -23,7 +23,11 @@ scope:
   path: src/quality.rs
 - confidence: inferred
   path: tests/quality.rs
-revision: 12
+revision: 16
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-06T09:15:47Z", actor: "agent:claude", revision: 13, decided_on: {"recorded":{"review_outcome":4}}}
+- {from: "proposed", to: "active", at: "2026-10-06T09:15:47Z", actor: "agent:claude", revision: 14, decided_on: {"recorded":{"review_outcome":4}}}
+- {from: "active", to: "implemented", at: "2026-10-06T10:15:05Z", actor: "agent:claude", revision: 16, decided_on: {"recorded":{"test_result":1,"review_outcome":5}}}
 ---
 ## Outcome
 
@@ -58,5 +62,8 @@ and `story:document-time-as-valid-time` (both edit `src/extract.rs`).
 
 ## Scope
 
-`src/quality.rs` (new), `src/extract.rs` (`Model::ask_with`), `src/lib.rs`, `src/main.rs`,
-`tests/quality.rs` (new).
+Landed 2026-10-06 in `fdfdbbd` (wave 20261006g), with a test fix `1bf9fd3`.
+
+- **Files:** `src/quality.rs` (new), `src/extract.rs` (`Model::ask_with`, `Refused` with cost), `src/main.rs`, `src/lib.rs`, `src/ports.rs`, `spec/domains/instance.yaml` and `spec/components.yaml` (`MeasureQuality`, `QualityMeasured`, `QualityVerdict`), `generated/`, `tests/quality.rs` (new), `tests/conformance.rs`, `website/docs/commands.md`, `AGENTS.md` (scenario count)
+- **Review:** one adversary pass, 4 findings fixed (rare names reached the judge, a failed call's cost, unclear untested, the home lock held through model calls)
+- **Open:** `rate` and `cost_usd` stay off the event, https://github.com/beyond10x/ess/issues/467; a failed extraction call's cost never reaches a run's `cost_usd` (`src/run.rs`), pre-existing
