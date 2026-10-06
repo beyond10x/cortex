@@ -3,11 +3,29 @@
 
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::OnceLock;
 
 use serde_json::Value;
 
 pub struct Connectors {
     pub bin: PathBuf,
+}
+
+static BIN: OnceLock<PathBuf> = OnceLock::new();
+
+/// Records the `connectors` binary the command line names (`--connectors`), once, for [`bin`].
+pub fn set_bin(bin: PathBuf) {
+    let _ = BIN.set(bin);
+}
+
+/// The `connectors` binary this process uses: the one [`set_bin`] recorded, else
+/// `CORTEX_CONNECTORS`, else `connectors` on `PATH`.
+pub fn bin() -> PathBuf {
+    BIN.get().cloned().unwrap_or_else(|| {
+        std::env::var_os("CORTEX_CONNECTORS")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("connectors"))
+    })
 }
 
 /// Why an invocation answered nothing.

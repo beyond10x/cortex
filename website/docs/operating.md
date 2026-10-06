@@ -277,8 +277,25 @@ The model sees fetched text and nothing else. Fetched text is untrusted: it is m
 credential shapes, stored as evidence and sent to a model that cannot act on it, with the
 personal data a `redaction` policy names replaced by placeholders (see [Limits](./limits.md)).
 
+## A PostgreSQL store's password
+
+A `postgres` store whose spec names `store.value.connection` gets its password from Connectors:
+every `ekr` that opens the store, the viewer's and the MCP line's included, starts through
+`connectors connections launch --consumer ekr`, and `cortex update` rewrites the viewer unit when
+an update adds or drops the connection ([Spec file](./spec-file.md#store)).
+
+The one `ekr` cortex starts directly is the provisioning of `cortex create
+--postgres-schema-config <file>` when the spec names no `store.value.schema_connection`: it runs
+`ekr postgres-schema --config <file>` itself. That file is the operator's own schema-role
+configuration, given on the command line for this one call and never copied into the instance, so
+its password stays wherever the operator keeps it. Name `schema_connection` to start that `ekr`
+through Connectors too.
+
 ## Serving a store
 
 `cortex list` prints each instance's viewer address, `http://127.0.0.1:<port>/`.
 `cortex mcp-line <name>` prints a `claude mcp add --transport stdio cortex-<name> -- … ekr mcp`
 line with the instance's host document and store, which registers the store as an MCP server.
+For a `postgres` store that names a `connection`, the line, like the viewer unit, starts
+`ekr mcp` through `connectors connections launch … --args '["mcp"]'`, so the server gets the
+database password from Connectors (see [Spec file](./spec-file.md#store)).

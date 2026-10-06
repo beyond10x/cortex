@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17
-// contract digest 8d562b038cb06e2577e6a148e341c1535923c082eabdc3385792c367302f8fcc
+// model digest a5cdddd9e44c55f5312801a678ef3ff218957a546f5dc3e857e490a3aa3cca15
+// contract digest b5c1fffcca71606fe8e9c44e881856b37ae97c97a68cba6165d2449bad664144
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -27,6 +27,15 @@ pub struct ChildCall {
     pub records: String,
     /// `paging` — `Optional<cortex.instance.Paging>`.
     pub paging: Option<Paging>,
+}
+
+/// ConnectionRef — `cortex.instance.ConnectionRef`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectionRef {
+    /// `adapter` — `String`.
+    pub adapter: String,
+    /// `connection` — `String`.
+    pub connection: String,
 }
 
 /// ConnectorsSource — `cortex.instance.ConnectorsSource`.
@@ -271,6 +280,10 @@ pub struct Paging {
 pub struct PostgresStore {
     /// `config` — `String`.
     pub config: String,
+    /// `connection` — `Optional<cortex.instance.ConnectionRef>`.
+    pub connection: Option<ConnectionRef>,
+    /// `schema_connection` — `Optional<cortex.instance.ConnectionRef>`.
+    pub schema_connection: Option<ConnectionRef>,
 }
 
 /// PropertyChange — `cortex.instance.PropertyChange`.
@@ -1467,7 +1480,7 @@ pub enum CreateInstanceOutcome {
         /// Why it was refused: `cortex.instance.NameTaken`.
         error: NameTaken,
     },
-    /// `connection-missing` — externally decided (Connectors lists no live connection for a connection id a source of the spec names).
+    /// `connection-missing` — externally decided (Connectors lists no live connection for a connection id a source or the postgres store of the spec names).
     ///
     /// Nothing was created.
     ConnectionMissing {
@@ -2053,7 +2066,7 @@ pub struct BackendMismatch {
 
 /// The declared error `cortex.instance.ConnectionMissing`.
 ///
-/// Connectors lists no live connection with the id a source names. Run `connectors connections connect` for it, then try again.
+/// Connectors lists no live connection with the id a source or the postgres store names. Run `connectors connections connect` for it, then try again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConnectionMissing {
     /// `connection` — `String`.

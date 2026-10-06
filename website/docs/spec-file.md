@@ -456,3 +456,32 @@ gate:
 | field | meaning |
 |---|---|
 | `view_port` | optional port for `ekr view` on 127.0.0.1; without it, `cortex create` takes the first free port from 18900 |
+
+## `store`
+
+Optional. Where the instance's EKR store lives: `{backend: sqlite}` (the default, without
+`store`) is `store.sqlite` in the instance directory; `{backend: postgres, value: {...}}` is EKR's
+PostgreSQL provider.
+
+```yaml
+store:
+  backend: postgres
+  value:
+    config: ~/brain/app.json
+    connection: {adapter: postgres, connection: <connection id>}
+    schema_connection: {adapter: postgres, connection: <connection id>}
+```
+
+| field | meaning |
+|---|---|
+| `config` | absolute path, or one starting with `~/`, to the application role's `ekr.postgres/1` file. cortex passes the path to `ekr` |
+| `connection` | optional Connectors connection holding the application role's password. With it, every `ekr` that opens the store (runs, `create`, `adopt`, `quality`, `schema`, the viewer and the MCP line) starts through `connectors connections launch --consumer ekr`, which hands `ekr` the connection's `{"password": …}` document on descriptor 3; `config` must then name `"password_file": "/proc/self/fd/3"`. Without it, `ekr` starts directly and reads the password where `config` says |
+| `schema_connection` | optional Connectors connection of the schema-management role, used the same way for the `ekr postgres-schema --config` that `cortex create --postgres-schema-config` runs. It needs `connection` |
+
+With `connection`, cortex never reads the password: the operator saves it once with
+`connectors connections connect`, and pins the `ekr` binary in the Connectors configuration as
+the consumer `ekr`, with `pass_env = ["EKR_"]` so the `EKR_HOST`, `EKR_BACKEND` and `EKR_STORE`
+cortex sets reach it, and the connections' adapter alias in `permissions.connections`. That needs
+an `ekr` whose `ekr.postgres/1` reads `password_file` (EKR after 0.0.31). `cortex create` refuses
+a spec whose connection Connectors does not list (`connection-missing`), and a `config` without
+that `password_file` (`seed-refused`, naming the field, never its value).

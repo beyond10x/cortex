@@ -104,17 +104,21 @@ impl Layout {
 
     /// The store on the backend the spec names, through the pinned `ekr`. A `sqlite` store, and a
     /// spec with no `store`, is `store.sqlite` in the instance directory; a `postgres` store is the
-    /// spec's `ekr.postgres/1` file, `~/` expanded.
+    /// spec's `ekr.postgres/1` file, `~/` expanded. A `postgres` store that names a `connection`
+    /// starts every `ekr` through `connectors connections launch` ([`ekr::Launch`]).
     pub fn store_handle(&self, spec: &m::InstanceSpec) -> ekr::Store {
-        let (backend, store) = match &spec.store {
-            Some(m::StoreSpec::Postgres(p)) => (ekr::Backend::Postgres, ekr::expand(&p.config)),
-            Some(m::StoreSpec::Sqlite(_)) | None => (ekr::Backend::Sqlite, self.store()),
+        let (backend, store, launch) = match &spec.store {
+            Some(m::StoreSpec::Postgres(p)) => {
+                (ekr::Backend::Postgres, ekr::expand(&p.config), launch(p))
+            }
+            Some(m::StoreSpec::Sqlite(_)) | None => (ekr::Backend::Sqlite, self.store(), None),
         };
         ekr::Store {
             bin: ekr::resolve_bin(&spec.ekr.version, spec.ekr.bin.as_deref()),
             host: self.host(),
             backend,
             store,
+            launch,
         }
     }
 
@@ -189,6 +193,54 @@ pub enum AdoptRefusal {
     /// `--store` cannot be read, or `ekr` cannot open it with the instance's host
     /// (`store-unreadable`).
     StoreUnreadable(String),
+}
+
+/// The launch of a `postgres` store that names a `connection`, through the `connectors` binary
+/// this process uses.
+fn launch(p: &m::PostgresStore) -> Option<ekr::Launch> {
+    let connection = |c: &m::ConnectionRef| ekr::Connection {
+        adapter: c.adapter.clone(),
+        connection: c.connection.clone(),
+    };
+    p.connection.as_ref().map(|c| ekr::Launch {
+        connectors: crate::connectors::bin(),
+        connection: connection(c),
+        schema_connection: p.schema_connection.as_ref().map(connection),
+    })
+}
+
+/// The `password_file` of a launched store's `ekr.postgres/1` file: the descriptor
+/// `connectors connections launch` hands the connection's document on.
+pub const LAUNCH_PASSWORD_FILE: &str = "/proc/self/fd/3";
+
+/// Why a `postgres` store's launch cannot be used: a `schema_connection` without a `connection`,
+/// or a `connection` whose `ekr.postgres/1` file does not take its password from
+/// [`LAUNCH_PASSWORD_FILE`]. The file is read for `password_file` alone, and a reason names
+/// fields, never a value of the file or the spec.
+pub fn launch_refusal(spec: &m::InstanceSpec) -> Option<String> {
+    let Some(m::StoreSpec::Postgres(p)) = &spec.store else {
+        return None;
+    };
+    if p.connection.is_none() {
+        return p.schema_connection.as_ref().map(|_| {
+            "store.value.schema_connection needs store.value.connection: a store whose schema \
+             role is launched through Connectors is opened through Connectors too"
+                .to_string()
+        });
+    }
+    let needs = format!(
+        "store.value.config: a store with store.value.connection needs an ekr.postgres/1 file \
+         whose password_file is {LAUNCH_PASSWORD_FILE}, where connectors connections launch puts \
+         the connection's password"
+    );
+    let config: serde_json::Value = match std::fs::read(ekr::expand(&p.config))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+    {
+        Some(config) => config,
+        None => return Some(format!("{needs}; the file cannot be read as JSON")),
+    };
+    (config["password_file"].as_str() != Some(LAUNCH_PASSWORD_FILE)).then_some(needs)
 }
 
 /// The first bytes of every SQLite database file.
@@ -311,11 +363,8 @@ pub fn space_refusal(dir: &Path, need: u64, free: u64) -> Option<String> {
 pub fn evidence_identities(
     store: &ekr::Store,
 ) -> Result<std::collections::BTreeSet<String>, String> {
-    let out = std::process::Command::new(&store.bin)
-        .arg("snapshot")
-        .env("EKR_HOST", &store.host)
-        .env("EKR_BACKEND", store.backend.name())
-        .env("EKR_STORE", &store.store)
+    let out = store
+        .command(&[std::ffi::OsStr::new("snapshot")])?
         .output()
         .map_err(|e| format!("cannot run ekr for snapshot: {e}"))?;
     if !out.status.success() {

@@ -1,12 +1,12 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17",
+  "source_digest": "a5cdddd9e44c55f5312801a678ef3ff218957a546f5dc3e857e490a3aa3cca15",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:853f94b69ba02420ad88c683ca7122f471dcbcb6030e20de474ac227b4982b44",
-    "projection_digest": "57d65df9979e393a307e51ef99495c06df6641d5ae96258ad9da83937e7496d6"
+    "contract_digest": "slice-sha256/2:2856516cf5265bbc0e1b939cb855a029ec7e4e0ee308940677b0956bbed01d08",
+    "projection_digest": "01b834a0dfca5e0f31b230f3da35791538e3a1123e5e9b5aa1e48389319bd997"
   },
   "generator_version": "0.52.0",
   "target": "rust",
@@ -20,6 +20,7 @@
   "declarations": {
     "cortex.instance.ChangeDetection": "CortexInstanceChangeDetection",
     "cortex.instance.ChildCall": "CortexInstanceChildCall",
+    "cortex.instance.ConnectionRef": "CortexInstanceConnectionRef",
     "cortex.instance.ConnectorsSource": "CortexInstanceConnectorsSource",
     "cortex.instance.CrawlPolicy": "CortexInstanceCrawlPolicy",
     "cortex.instance.DropPolicy": "CortexInstanceDropPolicy",
@@ -92,6 +93,21 @@
     },
     {
       "pointer": "/$defs/cortex.instance.ChildCall/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ConnectionRef/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ConnectionRef/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ConnectionRef/x-ess-name",
       "rule": "x-ess-name",
       "detail": "model identity and wire mapping retained in source.schema.json"
     },

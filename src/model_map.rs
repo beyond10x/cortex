@@ -95,6 +95,8 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
         store: opt(&spec.store).map(|store| match *store {
             s::CortexInstanceStoreSpec::V0(p) => m::StoreSpec::Postgres(m::PostgresStore {
                 config: p.value.config.clone(),
+                connection: opt(&p.value.connection).map(|c| connection_ref(&c)),
+                schema_connection: opt(&p.value.schema_connection).map(|c| connection_ref(&c)),
             }),
             s::CortexInstanceStoreSpec::V1(q) => {
                 m::StoreSpec::Sqlite(opt(&q.value).map(|v| m::SqliteStore { path: opt(&v.path) }))
@@ -122,6 +124,13 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
                 .collect(),
         }),
     })
+}
+
+fn connection_ref(c: &s::CortexInstanceConnectionRef) -> m::ConnectionRef {
+    m::ConnectionRef {
+        adapter: c.adapter.clone(),
+        connection: c.connection.clone(),
+    }
 }
 
 fn redaction_class(class: &s::CortexInstanceRedactionClass) -> m::RedactionClass {

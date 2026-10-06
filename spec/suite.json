@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/12",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17",
-    "contract_digest": "8d562b038cb06e2577e6a148e341c1535923c082eabdc3385792c367302f8fcc"
+    "spec_digest": "a5cdddd9e44c55f5312801a678ef3ff218957a546f5dc3e857e490a3aa3cca15",
+    "contract_digest": "b5c1fffcca71606fe8e9c44e881856b37ae97c97a68cba6165d2449bad664144"
   },
   "scenarios": {
     "cortex.instance.AddSource/outcome/added": {
@@ -77,7 +77,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -411,7 +419,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -541,6 +557,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
         },
         {
           "kind": "type",
@@ -864,7 +884,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -943,6 +971,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
         },
         {
           "kind": "type",
@@ -1255,7 +1287,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config-1048594"
+                    "config": "spec.store.config-1048594",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter-1048594",
+                      "connection": "spec.store.connection.connection-1048594"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter-1048594",
+                      "connection": "spec.store.schema_connection.connection-1048594"
+                    }
                   }
                 }
               }
@@ -1403,7 +1443,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -1647,7 +1695,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -1726,6 +1782,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
         },
         {
           "kind": "type",
@@ -2045,7 +2105,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -2124,6 +2192,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
         },
         {
           "kind": "type",
@@ -2443,7 +2515,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -2522,6 +2602,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
         },
         {
           "kind": "type",
@@ -2841,7 +2925,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -2916,6 +3008,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
         },
         {
           "kind": "type",
@@ -3228,7 +3324,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -3350,6 +3454,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
         },
         {
           "kind": "type",
@@ -3673,7 +3781,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config-1048594"
+                    "config": "spec.store.config-1048594",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter-1048594",
+                      "connection": "spec.store.connection.connection-1048594"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter-1048594",
+                      "connection": "spec.store.schema_connection.connection-1048594"
+                    }
                   }
                 }
               }
@@ -3817,7 +3933,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -3961,7 +4085,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config-1048595"
+                    "config": "spec.store.config-1048595",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter-1048595",
+                      "connection": "spec.store.connection.connection-1048595"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter-1048595",
+                      "connection": "spec.store.schema_connection.connection-1048595"
+                    }
                   }
                 }
               }
@@ -4105,7 +4237,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -4352,7 +4492,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -4474,6 +4622,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
         },
         {
           "kind": "type",
@@ -4797,7 +4949,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -4872,6 +5032,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
         },
         {
           "kind": "type",
@@ -5184,7 +5348,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -5807,7 +5979,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -6154,7 +6334,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -6607,7 +6795,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -7251,7 +7447,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -7907,7 +8111,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -8404,7 +8616,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -8822,7 +9042,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -9603,7 +9831,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -10535,7 +10771,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -10995,7 +11239,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -11990,7 +12242,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -12399,7 +12659,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -12606,7 +12874,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -12963,7 +13239,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -13234,7 +13518,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -13562,7 +13854,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -13843,7 +14143,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -14356,7 +14664,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -14786,7 +15102,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -15188,7 +15512,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -15663,7 +15995,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -16131,7 +16471,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -16341,7 +16689,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -16480,7 +16836,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -16611,7 +16975,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -16711,6 +17083,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
         },
         {
           "kind": "type",
@@ -17049,7 +17425,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -17188,7 +17572,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -17301,7 +17693,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config-1"
+                    "config": "spec.store.config-1",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter-1",
+                      "connection": "spec.store.connection.connection-1"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter-1",
+                      "connection": "spec.store.schema_connection.connection-1"
+                    }
                   }
                 }
               }
@@ -17401,6 +17801,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
         },
         {
           "kind": "type",
@@ -17728,7 +18132,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config-1"
+                    "config": "spec.store.config-1",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter-1",
+                      "connection": "spec.store.connection.connection-1"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter-1",
+                      "connection": "spec.store.schema_connection.connection-1"
+                    }
                   }
                 }
               }
@@ -17841,7 +18253,15 @@
                 "store": {
                   "backend": "postgres",
                   "value": {
-                    "config": "spec.store.config"
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
                   }
                 }
               }
@@ -17983,6 +18403,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
         },
         {
           "kind": "type",
