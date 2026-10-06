@@ -25,10 +25,22 @@ pub fn ekr() -> PathBuf {
     bin
 }
 
+/// Writes a `/bin/sh` stand-in at `path` and makes it executable.
+///
+/// A child shell writes the file, never this process: a descriptor open for writing here would be
+/// copied into the child of every spawn another test thread makes meanwhile, and running the file
+/// fails with `Text file busy` until that child execs. Writing to a temporary name and renaming does
+/// not help; the renamed file is the same inode, still open for writing.
 pub fn executable(path: &Path, body: &str) {
-    std::fs::write(path, format!("#!/bin/sh\n{body}")).unwrap();
-    let status = Command::new("chmod").arg("755").arg(path).status().unwrap();
-    assert!(status.success());
+    let status = Command::new("/bin/sh")
+        .arg("-c")
+        .arg(r#"printf '%s' "$2" > "$1" && chmod 755 "$1""#)
+        .arg("sh")
+        .arg(path)
+        .arg(format!("#!/bin/sh\n{body}"))
+        .status()
+        .unwrap();
+    assert!(status.success(), "cannot write {}", path.display());
 }
 
 /// The CLI's envelope around an adapter answer: `result.result` is the answer as a JSON string.
