@@ -1,8 +1,7 @@
 version: '3'
 
 vars:
-  TARGET: '{{env "CARGO_TARGET_DIR" | default (printf "%s/.cache/b10x-target/cortex" (env "HOME"))}}'
-  CARGO: 'env CARGO_TARGET_DIR="{{.TARGET}}" CARGO_BUILD_JOBS=4 RUST_TEST_THREADS=4 nice -n 19 cargo'
+  CARGO: 'env CARGO_BUILD_JOBS=4 RUST_TEST_THREADS=4 nice -n 19 cargo'
   ESS: ess
 
 tasks:
