@@ -238,7 +238,16 @@ pub fn seed(layout: &Layout, tools: &Tools) -> Result<Report, Failure> {
     .map_err(|e| match e {
         FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
     })?;
-    process(layout, tools, &spec, "seed", fetched, &policy, None, None)
+    process(
+        layout,
+        tools,
+        &spec,
+        crate::instance::SEED,
+        fetched,
+        &policy,
+        None,
+        None,
+    )
 }
 
 /// `window`, when given, is the window the source's fetch asked about; its end is recorded in the

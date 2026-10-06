@@ -1,7 +1,8 @@
 //! The spec forms of the 1.0 types, held to the published schema
 //! (`website/static/schemas/instance-spec.schema.json`): every `store` form it accepts parses,
 //! every form it refuses is refused and the refusal names `store`, a gate bound that is no decimal
-//! is refused, and both SQLite forms freeze, update into each other and run.
+//! is refused, both SQLite forms freeze, update into each other and run, and a source named after
+//! a state file cortex keeps is refused.
 //!
 //! The cases were written by the wave's adversary (pass 2) and moved here.
 
@@ -235,4 +236,85 @@ fn both_sqlite_forms_freeze_update_into_each_other_and_run() {
         serde_json::from_slice(&std::fs::read(w.home.join("registry.json")).unwrap()).unwrap();
     assert_eq!(registry["instances"][0]["name"], "rt", "{registry}");
     assert_eq!(registry["instances"][0]["state"], "Active", "{registry}");
+}
+
+/// `spec_text` with its one source named `source` instead of `news`.
+fn spec_with_source(name: &str, source: &str) -> String {
+    spec_text(name, "{backend: sqlite}").replace("- name: news", &format!("- name: {source}"))
+}
+
+#[test]
+fn a_source_named_after_a_state_file_cortex_keeps_is_refused_naming_it() {
+    // A source's seen documents are `state/<source>.json`; cortex keeps the known entity names in
+    // `state/entities.json` and the seed's seen documents in `state/seed.json`. A source of either
+    // name would share that file (issue #27), so a spec given to create, update or adopt is refused.
+    for reserved in ["entities", "seed"] {
+        let w = World::new();
+        let given = write(&w, "r.yaml", &spec_with_source("r", reserved));
+        let given = given.to_str().unwrap();
+        let named =
+            |stderr: &str| stderr.contains(&format!("{reserved:?}")) && stderr.contains("reserved");
+
+        let (code, _, stderr) = cortex_raw(&w, &["create", "--spec", given, "--no-units"]);
+        assert_eq!(code, Some(2), "create with a source {reserved:?}: {stderr}");
+        assert!(
+            named(&stderr),
+            "create does not name {reserved:?} as reserved: {stderr}"
+        );
+        assert!(
+            !w.home.join("instances/r").exists(),
+            "create left an instance"
+        );
+
+        let (code, _, stderr) = cortex_raw(
+            &w,
+            &[
+                "adopt",
+                "--spec",
+                given,
+                "--store",
+                "absent.sqlite",
+                "--no-units",
+            ],
+        );
+        assert_eq!(code, Some(2), "adopt with a source {reserved:?}: {stderr}");
+        assert!(
+            named(&stderr),
+            "adopt does not name {reserved:?} as reserved: {stderr}"
+        );
+
+        let plain = write(&w, "plain.yaml", &spec_with_source("r", "news"));
+        let (code, created) =
+            w.cortex(&["create", "--spec", plain.to_str().unwrap(), "--no-units"]);
+        assert_eq!(
+            (code, created["outcome"].as_str()),
+            (0, Some("created")),
+            "{created}"
+        );
+        let frozen = std::fs::read_to_string(w.home.join("instances/r/instance.yaml")).unwrap();
+        let (code, _, stderr) = cortex_raw(&w, &["update", "r", "--spec", given, "--no-units"]);
+        assert_eq!(code, Some(2), "update to a source {reserved:?}: {stderr}");
+        assert!(
+            named(&stderr),
+            "update does not name {reserved:?} as reserved: {stderr}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(w.home.join("instances/r/instance.yaml")).unwrap(),
+            frozen,
+            "a refused update changed the frozen spec"
+        );
+    }
+}
+
+#[test]
+fn a_frozen_spec_with_a_reserved_source_name_still_parses() {
+    // The refusal is made where an operator gives a spec file, not where an instance reads its
+    // frozen copy: an instance created before the rule keeps loading, so every other source of it
+    // keeps running and `update` to a renamed source is possible.
+    for reserved in ["entities", "seed"] {
+        assert!(
+            spec::parse(&spec_with_source("r", reserved)).is_ok(),
+            "{reserved}"
+        );
+    }
 }
