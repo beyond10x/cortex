@@ -155,8 +155,10 @@ types:
       - {name: time, type: Optional<String>}
       - {name: author, type: Optional<String>}
       - {name: text, type: List<String>}
+      - {name: fallback_text, type: Optional<List<String>>}
       - {name: thread, type: Optional<String>}
       - {name: filters, type: List<cortex.instance.RecordFilter>}
+      - {name: lookup, type: Optional<String>}
 
   - name: cortex.instance.FilesSource
     kind: struct

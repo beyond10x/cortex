@@ -215,8 +215,10 @@ Files that are not UTF-8 text, or are empty, are skipped. A document's key is th
 | `time` | optional dotted path to the record's publication time |
 | `author` | optional dotted path to the record's author |
 | `text` | templates whose `{a.b}` placeholders are filled from the record; the non-empty results, joined, are the record's text |
+| `fallback_text` | optional templates tried in order only when every `text` template renders empty; the first non-empty result is the record's text |
 | `thread` | optional dotted path to the field that groups records into threads |
 | `filters` | a list, possibly empty, of `field` (a dotted path), `values` and `include`. With `include: true` only records whose field equals one of the values are read; with `include: false` those records are left out. A record is read only when it passes every filter |
+| `lookup` | optional path of a JSON file holding one object of strings, an id to a name; read against the spec file's directory as `paths` are. It maps the author and every `<@id>` in the text (below) |
 
 A record of a `MarkdownSections` file is one level-two section, with the fields `heading` (the
 heading's text) and `body` (the lines up to the next level-two heading, trimmed), so
@@ -241,10 +243,21 @@ result and in `cortex.log`, while the rest of the file is still read:
 
 An empty file is skipped and named nowhere, as without `records`.
 
-A record without an id, whose text is empty, or that a filter leaves out, is skipped. A document's
-key is `<file path>#<id>`, and its evidence is cited as `file:<file path>#<id>`; a key read twice
-in one run counts once. With `author`, the text reads `<author>: <text>`. Records are read in file
-order, and files by name, one entry of `paths` after the other.
+A record without an id, whose text and every `fallback_text` are empty, or that a filter leaves
+out, is skipped. A document's key is `<file path>#<id>`, and its evidence is cited as
+`file:<file path>#<id>`; a key read twice in one run counts once. With `author`, the text reads
+`<author>: <text>`. Records are read in file order, and files by name, one entry of `paths` after
+the other.
+
+**Lookup.** With `lookup`, the author's value and every `<@id>` in the text are replaced by the
+name the file gives that id: with the file `{"U1": "Ana", "U2": "Ben"}`, a record by `U1` with the
+text `hi <@U2>` reads `Ana: hi @Ben`. A labelled mention `<@U2|ben>` is looked up by its id and
+becomes `@Ben` too. An id the file does not hold, or maps to a blank name, is kept as written
+(`U9`, `<@U9>`). A leading byte-order mark in the file is ignored, as in record files. The file
+is read once per run, before any record; when it is missing, cannot be read or
+is not a JSON object of strings, the source's run fails with `fetch-failed` and a reason naming
+the file. Names enter the text before the `redaction` policy is applied, so the policy treats
+them as any other name in the text.
 
 **Threads.** With `thread`, a record that has the field carries the earlier records of that thread
 in the run after its own text, as paragraphs marked `[context]`: the nearest first (the record it

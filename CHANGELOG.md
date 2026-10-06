@@ -7,6 +7,8 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Added
 
+- A `records` spec can map its author field and inline `<@id>` mentions through a JSON lookup file
+  (`lookup`), and can name `fallback_text` templates used when `text` renders empty.
 - `<home>/bin/cortex`, the copy every timer of a home runs, has its version recorded beside it.
   `create`, `update` and `adopt` replace it only with the same or a newer cortex and say so in
   their `binary` detail; an older cortex keeps it, naming both versions, unless `--replace-binary`
