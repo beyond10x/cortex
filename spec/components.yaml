@@ -18,6 +18,7 @@ components:
         - cortex.instance.EnableSource
         - cortex.instance.RestoreSnapshot
         - cortex.instance.MeasureQuality
+        - cortex.instance.ProposeSchemaChanges
     publishes:
       events:
         - cortex.instance.InstanceCreated
@@ -31,6 +32,7 @@ components:
         - cortex.instance.SourceEnabled
         - cortex.instance.SnapshotRestored
         - cortex.instance.QualityMeasured
+        - cortex.instance.SchemaChangesProposed
     reached_by: command_line
     cli:
       binary: cortex
@@ -42,6 +44,7 @@ components:
         - cortex.instance.RunSource
         - cortex.instance.RestoreSnapshot
         - cortex.instance.MeasureQuality
+        - cortex.instance.ProposeSchemaChanges
       groups:
         - name: source
           summary: One data source of an instance

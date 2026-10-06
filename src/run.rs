@@ -972,7 +972,10 @@ fn end_dropped(
             match op {
                 crate::ekr::Operation::Supersede { .. } => report.superseded += 1,
                 crate::ekr::Operation::Retract { .. } => report.retracted += 1,
-                crate::ekr::Operation::DeleteEdge(_) => {}
+                crate::ekr::Operation::DeleteEdge(_)
+                | crate::ekr::Operation::DefineNodeType { .. }
+                | crate::ekr::Operation::DefineEdgeType { .. }
+                | crate::ekr::Operation::ModifyProperty { .. } => {}
             }
         }
     }

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.NewNodeType",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17",
+    "contract_digest": "slice-sha256/2:aee77765bc393ccb2fdf8867cf259eba6fa763a113fa28fafd05dd6f8886cd8b",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.NewNodeType": {
+      "title": "NewNodeType",
+      "x-ess-name": "cortex.instance.NewNodeType",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.SchemaProperty"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "properties"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.SchemaCardinality": {
+      "title": "SchemaCardinality",
+      "x-ess-name": "cortex.instance.SchemaCardinality",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "One",
+        "Many"
+      ]
+    },
+    "cortex.instance.SchemaProperty": {
+      "title": "SchemaProperty",
+      "x-ess-name": "cortex.instance.SchemaProperty",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value_kind": {
+          "$ref": "#/$defs/cortex.instance.SchemaValueKind"
+        },
+        "cardinality": {
+          "$ref": "#/$defs/cortex.instance.SchemaCardinality"
+        }
+      },
+      "required": [
+        "name",
+        "value_kind",
+        "cardinality"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.SchemaValueKind": {
+      "title": "SchemaValueKind",
+      "x-ess-name": "cortex.instance.SchemaValueKind",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "String",
+        "Integer",
+        "Decimal",
+        "Boolean",
+        "Timestamp"
+      ]
+    }
+  }
+}

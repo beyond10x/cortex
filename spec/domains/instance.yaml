@@ -359,6 +359,134 @@ types:
       - {name: verdict, type: cortex.instance.QualityVerdictKind}
       - {name: reason, type: String}
 
+  # The value kinds a schema proposal may give a property: those an extraction document writes as
+  # a scalar. `NodeRef`, `Float` and `Duration` are not proposed.
+  - name: cortex.instance.SchemaValueKind
+    kind: enum
+    variants: [String, Integer, Decimal, Boolean, Timestamp]
+
+  - name: cortex.instance.SchemaCardinality
+    kind: enum
+    variants: [One, Many]
+
+  # A property as a schema proposal declares it. cortex declares every property optional, so a
+  # change never makes a node the store holds invalid.
+  - name: cortex.instance.SchemaProperty
+    kind: struct
+    fields:
+      - {name: name, type: String}
+      - {name: value_kind, type: cortex.instance.SchemaValueKind}
+      - {name: cardinality, type: cortex.instance.SchemaCardinality}
+
+  # Types are named, never given by id: cortex looks each name up in the store's ontology.
+  - name: cortex.instance.NewNodeType
+    kind: struct
+    fields:
+      - {name: name, type: String}
+      - {name: properties, type: List<cortex.instance.SchemaProperty>}
+
+  - name: cortex.instance.NewEdgeType
+    kind: struct
+    fields:
+      - {name: name, type: String}
+      - {name: source_types, type: List<String>}
+      - {name: target_types, type: List<String>}
+
+  # `owner` names a node type or an edge type.
+  - name: cortex.instance.PropertyChange
+    kind: struct
+    fields:
+      - {name: owner, type: String}
+      - {name: property, type: cortex.instance.SchemaProperty}
+
+  - name: cortex.instance.TypeRemoval
+    kind: struct
+    fields:
+      - {name: name, type: String}
+
+  - name: cortex.instance.PropertyRemoval
+    kind: struct
+    fields:
+      - {name: owner, type: String}
+      - {name: property, type: String}
+
+  - name: cortex.instance.TypeMerge
+    kind: struct
+    fields:
+      - {name: types, type: List<String>}
+      - {name: into, type: String}
+
+  - name: cortex.instance.TypeSplit
+    kind: struct
+    fields:
+      - {name: name, type: String}
+      - {name: into, type: List<String>}
+
+  # The closed list of ontology changes a schema proposal names. EKR applies the first four as
+  # schema transactions (`DefineNodeType`, `DefineEdgeType`, `ModifyProperty`); it removes, merges
+  # and splits nothing, so the other five are recorded for review only.
+  - name: cortex.instance.SchemaChange
+    kind: union
+    tag: kind
+    variants:
+      add_node_type: cortex.instance.NewNodeType
+      add_edge_type: cortex.instance.NewEdgeType
+      add_property: cortex.instance.PropertyChange
+      redeclare_property: cortex.instance.PropertyChange
+      remove_node_type: cortex.instance.TypeRemoval
+      remove_edge_type: cortex.instance.TypeRemoval
+      remove_property: cortex.instance.PropertyRemoval
+      merge_types: cortex.instance.TypeMerge
+      split_type: cortex.instance.TypeSplit
+
+  # One proposal of the model's answer: the change, why, the ids of the facts of its batch it rests
+  # on, and the labels (`E1`, `E2`, …) of the batch's evidence it cites.
+  - name: cortex.instance.ProposedSchemaChange
+    kind: struct
+    fields:
+      - {name: change, type: cortex.instance.SchemaChange}
+      - {name: reason, type: String}
+      - {name: facts, type: List<String>}
+      - {name: evidence, type: List<String>}
+
+  # The model's whole answer for one batch; its JSON Schema is the one the answer is held to.
+  - name: cortex.instance.SchemaProposals
+    kind: struct
+    fields:
+      - {name: proposals, type: List<cortex.instance.ProposedSchemaChange>}
+
+  # What became of a proposal: `applied` committed as a schema transaction; `refused` by EKR's
+  # validation; `recorded-only` for a change EKR does not apply (remove, merge, split); `invalid`
+  # when cortex cannot write it against the store's ontology: a type or property it names is not
+  # there; a type it adds already is, in any case; a property it adds is one the type, a type it
+  # inherits from or a type inheriting from it already declares, in any case; a property it
+  # redeclares is inherited, not declared by the type it names; or a name it gives holds a
+  # placeholder of the redaction policy (only `reason` is restored). `dry-run` for a change EKR
+  # would be asked to apply.
+  - name: cortex.instance.SchemaProposalStatus
+    kind: enum
+    variants: [applied, refused, recorded-only, invalid, dry-run]
+
+  # One line of `schema/<stamp>/proposals.jsonl`, `format` `cortex.schema-proposal/1`. `facts` are
+  # EKR assertion ids; `evidence` the EKR evidence ids the proposal cites and its facts cite, each
+  # once. A schema transaction cites no evidence in EKR (its evidence set is held to its
+  # assertions, `evidence-set-mismatch`), so this line is where an applied change's evidence is.
+  # `codes` are EKR's issue codes when it refused the change; `note` says why it was refused,
+  # invalid or recorded only. `revision` and `schema_version` are what an applied change committed.
+  - name: cortex.instance.SchemaProposal
+    kind: struct
+    fields:
+      - {name: format, type: String}
+      - {name: change, type: cortex.instance.SchemaChange}
+      - {name: reason, type: String}
+      - {name: facts, type: List<String>}
+      - {name: evidence, type: List<String>}
+      - {name: status, type: cortex.instance.SchemaProposalStatus}
+      - {name: codes, type: List<String>}
+      - {name: note, type: Optional<String>}
+      - {name: revision, type: Optional<Integer>}
+      - {name: schema_version, type: Optional<String>}
+
 entities:
   - name: cortex.instance.Instance
     identity:
@@ -446,6 +574,7 @@ actors:
       - cortex.instance.EnableSource
       - cortex.instance.RestoreSnapshot
       - cortex.instance.MeasureQuality
+      - cortex.instance.ProposeSchemaChanges
     naming:
       display: Operator
 
@@ -583,6 +712,14 @@ errors:
       A judge's model call failed, timed out, answered no valid verdicts or found the budget spent,
       or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the
       verdicts of the batches judged before; no `fact-quality.json` was written.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.ProposeFailed
+    summary: >-
+      A model call for schema proposals failed, timed out, answered no valid proposals or found the
+      budget spent, the redaction policy refused what the model would be shown, or EKR could not
+      read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
     fields:
       - {name: reason, type: String}
 
@@ -1146,6 +1283,98 @@ commands:
             name: input.name
         summary: Nothing was measured.
 
+  - name: cortex.instance.ProposeSchemaChanges
+    naming:
+      wire: schema
+      display: Propose schema changes
+    # Under the home's lock, `ekr sample` draws `sample` of the store's active facts at its head,
+    # each with the evidence it cites, and `ekr ontology` reads the schema in force; then, without
+    # the lock, each batch of 20 goes to the instance's model with no tools and its own system
+    # prompt, shown as the redaction policy shows a run's documents, beside the ontology's type and
+    # property names. The model answers `cortex.instance.SchemaProposals`. A proposal citing a fact
+    # or an evidence label its batch does not hold, or citing no fact, is dropped. Of the answer,
+    # only each proposal's `reason` has the batch's placeholders restored. A redeclaration changes
+    # the value kind and the cardinality it names; whether the property is required and its
+    # constraints stay as the store declares them. Without
+    # `dry_run`, cortex takes the lock again and asks EKR to apply each proposal it can write as
+    # one schema transaction of its own, in order, against the ontology at the head. Every proposal
+    # not dropped is a `cortex.instance.SchemaProposal` line of `schema/<UTC stamp>/proposals.jsonl`
+    # under the instance directory. Spends at most the spec's `model.budget_usd`.
+    input:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: sample, type: Integer}
+      - {name: dry_run, type: Boolean}
+    outcomes:
+      - name: sample-failed
+        external: EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read
+        error: cortex.instance.SampleFailed
+        payload:
+          cortex.instance.SampleFailed:
+            reason: {generated: true}
+        summary: No model was asked and nothing was written.
+
+      - name: propose-failed
+        external: A model call fails, times out, answers no valid proposals or finds the budget spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology
+        error: cortex.instance.ProposeFailed
+        payload:
+          cortex.instance.ProposeFailed:
+            reason: {generated: true}
+        summary: Nothing was applied and no `proposals.jsonl` was written.
+
+      # UNMAPPED: the cost of the model calls (null as soon as one answer carried no cost) is not on
+      # SchemaChangesProposed, as for QualityMeasured: ESS 0.52.0 synthesis answers an `Optional`
+      # `{generated: true}` payload field with a constant `None`. The command line prints it beside
+      # the event's fields, and tests/schema.rs holds it. https://github.com/beyond10x/ess/issues/467
+      - name: proposed
+        when: dry_run
+        updates: cortex.instance.Instance
+        instance: name
+        emits:
+          - cortex.instance.SchemaChangesProposed
+        payload:
+          cortex.instance.SchemaChangesProposed:
+            name: input.name
+            stamp: {generated: true}
+            revision: {generated: true}
+            proposed: {generated: true}
+            applied: {generated: true}
+            refused: {generated: true}
+            recorded_only: {generated: true}
+            invalid: {generated: true}
+            dropped: {generated: true}
+        summary: >-
+          A dry run: every proposal not dropped is recorded and none is applied; `applied` and
+          `refused` are 0, and a change EKR would be asked to apply is `dry-run`.
+
+      - name: applied
+        updates: cortex.instance.Instance
+        instance: name
+        emits:
+          - cortex.instance.SchemaChangesProposed
+        payload:
+          cortex.instance.SchemaChangesProposed:
+            name: input.name
+            stamp: {generated: true}
+            revision: {generated: true}
+            proposed: {generated: true}
+            applied: {generated: true}
+            refused: {generated: true}
+            recorded_only: {generated: true}
+            invalid: {generated: true}
+            dropped: {generated: true}
+        summary: >-
+          Every proposal EKR accepted is committed, each as its own schema transaction and schema
+          version; `applied` counts them, 0 when it accepted none. `revision` is the head the
+          sample was drawn at, so `ekr ontology --at <revision>` still answers the schema before.
+
+      - name: no-such-instance
+        unknown_instance: true
+        error: cortex.instance.InstanceNotFound
+        payload:
+          cortex.instance.InstanceNotFound:
+            name: input.name
+        summary: Nothing was proposed.
+
 events:
   - name: cortex.instance.InstanceCreated
     fields:
@@ -1208,6 +1437,21 @@ events:
       - {name: unclear, type: Integer}
       - {name: lower, type: Decimal}
       - {name: upper, type: Decimal}
+
+  # `proposed` counts the lines of `proposals.jsonl`; `applied`, `refused`, `recorded_only` and
+  # `invalid` count them by status, and the rest are `dry-run`. `dropped` counts the proposals
+  # dropped for their citations, which are not written.
+  - name: cortex.instance.SchemaChangesProposed
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: stamp, type: String}
+      - {name: revision, type: Integer}
+      - {name: proposed, type: Integer}
+      - {name: applied, type: Integer}
+      - {name: refused, type: Integer}
+      - {name: recorded_only, type: Integer}
+      - {name: invalid, type: Integer}
+      - {name: dropped, type: Integer}
 
 views:
   - name: cortex.instance.Instances

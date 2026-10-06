@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.SchemaProposalStatus",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17",
+    "contract_digest": "slice-sha256/2:c9320d2f5f11e508c6a5bbefd65284512b64a4aff6407414ad0cfd1bc0742b0a",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.SchemaProposalStatus": {
+      "title": "SchemaProposalStatus",
+      "x-ess-name": "cortex.instance.SchemaProposalStatus",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "applied",
+        "refused",
+        "recorded-only",
+        "invalid",
+        "dry-run"
+      ]
+    }
+  }
+}

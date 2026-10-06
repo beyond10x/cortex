@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e
-contract digest 4ccfd55371704938bf0eee933501df17665487def4b8ad6c2faac061972da933
+model digest 80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17
+contract digest 8d562b038cb06e2577e6a148e341c1535923c082eabdc3385792c367302f8fcc
 do not edit: regenerate with `ess generate`
 -->
 
@@ -23,58 +23,63 @@ flowchart TB
         cmd2["cortex.instance.CreateInstance"]
         cmd3["cortex.instance.EnableSource"]
         cmd4["cortex.instance.MeasureQuality"]
-        cmd5["cortex.instance.RecordFailure"]
-        cmd6["cortex.instance.RemoveInstance"]
-        cmd7["cortex.instance.RestoreSnapshot"]
-        cmd8["cortex.instance.RunSource"]
-        cmd9["cortex.instance.UpdateInstance"]
+        cmd5["cortex.instance.ProposeSchemaChanges"]
+        cmd6["cortex.instance.RecordFailure"]
+        cmd7["cortex.instance.RemoveInstance"]
+        cmd8["cortex.instance.RestoreSnapshot"]
+        cmd9["cortex.instance.RunSource"]
+        cmd10["cortex.instance.UpdateInstance"]
         evt0["cortex.instance.InstanceAdopted"]
         evt1["cortex.instance.InstanceCreated"]
         evt2["cortex.instance.InstanceRemoved"]
         evt3["cortex.instance.InstanceUpdated"]
         evt4["cortex.instance.QualityMeasured"]
         evt5["cortex.instance.RunFailed"]
-        evt6["cortex.instance.SnapshotRestored"]
-        evt7["cortex.instance.SourceAdded"]
-        evt8["cortex.instance.SourceDisabled"]
-        evt9["cortex.instance.SourceEnabled"]
-        evt10["cortex.instance.SourceRan"]
+        evt6["cortex.instance.SchemaChangesProposed"]
+        evt7["cortex.instance.SnapshotRestored"]
+        evt8["cortex.instance.SourceAdded"]
+        evt9["cortex.instance.SourceDisabled"]
+        evt10["cortex.instance.SourceEnabled"]
+        evt11["cortex.instance.SourceRan"]
     end
     who0 -->|"may invoke"| cmd0
     who0 -->|"may invoke"| cmd1
     who0 -->|"may invoke"| cmd2
     who0 -->|"may invoke"| cmd3
     who0 -->|"may invoke"| cmd4
-    who0 -->|"may invoke"| cmd6
+    who0 -->|"may invoke"| cmd5
     who0 -->|"may invoke"| cmd7
-    who0 -->|"may invoke"| cmd9
-    who1 -->|"may invoke"| cmd5
-    who1 -->|"may invoke"| cmd8
-    cmd0 -->|"added"| evt7
+    who0 -->|"may invoke"| cmd8
+    who0 -->|"may invoke"| cmd10
+    who1 -->|"may invoke"| cmd6
+    who1 -->|"may invoke"| cmd9
+    cmd0 -->|"added"| evt8
     cmd1 -->|"adopted"| evt0
     cmd2 -->|"partial"| evt1
     cmd2 -->|"created"| evt1
-    cmd3 -->|"enabled"| evt9
+    cmd3 -->|"enabled"| evt10
     cmd4 -->|"measured"| evt4
-    cmd5 -->|"disabled"| evt8
-    cmd5 -->|"counted"| evt5
-    cmd6 -->|"removed"| evt2
-    cmd7 -->|"restored"| evt6
-    cmd8 -->|"ran"| evt10
-    cmd9 -->|"updated"| evt3
+    cmd5 -->|"proposed"| evt6
+    cmd5 -->|"applied"| evt6
+    cmd6 -->|"disabled"| evt9
+    cmd6 -->|"counted"| evt5
+    cmd7 -->|"removed"| evt2
+    cmd8 -->|"restored"| evt7
+    cmd9 -->|"ran"| evt11
+    cmd10 -->|"updated"| evt3
 ```
 
 A command is accepted by the component that owns its context, emits the events one of its outcomes declares, and a dashed edge is a binding carrying an event into the next command. Design §9 begins one step earlier, at the actor who invokes the first command, and so does this graph: a solid edge out of an actor is a grant, and an actor drawn with no edge at all may invoke nothing — which is something the model says, not an arrow somebody forgot.
 
 ## Bounded contexts
 
-- **[Instances](domains/cortex-instance.md)** (`cortex.instance`) — Instances of a knowledge brain and the data sources that feed them. An instance owns one EKR store, created from the instance spec's seed. A source fetches documents on its own schedule, keeps those that are new or changed, has a model extract them into an EKR extraction document and applies it to the instance's store. 50 types, three entities, two views, 10 commands, 11 events, 21 errors and two actors.
+- **[Instances](domains/cortex-instance.md)** (`cortex.instance`) — Instances of a knowledge brain and the data sources that feed them. An instance owns one EKR store, created from the instance spec's seed. A source fetches documents on its own schedule, keeps those that are new or changed, has a model extract them into an EKR extraction document and applies it to the instance's store. 65 types, three entities, two views, 11 commands, 12 events, 22 errors and two actors.
 
 ## Components
 
 A component is a unit of ownership, not a deployment. How many of each runs, and what each needs, is [the topology](topology.md).
 
-**`cortex`** — The operator's command line: create, update, run and remove instances, and switch a source off and on. A systemd user timer per source calls the same binary. It owns [`cortex.instance`](domains/cortex-instance.md). It accepts `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.RecordFailure`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.RunSource` and `cortex.instance.UpdateInstance`. It publishes `cortex.instance.InstanceAdopted`, `cortex.instance.InstanceCreated`, `cortex.instance.InstanceRemoved`, `cortex.instance.InstanceUpdated`, `cortex.instance.QualityMeasured`, `cortex.instance.RunFailed`, `cortex.instance.SnapshotRestored`, `cortex.instance.SourceAdded`, `cortex.instance.SourceDisabled`, `cortex.instance.SourceEnabled` and `cortex.instance.SourceRan`.
+**`cortex`** — The operator's command line: create, update, run and remove instances, and switch a source off and on. A systemd user timer per source calls the same binary. It owns [`cortex.instance`](domains/cortex-instance.md). It accepts `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.ProposeSchemaChanges`, `cortex.instance.RecordFailure`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.RunSource` and `cortex.instance.UpdateInstance`. It publishes `cortex.instance.InstanceAdopted`, `cortex.instance.InstanceCreated`, `cortex.instance.InstanceRemoved`, `cortex.instance.InstanceUpdated`, `cortex.instance.QualityMeasured`, `cortex.instance.RunFailed`, `cortex.instance.SchemaChangesProposed`, `cortex.instance.SnapshotRestored`, `cortex.instance.SourceAdded`, `cortex.instance.SourceDisabled`, `cortex.instance.SourceEnabled` and `cortex.instance.SourceRan`.
 
 ## The other pages
 
@@ -88,4 +93,4 @@ A component is a unit of ownership, not a deployment. How many of each runs, and
 
 ---
 
-Generated from cortex v1 · model digest `752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e` · contract digest `4ccfd55371704938bf0eee933501df17665487def4b8ad6c2faac061972da933`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17` · contract digest `8d562b038cb06e2577e6a148e341c1535923c082eabdc3385792c367302f8fcc`. Do not edit this file; change the specification and regenerate it with `ess generate`.

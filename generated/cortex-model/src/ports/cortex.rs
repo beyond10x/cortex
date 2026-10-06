@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e
-// contract digest 4ccfd55371704938bf0eee933501df17665487def4b8ad6c2faac061972da933
+// model digest 80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17
+// contract digest 8d562b038cb06e2577e6a148e341c1535923c082eabdc3385792c367302f8fcc
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -30,6 +30,8 @@ pub enum PublishedEvent {
     QualityMeasured(crate::instance::QualityMeasured),
     /// `cortex.instance.RunFailed`.
     RunFailed(crate::instance::RunFailed),
+    /// `cortex.instance.SchemaChangesProposed`.
+    SchemaChangesProposed(crate::instance::SchemaChangesProposed),
     /// `cortex.instance.SnapshotRestored`.
     SnapshotRestored(crate::instance::SnapshotRestored),
     /// `cortex.instance.SourceAdded`.
@@ -72,7 +74,7 @@ impl<B> Cortex<B> {
 
 impl<B> Cortex<B>
 where
-    B: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    B: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
 {
     /// Accepts `cortex.instance.AddSource`: runs the behaviour obligation, then publishes the declared events
     /// the outcome carries.
@@ -161,6 +163,27 @@ where
                 self.outbox.push(PublishedEvent::QualityMeasured(quality_measured.clone()));
             }
             crate::instance::MeasureQualityOutcome::NoSuchInstance { .. } => {}
+        }
+        Ok(outcome)
+    }
+
+    /// Accepts `cortex.instance.ProposeSchemaChanges`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn propose_schema_changes(&mut self, input: crate::instance::ProposeSchemaChanges) -> Result<crate::instance::ProposeSchemaChangesOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.propose_schema_changes(input)?;
+        match &outcome {
+            crate::instance::ProposeSchemaChangesOutcome::SampleFailed { .. } => {}
+            crate::instance::ProposeSchemaChangesOutcome::ProposeFailed { .. } => {}
+            crate::instance::ProposeSchemaChangesOutcome::Proposed { schema_changes_proposed, .. } => {
+                self.outbox.push(PublishedEvent::SchemaChangesProposed(schema_changes_proposed.clone()));
+            }
+            crate::instance::ProposeSchemaChangesOutcome::Applied { schema_changes_proposed, .. } => {
+                self.outbox.push(PublishedEvent::SchemaChangesProposed(schema_changes_proposed.clone()));
+            }
+            crate::instance::ProposeSchemaChangesOutcome::NoSuchInstance { .. } => {}
         }
         Ok(outcome)
     }

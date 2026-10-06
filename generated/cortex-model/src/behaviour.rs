@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e
-// contract digest 4ccfd55371704938bf0eee933501df17665487def4b8ad6c2faac061972da933
+// model digest 80093450f0d7a03dc57722348c9507b053cfa770ba8cc2c76d862d998e927a17
+// contract digest 8d562b038cb06e2577e6a148e341c1535923c082eabdc3385792c367302f8fcc
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -270,6 +270,42 @@ where
         let next = held;
         InstanceStorage::put(&mut self.ports, next);
         return Ok(crate::instance::MeasureQualityOutcome::Measured { quality_measured: crate::instance::QualityMeasured { name: input.name.clone(), stamp: self.ports.generate_string(), revision: self.ports.generate_integer(), seed: self.ports.generate_integer(), judged: self.ports.generate_integer(), passed: self.ports.generate_integer(), unclear: self.ports.generate_integer(), lower: self.ports.generate_decimal(), upper: self.ports.generate_decimal() } });
+    }
+}
+
+/// `cortex.instance.ProposeSchemaChanges`, generated: every outcome is one the specification fully determines.
+impl<P> crate::instance::obligations::ProposeSchemaChangesBehavior for Generated<P>
+where
+    P: Context + InstanceStorage,
+{
+    fn propose_schema_changes(&mut self, input: crate::instance::ProposeSchemaChanges) -> Result<crate::instance::ProposeSchemaChangesOutcome, UnmetObligation> {
+        let _ = &input;
+        // `sample-failed`: an external branch, where the context takes it.
+        if self.ports.external("cortex.instance.ProposeSchemaChanges", "sample-failed") {
+            return Ok(crate::instance::ProposeSchemaChangesOutcome::SampleFailed { error: crate::instance::SampleFailed { reason: self.ports.generate_string() } });
+        }
+        // `propose-failed`: an external branch, where the context takes it.
+        if self.ports.external("cortex.instance.ProposeSchemaChanges", "propose-failed") {
+            return Ok(crate::instance::ProposeSchemaChangesOutcome::ProposeFailed { error: crate::instance::ProposeFailed { reason: self.ports.generate_string() } });
+        }
+        // `proposed`: an accepting branch, in declaration order.
+        if decided(Some(&input.dry_run).map(|value| *value), "cortex.instance.ProposeSchemaChanges")? {
+            let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
+                return Ok(crate::instance::ProposeSchemaChangesOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+            };
+            let _ = &held;
+            let next = held;
+            InstanceStorage::put(&mut self.ports, next);
+            return Ok(crate::instance::ProposeSchemaChangesOutcome::Proposed { schema_changes_proposed: crate::instance::SchemaChangesProposed { name: input.name.clone(), stamp: self.ports.generate_string(), revision: self.ports.generate_integer(), proposed: self.ports.generate_integer(), applied: self.ports.generate_integer(), refused: self.ports.generate_integer(), recorded_only: self.ports.generate_integer(), invalid: self.ports.generate_integer(), dropped: self.ports.generate_integer() } });
+        }
+        // `applied`: the default.
+        let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
+            return Ok(crate::instance::ProposeSchemaChangesOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        };
+        let _ = &held;
+        let next = held;
+        InstanceStorage::put(&mut self.ports, next);
+        return Ok(crate::instance::ProposeSchemaChangesOutcome::Applied { schema_changes_proposed: crate::instance::SchemaChangesProposed { name: input.name.clone(), stamp: self.ports.generate_string(), revision: self.ports.generate_integer(), proposed: self.ports.generate_integer(), applied: self.ports.generate_integer(), refused: self.ports.generate_integer(), recorded_only: self.ports.generate_integer(), invalid: self.ports.generate_integer(), dropped: self.ports.generate_integer() } });
     }
 }
 
