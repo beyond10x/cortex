@@ -136,6 +136,32 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
             }
         }
     }
+    // A `connectors` source cites a record as `record:<adapter>:<operation>:<id>`, as a structured
+    // source does, so a structured source that ends what it no longer lists would claim the
+    // values the model extracted from that operation's records.
+    for source in &spec.sources {
+        let m::SourceSettings::Structured(st) = &source.settings else {
+            continue;
+        };
+        let m::StructuredInput::Connectors(c) = &st.input else {
+            continue;
+        };
+        if st.dropped != Some(m::DropPolicy::Supersede) {
+            continue;
+        }
+        let shared = spec.sources.iter().find(|other| {
+            matches!(&other.settings, m::SourceSettings::Connectors(o)
+                if o.adapter == c.adapter && o.operation == c.operation)
+        });
+        if let Some(other) = shared {
+            return Err(format!(
+                "sources.{}: dropped: Supersede with {}:{}, which the connectors source {:?} \
+                 also reads: its records are cited alike, so this source would end the values \
+                 extracted from them; use dropped: Keep, or read another operation",
+                source.name, c.adapter, c.operation, other.name
+            ));
+        }
+    }
     let budget: f64 = spec.model.budget_usd.0.parse().map_err(|_| {
         format!(
             "model.budget_usd {:?} is not a number",

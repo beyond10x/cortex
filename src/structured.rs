@@ -51,12 +51,23 @@ fn texts_at(record: &Value, path: &str) -> Vec<String> {
     }
 }
 
-/// `<adapter>:<operation>` of a structured source's input; a `files` input, which does not run
-/// yet, is `files:<glob>`.
+/// `<adapter>:<operation>` of a structured source's input; a `files` input is
+/// `files:<paths>:<glob>`, its `paths` as the spec writes them joined by `,`, so two inputs with
+/// one glob under different roots are two record sets. In a path and the glob, `%`, `:` and `,`
+/// are written `%25`, `%3A` and `%2C`, so the prefix holds exactly two `:` and no prefix of one
+/// input followed by `:` starts another's identity.
 pub fn prefix(st: &m::StructuredSource) -> String {
     match &st.input {
         m::StructuredInput::Connectors(c) => format!("{}:{}", c.adapter, c.operation),
-        m::StructuredInput::Files(f) => format!("files:{}", f.glob),
+        m::StructuredInput::Files(f) => {
+            let escape = |t: &str| {
+                t.replace('%', "%25")
+                    .replace(':', "%3A")
+                    .replace(',', "%2C")
+            };
+            let paths: Vec<String> = f.paths.iter().map(|p| escape(p)).collect();
+            format!("files:{}:{}", paths.join(","), escape(&f.glob))
+        }
     }
 }
 
@@ -169,6 +180,15 @@ struct Indexed {
 /// batch the target is in.
 pub struct Index(Vec<Indexed>);
 
+/// What one record lists now ([`Source::listed`]).
+#[derive(Debug, Default)]
+pub struct Listed {
+    /// `(property, value)`, each value as text.
+    pub properties: BTreeSet<(String, String)>,
+    /// `(relation, aliases of its target)`.
+    pub relations: Vec<(String, Vec<String>)>,
+}
+
 /// One batch's extraction document, and the evidence ids of the records each of its entities
 /// stands for or was named by, in the document's order.
 pub struct Mapped {
@@ -271,29 +291,270 @@ impl<'a> Source<'a> {
 
     /// The run's records, whose keys are their identities ([`Source::prepare`]).
     pub fn index(&self, records: &[Issued]) -> Index {
+        self.index_documents(records.iter().map(|issued| &issued.doc))
+    }
+
+    /// [`Source::index`] of documents.
+    fn index_documents<'d>(&self, docs: impl Iterator<Item = &'d Document>) -> Index {
         Index(
-            records
-                .iter()
-                .filter_map(|issued| {
-                    let record: Value = serde_json::from_str(&issued.doc.text).ok()?;
-                    let aliases = self.aliases(&record, &issued.doc.key)?;
-                    let names = text_at(&record, &self.mapping.name)
-                        .into_iter()
-                        .chain(
-                            self.mapping
-                                .aliases
-                                .iter()
-                                .flat_map(|p| texts_at(&record, p)),
-                        )
-                        .collect();
-                    Some(Indexed {
-                        identity: issued.doc.key.clone(),
-                        names,
-                        aliases,
-                    })
+            docs.filter_map(|doc| {
+                let record: Value = serde_json::from_str(&doc.text).ok()?;
+                let aliases = self.aliases(&record, &doc.key)?;
+                let names = text_at(&record, &self.mapping.name)
+                    .into_iter()
+                    .chain(
+                        self.mapping
+                            .aliases
+                            .iter()
+                            .flat_map(|p| texts_at(&record, p)),
+                    )
+                    .collect();
+                Some(Indexed {
+                    identity: doc.key.clone(),
+                    names,
+                    aliases,
                 })
-                .collect(),
+            })
+            .collect(),
         )
+    }
+
+    /// What each of `listed`, every record the run read, lists now, by its identity: the
+    /// `(property, value)` pairs and the `(relation, target aliases)` its mapping gives, as
+    /// [`Source::document`] would assert them.
+    pub fn listed(&self, listed: &[Document]) -> BTreeMap<String, Listed> {
+        let index = self.index_documents(listed.iter());
+        let mut out = BTreeMap::new();
+        for doc in listed {
+            let Ok(record) = serde_json::from_str::<Value>(&doc.text) else {
+                continue;
+            };
+            let mut l = Listed::default();
+            for p in &self.mapping.properties {
+                if let Some(value) = text_at(&record, &p.path) {
+                    l.properties.insert((p.property.clone(), value));
+                }
+            }
+            for r in &self.mapping.relations {
+                for target in texts_at(&record, &r.target_name) {
+                    let object = self.target(&index, &r.target_type, &target);
+                    let aliases = object["aliases"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect();
+                    l.relations.push((r.relation.clone(), aliases));
+                }
+            }
+            out.insert(doc.key.clone(), l);
+        }
+        out
+    }
+
+    /// The record identity an evidence item of the store names, when it is one of this source's
+    /// records: its `!HumanStatement` identity is `record:<prefix>:<id>` (`evidence::identity`).
+    fn owner(&self, evidence: &Value) -> Option<String> {
+        let identity = evidence["source"]["HumanStatement"]["identity"].as_str()?;
+        let identity = identity.strip_prefix("record:")?;
+        identity
+            .strip_prefix(&self.prefix)?
+            .starts_with(':')
+            .then(|| identity.to_string())
+    }
+
+    /// What ends the values this source asserted earlier and no longer lists (`dropped:
+    /// Supersede`), from `snapshot` (`ekr snapshot`) and `ontology` (`ekr ontology`) of the store
+    /// after the run applied its records.
+    ///
+    /// An assertion is this source's when every evidence item it cites is one of this source's
+    /// records ([`Source::owner`]); it is still listed when one of those records is in `listed`
+    /// with that claim: a property with that value, or a relation of that name to a node one of
+    /// whose names (its aliases and canonical name) is an alias of a target the record names now.
+    /// A record in `unsettled` (read, but its current text not applied: held back, rejected, or
+    /// beyond the run) keeps every value. Every other active assertion of this source is ended:
+    /// a property is superseded by the latest active assertion of the same record, subject and
+    /// property that is still listed and valid from no earlier than it (its replacement, which
+    /// cites the evidence of the run that applied it); one with no such replacement — the record
+    /// is gone, or no longer has the property — and a relation are retracted with `reason`, which
+    /// names the record. An edge from the subject to the object of a retracted relation, of its
+    /// type, is deleted when no active relation assertion that stays joins them.
+    pub fn ended(
+        &self,
+        snapshot: &Value,
+        ontology: &Value,
+        listed: &BTreeMap<String, Listed>,
+        unsettled: &BTreeSet<String>,
+    ) -> Vec<crate::ekr::Operation> {
+        use crate::ekr::Operation;
+        let graph = &snapshot["graph"]["graph"];
+        let mut properties: BTreeMap<&str, &str> = BTreeMap::new();
+        for t in ontology["node_types"].as_array().into_iter().flatten() {
+            for p in t["properties"].as_array().into_iter().flatten() {
+                if let (Some(id), Some(name)) = (p["id"].as_str(), p["name"].as_str()) {
+                    properties.insert(id, name);
+                }
+            }
+        }
+        let edge_types: BTreeMap<&str, &str> = ontology["edge_types"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|t| Some((t["id"].as_str()?, t["name"].as_str()?)))
+            .collect();
+        let owners: BTreeMap<&str, String> = graph["evidence"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter_map(|(id, e)| Some((id.as_str(), self.owner(e)?)))
+            .collect();
+        let node_names = |id: &str| -> BTreeSet<String> {
+            let node = &graph["nodes"][id];
+            node["aliases"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .chain(std::iter::once(&node["canonical_name"]))
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        };
+        // Each active assertion of this source, with the records it rests on and whether one of
+        // them still lists its claim (or is unsettled, so keeps it).
+        struct Mine<'g> {
+            a: &'g Value,
+            records: BTreeSet<String>,
+            kept: bool,
+        }
+        let mut mine: Vec<Mine<'_>> = Vec::new();
+        for a in graph["assertions"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(_, a)| a)
+        {
+            if a["lifecycle"] != "Active" {
+                continue;
+            }
+            let cited: Vec<&str> = a["evidence"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            let records: Option<BTreeSet<String>> =
+                cited.iter().map(|e| owners.get(e).cloned()).collect();
+            let Some(records) = records.filter(|r| !r.is_empty()) else {
+                continue;
+            };
+            let lists = |l: &Listed| -> bool {
+                if let Some(p) = a["predicate"]["Property"].as_str() {
+                    let value = scalar(&a["object"]["Value"]["value"]);
+                    return match (properties.get(p), value) {
+                        (Some(name), Some(value)) => {
+                            l.properties.contains(&(name.to_string(), value))
+                        }
+                        _ => true,
+                    };
+                }
+                if let Some(e) = a["predicate"]["Relation"].as_str() {
+                    let (Some(name), Some(object)) =
+                        (edge_types.get(e), a["object"]["Node"].as_str())
+                    else {
+                        return true;
+                    };
+                    let names = node_names(object);
+                    return l.relations.iter().any(|(relation, aliases)| {
+                        relation == name && aliases.iter().any(|t| names.contains(t))
+                    });
+                }
+                true
+            };
+            let kept = records
+                .iter()
+                .any(|r| unsettled.contains(r) || listed.get(r).is_some_and(lists));
+            mine.push(Mine { a, records, kept });
+        }
+        let from = |a: &Value| a["valid_time"]["from"].as_i64();
+        let mut ops = Vec::new();
+        let mut retracted: Vec<&Value> = Vec::new();
+        for m in mine.iter().filter(|m| !m.kept) {
+            let a = m.a;
+            let id = a["id"].as_str().unwrap_or_default().to_string();
+            let replacement = a["predicate"]["Property"].as_str().and_then(|_| {
+                let start = from(a);
+                let end = a["valid_time"]["to"].as_i64();
+                mine.iter()
+                    .filter(|r| r.kept && r.records == m.records)
+                    .filter(|r| {
+                        r.a["subject"] == a["subject"] && r.a["predicate"] == a["predicate"]
+                    })
+                    .filter_map(|r| Some((from(r.a)?, r.a["id"].as_str()?)))
+                    .filter(|(f, _)| start.is_none_or(|s| *f >= s) && end.is_none_or(|e| *f <= e))
+                    .max()
+            });
+            match replacement {
+                Some((effective_from, by)) => ops.push(Operation::Supersede {
+                    assertion: id,
+                    by: by.to_string(),
+                    effective_from,
+                }),
+                None => {
+                    let records: Vec<&str> = m.records.iter().map(String::as_str).collect();
+                    ops.push(Operation::Retract {
+                        assertion: id,
+                        reason: format!(
+                            "{} no longer lists this value (dropped: Supersede)",
+                            records.join(", ")
+                        ),
+                    });
+                    retracted.push(a);
+                }
+            }
+        }
+        // The edges of retracted relations no active relation assertion that stays still joins.
+        let joins = |a: &Value| {
+            (
+                a["subject"]["Node"].as_str().map(str::to_string),
+                a["predicate"]["Relation"].as_str().map(str::to_string),
+                a["object"]["Node"].as_str().map(str::to_string),
+            )
+        };
+        let gone: BTreeSet<_> = retracted
+            .iter()
+            .map(|a| joins(a))
+            .filter(|(s, p, o)| s.is_some() && p.is_some() && o.is_some())
+            .collect();
+        let retracted_ids: BTreeSet<&str> =
+            retracted.iter().filter_map(|a| a["id"].as_str()).collect();
+        let staying: BTreeSet<_> = graph["assertions"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(_, a)| a)
+            .filter(|a| a["lifecycle"] == "Active")
+            .filter(|a| !a["id"].as_str().is_some_and(|i| retracted_ids.contains(i)))
+            .map(joins)
+            .collect();
+        for edge in graph["edges"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(_, e)| e)
+        {
+            let key = (
+                edge["source"].as_str().map(str::to_string),
+                edge["type_id"].as_str().map(str::to_string),
+                edge["target"].as_str().map(str::to_string),
+            );
+            if gone.contains(&key) && !staying.contains(&key) {
+                if let Some(id) = edge["id"].as_str() {
+                    ops.push(Operation::DeleteEdge(id.to_string()));
+                }
+            }
+        }
+        ops
     }
 
     /// The named thing a relation's `target` text names, of `node_type`. Of the mapping's own node
@@ -617,6 +878,81 @@ mod tests {
         assert_eq!(rejected(&["entities[1]"]), ["e1", "e2"]);
         assert_eq!(rejected(&["ontology"]), ["e1", "e2", "e3"]);
         assert_eq!(rejected(&["something[0]"]), ["e1", "e2", "e3"]);
+    }
+
+    /// A store with one `age` property (`p-age`) and these assertions: `(id, subject, value,
+    /// evidence, valid from)`, every one active. Evidence `e-<n>` is of record `P-<n>` of this
+    /// source; `w-1` is a web page's.
+    fn store(assertions: &[(&str, &str, &str, &str, i64)]) -> (Value, Value) {
+        let mut a = serde_json::Map::new();
+        for (id, subject, value, evidence, from) in assertions {
+            a.insert(
+                id.to_string(),
+                json!({"id": id, "subject": {"Node": subject}, "predicate": {"Property": "p-age"},
+                    "object": {"Value": {"value_kind": "String", "value": value}},
+                    "evidence": [evidence], "lifecycle": "Active",
+                    "valid_time": {"from": from, "to": null}}),
+            );
+        }
+        let record = |n: &str| json!({"source": {"HumanStatement": {"identity": format!("record:dir:people.list:P-{n}")}}});
+        let snapshot = json!({"graph": {"graph": {
+            "assertions": a,
+            "edges": {},
+            "nodes": {},
+            "evidence": {
+                "e-1": record("1"), "e-1b": record("1"), "e-2": record("2"), "e-3": record("3"),
+                "w-1": {"source": {"HumanStatement": {"identity": "https://example.org/a"}}},
+            },
+        }}});
+        let ontology = json!({"node_types": [{"properties": [{"id": "p-age", "name": "age"}]}],
+            "edge_types": []});
+        (snapshot, ontology)
+    }
+
+    #[test]
+    fn a_changed_value_is_superseded_a_gone_one_retracted_and_an_unsettled_or_foreign_one_kept() {
+        use crate::ekr::Operation;
+        let m = mapping();
+        let s = source(&m);
+        let (snapshot, ontology) = store(&[
+            ("a-old", "n1", "36", "e-1", 1),
+            ("a-new", "n1", "37", "e-1b", 2),
+            ("b", "n2", "50", "e-2", 1),
+            ("c", "n3", "60", "e-3", 1),
+            ("web", "n1", "35", "w-1", 1),
+        ]);
+        let doc = |id: &str, age: i64| {
+            let mut d = issued(&s, "x", json!({"id": id, "name": "N", "age": age})).doc;
+            d.hash = None;
+            d
+        };
+        // P-1 lists 37 now, P-2 is gone, P-3 lists 61 but its text is not applied yet.
+        let listed = s.listed(&[doc("P-1", 37), doc("P-3", 61)]);
+        let unsettled = BTreeSet::from(["dir:people.list:P-3".to_string()]);
+        let ops = s.ended(&snapshot, &ontology, &listed, &unsettled);
+        assert_eq!(
+            ops,
+            [
+                Operation::Supersede {
+                    assertion: "a-old".into(),
+                    by: "a-new".into(),
+                    effective_from: 2
+                },
+                Operation::Retract {
+                    assertion: "b".into(),
+                    reason: "dir:people.list:P-2 no longer lists this value (dropped: Supersede)"
+                        .into()
+                },
+            ]
+        );
+        // A value the record no longer has at all, with no replacement, is retracted.
+        let listed = s.listed(&[doc("P-1", 37)]);
+        let (snapshot, _) = store(&[("a-old", "n1", "36", "e-1", 1)]);
+        let ops = s.ended(&snapshot, &ontology, &listed, &BTreeSet::new());
+        assert!(
+            matches!(&ops[..], [Operation::Retract { assertion, .. }] if assertion == "a-old"),
+            "{ops:?}"
+        );
     }
 
     #[test]

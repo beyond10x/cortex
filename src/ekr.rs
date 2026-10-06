@@ -241,6 +241,139 @@ impl Store {
         cmd.arg("ontology");
         json(&run(cmd, "ontology")?, "ontology")
     }
+
+    /// The graph at the head (`ekr snapshot`): `graph.graph` holds `nodes`, `edges`, `assertions`
+    /// and `evidence`, each a map keyed by id, every assertion with its `lifecycle`, retracted and
+    /// superseded ones included (EKR 0.0.31 `docs/cli.md`, `ekr snapshot`).
+    pub fn snapshot(&self) -> Result<Value, String> {
+        let mut cmd = self.cmd();
+        cmd.arg("snapshot");
+        json(&run(cmd, "snapshot")?, "snapshot")
+    }
+
+    /// Writes one `ekr.transaction-document/2` of `operations`, proposed by `proposer` (the host
+    /// operator), to `path`, and proposes, validates and commits it. Answers the committed
+    /// revision; a transaction validation rejects, or one a commit in between left stale, is an
+    /// error naming the issues, with nothing applied.
+    pub fn transact(
+        &self,
+        path: &Path,
+        proposer: &str,
+        operations: &[Operation],
+    ) -> Result<i64, String> {
+        let mut mint = self.cmd();
+        mint.args(["mint", "transaction"]);
+        let minted = json(&run(mint, "mint")?, "mint")?;
+        let id = minted["id"]
+            .as_str()
+            .ok_or("ekr mint answered no id")?
+            .to_string();
+        std::fs::write(path, transaction_document(&id, proposer, operations))
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let mut propose = self.cmd();
+        propose.arg("propose").arg(path);
+        run(propose, "propose")?;
+        let mut validate = self.cmd();
+        validate.args(["validate", &id]);
+        let validated = json(&run(validate, "validate")?, "validate")?;
+        if validated["kind"] != "Validated" {
+            let issues: Vec<String> = validated["issues"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|i| {
+                    format!(
+                        "{}: {}",
+                        i["code"].as_str().unwrap_or("?"),
+                        i["message"].as_str().unwrap_or_default()
+                    )
+                })
+                .collect();
+            return Err(format!(
+                "ekr validate rejected transaction {id}: {}",
+                issues.join("; ")
+            ));
+        }
+        let mut commit = self.cmd();
+        commit.args(["commit", &id]);
+        let committed = json(&run(commit, "commit")?, "commit")?;
+        match committed["kind"].as_str() {
+            Some("Committed") => committed["result"]["revision"]
+                .as_i64()
+                .ok_or_else(|| "ekr commit answered no revision".to_string()),
+            other => Err(format!(
+                "ekr commit of transaction {id} answered {}",
+                other.unwrap_or("nothing")
+            )),
+        }
+    }
+}
+
+/// One operation of a transaction cortex writes itself.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Operation {
+    /// `!SupersedeAssertion`: `assertion` ends where `by`, its active replacement, begins.
+    Supersede {
+        assertion: String,
+        by: String,
+        effective_from: i64,
+    },
+    /// `!RetractAssertion`: `assertion` is withdrawn, with `reason`.
+    Retract { assertion: String, reason: String },
+    /// `!DeleteEdge`: the edge is removed.
+    DeleteEdge(String),
+}
+
+impl Operation {
+    fn yaml(&self) -> serde_yaml_ng::Value {
+        use serde_yaml_ng::value::{Tag, TaggedValue};
+        use serde_yaml_ng::{Mapping, Value as Yaml};
+        let s = |t: &str| Yaml::String(t.to_string());
+        let (tag, value) = match self {
+            Operation::Supersede {
+                assertion,
+                by,
+                effective_from,
+            } => {
+                let mut m = Mapping::new();
+                m.insert(s("assertion"), s(assertion));
+                m.insert(s("by"), s(by));
+                m.insert(s("effective_from"), Yaml::Number((*effective_from).into()));
+                ("SupersedeAssertion", Yaml::Mapping(m))
+            }
+            Operation::Retract { assertion, reason } => {
+                let mut m = Mapping::new();
+                m.insert(s("assertion"), s(assertion));
+                m.insert(s("reason"), s(reason));
+                ("RetractAssertion", Yaml::Mapping(m))
+            }
+            Operation::DeleteEdge(edge) => ("DeleteEdge", s(edge)),
+        };
+        Yaml::Tagged(Box::new(TaggedValue {
+            tag: Tag::new(tag),
+            value,
+        }))
+    }
+}
+
+/// The `ekr.transaction-document/2` text of transaction `id`: `operations` in order, proposed by
+/// `proposer`, citing no evidence (none of them adds an assertion). The `format:` line comes
+/// first, on its own, as EKR reads the byte cap from it.
+fn transaction_document(id: &str, proposer: &str, operations: &[Operation]) -> String {
+    use serde_yaml_ng::{Mapping, Value as Yaml};
+    let s = |t: &str| Yaml::String(t.to_string());
+    let mut tx = Mapping::new();
+    tx.insert(s("id"), s(id));
+    tx.insert(s("proposer"), s(proposer));
+    tx.insert(
+        s("operations"),
+        Yaml::Sequence(operations.iter().map(Operation::yaml).collect()),
+    );
+    tx.insert(s("evidence"), Yaml::Sequence(Vec::new()));
+    let mut doc = Mapping::new();
+    doc.insert(s("format"), s("ekr.transaction-document/2"));
+    doc.insert(s("transaction"), Yaml::Mapping(tx));
+    serde_yaml_ng::to_string(&Yaml::Mapping(doc)).expect("YAML")
 }
 
 /// The operator agent of a host document, which every evidence item names as `extracted_by`.
@@ -269,7 +402,43 @@ mod tests {
     use std::ffi::OsStr;
     use std::path::PathBuf;
 
-    use super::{Backend, Store};
+    use super::{transaction_document, Backend, Operation, Store};
+
+    #[test]
+    fn a_transaction_document_names_its_format_first_and_tags_each_operation() {
+        let text = transaction_document(
+            "t-1",
+            "op-1",
+            &[
+                Operation::Supersede {
+                    assertion: "a-1".into(),
+                    by: "a-2".into(),
+                    effective_from: 7,
+                },
+                Operation::Retract {
+                    assertion: "a-3".into(),
+                    reason: "P-2: gone".into(),
+                },
+                Operation::DeleteEdge("e-1".into()),
+            ],
+        );
+        assert!(
+            text.starts_with("format: ekr.transaction-document/2\n"),
+            "{text}"
+        );
+        for part in [
+            "id: t-1",
+            "proposer: op-1",
+            "- !SupersedeAssertion",
+            "effective_from: 7",
+            "- !RetractAssertion",
+            "reason: 'P-2: gone'",
+            "- !DeleteEdge e-1",
+            "evidence: []",
+        ] {
+            assert!(text.contains(part), "{part} in {text}");
+        }
+    }
 
     fn env(store: &Store) -> Vec<(String, String)> {
         let cmd = store.cmd();
