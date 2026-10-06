@@ -9,7 +9,6 @@ relations:
 - serves: vision:self-updating-instances
 - depends_on: story:file-records
 - depends_on: story:spec-standalone-types
-- depends_on: story:codex-model-backend
 scope:
 - confidence: cited
   path: src/evidence.rs
