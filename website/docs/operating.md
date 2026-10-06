@@ -41,10 +41,18 @@ Unit names carry no home, and every home of one user shares the unit directory. 
 records the home that wrote it as `X-CortexHome=<home>` in its `[Unit]` section (a unit an earlier
 cortex wrote is read as belonging to the `--home` its service runs, or for a viewer the home of
 its `EKR_HOST`). A home never changes another home's unit: `create`, `update` and `adopt` refuse,
-before changing anything, when a unit they would write belongs to another home, and name that
-home; pass `--no-units` to try a spec in a second home. `remove` deletes only its own home's units
-and names any it kept in its `units.kept` detail, and `restore`, `source enable` and a source
-disabled by `--record-failure` leave another home's viewer and timers alone.
+before changing anything, when a unit they would write belongs to another home that holds an
+instance of the same name (or whose registry cannot be read), and name that home; pass
+`--no-units` to try a spec in a second home. `remove` deletes only its own home's units and names
+any it kept in its `units.kept` detail, and `restore`, `source enable` and a source disabled by
+`--record-failure` leave another home's viewer and timers alone.
+
+A unit whose home was deleted, or no longer holds an active instance of that name, is orphaned: no
+command of that home reaches it. The next `create`, `update` or `adopt` of the name in any home
+takes it over, records its own home in it, and names it in its `units.taken_over` detail as
+`<unit> (home <old home>)`. A home path holding a line break is refused by every command, since a
+unit records its home on one line; so is any value a unit would hold on one line, such as a
+schedule.
 
 A unit runs with the systemd user manager's environment, not your shell's: its `PATH` holds no
 user tool directory such as `~/.local/bin` or `~/.cargo/bin`, and its working directory is your

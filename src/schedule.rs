@@ -2,10 +2,12 @@
 //! run a copy of cortex at `<home>/bin/cortex`, so a rebuild changes nothing until the next install.
 //! Its version is recorded beside it, in `<home>/bin/cortex.version`.
 
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use cortex_model::instance as m;
 use serde_json::{json, Value};
 
 /// This cortex's version, recorded beside `<home>/bin/cortex` when it is placed there.
@@ -75,6 +77,9 @@ pub struct Systemd {
     /// `$XDG_CONFIG_HOME/systemd/user`, or `CORTEX_UNIT_DIR`.
     pub unit_dir: PathBuf,
     pub home_root: PathBuf,
+    /// Each unit this value wrote over a unit another home had orphaned, as `<unit> (home
+    /// <that home>)` ([`Owner::Orphaned`]).
+    pub taken_over: RefCell<Vec<String>>,
 }
 
 pub fn source_unit(instance: &str, source: &str) -> String {
@@ -119,6 +124,55 @@ fn same_home(a: &Path, b: &Path) -> bool {
         )
 }
 
+/// Why every command refuses the home `root`: its path holds a line break. Every unit the home
+/// writes records the home on one line (`X-CortexHome=`, the service's `--home`), and systemd reads
+/// a unit line by line, so the home would no longer know its own units from another home's.
+pub fn home_refusal(root: &Path) -> Option<String> {
+    root.to_string_lossy().contains(['\n', '\r']).then(|| {
+        format!(
+            "the cortex home {:?} holds a line break; each systemd unit cortex writes records its \
+             home on one line, and a line break would cut it there. Use a home path without one",
+            root.display().to_string()
+        )
+    })
+}
+
+/// Refuses a unit whose `values` (what each is, and its text) hold a line break: systemd reads a
+/// unit line by line, so the rest of the value would be read as a line of its own. The refusal
+/// names what holds it, not the text, which may be a credential (`CONNECTORS_*`).
+fn single_line<W: std::fmt::Display>(
+    values: impl IntoIterator<Item = (W, String)>,
+) -> Result<(), String> {
+    for (what, value) in values {
+        if value.contains(['\n', '\r']) {
+            return Err(format!(
+                "{what} holds a line break, and a systemd unit holds one value per \
+                 line; cortex writes no unit with it"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Whose a unit file another home wrote is.
+enum Owner {
+    /// That home holds an active instance of the name: the unit is its own.
+    Live(PathBuf),
+    /// That home's registry cannot be read (why), so it may hold the instance.
+    Unreadable(PathBuf, String),
+    /// That home does not exist, or holds no active instance of the name. No command of it
+    /// reaches the unit again, and the home that writes it next takes it over.
+    Orphaned(PathBuf),
+}
+
+impl Owner {
+    fn home(&self) -> &Path {
+        match self {
+            Owner::Live(home) | Owner::Unreadable(home, _) | Owner::Orphaned(home) => home,
+        }
+    }
+}
+
 /// `KEY=value` for systemd's `Environment=`, quoted.
 fn env_line(key: &str, value: &str) -> String {
     let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
@@ -129,8 +183,14 @@ fn env_line(key: &str, value: &str) -> String {
 /// the user manager's `PATH` holds none of the user's tool directories, and `claude` reads its
 /// sign-in under `HOME`.
 fn environment() -> String {
-    let mut out = String::new();
-    for (key, value) in std::env::vars() {
+    environment_values()
+        .map(|(key, value)| env_line(&key, &value))
+        .collect()
+}
+
+/// The variables [`environment`] writes, by name.
+fn environment_values() -> impl Iterator<Item = (String, String)> {
+    std::env::vars().filter_map(|(key, value)| {
         let wanted = matches!(
             key.as_str(),
             "PATH"
@@ -140,11 +200,8 @@ fn environment() -> String {
                 | "XDG_DATA_HOME"
                 | "XDG_RUNTIME_DIR"
         ) || key.starts_with("CONNECTORS_");
-        if wanted {
-            out.push_str(&env_line(&key, &value));
-        }
-    }
-    out
+        wanted.then_some((key, value))
+    })
 }
 
 /// `CORTEX_CONNECTORS`, `CORTEX_CLAUDE` and `CORTEX_CODEX` for a source unit, so a scheduled run
@@ -187,6 +244,7 @@ impl Systemd {
             systemctl,
             unit_dir,
             home_root: home_root.to_path_buf(),
+            taken_over: RefCell::default(),
         }
     }
 
@@ -212,29 +270,68 @@ impl Systemd {
             .map_err(|e| format!("cannot run {}: {e}", self.systemctl.display()))
     }
 
-    /// The other home the unit file `name` belongs to, when it exists and another home wrote it. A
-    /// timer that names no home belongs to its service's.
-    fn foreign(&self, name: &str) -> Option<PathBuf> {
+    /// Who the unit file `name` of `instance` belongs to, when it exists and another home wrote it.
+    /// A timer that names no home belongs to its service's.
+    fn foreign(&self, instance: &str, name: &str) -> Option<Owner> {
         let read = |name: &str| std::fs::read_to_string(self.unit_dir.join(name)).ok();
         let home = home_of(&read(name)?).or_else(|| {
             let service = name.strip_suffix(".timer")?;
             home_of(&read(&format!("{service}.service"))?)
         })?;
-        (!same_home(&home, &self.home_root)).then_some(home)
+        if same_home(&home, &self.home_root) {
+            return None;
+        }
+        // A home that does not exist reads as an empty registry.
+        Some(match crate::home::Home::new(home.clone()).load_registry() {
+            Ok(registry)
+                if registry
+                    .instances
+                    .get(instance)
+                    .is_some_and(|i| i.state == m::InstanceState::Active) =>
+            {
+                Owner::Live(home)
+            }
+            Ok(_) => Owner::Orphaned(home),
+            Err(e) => Owner::Unreadable(home, e),
+        })
     }
 
-    /// The refusal of the unit file `name`, which `home` wrote.
-    fn refusal(&self, name: &str, home: &Path) -> String {
-        format!(
-            "{} belongs to the cortex home {}, which has an instance of the same name; cortex \
-             changes no unit of another home. Remove the instance there, or pass --no-units",
-            self.unit_dir.join(name).display(),
-            home.display()
-        )
+    /// Why the unit file `name` of `instance`, which `owner` wrote, is not written, started or
+    /// stopped by this home, with the step that clears it: `install` for `create`, `adopt` and
+    /// `update`, which can pass `--no-units`, and otherwise for a command that only signals it.
+    fn refusal(&self, instance: &str, name: &str, owner: &Owner, install: bool) -> String {
+        let path = self.unit_dir.join(name);
+        let (path, home) = (path.display(), owner.home().display());
+        let other = "cortex changes no unit of another home";
+        match (owner, install) {
+            (Owner::Live(_), true) => format!(
+                "{path} belongs to the cortex home {home}, which has an instance of the same \
+                 name; {other}. Remove the instance there, or pass --no-units"
+            ),
+            (Owner::Live(_), false) => format!(
+                "{path} belongs to the cortex home {home}, which has an instance of the same \
+                 name; {other}. Remove the instance there, then `update` {instance} here to \
+                 install this home's units"
+            ),
+            (Owner::Unreadable(_, e), true) => format!(
+                "{path} belongs to the cortex home {home}, whose registry cannot be read ({e}), \
+                 so it may hold an instance of the same name; {other}. Repair that registry, or \
+                 pass --no-units"
+            ),
+            (Owner::Unreadable(_, e), false) => format!(
+                "{path} belongs to the cortex home {home}, whose registry cannot be read ({e}), \
+                 so it may hold an instance of the same name; {other}. Repair that registry"
+            ),
+            (Owner::Orphaned(_), _) => format!(
+                "{path} belongs to the cortex home {home}, which holds no instance {instance}; \
+                 `update` {instance} here takes its units over"
+            ),
+        }
     }
 
     /// Why the units of `instance`'s `sources` (and its viewer, when `view`) cannot be written:
-    /// another home wrote one of them.
+    /// another home that holds the instance, or may hold it, wrote one of them. A unit whose home
+    /// holds no such instance is not a reason; writing it takes it over.
     pub fn foreign_units(&self, instance: &str, sources: &[String], view: bool) -> Option<String> {
         let mut names: Vec<String> = sources
             .iter()
@@ -246,26 +343,39 @@ impl Systemd {
         if view {
             names.push(format!("{}.service", view_unit(instance)));
         }
-        names
-            .iter()
-            .find_map(|n| self.foreign(n).map(|home| self.refusal(n, &home)))
+        names.iter().find_map(|n| match self.foreign(instance, n)? {
+            Owner::Orphaned(_) => None,
+            owner => Some(self.refusal(instance, n, &owner, true)),
+        })
     }
 
-    /// Writes the unit file `name`, `text` with this home recorded under its `[Unit]` line. A unit
-    /// another home wrote is refused, naming that home.
-    fn write(&self, name: &str, text: &str) -> Result<(), String> {
-        if let Some(home) = self.foreign(name) {
-            return Err(self.refusal(name, &home));
+    /// Writes the unit files `units` (name, text) of `instance`, each text with this home recorded
+    /// under its `[Unit]` line. When another home that holds the instance (or may) wrote one of
+    /// them, none is written and the answer names that home; one an orphaning home wrote is taken
+    /// over and named in [`Systemd::taken_over`]. Every owner is read before any unit is written:
+    /// a timer that names no home is its service's, and the service is written first.
+    fn write(&self, instance: &str, units: &[(String, String)]) -> Result<(), String> {
+        let mut taken = Vec::new();
+        for (name, _) in units {
+            taken.push(match self.foreign(instance, name) {
+                Some(Owner::Orphaned(home)) => Some(format!("{name} (home {})", home.display())),
+                Some(owner) => return Err(self.refusal(instance, name, &owner, true)),
+                None => None,
+            });
         }
-        let text = text.replacen(
-            "[Unit]\n",
-            &format!("[Unit]\n{HOME_KEY}{}\n", self.home_root.display()),
-            1,
-        );
         std::fs::create_dir_all(&self.unit_dir)
             .map_err(|e| format!("{}: {e}", self.unit_dir.display()))?;
-        let path = self.unit_dir.join(name);
-        std::fs::write(&path, &text).map_err(|e| format!("{}: {e}", path.display()))
+        for ((name, text), taken) in units.iter().zip(taken) {
+            let text = text.replacen(
+                "[Unit]\n",
+                &format!("[Unit]\n{HOME_KEY}{}\n", self.home_root.display()),
+                1,
+            );
+            let path = self.unit_dir.join(name);
+            std::fs::write(&path, &text).map_err(|e| format!("{}: {e}", path.display()))?;
+            self.taken_over.borrow_mut().extend(taken);
+        }
+        Ok(())
     }
 
     /// Places this cortex at `<home>/bin/cortex`, which every source unit of the home runs, and
@@ -323,21 +433,44 @@ impl Systemd {
     ) -> Result<(), String> {
         let unit = source_unit(instance, source);
         let exe = binary_path(&self.home_root);
-        let tools = tool_environment(tools);
-        self.write(
-            &format!("{unit}.service"),
-            &format!(
-                "[Unit]\nDescription=cortex: run {instance}/{source}\n\n[Service]\nType=oneshot\n{}{tools}ExecStart=\"{}\" --home \"{}\" run {instance}/{source} --record-failure\n",
-                environment(),
-                exe.display(),
-                self.home_root.display()
+        single_line(
+            [
+                ("the schedule", schedule.to_string()),
+                ("the cortex home", self.home_root.display().to_string()),
+                (
+                    "the connectors binary",
+                    tools.connectors.bin.display().to_string(),
+                ),
+                ("the claude binary", tools.claude.display().to_string()),
+                ("the codex binary", tools.codex.display().to_string()),
+            ]
+            .into_iter()
+            .map(|(what, value)| (what.to_string(), value))
+            .chain(
+                environment_values()
+                    .map(|(key, value)| (format!("{key} in the environment"), value)),
             ),
         )?;
+        let tools = tool_environment(tools);
         self.write(
-            &format!("{unit}.timer"),
-            &format!(
-                "[Unit]\nDescription=cortex: schedule {instance}/{source}\n\n[Timer]\nOnCalendar={schedule}\nPersistent=true\nUnit={unit}.service\n\n[Install]\nWantedBy=timers.target\n"
-            ),
+            instance,
+            &[
+                (
+                    format!("{unit}.service"),
+                    format!(
+                        "[Unit]\nDescription=cortex: run {instance}/{source}\n\n[Service]\nType=oneshot\n{}{tools}ExecStart=\"{}\" --home \"{}\" run {instance}/{source} --record-failure\n",
+                        environment(),
+                        exe.display(),
+                        self.home_root.display()
+                    ),
+                ),
+                (
+                    format!("{unit}.timer"),
+                    format!(
+                        "[Unit]\nDescription=cortex: schedule {instance}/{source}\n\n[Timer]\nOnCalendar={schedule}\nPersistent=true\nUnit={unit}.service\n\n[Install]\nWantedBy=timers.target\n"
+                    ),
+                ),
+            ],
         )?;
         self.systemctl(&["daemon-reload"])?;
         self.systemctl(&["enable", "--now", &format!("{unit}.timer")])
@@ -350,15 +483,24 @@ impl Systemd {
         port: u16,
     ) -> Result<(), String> {
         let unit = view_unit(instance);
+        single_line([
+            ("EKR_HOST", store.host.display().to_string()),
+            ("EKR_STORE", store.store.display().to_string()),
+            ("the ekr binary", store.bin.display().to_string()),
+            ("the cortex home", self.home_root.display().to_string()),
+        ])?;
         self.write(
-            &format!("{unit}.service"),
-            &format!(
-                "[Unit]\nDescription=cortex: viewer of {instance}\n\n[Service]\n{}{}{}ExecStart=\"{}\" view --port {port}\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n",
-                env_line("EKR_HOST", &store.host.display().to_string()),
-                env_line("EKR_BACKEND", store.backend.name()),
-                env_line("EKR_STORE", &store.store.display().to_string()),
-                store.bin.display()
-            ),
+            instance,
+            &[(
+                format!("{unit}.service"),
+                format!(
+                    "[Unit]\nDescription=cortex: viewer of {instance}\n\n[Service]\n{}{}{}ExecStart=\"{}\" view --port {port}\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n",
+                    env_line("EKR_HOST", &store.host.display().to_string()),
+                    env_line("EKR_BACKEND", store.backend.name()),
+                    env_line("EKR_STORE", &store.store.display().to_string()),
+                    store.bin.display()
+                ),
+            )],
         )?;
         self.systemctl(&["daemon-reload"])?;
         self.systemctl(&["enable", "--now", &format!("{unit}.service")])
@@ -377,7 +519,7 @@ impl Systemd {
         let service = format!("{}.service", view_unit(instance));
         // Another home's viewer of an instance of the same name is not this instance's.
         if !self.unit_dir.join(&service).is_file()
-            || self.foreign(&service).is_some()
+            || self.foreign(instance, &service).is_some()
             || !self.active(&service)?
         {
             return Ok((stopped(), None));
@@ -389,8 +531,8 @@ impl Systemd {
 
     pub fn set_source_timer(&self, instance: &str, source: &str, on: bool) -> Result<(), String> {
         let timer = format!("{}.timer", source_unit(instance, source));
-        if let Some(home) = self.foreign(&timer) {
-            return Err(self.refusal(&timer, &home));
+        if let Some(owner) = self.foreign(instance, &timer) {
+            return Err(self.refusal(instance, &timer, &owner, false));
         }
         if on {
             self.systemctl(&["enable", "--now", &timer])
@@ -417,7 +559,7 @@ impl Systemd {
         files.push(view.clone());
         let (kept, own): (Vec<_>, Vec<_>) = files
             .into_iter()
-            .map(|f| (self.foreign(&f), f))
+            .map(|f| (self.foreign(instance, &f), f))
             .partition(|(home, _)| home.is_some());
         // The timers and the viewer are what is enabled; a source's service only runs from its
         // timer.
@@ -432,7 +574,10 @@ impl Systemd {
         self.systemctl(&["daemon-reload"])?;
         Ok(kept
             .into_iter()
-            .map(|(home, file)| format!("{file} (home {})", home.unwrap_or_default().display()))
+            .map(|(owner, file)| match owner {
+                Some(owner) => format!("{file} (home {})", owner.home().display()),
+                None => file,
+            })
             .collect())
     }
 }
