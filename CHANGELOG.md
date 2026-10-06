@@ -80,3 +80,10 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 - A release workflow: a published GitHub Release `v<version>` gets
   `cortex-<version>-x86_64-unknown-linux-gnu.tar.gz` and `SHA256SUMS` attached; a manual run
   builds the same two files as a workflow artifact.
+
+### Fixed
+
+- A source named `entities` or `seed` is refused by `create`, `update` and `adopt`, naming the
+  reserved name. Its seen documents would have shared `state/entities.json` with the known entity
+  names, or `state/seed.json` with the seed, and a source named `entities` was disabled after
+  another source ran.

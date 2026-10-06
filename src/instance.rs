@@ -14,6 +14,17 @@ pub struct Layout {
     pub dir: PathBuf,
 }
 
+/// The pseudo-source the seed documents are recorded as: its seen documents are
+/// `state/seed.json`.
+pub const SEED: &str = "seed";
+
+/// The file stem of the known entity names, `state/entities.json`.
+pub const ENTITIES: &str = "entities";
+
+/// The `state/<name>.json` stems cortex keeps for itself. A source's seen documents are
+/// `state/<source>.json`, so no source may take one of these names.
+pub const RESERVED_STATE_NAMES: [&str; 2] = [SEED, ENTITIES];
+
 /// What the instance needs beyond its spec.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Meta {
@@ -58,7 +69,7 @@ impl Layout {
         self.dir.join("state").join(format!("{source}.json"))
     }
     pub fn entities(&self) -> PathBuf {
-        self.dir.join("state").join("entities.json")
+        self.seen(ENTITIES)
     }
     pub fn runs(&self) -> PathBuf {
         self.dir.join("runs")

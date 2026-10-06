@@ -77,6 +77,12 @@ different seed files answers `seed-change-refused`.
 Each source has a `name` (same rules as the instance name, unique within the instance), a
 `schedule`, `settings` and a `policy`. Its id is `<instance>/<source>`.
 
+`entities` and `seed` are reserved: a source's seen documents are `state/<source>.json`, and
+cortex keeps the known entity names in `state/entities.json` and the seed's seen documents in
+`state/seed.json`. `create`, `update` and `adopt` refuse a spec with a source of either name and
+name it. An instance created with one before this rule keeps loading; rename the source with
+`update`.
+
 `schedule` is a systemd calendar expression; it is written into the timer as `OnCalendar=`, for
 example `"*-*-* 06:00:00"` for every day at 06:00.
 
