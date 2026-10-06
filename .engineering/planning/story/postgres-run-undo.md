@@ -20,7 +20,7 @@ scope:
   path: src/snapshot.rs
 - confidence: inferred
   path: tests/store_backend.rs
-revision: 4
+revision: 5
 ---
 ## Outcome
 
@@ -46,3 +46,7 @@ Whether EKR has, or needs, a revert or a provider-level restore point for this: 
 ## Files (from the inventory, unverified)
 
 `src/snapshot.rs`, `src/run.rs`, `src/ekr.rs`, `tests/store_backend.rs`.
+
+## Shared files
+
+`story:structured-from-files-and-drops` also edits `src/ekr.rs`: it adds a read of a source's active assertions, and this story adds the PostgreSQL restore point around a run. Different functions; the overlap is accepted (2026-10-06), and the second to land rebases.

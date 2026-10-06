@@ -12,6 +12,7 @@ relations:
 - depends_on: story:connectors-source-walks
 - depends_on: story:file-records
 - depends_on: story:store-backend-per-instance
+- depends_on: story:record-field-lookups
 scope:
 - confidence: cited
   path: src/ekr.rs
