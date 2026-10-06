@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 0fc580942f295d0f5dc09e702a75e70eee57d08233671d7934b03e104c73ab85
-// contract digest 7942f8a668be6af9ca8b312816fa1ae3c7611158d27d675feb1728f83b6d8cbc
+// model digest 46d14b665108bd7bba685ab525d1afaab8b67265939b431046efa7b3486ad936
+// contract digest 0eb8f43114995eccfc97b658bb6867cfa0e0f38338a4021148894c7d43c3f33a
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -121,10 +121,14 @@ pub struct FileRecords {
     pub author: Option<String>,
     /// `text` — `List<String>`.
     pub text: Vec<String>,
+    /// `fallback_text` — `Optional<List<String>>`.
+    pub fallback_text: Option<Vec<String>>,
     /// `thread` — `Optional<String>`.
     pub thread: Option<String>,
     /// `filters` — `List<cortex.instance.RecordFilter>`.
     pub filters: Vec<RecordFilter>,
+    /// `lookup` — `Optional<String>`.
+    pub lookup: Option<String>,
 }
 
 /// FilesSource — `cortex.instance.FilesSource`.
