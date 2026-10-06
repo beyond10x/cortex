@@ -51,7 +51,7 @@ A source id is `<instance>/<source>`.
 | `cortex sources` | sources: id, kind, state, schedule, runs, consecutive failures | |
 
 A `ran` line's detail carries `documents_new`, `documents_applied`, `cost_usd`, `facts_refused`
-(facts the model cited unissued evidence for), `parts_rejected` (parts EKR rejected), `masked`
+(facts the model cited unissued evidence for), `parts_rejected` (parts EKR rejected), `rejected` (each document a rejected part belongs to, with EKR's refusal; present only when there is one), `masked`
 (credential shapes replaced) and `stopped` (why the run ended early, if it did). When the spec
 has a `redaction` policy it also carries `redacted` (values replaced by placeholders in the
 prompts sent, per class or rule) and `unrestored` (placeholders in the model's answers that had no

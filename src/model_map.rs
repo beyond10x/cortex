@@ -188,7 +188,9 @@ fn file_records(r: &s::CortexInstanceFileRecords) -> m::FileRecords {
         time: opt(&r.time),
         author: opt(&r.author),
         text: r.text.clone(),
+        fallback_text: opt(&r.fallback_text),
         thread: opt(&r.thread),
+        lookup: opt(&r.lookup),
         filters: r
             .filters
             .iter()
