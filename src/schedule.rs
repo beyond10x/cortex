@@ -1,8 +1,73 @@
 //! systemd user units: one timer and service per source, and one viewer per instance. The units
 //! run a copy of cortex at `<home>/bin/cortex`, so a rebuild changes nothing until the next install.
+//! Its version is recorded beside it, in `<home>/bin/cortex.version`.
 
+use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+use serde_json::{json, Value};
+
+/// This cortex's version, recorded beside `<home>/bin/cortex` when it is placed there.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// `<home>/bin/cortex`, the copy of cortex every source unit of the home runs.
+pub fn binary_path(home_root: &Path) -> PathBuf {
+    home_root.join("bin/cortex")
+}
+
+fn version_path(home_root: &Path) -> PathBuf {
+    home_root.join("bin/cortex.version")
+}
+
+/// The version recorded for `<home>/bin/cortex`; `None` before a cortex that records it placed
+/// one.
+pub fn binary_version(home_root: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(version_path(home_root)).ok()?;
+    Some(text.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+/// `major.minor.patch[-pre][+build]`, ordered as SemVer orders them, the pre-release compared as
+/// text. `None` when either is not of that form.
+pub fn compare(a: &str, b: &str) -> Option<Ordering> {
+    fn parse(v: &str) -> Option<([u64; 3], Option<&str>)> {
+        let v = v.split('+').next()?;
+        let (core, pre) = match v.split_once('-') {
+            Some((core, pre)) => (core, Some(pre)),
+            None => (v, None),
+        };
+        let mut parts = core.split('.').map(|n| n.parse::<u64>().ok());
+        let triple = [parts.next()??, parts.next()??, parts.next()??];
+        parts.next().is_none().then_some((triple, pre))
+    }
+    let ((a, a_pre), (b, b_pre)) = (parse(a)?, parse(b)?);
+    Some(a.cmp(&b).then(match (a_pre, b_pre) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Greater,
+        (Some(_), None) => Ordering::Less,
+        (Some(x), Some(y)) => x.cmp(y),
+    }))
+}
+
+/// What placing this cortex at `<home>/bin/cortex` did: the version recorded before (`old`), this
+/// cortex's (`new`), whether it replaced the binary, and why not when it did not.
+#[derive(Debug)]
+pub struct Placed {
+    pub old: Option<String>,
+    pub new: String,
+    pub replaced: bool,
+    pub reason: Option<String>,
+}
+
+impl Placed {
+    pub fn json(&self) -> Value {
+        let mut out = json!({"replaced": self.replaced, "old": self.old, "new": self.new});
+        if let Some(reason) = &self.reason {
+            out["reason"] = json!(reason);
+        }
+        out
+    }
+}
 
 pub struct Systemd {
     /// `systemctl`, or a stand-in (`CORTEX_SYSTEMCTL`).
@@ -120,20 +185,52 @@ impl Systemd {
         std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))
     }
 
-    /// Copies the running binary to `<home>/bin/cortex`, which every unit runs.
-    fn binary(&self) -> Result<PathBuf, String> {
+    /// Places this cortex at `<home>/bin/cortex`, which every source unit of the home runs, and
+    /// records its version beside it ([`binary_version`]). A binary recorded as newer than this
+    /// cortex is kept unless `replace_newer`: replacing it would move every timer of the home to
+    /// an older cortex. The same or an older version, or none recorded, is replaced.
+    pub fn place_binary(&self, replace_newer: bool) -> Result<Placed, String> {
         let exe = std::env::current_exe().map_err(|e| format!("cannot find cortex itself: {e}"))?;
-        let dest = self.home_root.join("bin/cortex");
-        if exe != dest {
-            std::fs::create_dir_all(dest.parent().expect("bin dir")).map_err(|e| e.to_string())?;
-            let tmp = dest.with_extension("new");
-            std::fs::copy(&exe, &tmp).map_err(|e| format!("cannot copy cortex: {e}"))?;
-            std::fs::rename(&tmp, &dest).map_err(|e| format!("cannot place cortex: {e}"))?;
+        let dest = binary_path(&self.home_root);
+        let old = binary_version(&self.home_root);
+        let mut placed = Placed {
+            old: old.clone(),
+            new: VERSION.to_string(),
+            replaced: false,
+            reason: None,
+        };
+        if exe == dest {
+            placed.reason = Some(format!("this cortex is {}", dest.display()));
+            return Ok(placed);
         }
-        Ok(dest)
+        let newer = old
+            .as_deref()
+            .and_then(|old| compare(old, VERSION))
+            .is_some_and(|o| o == Ordering::Greater);
+        if newer && dest.exists() && !replace_newer {
+            placed.reason = Some(format!(
+                "{} is cortex {}, newer than this cortex {VERSION}, and every timer of the home \
+                 runs it; it is kept. Pass --replace-binary to replace it",
+                dest.display(),
+                old.unwrap_or_default()
+            ));
+            return Ok(placed);
+        }
+        std::fs::create_dir_all(dest.parent().expect("bin dir")).map_err(|e| e.to_string())?;
+        let tmp = dest.with_extension("new");
+        std::fs::copy(&exe, &tmp).map_err(|e| format!("cannot copy cortex: {e}"))?;
+        std::fs::rename(&tmp, &dest).map_err(|e| format!("cannot place cortex: {e}"))?;
+        crate::home::write_atomic(
+            &version_path(&self.home_root),
+            format!("{VERSION}\n").as_bytes(),
+        )
+        .map_err(|e| format!("cannot record the version of cortex: {e}"))?;
+        placed.replaced = true;
+        Ok(placed)
     }
 
-    /// The source's service runs the `tools` this process runs ([`tool_environment`]).
+    /// The source's service runs the `tools` this process runs ([`tool_environment`]), and
+    /// `<home>/bin/cortex`, which [`Systemd::place_binary`] places.
     pub fn install_source(
         &self,
         instance: &str,
@@ -142,7 +239,7 @@ impl Systemd {
         tools: &crate::run::Tools,
     ) -> Result<(), String> {
         let unit = source_unit(instance, source);
-        let exe = self.binary()?;
+        let exe = binary_path(&self.home_root);
         let tools = tool_environment(tools);
         self.write(
             &format!("{unit}.service"),
@@ -233,5 +330,24 @@ impl Systemd {
                 .join(format!("{}.service", view_unit(instance))),
         );
         self.systemctl(&["daemon-reload"])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cmp::Ordering::{Equal, Greater, Less};
+
+    use super::compare;
+
+    #[test]
+    fn versions_are_ordered_as_semver_orders_them() {
+        assert_eq!(compare("0.2.0", "0.1.9"), Some(Greater));
+        assert_eq!(compare("0.10.0", "0.9.0"), Some(Greater));
+        assert_eq!(compare("1.0.0", "1.0.0"), Some(Equal));
+        assert_eq!(compare("1.0.0+build.7", "1.0.0"), Some(Equal));
+        assert_eq!(compare("1.0.0-rc.1", "1.0.0"), Some(Less));
+        assert_eq!(compare("1.0.0-rc.2", "1.0.0-rc.1"), Some(Greater));
+        assert_eq!(compare("0.1", "0.1.0"), None);
+        assert_eq!(compare("dev", "0.1.0"), None);
     }
 }

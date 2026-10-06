@@ -15,6 +15,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `registry.json` | every instance and source with its state and counters |
 | `cortex.lock` | the lock every writing command holds, so two commands on one home never interleave |
 | `bin/cortex` | the copy of cortex the systemd units run |
+| `bin/cortex.version` | the version of that copy, recorded when it is placed |
 | `instances/<name>/instance.yaml` | the frozen spec file, beside copies of the seed files and instructions it names |
 | `instances/<name>/store.sqlite` | the instance's EKR store, unless its spec names `store.backend: postgres`; then the store is in PostgreSQL, opened through the spec's `ekr.postgres/1` file |
 | `instances/<name>/host.json` | the EKR host document the store is opened with |
@@ -55,8 +56,15 @@ either, `cortex update` writes the units again.
 The timers run only while your systemd user manager runs. To have them run while you are logged
 out, enable lingering once: `loginctl enable-linger`.
 
-The units run the copy at `<home>/bin/cortex`. Rebuilding cortex changes nothing for existing
-timers until a `create` or `update` installs the units again and copies the new binary.
+The units run the copy at `<home>/bin/cortex`, one for every instance of the home. Rebuilding
+cortex changes nothing for existing timers until a `create`, `update` or `adopt` installs the
+units again and places the new binary. That command replaces the copy when it is the same version
+or newer than the one recorded in `<home>/bin/cortex.version`, or when none is recorded. An older
+cortex keeps the newer copy, because replacing it would move every timer of the home to the older
+one; it writes the new instance's units all the same. Pass `--replace-binary` to replace it
+anyway. The command's `binary` detail says what happened: `replaced`, the `old` version recorded
+and the `new` one, and the `reason` when the copy was kept. `cortex list` shows the recorded
+version as `binary_version`. `--no-units`, and a spec with no source, leave the copy alone.
 
 ## What one run does
 
