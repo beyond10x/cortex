@@ -235,6 +235,40 @@ impl<'a> Source<'a> {
         Some(out)
     }
 
+    /// The values the mapping takes from a record whose text is `text`, one `<label>: <value>`
+    /// line each, under `Mapped values:` and ending in an empty line: its id, its name, its mapped
+    /// aliases, each mapped property and each relation's targets. It leads the record's evidence
+    /// (`evidence::issue_led`), so every value a fact from the record cites is in the payload
+    /// before the cut. Empty for a text that is not JSON.
+    pub fn lead(&self, text: &str) -> String {
+        let Ok(record) = serde_json::from_str::<Value>(text) else {
+            return String::new();
+        };
+        let mapping = self.mapping;
+        let mut lines: Vec<(&str, String)> = Vec::new();
+        lines.extend(text_at(&record, &mapping.id).map(|v| ("id", v)));
+        lines.extend(text_at(&record, &mapping.name).map(|v| ("name", v)));
+        for path in &mapping.aliases {
+            lines.extend(texts_at(&record, path).into_iter().map(|v| ("alias", v)));
+        }
+        for p in &mapping.properties {
+            lines.extend(text_at(&record, &p.path).map(|v| (p.property.as_str(), v)));
+        }
+        for r in &mapping.relations {
+            lines.extend(
+                texts_at(&record, &r.target_name)
+                    .into_iter()
+                    .map(|v| (r.relation.as_str(), v)),
+            );
+        }
+        let mut out = String::from("Mapped values:\n");
+        for (label, value) in lines {
+            out.push_str(&format!("{label}: {value}\n"));
+        }
+        out.push('\n');
+        out
+    }
+
     /// The run's records, whose keys are their identities ([`Source::prepare`]).
     pub fn index(&self, records: &[Issued]) -> Index {
         Index(
@@ -361,8 +395,9 @@ impl<'a> Source<'a> {
 impl Mapped {
     /// The evidence ids of the records with a part `report` (an `ekr.integrate.ExtractionReport`)
     /// lists as `rejected`: a fact's record, every record an entity stands for or was named by,
-    /// and, for the `ontology` or an item it does not know, every record of the batch.
-    pub fn rejected(&self, report: &Value) -> BTreeSet<String> {
+    /// and, for the `ontology` or an item it does not know, every record of the batch; each with
+    /// the refusals EKR gave for its parts.
+    pub fn rejected(&self, report: &Value) -> BTreeMap<String, Vec<String>> {
         let cited = |fact: &Value| -> Vec<String> {
             fact.as_object()
                 .and_then(|o| o.values().next())
@@ -396,21 +431,20 @@ impl Mapped {
                 .parse()
                 .ok()
         };
-        let mut out = BTreeSet::new();
+        let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for part in report["rejected"].as_array().into_iter().flatten() {
             let item = part["item"].as_str().unwrap_or_default();
-            if let Some(i) = index(item, "facts") {
-                if let Some(fact) = facts.get(i) {
-                    out.extend(cited(fact));
-                    continue;
+            let owners: BTreeSet<String> = match (index(item, "facts"), index(item, "entities")) {
+                (Some(i), _) if i < facts.len() => cited(&facts[i]).into_iter().collect(),
+                (None, Some(i)) if i < self.entity_owners.len() => {
+                    self.entity_owners[i].iter().cloned().collect()
                 }
-            } else if let Some(i) = index(item, "entities") {
-                if let Some(owners) = self.entity_owners.get(i) {
-                    out.extend(owners.iter().cloned());
-                    continue;
-                }
+                _ => every(),
+            };
+            let refusal = crate::extract::refusal(part);
+            for owner in owners {
+                out.entry(owner).or_default().push(refusal.clone());
             }
-            out.extend(every());
         }
         out
     }
@@ -573,7 +607,7 @@ mod tests {
             let parts: Vec<_> = items.iter().map(|i| json!({"item": i})).collect();
             mapped
                 .rejected(&json!({"rejected": parts}))
-                .into_iter()
+                .into_keys()
                 .collect()
         };
         assert!(rejected(&[]).is_empty());

@@ -3,6 +3,7 @@
   "asOf": "2026-10-05",
   "source": "cortex's status record, maintained in the repository and checked against main and its planning store",
   "items": [
+    {"label": "File records map ids to names through a lookup file", "status": "shipped", "area": "Sources", "detail": "lookup and fallback_text on records specs.", "href": "/docs/spec-file"},
     {"label": "The test suite is free of the Text file busy race", "status": "shipped", "area": "Project", "detail": "20 of 20 full runs under load exit 0.", "href": "/docs/limits"},
     {"label": "An existing store becomes an instance without reseeding", "status": "shipped", "area": "Instances", "detail": "cortex adopt copies a SQLite store with its -wal or uses a PostgreSQL store in place; --host and --seen carry its identity and seen state.", "href": "/docs/operating"},
     {"label": "A bad run can be undone from the snapshot taken before it", "status": "shipped", "area": "Runs", "detail": "cortex restore puts back the store and state/ and snapshots the current state first.", "href": "/docs/operating"},

@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "31795f723c86656bf6d6a74e26d2d9bb4f157af48aec0e473f81b5d27fe09b0d",
-    "contract_digest": "slice-sha256/2:06dc7a59e7ca20316c5984b0de4df1f3c5e1eb599fb21302dcb556db63a2f7ef",
+    "source_digest": "3f41e7bfa05fd6d8ef1f3aed9bf4d87dd1ac06eadb402b333aab6ff0e0193c73",
+    "contract_digest": "slice-sha256/2:81a34c64a76a388acdca3716cd32692cbd0c5ee71359f6b741b1104591f44978",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -33,6 +33,12 @@
             "type": "string"
           }
         },
+        "fallback_text": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "thread": {
           "type": "string"
         },
@@ -41,6 +47,9 @@
           "items": {
             "$ref": "#/$defs/cortex.instance.RecordFilter"
           }
+        },
+        "lookup": {
+          "type": "string"
         }
       },
       "required": [

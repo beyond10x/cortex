@@ -702,4 +702,98 @@ echo "=== end of prompt ===" >> "$R/prompt.log"
         assert!(!keys[0].contains(&token), "{keys:?}");
         assert!(shown(&w).iter().all(|d| !d.contains(&token)));
     }
+
+    /// The lookup file of the next three cases, beside the spec file: two author ids and names.
+    const PEOPLE: &str = r#"{"U1": "Ana", "U2": "Ben"}"#;
+
+    /// `story:record-field-lookups` acceptance 1: with `lookup`, the author value and every `<@id>`
+    /// in the text are mapped to the name the lookup file gives them; an id the file does not hold
+    /// stays as it is.
+    #[test]
+    fn a_lookup_maps_the_author_and_every_mention_to_a_name() {
+        let chat = concat!(
+            r#"{"id":"1","user":"U1","text":"hi <@U2>"}"#,
+            "\n",
+            r#"{"id":"2","user":"U9","text":"ping <@U9> and <@U1>"}"#,
+            "\n"
+        );
+        let records = "{format: JsonLines, id: id, author: user, text: [\"{text}\"], lookup: people.json, filters: []}";
+        let w = world(
+            &[
+                ("chat/export.jsonl", chat.as_bytes()),
+                ("people.json", PEOPLE.as_bytes()),
+            ],
+            &source("chat", "chat", "*.jsonl", records),
+            "",
+        );
+        let ran = run(&w, "chat");
+        assert_eq!(ran["detail"]["documents_new"], 2, "{ran}");
+        let r = root(&w);
+        let one = shown_doc(&w, &key(&r, "chat/export.jsonl", "1"));
+        assert!(one.contains("\nAna: hi @Ben\n"), "{one}");
+        let two = shown_doc(&w, &key(&r, "chat/export.jsonl", "2"));
+        assert!(two.contains("\nU9: ping <@U9> and @Ana\n"), "{two}");
+    }
+
+    /// `story:record-field-lookups` acceptance 2: `fallback_text` is used only when `text` renders
+    /// empty; a record whose `text` and every fallback render empty yields no document.
+    #[test]
+    fn fallback_text_stands_in_for_an_empty_text_and_both_empty_yield_nothing() {
+        let chat = concat!(
+            r#"{"id":"1","text":"","blocks":"from blocks"}"#,
+            "\n",
+            r#"{"id":"2","text":"","blocks":""}"#,
+            "\n",
+            r#"{"id":"3","text":"own text","blocks":"not used"}"#,
+            "\n"
+        );
+        let records = "{format: JsonLines, id: id, text: [\"{text}\"], fallback_text: [\"{missing}\", \"{blocks}\"], filters: []}";
+        let w = world(
+            &[("chat/export.jsonl", chat.as_bytes())],
+            &source("chat", "chat", "*.jsonl", records),
+            "",
+        );
+        let ran = run(&w, "chat");
+        assert_eq!(ran["detail"]["documents_new"], 2, "{ran}");
+        let r = root(&w);
+        let mut stored = keys(&w, "chat");
+        stored.sort();
+        assert_eq!(
+            stored,
+            [
+                key(&r, "chat/export.jsonl", "1"),
+                key(&r, "chat/export.jsonl", "3")
+            ]
+        );
+        let one = shown_doc(&w, &key(&r, "chat/export.jsonl", "1"));
+        assert!(one.contains("\nfrom blocks\n"), "{one}");
+        let three = shown_doc(&w, &key(&r, "chat/export.jsonl", "3"));
+        assert!(
+            three.contains("\nown text\n") && !three.contains("not used"),
+            "{three}"
+        );
+    }
+
+    /// `story:record-field-lookups` acceptance 3: a lookup file that does not exist fails the
+    /// source's fetch, and the error names the file.
+    #[test]
+    fn a_missing_lookup_file_fails_the_fetch_and_names_the_file() {
+        let chat = concat!(r#"{"id":"1","user":"U1","text":"hi <@U2>"}"#, "\n");
+        let records = "{format: JsonLines, id: id, author: user, text: [\"{text}\"], lookup: absent.json, filters: []}";
+        let w = world(
+            &[("chat/export.jsonl", chat.as_bytes())],
+            &source("chat", "chat", "*.jsonl", records),
+            "",
+        );
+        let (code, ran) = w.cortex(&["run", "adv/chat"]);
+        assert_eq!(
+            (code != 0, ran["outcome"].as_str()),
+            (true, Some("fetch-failed")),
+            "{ran}"
+        );
+        let reason = ran["detail"]["reason"].as_str().unwrap_or_default();
+        let named = root(&w).join("absent.json").display().to_string();
+        assert!(reason.contains(&named), "{reason} does not name {named}");
+        assert!(keys(&w, "chat").is_empty());
+    }
 }

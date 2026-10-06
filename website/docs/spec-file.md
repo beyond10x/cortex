@@ -215,8 +215,10 @@ Files that are not UTF-8 text, or are empty, are skipped. A document's key is th
 | `time` | optional dotted path to the record's publication time |
 | `author` | optional dotted path to the record's author |
 | `text` | templates whose `{a.b}` placeholders are filled from the record; the non-empty results, joined, are the record's text |
+| `fallback_text` | optional templates tried in order only when every `text` template renders empty; the first non-empty result is the record's text |
 | `thread` | optional dotted path to the field that groups records into threads |
 | `filters` | a list, possibly empty, of `field` (a dotted path), `values` and `include`. With `include: true` only records whose field equals one of the values are read; with `include: false` those records are left out. A record is read only when it passes every filter |
+| `lookup` | optional path of a JSON file holding one object of strings, an id to a name; read against the spec file's directory as `paths` are. It maps the author and every `<@id>` in the text (below) |
 
 A record of a `MarkdownSections` file is one level-two section, with the fields `heading` (the
 heading's text) and `body` (the lines up to the next level-two heading, trimmed), so
@@ -241,10 +243,21 @@ result and in `cortex.log`, while the rest of the file is still read:
 
 An empty file is skipped and named nowhere, as without `records`.
 
-A record without an id, whose text is empty, or that a filter leaves out, is skipped. A document's
-key is `<file path>#<id>`, and its evidence is cited as `file:<file path>#<id>`; a key read twice
-in one run counts once. With `author`, the text reads `<author>: <text>`. Records are read in file
-order, and files by name, one entry of `paths` after the other.
+A record without an id, whose text and every `fallback_text` are empty, or that a filter leaves
+out, is skipped. A document's key is `<file path>#<id>`, and its evidence is cited as
+`file:<file path>#<id>`; a key read twice in one run counts once. With `author`, the text reads
+`<author>: <text>`. Records are read in file order, and files by name, one entry of `paths` after
+the other.
+
+**Lookup.** With `lookup`, the author's value and every `<@id>` in the text are replaced by the
+name the file gives that id: with the file `{"U1": "Ana", "U2": "Ben"}`, a record by `U1` with the
+text `hi <@U2>` reads `Ana: hi @Ben`. A labelled mention `<@U2|ben>` is looked up by its id and
+becomes `@Ben` too. An id the file does not hold, or maps to a blank name, is kept as written
+(`U9`, `<@U9>`). A leading byte-order mark in the file is ignored, as in record files. The file
+is read once per run, before any record; when it is missing, cannot be read or
+is not a JSON object of strings, the source's run fails with `fetch-failed` and a reason naming
+the file. Names enter the text before the `redaction` policy is applied, so the policy treats
+them as any other name in the text.
 
 **Threads.** With `thread`, a record that has the field carries the earlier records of that thread
 in the run after its own text, as paragraphs marked `[context]`: the nearest first (the record it
@@ -321,11 +334,16 @@ named by the target text. The mapping's node type, its properties, the target ty
 relations are added to the store's ontology where it does not hold them yet.
 
 **Evidence and rejections.** Each record is stored as the evidence every fact from it cites: a
-`Source:` header and the record's JSON. Before that, every string in the record has credential
+`Source:` header, its mapped values (`Mapped values:`, one `<label>: <value>` line each for its
+id, name, aliases, properties and relation targets), then the record's JSON, cut at a character
+boundary to 16,384 bytes (EKR 0.0.30's bound on one evidence payload). The mapped values come
+first, so the cut never takes a value a fact cites. A record whose header and mapped values alone
+are over the bound is not applied: the run names it in `skipped` with the reason and records it as
+seen, so it is read again only once it changes. Before that, every string in the record has credential
 shapes masked and the `redaction` policy's rules with a `replacement` applied; no model sees a
 record, so nothing is replaced by a placeholder. `max_chars_per_document` does not cut a record,
 and EKR rejects a text value over 65,536 bytes (EKR 0.0.30's string limit). A record with any part
-EKR rejects is counted in `parts_rejected`, is not counted in `documents_applied` and is not marked
+EKR rejects is counted in `parts_rejected`, named in `rejected` with EKR's refusal, is not counted in `documents_applied` and is not marked
 seen; the run is then not successful, so later runs read the record and try it again until it
 applies. Shorten or unmap the value at the source to clear it. Change detection,
 `refresh_after_days` and `max_documents_per_run` work as for any source.
@@ -337,7 +355,7 @@ applies. Shorten or unmap the value at the source to clear it. Change detection,
 | `refresh_after_days` | a document whose text changed is extracted again only when it was last applied at least this many days ago; 0 or more |
 | `change` | how a change is detected; `ContentHash` is the only value |
 | `max_documents_per_run` | the most documents one run extracts; above 0 |
-| `max_chars_per_document` | longer text is cut to this many characters; above 0. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |
+| `max_chars_per_document` | longer text is cut to this many characters; above 0. Text is also cut, at a character boundary, to what a 16,384-byte evidence payload holds after its header (EKR 0.0.30's bound), so about 5,400 characters of a three-byte script such as Chinese fit. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |
 
 ## `redaction`
 

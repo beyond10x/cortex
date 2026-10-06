@@ -1416,6 +1416,14 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
             if !report.skipped.is_empty() {
                 detail["skipped"] = json!(report.skipped);
             }
+            // Present only when EKR rejected a part: a run that had none reports as before.
+            if !report.rejected.is_empty() {
+                detail["rejected"] = json!(report
+                    .rejected
+                    .iter()
+                    .map(run::Rejected::json)
+                    .collect::<Vec<_>>());
+            }
             // Present only when the policy pseudonymises: a spec file without one reports as
             // before.
             if let Some(redacted) = &report.redacted {
