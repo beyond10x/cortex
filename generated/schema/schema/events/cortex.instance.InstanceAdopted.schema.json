@@ -1,27 +1,31 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Restore a snapshot input",
-  "x-ess-name": "cortex.instance.RestoreSnapshot",
-  "x-ess-kind": "command-input",
+  "title": "InstanceAdopted payload",
+  "x-ess-name": "cortex.instance.InstanceAdopted",
+  "x-ess-kind": "event-payload",
   "type": "object",
   "properties": {
     "name": {
       "$ref": "#/$defs/cortex.instance.InstanceName"
     },
-    "snapshot": {
-      "type": "string"
+    "revision": {
+      "type": "integer"
+    },
+    "view_port": {
+      "type": "integer"
     }
   },
   "required": [
     "name",
-    "snapshot"
+    "revision",
+    "view_port"
   ],
   "additionalProperties": false,
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
     "source_digest": "074694b024679ddcf3d3bcddb5b3ad9a6149da9dcdf53cfd7604ac031fb75e27",
-    "contract_digest": "slice-sha256/2:083bce5ecabade675ee60a7c4308175344acce82a854c996b0febc66148b4824",
+    "contract_digest": "slice-sha256/2:1ff7c397d428de1a68ef3818f2b695d07ebf0f5f16f497d17d88fa0265da27a5",
     "regenerate": "ess generate"
   },
   "$defs": {

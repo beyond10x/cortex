@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "InstanceBusy payload",
-  "description": "Another cortex command holds the home's lock, or a process other than the viewer holds the store open; nothing was restored.",
-  "x-ess-name": "cortex.instance.InstanceBusy",
+  "title": "BackendMismatch payload",
+  "description": "The store named for adoption is not a store on the backend the spec's `store` names: no SQLite database for `sqlite`, or not the `ekr.postgres/1` file `store.value.config` names for `postgres`.",
+  "x-ess-name": "cortex.instance.BackendMismatch",
   "x-ess-kind": "error-payload",
   "type": "object",
   "properties": {
@@ -18,7 +18,7 @@
     "system": "cortex",
     "specification_version": "v1",
     "source_digest": "074694b024679ddcf3d3bcddb5b3ad9a6149da9dcdf53cfd7604ac031fb75e27",
-    "contract_digest": "slice-sha256/2:7f405c642d120c582cc81a6683b609bc532934bf468a959d4dc70854202a27f0",
+    "contract_digest": "slice-sha256/2:b5bd162e66f9f19ac092e8fb3e66ca9266810c8272923d0f49fae82f678a1c39",
     "regenerate": "ess generate"
   }
 }

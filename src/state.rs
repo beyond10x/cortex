@@ -62,6 +62,9 @@ pub fn hex(bytes: &[u8]) -> String {
 
 const DAY_MS: i64 = 86_400_000;
 
+/// The format of a state file.
+pub const FORMAT: &str = "cortex.seen/1";
+
 /// Whether a change to `doc` waits for the refresh window: every document but a record read from
 /// a file, whose edit is delivered on the next run.
 fn waits(doc: &Document) -> bool {
@@ -83,7 +86,7 @@ impl SeenState {
                 Ok(state)
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self {
-                format: "cortex.seen/1".into(),
+                format: FORMAT.into(),
                 documents: BTreeMap::new(),
                 last_success_started_at: None,
                 held_since: None,
@@ -92,6 +95,24 @@ impl SeenState {
             }),
             Err(e) => Err(format!("cannot read {}: {e}", path.display())),
         }
+    }
+
+    /// A `cortex.seen/1` document an operator names with `cortex adopt --seen`, read as a state
+    /// file is: a missing file or another `format` is an error, and a key that still holds a
+    /// credential is dropped.
+    pub fn read_document(path: &Path) -> Result<Self, String> {
+        if !path.is_file() {
+            return Err(format!("{} is no file", path.display()));
+        }
+        let state = Self::load(path)?;
+        if state.format != FORMAT {
+            return Err(format!(
+                "{}: format is {:?}, not {FORMAT:?}",
+                path.display(),
+                state.format
+            ));
+        }
+        Ok(state)
     }
 
     pub fn save(&self, path: &Path) -> Result<(), String> {
@@ -210,6 +231,25 @@ mod tests {
         );
         loaded.save(&path).unwrap();
         assert!(!std::fs::read_to_string(&path).unwrap().contains(&token));
+    }
+
+    /// `cortex adopt --seen` reads a `cortex.seen/1` document as a state file, and refuses a
+    /// missing file or another format rather than starting from an empty state.
+    #[test]
+    fn a_seen_document_is_read_as_a_state_file_and_another_format_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("notes.json");
+        let mut state = SeenState::load(&path).unwrap();
+        state.record(&doc("https://example.org/a", "one"), 4);
+        state.save(&path).unwrap();
+        let read = SeenState::read_document(&path).unwrap();
+        assert_eq!(read.documents, state.documents);
+
+        let missing = SeenState::read_document(&dir.path().join("none.json")).unwrap_err();
+        assert!(missing.contains("none.json"), "{missing}");
+        std::fs::write(&path, r#"{"format": "other/1", "documents": {}}"#).unwrap();
+        let other = SeenState::read_document(&path).unwrap_err();
+        assert!(other.contains("other/1"), "{other}");
     }
 
     #[test]

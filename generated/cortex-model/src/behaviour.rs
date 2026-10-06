@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d
-// contract digest add61f1f192f4767e91f96690fe684e5461a92681a4000b4032423d92532ec30
+// model digest 074694b024679ddcf3d3bcddb5b3ad9a6149da9dcdf53cfd7604ac031fb75e27
+// contract digest 296a7606b2747e46a03e5b015a93158db3c8eab5897da3fedeccf2c046162b5e
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -126,6 +126,47 @@ where
         }
         SourceStorage::put(&mut self.ports, crate::instance::AnySource::Enabled(crate::instance::Source::new(data)).snapshot());
         return Ok(crate::instance::AddSourceOutcome::Added { source_added: crate::instance::SourceAdded { source_id: identity.clone(), instance_name: input.instance_name.clone() } });
+    }
+}
+
+/// `cortex.instance.AdoptInstance`, generated: every outcome is one the specification fully determines.
+impl<P> crate::instance::obligations::AdoptInstanceBehavior for Generated<P>
+where
+    P: Context + InstanceStorage,
+{
+    fn adopt_instance(&mut self, input: crate::instance::AdoptInstance) -> Result<crate::instance::AdoptInstanceOutcome, UnmetObligation> {
+        let _ = &input;
+        // `name-taken`: an identity a record already carries, before any branch is taken.
+        if InstanceStorage::get(&self.ports, &input.name).is_some() {
+            return Ok(crate::instance::AdoptInstanceOutcome::NameTaken { error: crate::instance::NameTaken { name: input.name.clone() } });
+        }
+        // `backend-mismatch`: an external branch, where the context takes it.
+        if self.ports.external("cortex.instance.AdoptInstance", "backend-mismatch") {
+            return Ok(crate::instance::AdoptInstanceOutcome::BackendMismatch { error: crate::instance::BackendMismatch { reason: self.ports.generate_string() } });
+        }
+        // `store-unreadable`: an external branch, where the context takes it.
+        if self.ports.external("cortex.instance.AdoptInstance", "store-unreadable") {
+            return Ok(crate::instance::AdoptInstanceOutcome::StoreUnreadable { error: crate::instance::StoreUnreadable { reason: self.ports.generate_string() } });
+        }
+        // `store-held`: an external branch, where the context takes it.
+        if self.ports.external("cortex.instance.AdoptInstance", "store-held") {
+            return Ok(crate::instance::AdoptInstanceOutcome::StoreHeld { error: crate::instance::StoreHeld { name: self.ports.generate_string() } });
+        }
+        // `seed-types-missing`: an external branch, where the context takes it.
+        if self.ports.external("cortex.instance.AdoptInstance", "seed-types-missing") {
+            return Ok(crate::instance::AdoptInstanceOutcome::SeedTypesMissing { error: crate::instance::SeedTypesMissing { types: self.ports.generate_string() } });
+        }
+        // `adopted`: the default.
+        let identity: crate::instance::InstanceName = input.name.clone();
+        let data = crate::instance::InstanceData {
+            name: identity.clone(),
+            description: input.description.clone(),
+            model: input.model.clone(),
+            ekr_version: input.ekr_version.clone(),
+            seed_digest: input.seed_digest.clone(),
+        };
+        InstanceStorage::put(&mut self.ports, crate::instance::AnyInstance::Active(crate::instance::Instance::new(data)).snapshot());
+        return Ok(crate::instance::AdoptInstanceOutcome::Adopted { instance_adopted: crate::instance::InstanceAdopted { name: identity.clone(), revision: self.ports.generate_integer(), view_port: self.ports.generate_integer() } });
     }
 }
 

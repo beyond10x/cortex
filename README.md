@@ -71,6 +71,7 @@ every command, operating notes, limits and the generated specification reference
 | command | does |
 |---|---|
 | `cortex create --spec <file>` | create an instance and add its sources |
+| `cortex adopt --spec <file> --store <file>` | make an existing EKR store an instance, with its history, without reseeding it |
 | `cortex update <name> --spec <file>` | change sources, model or serve settings; a seed change is refused |
 | `cortex run <instance>/<source>` | run one source once |
 | `cortex remove <name>` | remove the timers and the viewer; the directory and store stay |

@@ -140,6 +140,57 @@ locking keeps such a reader consistent, but it reads the restored store from the
 A `postgres` store has no snapshot; its backup is the operator's database backup, and
 `cortex restore` answers `backend-unsupported`.
 
+## Adopting an existing store
+
+`cortex adopt --spec <file> --store <file>` makes an EKR store that cortex did not create an
+instance, with its whole revision history. Nothing is seeded, no seed document is extracted and
+nothing is written to the store named. The spec's sources are added, and the units installed, as
+`create` does.
+
+- **SQLite.** The spec names no `store`, or `store.backend: sqlite`, and `--store` is the database
+  file, or a symlink to it. cortex copies it, from a read-only connection on the file it resolves
+  to, through SQLite's online backup to `instances/<name>/store.sqlite`, and the instance grows
+  the copy. The copy holds every revision, those still in the store's `-wal` included, as when a
+  viewer or an `ekr mcp` session holds the store open. The database and its `-wal` are not
+  written; SQLite itself creates or updates the `-shm` beside them, and on a store at rest it also
+  leaves an empty `-wal` there. The copy is the store at the moment it is taken: stop every
+  process that writes to the old file first, since later writes to it do not reach the instance.
+- **Free space.** Before copying, cortex checks the free space under the home (statvfs): the store,
+  its `-wal` and a 64 MiB margin must fit. If they do not, `cortex adopt` exits 2 naming the bytes
+  needed and the bytes free. A copy that fails while writing (a full disk, a file-size limit)
+  exits 2 with `cannot copy --store into …`; it is not `store-unreadable`, which means the store
+  itself could not be read.
+- **PostgreSQL.** The spec names `store.backend: postgres`, and `--store` is the same
+  `ekr.postgres/1` file its `store.value.config` names. The store is used where it is; cortex
+  provisions no tables. One lineage, the resolved configuration file and the host's tenant, is
+  grown by one instance: adopting it while another active instance of the home grows it answers
+  `store-held`, naming that instance, and `create` refuses it as `seed-refused`. cortex records
+  each `postgres` instance's lineage in `instances/<name>/meta.json`.
+- **The host.** EKR opens a store only under the tenant and the authority (its agents and
+  validation profile) it was seeded with; under another host it answers "the lineage has no seed"
+  or `bootstrap-authority-mismatch`, and adopting answers `store-unreadable`. `--host <file>` names
+  the `ekr.cli-host/1` document the store was seeded under, which is copied as
+  `instances/<name>/host.json`. Without it, cortex writes its own host for tenant `<name>`, which
+  opens only a store cortex created. A run adds node and edge types only under a validation
+  profile that admits schema changes, such as the `ekr.p2-apply/1` of cortex's own host.
+- **The seed.** Every node and edge type that the spec's `seed.ekr_seed` and `seed.schema` declare
+  must be in the store's ontology; otherwise adopting answers `seed-types-missing` and lists them.
+  The seed files are frozen with the spec, as for `create`, so `update` refuses to change them.
+- **Seen documents.** Each source starts from the `cortex.seen/1` file `--seen <source>=<file>`
+  names, such as that source's `state/<source>.json` in another home, or empty; a second `--seen`
+  for one source exits 2. With an empty state the first run fetches every document and applies
+  each whose content hash it has not seen, which re-extracts the documents the store already
+  holds: a second set of assertions and evidence for them, at the model's cost. A document a seen
+  file names is not extracted again while its text is unchanged, whether or not the store holds
+  evidence of it. `adopted` therefore reports `seen_documents`, every document the seen files name,
+  and `seen_without_evidence`, those of them the store holds no evidence of under any identity
+  cortex gives a document (its URL, `file:<key>` or `record:<key>`). A non-zero
+  `seen_without_evidence` means the seen file is from another store, or the store lost those
+  documents' evidence: to have them extracted, remove their keys from `state/<source>.json`.
+
+`adopted` reports the store's head as `revision`. `backend-mismatch`, `store-unreadable`,
+`store-held` and `seed-types-missing` leave no instance directory and register nothing.
+
 ## The model call
 
 Extraction runs `claude -p` in an empty directory under the run's directory, isolated from the
