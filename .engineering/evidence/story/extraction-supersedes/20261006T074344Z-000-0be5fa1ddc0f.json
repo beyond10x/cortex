@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-06T07:43:44Z",
+  "actor": "agent:claude",
+  "artifact": "story:extraction-supersedes",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261006e (EXIT=0, 407 tests)"
+  }
+}
