@@ -348,10 +348,10 @@ fn a_judge_failing_mid_measurement_states_everything_spent_in_all() {
         "if [ -e \"$R/judge-error\" ]; then",
         "if [ -e \"$R/judge-error\" ] || [ \"$n\" -ge 1 ]; then",
     );
-    executable(
-        &w.bin.join("claude"),
-        script.trim_start_matches("#!/bin/sh\n"),
-    );
+    let body = script
+        .split_once('\n')
+        .map_or(script.as_str(), |(_, rest)| rest);
+    executable(&w.bin.join("claude"), body);
     let (code, out) = w.cortex(&["quality", "spent", "--sample", "25"]);
     assert_eq!(
         (code, out["outcome"].as_str()),
