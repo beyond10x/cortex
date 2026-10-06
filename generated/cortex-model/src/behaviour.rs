@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 3f41e7bfa05fd6d8ef1f3aed9bf4d87dd1ac06eadb402b333aab6ff0e0193c73
-// contract digest d3fc64a1257346e9b746fe7ef224384e0838ec0291c85560075fcf2f917faf53
+// model digest 752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e
+// contract digest 4ccfd55371704938bf0eee933501df17665487def4b8ad6c2faac061972da933
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -68,6 +68,10 @@ pub trait Context {
     /// A new `cortex.instance.Source.State`, which the model says the implementation assigns — a created identity, a
     /// `{generated: true}` value, or an event field the model leaves undetermined.
     fn generate_cortex_instance_source_state(&mut self) -> crate::instance::SourceState;
+
+    /// A new `Decimal`, which the model says the implementation assigns — a created identity, a
+    /// `{generated: true}` value, or an event field the model leaves undetermined.
+    fn generate_decimal(&mut self) -> crate::primitives::Decimal;
 
     /// A new `Integer`, which the model says the implementation assigns — a created identity, a
     /// `{generated: true}` value, or an event field the model leaves undetermined.
@@ -240,6 +244,32 @@ where
         }
         SourceStorage::put(&mut self.ports, next);
         return Ok(crate::instance::EnableSourceOutcome::Enabled { source_enabled: crate::instance::SourceEnabled { source_id: input.source_id.clone() } });
+    }
+}
+
+/// `cortex.instance.MeasureQuality`, generated: every outcome is one the specification fully determines.
+impl<P> crate::instance::obligations::MeasureQualityBehavior for Generated<P>
+where
+    P: Context + InstanceStorage,
+{
+    fn measure_quality(&mut self, input: crate::instance::MeasureQuality) -> Result<crate::instance::MeasureQualityOutcome, UnmetObligation> {
+        let _ = &input;
+        // `sample-failed`: an external branch, where the context takes it.
+        if self.ports.external("cortex.instance.MeasureQuality", "sample-failed") {
+            return Ok(crate::instance::MeasureQualityOutcome::SampleFailed { error: crate::instance::SampleFailed { reason: self.ports.generate_string() } });
+        }
+        // `judge-failed`: an external branch, where the context takes it.
+        if self.ports.external("cortex.instance.MeasureQuality", "judge-failed") {
+            return Ok(crate::instance::MeasureQualityOutcome::JudgeFailed { error: crate::instance::JudgeFailed { reason: self.ports.generate_string() } });
+        }
+        // `measured`: the default.
+        let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
+            return Ok(crate::instance::MeasureQualityOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        };
+        let _ = &held;
+        let next = held;
+        InstanceStorage::put(&mut self.ports, next);
+        return Ok(crate::instance::MeasureQualityOutcome::Measured { quality_measured: crate::instance::QualityMeasured { name: input.name.clone(), stamp: self.ports.generate_string(), revision: self.ports.generate_integer(), seed: self.ports.generate_integer(), judged: self.ports.generate_integer(), passed: self.ports.generate_integer(), unclear: self.ports.generate_integer(), lower: self.ports.generate_decimal(), upper: self.ports.generate_decimal() } });
     }
 }
 

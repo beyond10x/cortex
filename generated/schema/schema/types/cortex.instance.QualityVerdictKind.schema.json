@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.QualityVerdictKind",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e",
+    "contract_digest": "slice-sha256/2:bd2ab259cd4ada2dd3899750f17e990697b3341d7e57b1353ba585c62513ea2e",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.QualityVerdictKind": {
+      "title": "QualityVerdictKind",
+      "x-ess-name": "cortex.instance.QualityVerdictKind",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "yes",
+        "no",
+        "unclear"
+      ]
+    }
+  }
+}

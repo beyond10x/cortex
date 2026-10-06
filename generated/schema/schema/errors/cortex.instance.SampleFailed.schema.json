@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SampleFailed payload",
+  "description": "EKR could not draw the sample (`ekr sample`): the size is outside 1 to 1000, or the store cannot be read under the instance's host. No model was asked and nothing was written.",
+  "x-ess-name": "cortex.instance.SampleFailed",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "752e5a6dedf3fb8a6d35dd1d13fe46d5ba9c4ac701ddb1e1e22000515599010e",
+    "contract_digest": "slice-sha256/2:3ccd364f21cf3b4bae856cf123ee2e74294080bb0bf7571c72f75d06b19dc7f0",
+    "regenerate": "ess generate"
+  }
+}

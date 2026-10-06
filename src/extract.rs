@@ -57,12 +57,39 @@ pub struct Answer {
     pub cost_usd: Option<f64>,
 }
 
+/// A model call that gave no answer, and what it cost.
+#[derive(Debug)]
+pub struct Refused {
+    pub message: String,
+    /// What the call cost: `0` when no model was asked, `None` when a model was asked and its
+    /// cost is not known. A missing cost is never `0`.
+    pub cost_usd: Option<f64>,
+}
+
+impl Refused {
+    /// A call refused before any model was asked: it cost nothing.
+    fn free(message: String) -> Self {
+        Self {
+            message,
+            cost_usd: Some(0.0),
+        }
+    }
+
+    /// A call whose model was asked and left no cost to read.
+    fn uncosted(message: String) -> Self {
+        Self {
+            message,
+            cost_usd: None,
+        }
+    }
+}
+
 /// Why a `Codex` backend does not extract yet.
 pub const CODEX_PENDING: &str =
     "the Codex model backend does not extract yet (story:codex-model-backend)";
 
 /// An answer's cost as an error message states it.
-fn cost_text(cost_usd: Option<f64>) -> String {
+pub fn cost_text(cost_usd: Option<f64>) -> String {
     match cost_usd {
         Some(c) => format!("cost {c:.4} USD"),
         None => "no cost reported".into(),
@@ -178,7 +205,10 @@ pub fn prompt(
 }
 
 impl Model {
-    /// One model call for one batch, through the spec's backend, run in `dir`.
+    /// One extraction call for one batch, through the spec's backend, run in `dir`: [`ask_with`]
+    /// and the extraction prompt [`SYSTEM_PROMPT`].
+    ///
+    /// [`ask_with`]: Model::ask_with
     pub fn ask(
         &self,
         dir: &Path,
@@ -186,9 +216,24 @@ impl Model {
         prompt: &str,
         budget_usd: f64,
     ) -> Result<Answer, String> {
+        self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd)
+            .map_err(|e| e.message)
+    }
+
+    /// One model call with `system_prompt`, through the spec's backend, run in `dir`: the answer
+    /// is held to `schema`, and the call isolated as an extraction is. A failed call states what
+    /// it cost, so a caller adding up several calls counts the failed one too.
+    pub fn ask_with(
+        &self,
+        system_prompt: &str,
+        dir: &Path,
+        schema: &Value,
+        prompt: &str,
+        budget_usd: f64,
+    ) -> Result<Answer, Refused> {
         match self.backend {
-            ModelBackend::Claude => self.ask_claude(dir, schema, prompt, budget_usd),
-            ModelBackend::Codex => Err(CODEX_PENDING.into()),
+            ModelBackend::Claude => self.ask_claude(system_prompt, dir, schema, prompt, budget_usd),
+            ModelBackend::Codex => Err(Refused::free(CODEX_PENDING.into())),
         }
     }
 
@@ -196,12 +241,14 @@ impl Model {
     /// is used; no user, project or local settings, MCP servers, skills or tools are loaded.
     fn ask_claude(
         &self,
+        system_prompt: &str,
         dir: &Path,
         schema: &Value,
         prompt: &str,
         budget_usd: f64,
-    ) -> Result<Answer, String> {
-        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    ) -> Result<Answer, Refused> {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| Refused::free(format!("{}: {e}", dir.display())))?;
         let mut child = Command::new("timeout")
             .arg("--kill-after=30")
             .arg(self.timeout_s.to_string())
@@ -213,7 +260,7 @@ impl Model {
                 "--no-session-persistence",
             ])
             .args(["--model", &self.model])
-            .args(["--system-prompt", SYSTEM_PROMPT])
+            .args(["--system-prompt", system_prompt])
             .args(["--json-schema", &schema.to_string()])
             .args(["--max-budget-usd", &format!("{budget_usd:.4}")])
             .args(["--output-format", "json"])
@@ -223,40 +270,46 @@ impl Model {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| format!("cannot run claude: {e}"))?;
+            .map_err(|e| Refused::free(format!("cannot run claude: {e}")))?;
         child
             .stdin
             .take()
             .expect("piped stdin")
             .write_all(prompt.as_bytes())
-            .map_err(|e| format!("cannot send the prompt: {e}"))?;
+            .map_err(|e| Refused::uncosted(format!("cannot send the prompt: {e}")))?;
         let out = child
             .wait_with_output()
-            .map_err(|e| format!("claude did not finish: {e}"))?;
+            .map_err(|e| Refused::uncosted(format!("claude did not finish: {e}")))?;
         let answer: Value = serde_json::from_slice(&out.stdout).map_err(|_| {
-            format!(
+            Refused::uncosted(format!(
                 "claude exited {} without a JSON answer: {}",
                 out.status,
                 String::from_utf8_lossy(&out.stderr).trim()
-            )
+            ))
         })?;
         let cost_usd = answer["total_cost_usd"].as_f64();
         if answer["is_error"] == Value::Bool(true) {
-            return Err(format!(
-                "claude answered an error ({}), {}",
-                answer["subtype"].as_str().unwrap_or("unknown"),
-                cost_text(cost_usd)
-            ));
+            return Err(Refused {
+                message: format!(
+                    "claude answered an error ({}), {}",
+                    answer["subtype"].as_str().unwrap_or("unknown"),
+                    cost_text(cost_usd)
+                ),
+                cost_usd,
+            });
         }
         match answer.get("structured_output") {
             Some(document) if document.is_object() => Ok(Answer {
                 document: document.clone(),
                 cost_usd,
             }),
-            _ => Err(format!(
-                "claude returned no structured output, {}",
-                cost_text(cost_usd)
-            )),
+            _ => Err(Refused {
+                message: format!(
+                    "claude returned no structured output, {}",
+                    cost_text(cost_usd)
+                ),
+                cost_usd,
+            }),
         }
     }
 }
