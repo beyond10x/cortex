@@ -289,10 +289,15 @@ a structured run costs 0.
 
 | field | meaning |
 |---|---|
-| `input` | `from: connectors` with its `value`: `adapter`, `connection`, `operation`, `inputs` and an optional `paging`, as for [`kind: connectors`](#kind-connectors), window included. `from: files` is accepted but does not run yet: its run fails with `fetch-failed` |
-| `records` | path to the array of records in the answer, for example `$.people` |
+| `input` | `from: connectors` with its `value`: `adapter`, `connection`, `operation`, `inputs` and an optional `paging`, as for [`kind: connectors`](#kind-connectors), window included. Or `from: files` with its `value`: `paths` and `glob`, as for [`kind: files`](#kind-files); each matching file is one JSON document (a leading byte-order mark is ignored) |
+| `records` | path to the array of records in the answer or in each file, for example `$.people` |
 | `mapping` | how a record becomes an entity (below) |
-| `dropped` | accepted; `Keep` and `Supersede` do not act yet, and nothing a source made earlier is superseded |
+| `dropped` | optional: `Keep` (the default) leaves every value the source asserted earlier; `Supersede` ends each value the source no longer lists (below) |
+
+A file of a `from: files` input that cannot be read, is not JSON, or holds no array at `records`
+fails the run with `fetch-failed`, naming the file, and nothing is applied or ended. So does a
+path under which no file matches `glob` (a file moved away, a mount not there yet), naming the
+path and the glob.
 
 A path is dotted and may start at the root: `$.contact.email` and `contact.email` are the same,
 and `$` alone is the answer itself.
@@ -309,7 +314,10 @@ and `$` alone is the answer itself.
 A record without an id or a name is skipped, and a record whose id was already read in the run
 counts once.
 
-**Identity.** A record's identity is `<adapter>:<operation>:<id>`. When masking or a `redaction`
+**Identity.** A record's identity is `<adapter>:<operation>:<id>`, or `files:<paths>:<glob>:<id>`
+for a `from: files` input, its `paths` as written joined by `,` (for example
+`files:registry:*.json:P-1`), so one glob under two roots is two record sets. In a path and the
+glob, `%`, `:` and `,` are written `%25`, `%3A` and `%2C`. When masking or a `redaction`
 rule with a `replacement` would change the id, the identity carries the first 16 hex digits of the
 id's SHA-256 in its place, so the id is never stored and two such ids stay two records. The
 identity is the record's document key, and its evidence reads `Source: record:<identity>`. EKR treats things of one node
@@ -327,9 +335,35 @@ merge a record with nodes known by its plain name, map the name as an alias too
 
 **Values.** A property's value is stored as text (a number or a boolean as written in JSON); a
 property whose value is absent, empty, null, a list or an object is not set. A changed value adds
-an assertion of the new value, and the old one stays active beside it: EKR 0.0.30 does not
-supersede an assertion, and cortex will once EKR does. Until then a property can hold every value
-a record has had.
+an assertion of the new value. With `dropped: Keep` the old one stays active beside it, so a
+property can hold every value a record has had.
+
+**Dropped values.** With `dropped: Supersede`, after each run cortex reads the store
+(`ekr snapshot`) for the active assertions this source made: those whose evidence is all
+`record:<identity>` of this source's identities. It compares each with what the record lists now
+and ends the ones it no longer lists, in transactions of their own (`runs/<run>/ends-<n>.yaml`):
+
+- a property value that changed is **superseded** by the record's new value, from the new value's
+  valid time on, so `ekr snapshot --valid-at` still answers the old value for earlier instants;
+- a value with no replacement (the record is no longer listed, or no longer has the property or the
+  relation) is **retracted**, with a reason naming the record: EKR 0.0.31 supersedes an assertion
+  only by another. The node itself stays. A retracted relation's edge is removed when no other
+  active assertion of that relation joins the two nodes.
+
+The run reports `superseded` and `retracted` when it ended any. Nothing is ended when the fetch
+left records unread (a `max_pages` reached, an empty page that named a next one), or when the
+source lists no record at all: an empty list is read as a list that failed, so a source cannot
+drop its last record. A record whose current text the run did not apply (held back by
+`refresh_after_days`, beyond `max_documents_per_run`, rejected, or over the evidence bound) keeps
+its values. Values are ended at most 1,000 to a transaction; when a later transaction of a run
+fails, the edges of relations an earlier one retracted stay, and later runs do not remove them.
+
+Values another source asserted are never ended. A `kind: connectors` source cites its records as
+a structured source does, so `create` and `update` refuse a `dropped: Supersede` structured source
+that reads the adapter and operation a `connectors` source of the spec reads, naming both. Two
+structured sources whose identities share one prefix (the same adapter and operation, or the same
+paths and `glob`) are one source here, as they are one record set: a run of one ends the values of
+records only the other lists.
 
 **Relations.** A relation target names a record of the same run by that record's identity (the
 target taken as an id) or, when exactly one record of the run has it, by its name or a mapped

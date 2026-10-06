@@ -314,10 +314,12 @@ fn the_codex_binary_is_a_flag_beside_the_claude_binary() {
 }
 
 /// A structured source is accepted, registered as `Structured`, survives a registry reload, and,
-/// reading files, fails its run naming the story that builds file input. Written by the wave's
-/// adversary (pass 1); `story:structured-source` runs the Connectors input (`tests/structured.rs`).
+/// reading a directory with no matching file, fails its fetch naming the glob. Written by the
+/// wave's adversary (pass 1); `story:structured-source` runs the Connectors input
+/// (`tests/structured.rs`) and `story:structured-from-files-and-drops` the files input
+/// (`tests/structured_files.rs`).
 #[test]
-fn a_structured_source_is_registered_round_trips_and_does_not_run() {
+fn a_structured_source_is_registered_round_trips_and_reads_its_files() {
     let w = World::new();
     std::fs::create_dir_all(w.root.join("records")).unwrap();
     let path = w.spec("st", "conn_test");
@@ -370,7 +372,7 @@ serve:"#;
         ran["detail"]["reason"]
             .as_str()
             .unwrap_or_default()
-            .contains("story:structured-from-files-and-drops"),
+            .contains("no file matches glob"),
         "{ran}"
     );
     let (code, ran) = w.cortex(&["run", "st/news"]);

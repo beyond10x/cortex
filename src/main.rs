@@ -1471,6 +1471,12 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
                 detail["redacted"] = json!(redacted);
                 detail["unrestored"] = json!(report.unrestored);
             }
+            // Present only when the run ended a value (`dropped: Supersede`): a run that ended
+            // none reports as before.
+            if report.superseded + report.retracted > 0 {
+                detail["superseded"] = json!(report.superseded);
+                detail["retracted"] = json!(report.retracted);
+            }
             (
                 Done {
                     outcome: "ran",

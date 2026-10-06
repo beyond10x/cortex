@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:structured-from-files-and-drops
 kind: story
-status: draft
+status: implemented
 title: Structured imports read files and supersede what a source dropped
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -22,7 +22,11 @@ scope:
   path: src/structured.rs
 - confidence: inferred
   path: tests/structured_files.rs
-revision: 10
+revision: 15
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-06T07:46:33Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":4}}}
+- {from: "proposed", to: "active", at: "2026-10-06T07:46:33Z", actor: "agent:claude", revision: 12, decided_on: {"recorded":{"review_outcome":4}}}
+- {from: "active", to: "implemented", at: "2026-10-06T08:12:28Z", actor: "agent:claude", revision: 15, decided_on: {"recorded":{"test_result":1,"review_outcome":5}}}
 ---
 ## Outcome
 
@@ -43,10 +47,7 @@ longer lists is superseded in the store instead of standing forever.
 
 ## Acceptance
 
-`tests/structured_files.rs`: a registry file of 3 people with a `team` property imports 3 nodes;
-after one person's team changes and another is removed, a second run leaves the changed person with
-the new team as the active assertion and the old one superseded, and the removed person's
-assertions superseded.
+`tests/structured_files.rs`: a registry file of 3 people with a `team` property imports 3 nodes; after one person's team changes and another is removed, a second run leaves the changed person with the new team as the active assertion and the old one superseded, and the removed person's assertions retracted (EKR 0.0.31 supersedes only with a replacement; corrected 2026-10-06).
 
 ## Depends on
 
@@ -58,5 +59,8 @@ assertions superseded.
 
 ## Scope
 
-`src/structured.rs`, `src/sources.rs`, `src/ekr.rs` (the read of this source's active assertions),
-`tests/structured_files.rs` (new).
+Landed 2026-10-06 in `a142add` (wave 20261006f).
+
+- **Files:** `src/structured.rs` (`listed`, `ended`, files identity), `src/sources.rs` (files fetch), `src/ekr.rs` (`snapshot`, `transact`), `src/run.rs` (the drop step), `src/spec.rs` (Supersede beside a connectors source refused), `src/main.rs`, `tests/structured_files.rs` (new), `tests/structured.rs`, `tests/e2e.rs`, `website/docs/spec-file.md`
+- **Review:** one adversary pass, 3 findings fixed (no-match glob, over-bound record, model source on the same operation)
+- **Limits kept:** a source cannot drop its last record; an edge deletion can be lost after a partial failure of a chunked end transaction

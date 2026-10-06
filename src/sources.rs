@@ -328,14 +328,103 @@ pub fn fetch(
                     fetched
                 })
             }
-            // The spec accepts the settings; reading files is that story's.
-            m::StructuredInput::Files(_) => Err(FetchError::Failed(
-                "a structured source reading files is not run yet \
-                 (story:structured-from-files-and-drops)"
-                    .into(),
-            )),
+            m::StructuredInput::Files(f) => {
+                fetch_structured_files(st, f, base).map(|documents| Fetched {
+                    documents,
+                    ..Fetched::default()
+                })
+            }
         },
     }
+}
+
+/// Adds the documents of `records` to `docs`, one per record, as a structured source reads them:
+/// a record with no scalar at the mapping's `id` or `name` is left out, and so is a record whose
+/// id `keys` already holds. Its key is `<prefix>:<raw id>` ([`crate::structured::prefix`]).
+fn structured_records(
+    st: &m::StructuredSource,
+    records: &[Value],
+    keys: &mut BTreeSet<String>,
+    docs: &mut Vec<Document>,
+) {
+    let prefix = crate::structured::prefix(st);
+    for record in records {
+        let Some(id) = crate::structured::text_at(record, &st.mapping.id) else {
+            continue;
+        };
+        if crate::structured::text_at(record, &st.mapping.name).is_none() {
+            continue;
+        }
+        let key = format!("{prefix}:{id}");
+        if !keys.insert(key.clone()) {
+            continue;
+        }
+        docs.push(Document {
+            key,
+            origin: Origin::Record,
+            title: None,
+            description: None,
+            published: None,
+            text: record.to_string(),
+            hash: None,
+        });
+    }
+}
+
+/// The records of a `structured` source's `files` input: every file under `paths` (read against
+/// `base`, `~/` expanded) whose path below its root matches `glob`, in file name order, each a
+/// JSON document whose `records` path holds the list (a leading byte-order mark is ignored), read
+/// as [`structured_records`] reads a page. A root, a file or a list that cannot be read fails the
+/// fetch, naming the file, and so does a root under which no file matches `glob`: a source that
+/// leaves a record out of a run must not have it read as no longer listed (`dropped: Supersede`).
+fn fetch_structured_files(
+    st: &m::StructuredSource,
+    f: &m::StructuredFiles,
+    base: &Path,
+) -> Result<Vec<Document>, FetchError> {
+    let glob = globset::Glob::new(&f.glob)
+        .map_err(|e| FetchError::Failed(format!("glob {:?}: {e}", f.glob)))?
+        .compile_matcher();
+    let mut docs = Vec::new();
+    let mut keys = BTreeSet::new();
+    for root in &f.paths {
+        let root = under(base, root);
+        let mut matched = false;
+        for entry in walkdir::WalkDir::new(&root).sort_by_file_name() {
+            let entry =
+                entry.map_err(|e| FetchError::Failed(format!("{}: {e}", root.display())))?;
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let rel = entry.path().strip_prefix(&root).unwrap_or(entry.path());
+            if !glob.is_match(rel) {
+                continue;
+            }
+            matched = true;
+            let path = entry.path().display();
+            let bytes = std::fs::read(entry.path())
+                .map_err(|e| FetchError::Failed(format!("{path}: {e}")))?;
+            let unmarked = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
+            let answer: Value = serde_json::from_slice(unmarked)
+                .map_err(|e| FetchError::Failed(format!("{path}: not JSON: {e}")))?;
+            let records = at(&answer, &st.records)
+                .and_then(Value::as_array)
+                .ok_or_else(|| {
+                    FetchError::Failed(format!("{path}: no array at {:?}", st.records))
+                })?;
+            structured_records(st, records, &mut keys, &mut docs);
+        }
+        // A file moved away, a mount not there yet or an edited glob reads nothing: that is not a
+        // source that lists nobody.
+        if !matched {
+            return Err(FetchError::Failed(format!(
+                "{}: no file matches glob {:?}",
+                root.display(),
+                f.glob
+            )));
+        }
+    }
+    Ok(docs)
 }
 
 /// The records of a `structured` source's Connectors operation, one document per record, read as
@@ -353,7 +442,7 @@ fn fetch_structured(
 ) -> Result<Fetched, FetchError> {
     let mut docs = Vec::new();
     let mut unread = Vec::new();
-    let mut keys = std::collections::BTreeSet::new();
+    let mut keys = BTreeSet::new();
     let mut invoke =
         |input: &Value| Ok(connectors.invoke(&c.adapter, &c.connection, &c.operation, input)?);
     for input in &c.inputs {
@@ -365,27 +454,7 @@ fn fetch_structured(
             c.paging.as_ref(),
             &mut unread,
         )?;
-        for record in &records {
-            let Some(id) = crate::structured::text_at(record, &st.mapping.id) else {
-                continue;
-            };
-            if crate::structured::text_at(record, &st.mapping.name).is_none() {
-                continue;
-            }
-            let key = format!("{}:{}:{id}", c.adapter, c.operation);
-            if !keys.insert(key.clone()) {
-                continue;
-            }
-            docs.push(Document {
-                key,
-                origin: Origin::Record,
-                title: None,
-                description: None,
-                published: None,
-                text: record.to_string(),
-                hash: None,
-            });
-        }
+        structured_records(st, &records, &mut keys, &mut docs);
     }
     Ok(Fetched {
         documents: docs,
