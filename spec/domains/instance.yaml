@@ -524,8 +524,8 @@ errors:
 
   - name: cortex.instance.InstanceBusy
     summary: >-
-      Another cortex command holds the home's lock, or a process other than the viewer holds the
-      store open; nothing was restored.
+      Another cortex command holds the home's lock, or another connection held the store's write
+      lock for 5 seconds; nothing was restored. A reader that holds the store open does not.
     fields:
       - {name: reason, type: String}
 
@@ -977,7 +977,7 @@ commands:
         summary: Nothing was restored.
 
       - name: busy
-        external: Another cortex command holds the home's lock, or a process other than the viewer holds the store open
+        external: Another cortex command holds the home's lock, or another connection holds the store's write lock for 5 seconds
         error: cortex.instance.InstanceBusy
         payload:
           cortex.instance.InstanceBusy:

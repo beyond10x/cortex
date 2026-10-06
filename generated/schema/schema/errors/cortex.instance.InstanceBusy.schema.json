@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "InstanceBusy payload",
-  "description": "Another cortex command holds the home's lock, or a process other than the viewer holds the store open; nothing was restored.",
+  "description": "Another cortex command holds the home's lock, or another connection held the store's write lock for 5 seconds; nothing was restored. A reader that holds the store open does not.",
   "x-ess-name": "cortex.instance.InstanceBusy",
   "x-ess-kind": "error-payload",
   "type": "object",
@@ -17,8 +17,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "074694b024679ddcf3d3bcddb5b3ad9a6149da9dcdf53cfd7604ac031fb75e27",
-    "contract_digest": "slice-sha256/2:7f405c642d120c582cc81a6683b609bc532934bf468a959d4dc70854202a27f0",
+    "source_digest": "0fc580942f295d0f5dc09e702a75e70eee57d08233671d7934b03e104c73ab85",
+    "contract_digest": "slice-sha256/2:58d325f61094e59f15d79639d94b92445a52d9894045700a1012b82e759e1d60",
     "regenerate": "ess generate"
   }
 }

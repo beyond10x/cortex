@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 074694b024679ddcf3d3bcddb5b3ad9a6149da9dcdf53cfd7604ac031fb75e27
-// contract digest 296a7606b2747e46a03e5b015a93158db3c8eab5897da3fedeccf2c046162b5e
+// model digest 0fc580942f295d0f5dc09e702a75e70eee57d08233671d7934b03e104c73ab85
+// contract digest 7942f8a668be6af9ca8b312816fa1ae3c7611158d27d675feb1728f83b6d8cbc
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -1432,7 +1432,7 @@ pub enum RestoreSnapshotOutcome {
         /// Why it was refused: `cortex.instance.RestoreUnsupported`.
         error: RestoreUnsupported,
     },
-    /// `busy` — externally decided (Another cortex command holds the home's lock, or a process other than the viewer holds the store open).
+    /// `busy` — externally decided (Another cortex command holds the home's lock, or another connection holds the store's write lock for 5 seconds).
     ///
     /// Nothing was restored.
     Busy {
@@ -1713,7 +1713,7 @@ pub struct FetchFailed {
 
 /// The declared error `cortex.instance.InstanceBusy`.
 ///
-/// Another cortex command holds the home's lock, or a process other than the viewer holds the store open; nothing was restored.
+/// Another cortex command holds the home's lock, or another connection held the store's write lock for 5 seconds; nothing was restored. A reader that holds the store open does not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceBusy {
     /// `reason` — `String`.
