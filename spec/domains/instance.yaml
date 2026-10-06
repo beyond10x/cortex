@@ -420,6 +420,7 @@ actors:
   - name: cortex.instance.Operator
     may:
       - cortex.instance.CreateInstance
+      - cortex.instance.AdoptInstance
       - cortex.instance.UpdateInstance
       - cortex.instance.RemoveInstance
       - cortex.instance.AddSource
@@ -475,6 +476,35 @@ errors:
     fields:
       - {name: name, type: cortex.instance.InstanceName}
 
+  - name: cortex.instance.BackendMismatch
+    summary: >-
+      The store named for adoption is not a store on the backend the spec's `store` names: no
+      SQLite database for `sqlite`, or not the `ekr.postgres/1` file `store.value.config` names for
+      `postgres`.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.StoreUnreadable
+    summary: >-
+      The store named for adoption cannot be read, or EKR cannot open it under the instance's host
+      document (another tenant or authority than the store was seeded under, or no seed).
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.StoreHeld
+    summary: >-
+      An active instance of the home, `name`, already grows this PostgreSQL lineage: the same
+      `ekr.postgres/1` file and tenant.
+    fields:
+      - {name: name, type: String}
+
+  - name: cortex.instance.SeedTypesMissing
+    summary: >-
+      A node or edge type the spec's seed declares is not in the store's ontology. `types` lists
+      them, separated by a comma and a space.
+    fields:
+      - {name: types, type: String}
+
   - name: cortex.instance.InstanceNotFound
     summary: No instance has this name.
     fields:
@@ -494,8 +524,8 @@ errors:
 
   - name: cortex.instance.InstanceBusy
     summary: >-
-      Another cortex command holds the home's lock, or a process other than the viewer holds the
-      store open; nothing was restored.
+      Another cortex command holds the home's lock, or another connection held the store's write
+      lock for 5 seconds; nothing was restored. A reader that holds the store open does not.
     fields:
       - {name: reason, type: String}
 
@@ -522,9 +552,82 @@ errors:
       - {name: reason, type: String}
 
 commands:
-  # UNMAPPED: AdoptInstance registers an existing EKR store, on either backend, as an instance
-  # without reseeding it. Its outcomes (adopted, name taken, store unreadable, backend mismatch) and
-  # how the seen-documents state is backfilled are not decided; story:adopt-existing-store does.
+  - name: cortex.instance.AdoptInstance
+    naming:
+      wire: adopt
+      display: Adopt an existing store
+    # As for CreateInstance, the command line reads the spec file; `store` is `--store`. Each
+    # source's seen documents start from the `cortex.seen/1` file `--seen` names for it, or empty.
+    input:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: description, type: String}
+      - {name: model, type: String}
+      - {name: ekr_version, type: String}
+      - {name: seed_digest, type: String}
+      - {name: spec, type: cortex.instance.InstanceSpec}
+      - {name: store, type: String}
+    outcomes:
+      - name: name-taken
+        existing_instance: true
+        error: cortex.instance.NameTaken
+        payload:
+          cortex.instance.NameTaken:
+            name: input.name
+        summary: Nothing was adopted.
+
+      - name: backend-mismatch
+        external: The store is not on the backend the spec's store names, or not the postgres configuration it names
+        error: cortex.instance.BackendMismatch
+        payload:
+          cortex.instance.BackendMismatch:
+            reason: {generated: true}
+        summary: Nothing was adopted.
+
+      - name: store-unreadable
+        external: The store cannot be read, or EKR cannot open it under the instance's host document
+        error: cortex.instance.StoreUnreadable
+        payload:
+          cortex.instance.StoreUnreadable:
+            reason: {generated: true}
+        summary: Nothing was adopted.
+
+      - name: store-held
+        external: An active instance of the home already grows the PostgreSQL lineage, the same configuration and tenant
+        error: cortex.instance.StoreHeld
+        payload:
+          cortex.instance.StoreHeld:
+            name: {generated: true}
+        summary: Nothing was adopted.
+
+      - name: seed-types-missing
+        external: A node or edge type of the spec's seed is not in the store's ontology
+        error: cortex.instance.SeedTypesMissing
+        payload:
+          cortex.instance.SeedTypesMissing:
+            types: {generated: true}
+        summary: Nothing was adopted.
+
+      - name: adopted
+        creates: cortex.instance.Instance
+        instance: name
+        sets:
+          description: input.description
+          model: input.model
+          ekr_version: input.ekr_version
+          seed_digest: input.seed_digest
+        emits:
+          - cortex.instance.InstanceAdopted
+        payload:
+          cortex.instance.InstanceAdopted:
+            name: input.name
+            revision: {generated: true}
+            view_port: {generated: true}
+        summary: >-
+          The store answers the head it had, `revision`; nothing was seeded, extracted or written
+          to it. A SQLite store was copied into the instance directory, which grows the copy; a
+          PostgreSQL store is used where it is. The sources are added by AddSource, one per source
+          in the spec.
+
   - name: cortex.instance.CreateInstance
     naming:
       wire: create
@@ -874,7 +977,7 @@ commands:
         summary: Nothing was restored.
 
       - name: busy
-        external: Another cortex command holds the home's lock, or a process other than the viewer holds the store open
+        external: Another cortex command holds the home's lock, or another connection holds the store's write lock for 5 seconds
         error: cortex.instance.InstanceBusy
         payload:
           cortex.instance.InstanceBusy:
@@ -916,6 +1019,12 @@ events:
   - name: cortex.instance.InstanceCreated
     fields:
       - {name: name, type: cortex.instance.InstanceName}
+      - {name: view_port, type: Integer}
+
+  - name: cortex.instance.InstanceAdopted
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: revision, type: Integer}
       - {name: view_port, type: Integer}
 
   - name: cortex.instance.InstanceUpdated

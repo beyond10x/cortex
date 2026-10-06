@@ -8,21 +8,46 @@ relations:
 - decomposes: epic:organisation-scale-instance
 - depends_on: story:store-backend-per-instance
 - serves: vision:self-updating-instances
-revision: 1
+scope:
+- confidence: inferred
+  path: spec/domains/instance.yaml
+- confidence: inferred
+  path: src/ekr.rs
+- confidence: inferred
+  path: src/instance.rs
+- confidence: inferred
+  path: src/main.rs
+- confidence: inferred
+  path: src/model_map.rs
+- confidence: inferred
+  path: src/schedule.rs
+- confidence: inferred
+  path: tests/common/mod.rs
+- confidence: inferred
+  path: tests/store_backend.rs
+revision: 3
 ---
 ## Outcome
 
-A PostgreSQL-backed instance gets its database credential from a Connectors connection held in Connectors' secret backends. Neither cortex nor any file cortex writes ever holds the password.
+A PostgreSQL-backed instance starts every `ekr` through `connectors connections launch`,
+so neither cortex nor any file cortex writes holds the database password.
 
 ## Why
 
-Decided for the cb3 move (cb3 `initiative:run-on-cortex`, "Decided": "Database credentials for the PostgreSQL store come from a Connectors connection held in Connectors' secret backends; cortex never sees them", operator, 2026-10-05). `story:store-backend-per-instance` (wave 20261005c) shipped the backend with file paths only. EKR 0.0.30 reads the password from the connection file that the `ekr.postgres/1` file names. cortex never reads that file, and a test checks that the password appears nowhere cortex writes. The channel itself was not designed.
+Operator decision 2026-10-05: database credentials for a PostgreSQL store come from a Connectors connection held in Connectors' secret backends, and cortex never sees them. Design B of the cortex design note (chosen 2026-10-06, operator: "do it"): Connectors launches an operator-pinned `ekr` with the connection's password document on fd 3; EKR reads a `password_file`; cortex starts every `ekr` through the launch. Order: EKR `postgres-password-file` and the Connectors launch story can run in parallel. The
+cortex story depends on both: its test needs a real `ekr` with `password_file`, and its stand-in
+mimics only the Connectors verb.
 
 ## Work
-
-1. Design how `ekr` obtains the credential at process start from Connectors, without cortex in the path. Two options: an `ekr.postgres/1` variant naming a Connectors connection, or a Connectors-launched `ekr`. Record the decision in this story.
-2. The EKR change and any Connectors change it needs go in their own repositories' stories. This story wires cortex to it.
+1. Spec: `cortex.instance.PostgresStore` gains `connection: {adapter: String, connection: String}`, and optionally `schema_connection` for provisioning. Regenerate the spec types.
+2. `ekr::Store` gains the connection reference. `Store::cmd()` builds `connectors connections launch --adapter A --connection C --consumer ekr -- <ekr args>` with the same `EKR_*` env, after `Connectors::ensure_ready(A, C)`. `provision()` launches through `schema_connection` when it is given.
+3. `install_view` writes `environment()` and the `CORTEX_CONNECTORS` path into the viewer unit, and starts `ekr view` through the launch.
+4. `cortex instance check` refuses a postgres store whose `ekr.postgres/1` has no `password_file`, or whose connection is not listed. (Check: does `connections describe` expose `role@database`, so it can be compared with the DSN's user and database?)
+5. Record the design decision (Design B) in the story.
 
 ## Acceptance
+- The docker case in `tests/store_backend.rs` (`a_postgres_instance_is_provisioned_seeded_run_and_served_from_postgres`) runs with the application password held only in the stand-in `connectors`' own state dir. The stand-in implements `connections launch` as `exec 3<"$STATE/password.json"; exec "$@"`, and the `ekr.postgres/1` names `"/proc/self/fd/3"`.
+- The test still asserts the sentinel password is absent under the instance home, in every unit file written, and in the argv of every process cortex started (logged by the stand-in).
+- A new unit test in `src/ekr.rs` asserts that the postgres `Store::cmd()` program is the `connectors` binary with `connections launch … -- ` before the `ekr` path.
 
-The docker PostgreSQL case in `tests/store_backend.rs` runs with the credential held only by a stand-in Connectors connection. No file under the instance home, no unit file and no process argv cortex starts contains the password.
+## Files (from the design, unverified) `spec/domains/instance.yaml`, `generated/spec-types/types.rs` (regenerated), `src/model_map.rs`, `src/instance.rs`, `src/ekr.rs`, `src/schedule.rs`, `src/main.rs`, `tests/store_backend.rs`, `tests/common/mod.rs`.

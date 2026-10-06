@@ -3,6 +3,7 @@
   "asOf": "2026-10-05",
   "source": "cortex's status record, maintained in the repository and checked against main and its planning store",
   "items": [
+    {"label": "An existing store becomes an instance without reseeding", "status": "shipped", "area": "Instances", "detail": "cortex adopt copies a SQLite store with its -wal or uses a PostgreSQL store in place; --host and --seen carry its identity and seen state.", "href": "/docs/operating"},
     {"label": "A bad run can be undone from the snapshot taken before it", "status": "shipped", "area": "Runs", "detail": "cortex restore puts back the store and state/ and snapshots the current state first.", "href": "/docs/operating"},
     {"label": "Scheduled runs verified with nobody at the keyboard", "status": "shipped", "area": "Runs", "detail": "15 runs of a real systemd user timer in 15 minutes, all exit 0; the 24 h window on a real instance comes with the first web instance.", "href": "/docs/operating"},
     {"label": "Names and links stay out of the model; a gate refuses what survives", "status": "shipped", "area": "Runs", "detail": "Url, known_names and RareName placeholders are restored before storage; refuse_if_left checks what the model would see.", "href": "/docs/limits"},

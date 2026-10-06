@@ -87,6 +87,10 @@ fn event(e: PublishedEvent) -> (String, Value) {
             "InstanceCreated",
             json!({"name": e.name.0, "view_port": e.view_port}),
         ),
+        PublishedEvent::InstanceAdopted(e) => (
+            "InstanceAdopted",
+            json!({"name": e.name.0, "revision": e.revision, "view_port": e.view_port}),
+        ),
         PublishedEvent::InstanceRemoved(e) => ("InstanceRemoved", json!({"name": e.name.0})),
         PublishedEvent::InstanceUpdated(e) => ("InstanceUpdated", json!({"name": e.name.0})),
         PublishedEvent::RunFailed(e) => (
@@ -208,6 +212,40 @@ impl Scenario {
                     Some(("SeedRefused", json!({"reason": error.reason}))),
                 ),
                 m::CreateInstanceOutcome::Created { .. } => ("created", None),
+            },
+            "cortex.instance.AdoptInstance" => match app
+                .adopt_instance(m::AdoptInstance {
+                    name: m::InstanceName(s("name")),
+                    description: s("description"),
+                    model: s("model"),
+                    ekr_version: s("ekr_version"),
+                    seed_digest: s("seed_digest"),
+                    spec: placeholder_spec(),
+                    store: s("store"),
+                })
+                .unwrap()
+            {
+                m::AdoptInstanceOutcome::NameTaken { error } => (
+                    "name-taken",
+                    Some(("NameTaken", json!({"name": error.name.0}))),
+                ),
+                m::AdoptInstanceOutcome::BackendMismatch { error } => (
+                    "backend-mismatch",
+                    Some(("BackendMismatch", json!({"reason": error.reason}))),
+                ),
+                m::AdoptInstanceOutcome::StoreUnreadable { error } => (
+                    "store-unreadable",
+                    Some(("StoreUnreadable", json!({"reason": error.reason}))),
+                ),
+                m::AdoptInstanceOutcome::StoreHeld { error } => (
+                    "store-held",
+                    Some(("StoreHeld", json!({"name": error.name}))),
+                ),
+                m::AdoptInstanceOutcome::SeedTypesMissing { error } => (
+                    "seed-types-missing",
+                    Some(("SeedTypesMissing", json!({"types": error.types}))),
+                ),
+                m::AdoptInstanceOutcome::Adopted { .. } => ("adopted", None),
             },
             "cortex.instance.UpdateInstance" => match app
                 .update_instance(m::UpdateInstance {
@@ -622,7 +660,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        39,
+        45,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

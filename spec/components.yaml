@@ -9,6 +9,7 @@ components:
     accepts:
       commands:
         - cortex.instance.CreateInstance
+        - cortex.instance.AdoptInstance
         - cortex.instance.UpdateInstance
         - cortex.instance.RemoveInstance
         - cortex.instance.AddSource
@@ -19,6 +20,7 @@ components:
     publishes:
       events:
         - cortex.instance.InstanceCreated
+        - cortex.instance.InstanceAdopted
         - cortex.instance.InstanceUpdated
         - cortex.instance.InstanceRemoved
         - cortex.instance.SourceAdded
@@ -32,6 +34,7 @@ components:
       binary: cortex
       commands:
         - cortex.instance.CreateInstance
+        - cortex.instance.AdoptInstance
         - cortex.instance.UpdateInstance
         - cortex.instance.RemoveInstance
         - cortex.instance.RunSource

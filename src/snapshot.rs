@@ -94,20 +94,28 @@ fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
 }
 
 /// Removes the oldest snapshots cortex named beyond `keep`, each with its side files and its copy
-/// of `state/`. A file of any other name is never removed and counts toward nothing.
-fn rotate(layout: &Layout, keep: usize) {
+/// of `state/`, except `spare`: a restore never removes the snapshot it restored from, so with
+/// `keep` 1 it leaves two. A file of any other name is never removed and counts toward nothing.
+fn rotate(layout: &Layout, keep: usize, spare: Option<&str>) {
     let named: Vec<String> = list(layout)
         .into_iter()
         .filter(|n| cortex_named(n))
         .collect();
     for old in &named[..named.len().saturating_sub(keep)] {
-        let store = dir(layout).join(format!("{old}.sqlite"));
-        let _ = std::fs::remove_file(&store);
-        for suffix in SIDE {
-            let _ = std::fs::remove_file(with_suffix(&store, suffix));
+        if Some(old.as_str()) != spare {
+            remove(layout, old);
         }
-        let _ = std::fs::remove_file(state_dir(layout).join(format!("{old}.json")));
     }
+}
+
+/// Removes the snapshot `name`: its store with side files and its copy of `state/`.
+fn remove(layout: &Layout, name: &str) {
+    let store = dir(layout).join(format!("{name}.sqlite"));
+    let _ = std::fs::remove_file(&store);
+    for suffix in SIDE {
+        let _ = std::fs::remove_file(with_suffix(&store, suffix));
+    }
+    let _ = std::fs::remove_file(state_dir(layout).join(format!("{name}.json")));
 }
 
 /// Removes the hidden temporary copies a killed snapshot left behind, with their side files,
@@ -337,7 +345,7 @@ impl BeforeApply {
         match std::mem::replace(&mut self.stage, Stage::Done) {
             Stage::Taken(taken) => {
                 let name = taken.publish()?;
-                rotate(&Layout::new(self.instance.clone()), self.keep);
+                rotate(&Layout::new(self.instance.clone()), self.keep, None);
                 Ok(Some(name))
             }
             Stage::Off => {
@@ -356,7 +364,10 @@ fn backup_to_new(store: &Path, to: &Path) -> Result<(), String> {
         to,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
     )?;
-    copy(&from, &mut to)
+    copy(&from, &mut to).map_err(|e| match e {
+        CopyError::Locked => format!("the store stayed locked for {} s", LOCK_WAIT.as_secs()),
+        CopyError::Failed(e) => e,
+    })
 }
 
 fn open(path: &Path, flags: OpenFlags) -> Result<Connection, String> {
@@ -382,18 +393,87 @@ fn open_snapshot(path: &Path) -> Result<Connection, String> {
     .map_err(|e| format!("{}: {e}", path.display()))
 }
 
+/// How long a copy, or a restore, waits for a lock another connection holds.
+const LOCK_WAIT: Duration = Duration::from_secs(5);
+
+/// Why [`copy`] did not finish.
+enum CopyError {
+    /// A lock on either database was held for all of [`LOCK_WAIT`].
+    Locked,
+    Failed(String),
+}
+
 /// Every page of `from` into `to` in one step of SQLite's online backup, so the copy is one
-/// consistent state; a store that stays locked for 5 s fails it.
-fn copy(from: &Connection, to: &mut Connection) -> Result<(), String> {
-    let backup = Backup::new(from, to).map_err(|e| e.to_string())?;
-    for _ in 0..50 {
-        match backup.step(-1).map_err(|e| e.to_string())? {
+/// consistent state, written into `to` as one transaction: a reader of `to` keeps reading what it
+/// read and sees the copy on its next read. A lock held for all of [`LOCK_WAIT`] fails it.
+fn copy(from: &Connection, to: &mut Connection) -> Result<(), CopyError> {
+    let backup = Backup::new(from, to).map_err(|e| CopyError::Failed(e.to_string()))?;
+    let step = Duration::from_millis(100);
+    for _ in 0..(LOCK_WAIT.as_millis() / step.as_millis()) {
+        match backup
+            .step(-1)
+            .map_err(|e| CopyError::Failed(e.to_string()))?
+        {
             StepResult::Done => return Ok(()),
             StepResult::More => {}
-            _ => std::thread::sleep(Duration::from_millis(100)),
+            _ => std::thread::sleep(step),
         }
     }
-    Err("the store stayed locked for 5 s".into())
+    Err(CopyError::Locked)
+}
+
+/// Waits up to [`LOCK_WAIT`] for the write lock of `store` and lets it go: `Ok(false)` when
+/// another connection held it all that time. Readers never hold it.
+fn write_lock_free(store: &Path) -> Result<bool, String> {
+    let db = open(store, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+    db.busy_timeout(LOCK_WAIT).map_err(|e| e.to_string())?;
+    match db.execute_batch("BEGIN IMMEDIATE; ROLLBACK;") {
+        Ok(()) => Ok(true),
+        Err(rusqlite::Error::SqliteFailure(e, _))
+            if matches!(
+                e.code,
+                rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
+            ) =>
+        {
+            Ok(false)
+        }
+        Err(e) => Err(format!("{}: {e}", store.display())),
+    }
+}
+
+/// Writes what a restore put in the store's write-ahead log into the store file itself, waiting
+/// up to [`LOCK_WAIT`] for readers to finish what they are reading. Until then, EKR 0.0.30 refuses
+/// to open the store (`store-replaced`): the file still holds the events the restore removed.
+/// Another connection that keeps a read transaction open past the wait defers it; the warning
+/// says so, and the store is readable through EKR again once that reader lets go and the next
+/// connection to close writes the log back.
+fn settle(db: &Connection, store: &Path) {
+    let settled = db.busy_timeout(LOCK_WAIT).and_then(|()| {
+        db.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| {
+            r.get::<_, i64>(0)
+        })
+    });
+    match settled {
+        Ok(0) => {}
+        Ok(_) => eprintln!(
+            "cortex: {} is restored, but a reader held a read transaction for {} s, so EKR \
+             refuses it until that reader lets go",
+            store.display(),
+            LOCK_WAIT.as_secs()
+        ),
+        Err(e) => eprintln!(
+            "cortex: {}: the restore was not checkpointed: {e}",
+            store.display()
+        ),
+    }
+}
+
+fn write_locked(store: &Path) -> RestoreError {
+    RestoreError::Refused(Refusal::Busy(format!(
+        "another connection held the write lock of {} for {} s",
+        store.display(),
+        LOCK_WAIT.as_secs()
+    )))
 }
 
 /// A process other than this one holding `path`, or its `-wal`, `-shm` or `-journal` file,
@@ -434,7 +514,8 @@ fn holder(path: &Path) -> Option<u32> {
 pub enum Refusal {
     /// The store is on the `postgres` backend.
     Unsupported,
-    /// Another cortex command holds the home's lock, or another process holds the store open.
+    /// Another cortex command holds the home's lock, or another connection held the store's write
+    /// lock for all of [`LOCK_WAIT`].
     Busy(String),
     NoSuchSnapshot,
 }
@@ -458,10 +539,29 @@ pub struct Restored {
     pub viewer_failed: Option<String>,
 }
 
+/// Puts `state/` alone back to the copy the snapshot `snapshot` holds, for a caller whose restore
+/// of the store was refused: answers whether the snapshot had one.
+pub fn rewind_state(layout: &Layout, snapshot: &str) -> Result<bool, String> {
+    // Only a name `list` answers is a snapshot: no path, no hidden temporary file.
+    if !list(layout).iter().any(|held| held == snapshot) {
+        return Err(format!("there is no snapshot {snapshot:?}"));
+    }
+    let from = state_dir(layout).join(format!("{snapshot}.json"));
+    if !from.is_file() {
+        return Ok(false);
+    }
+    write_state(layout, &from)?;
+    Ok(true)
+}
+
 /// Puts the store and `state/` of the instance `name` back to `snapshot`, for a caller that
 /// already holds the home's lock (`cortex restore` takes it; a run holds it). A running viewer is
-/// stopped first and started again after, whatever the restore answered. What the restore
-/// replaces is snapshotted first as `<ms>-before-restore`, which counts toward `keep`.
+/// stopped first and started again after, whatever the restore answered. The snapshot is written
+/// into the live store through SQLite's online backup, so a reader that holds the store open (an
+/// attached `ekr mcp`) does not stop it and sees the restored store on its next read; only a
+/// connection holding the store's write lock for [`LOCK_WAIT`] makes it `busy`. What the restore
+/// replaces is snapshotted first as `<ms>-before-restore`, which counts toward `keep`; the
+/// snapshot restored from is never rotated out by its own restore.
 pub fn restore_held(
     layout: &Layout,
     name: &str,
@@ -482,11 +582,8 @@ pub fn restore_held(
     let state_from = state_dir(layout).join(format!("{snapshot}.json"));
     let (restored, viewer_failed) = systemd
         .restart_view(name, || {
-            if let Some(pid) = holder(&store.store) {
-                return Err(RestoreError::Refused(Refusal::Busy(format!(
-                    "process {pid} holds {} open",
-                    store.store.display()
-                ))));
+            if !write_lock_free(&store.store).map_err(RestoreError::Failed)? {
+                return Err(write_locked(&store.store));
             }
             let before_restore = match keep {
                 0 => None,
@@ -504,15 +601,31 @@ pub fn restore_held(
             let source = open_snapshot(&from).map_err(RestoreError::Failed)?;
             let mut target = open(&store.store, OpenFlags::SQLITE_OPEN_READ_WRITE)
                 .map_err(RestoreError::Failed)?;
-            copy(&source, &mut target).map_err(|e| {
-                RestoreError::Failed(format!("cannot restore {}: {e}", store.store.display()))
-            })?;
-            drop((source, target));
+            match copy(&source, &mut target) {
+                Ok(()) => {}
+                // Taken between the check and the copy: nothing was restored, so the snapshot of
+                // what it would have replaced goes too.
+                Err(CopyError::Locked) => {
+                    if let Some(taken) = &before_restore {
+                        remove(layout, taken);
+                    }
+                    return Err(write_locked(&store.store));
+                }
+                Err(CopyError::Failed(e)) => {
+                    return Err(RestoreError::Failed(format!(
+                        "cannot restore {}: {e}",
+                        store.store.display()
+                    )))
+                }
+            }
+            drop(source);
+            settle(&target, &store.store);
+            drop(target);
             let state_restored = state_from.is_file();
             if state_restored {
                 write_state(layout, &state_from).map_err(RestoreError::Failed)?;
             }
-            rotate(layout, keep);
+            rotate(layout, keep, Some(snapshot));
             Ok((before_restore, state_restored))
         })
         .map_err(RestoreError::Failed)?;
@@ -689,6 +802,84 @@ mod tests {
         run(&layout, 1000, 3);
         assert_eq!(entries(&dir(&layout)), ["1000-news.sqlite"]);
         assert_eq!(entries(&state_dir(&layout)), ["1000-news.json"]);
+    }
+
+    fn spec(layout: &Layout, extra: &str) {
+        std::fs::write(
+            layout.spec(),
+            format!(
+                "format: cortex.instance/1\nname: t\ndescription: d\nekr: {{version: \"0.0.30\"}}\n\
+                 seed: {{documents: []}}\nmodel: {{model: m, budget_usd: \"1\", timeout_s: 60}}\n\
+                 sources: []\nserve: {{}}\n{extra}"
+            ),
+        )
+        .unwrap();
+    }
+
+    fn no_units(tmp: &Path) -> Systemd {
+        Systemd {
+            systemctl: PathBuf::from("systemctl-unused"),
+            unit_dir: tmp.join("no-units"),
+            home_root: tmp.to_path_buf(),
+        }
+    }
+
+    #[test]
+    fn a_restore_with_keep_1_keeps_the_snapshot_it_restored_from() {
+        let tmp = tempfile::tempdir().unwrap();
+        let layout = Layout::new(tmp.path().to_path_buf());
+        spec(&layout, "snapshots: {keep: 1}\n");
+        let store = store_with(&layout.dir, &["a"]);
+        seen(&layout, "seen a");
+        let name = run(&layout, 1000, 1);
+        store_with(&layout.dir, &["b"]);
+        let restored = restore_held(&layout, "t", &name, &no_units(tmp.path())).unwrap();
+        assert_eq!(rows(&store), ["a"]);
+        let before = restored.before_restore.expect("the replaced state is kept");
+        assert_eq!(
+            list(&layout),
+            [name, before],
+            "the snapshot restored from is never rotated out by its own restore"
+        );
+    }
+
+    #[test]
+    fn a_held_write_lock_is_waited_for_then_refused_and_nothing_is_snapshotted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let layout = Layout::new(tmp.path().to_path_buf());
+        spec(&layout, "");
+        let store = store_with(&layout.dir, &["a"]);
+        seen(&layout, "seen a");
+        let name = run(&layout, 1000, 3);
+        store_with(&layout.dir, &["b"]);
+        seen(&layout, "seen b");
+        let writer = Connection::open(&store).unwrap();
+        writer.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let started = std::time::Instant::now();
+        let refused = restore_held(&layout, "t", &name, &no_units(tmp.path()));
+        assert!(
+            matches!(&refused, Err(RestoreError::Refused(Refusal::Busy(r))) if r.contains("write lock")),
+            "{refused:?}"
+        );
+        assert!(
+            started.elapsed() >= Duration::from_secs(1),
+            "the lock was not waited for"
+        );
+        assert_eq!(
+            list(&layout),
+            std::slice::from_ref(&name),
+            "a refused restore snapshots nothing"
+        );
+        drop(writer);
+        assert_eq!(rows(&store), ["b"]);
+
+        // `state/` alone is put back, for a caller whose store restore was refused.
+        assert!(rewind_state(&layout, &name).unwrap());
+        assert_eq!(
+            std::fs::read_to_string(live_state(&layout).join("news.json")).unwrap(),
+            "seen a"
+        );
+        assert_eq!(rows(&store), ["b"], "the store is left as it is");
     }
 
     #[test]

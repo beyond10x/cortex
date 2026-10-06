@@ -406,7 +406,7 @@ Each move is taken by a declared command outcome, and a move nothing takes is re
 
 - `remove` — taken by `cortex.instance.RemoveInstance` on its `removed` outcome
 
-An instance is brought into existence by `cortex.instance.CreateInstance` on its `created` outcome.
+An instance is brought into existence by `cortex.instance.AdoptInstance` on its `adopted` outcome and `cortex.instance.CreateInstance` on its `created` outcome.
 
 Illegal transitions are illegal by absence: no rule forbids them, there is simply no arrow, because a rule would be a second place for the same truth to live. A diagram cannot show an absence, so the pairs it does not connect are listed here, derived from the same transitions — anything named below is a move this specification does not permit.
 
@@ -558,6 +558,34 @@ It has one outcome.
 
 **`added`** — The source's timer is installed and enabled. The default branch, taken when no other outcome's condition matched. It creates a `cortex.instance.Source`, which starts in `Enabled`. The new instance's identity is published as `source_id` on `cortex.instance.SourceAdded`. It emits `cortex.instance.SourceAdded`. It sets `instance_name` from `input.instance_name`, `name` from `input.name`, `kind` from `input.kind`, `schedule` from `input.schedule`, `runs` from `"0"` and `consecutive_failures` from `"0"`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
+### `AdoptInstance`
+
+`cortex.instance.AdoptInstance`, shown to a person as "Adopt an existing store" and called `adopt` on the wire.
+
+It takes:
+
+- `name` — `cortex.instance.InstanceName`
+- `description` — `String`
+- `model` — `String`
+- `ekr_version` — `String`
+- `seed_digest` — `String`
+- `spec` — `cortex.instance.InstanceSpec`
+- `store` — `String`
+
+It has six outcomes.
+
+**`name-taken`** — Nothing was adopted. Taken when a record already carries the identity the command's creating branch would create, and no input-guarded refusal applies. No entity in this specification changes. It reports `cortex.instance.NameTaken`, carrying `name`. It emits nothing. A test reaches it by sending the command twice with one identity: the first call creates the record, the second is answered by this branch.
+
+**`backend-mismatch`** — Nothing was adopted. Decided outside the input: The store is not on the backend the spec's store names, or not the postgres configuration it names. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.BackendMismatch`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`store-unreadable`** — Nothing was adopted. Decided outside the input: The store cannot be read, or EKR cannot open it under the instance's host document. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.StoreUnreadable`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`store-held`** — Nothing was adopted. Decided outside the input: An active instance of the home already grows the PostgreSQL lineage, the same configuration and tenant. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.StoreHeld`, carrying `name`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`seed-types-missing`** — Nothing was adopted. Decided outside the input: A node or edge type of the spec's seed is not in the store's ontology. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SeedTypesMissing`, carrying `types`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`adopted`** — The store answers the head it had, `revision`; nothing was seeded, extracted or written to it. A SQLite store was copied into the instance directory, which grows the copy; a PostgreSQL store is used where it is. The sources are added by AddSource, one per source in the spec. The default branch, taken when no other outcome's condition matched. It creates a `cortex.instance.Instance`, which starts in `Active`. The new instance's identity is published as `name` on `cortex.instance.InstanceAdopted`. It emits `cortex.instance.InstanceAdopted`. It sets `description` from `input.description`, `model` from `input.model`, `ekr_version` from `input.ekr_version` and `seed_digest` from `input.seed_digest`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+
 ### `CreateInstance`
 
 `cortex.instance.CreateInstance`, shown to a person as "Create an instance" and called `create` on the wire.
@@ -645,7 +673,7 @@ It has five outcomes.
 
 **`backend-unsupported`** — Nothing was restored. Decided outside the input: The instance's store is on the postgres backend, whose snapshot is the operator's database backup. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.RestoreUnsupported`, carrying `name`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`busy`** — Nothing was restored. Decided outside the input: Another cortex command holds the home's lock, or a process other than the viewer holds the store open. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.InstanceBusy`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`busy`** — Nothing was restored. Decided outside the input: Another cortex command holds the home's lock, or another connection holds the store's write lock for 5 seconds. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.InstanceBusy`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`no-such-snapshot`** — Nothing was restored. Decided outside the input: The instance directory holds no snapshot by this name. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SnapshotNotFound`, carrying `snapshot`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
@@ -698,6 +726,20 @@ It has four outcomes.
 **`no-such-instance`** — Nothing changed. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
 ## Events
+
+### `InstanceAdopted`
+
+`cortex.instance.InstanceAdopted`.
+
+It carries:
+
+- `name` — `cortex.instance.InstanceName`
+- `revision` — `Integer`
+- `view_port` — `Integer`
+
+Emitted by `cortex.instance.AdoptInstance` on its `adopted` outcome.
+
+Nothing in this system reacts to it.
 
 ### `InstanceCreated`
 
@@ -827,6 +869,16 @@ It carries:
 
 Reported by `cortex.instance.RunSource` on its `apply-refused` outcome.
 
+### `BackendMismatch`
+
+The store named for adoption is not a store on the backend the spec's `store` names: no SQLite database for `sqlite`, or not the `ekr.postgres/1` file `store.value.config` names for `postgres`.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.AdoptInstance` on its `backend-mismatch` outcome.
+
 ### `ConnectionMissing`
 
 Connectors lists no live connection with the id a source names. Run `connectors connections connect` for it, then try again.
@@ -859,7 +911,7 @@ Reported by `cortex.instance.RunSource` on its `fetch-failed` outcome.
 
 ### `InstanceBusy`
 
-Another cortex command holds the home's lock, or a process other than the viewer holds the store open; nothing was restored.
+Another cortex command holds the home's lock, or another connection held the store's write lock for 5 seconds; nothing was restored. A reader that holds the store open does not.
 
 It carries:
 
@@ -901,6 +953,8 @@ It carries:
 
 - `name` — `cortex.instance.InstanceName`
 
+Reported by `cortex.instance.AdoptInstance` on its `name-taken` outcome.
+
 Reported by `cortex.instance.CreateInstance` on its `name-taken` outcome.
 
 ### `RestoreUnsupported`
@@ -932,6 +986,16 @@ It carries:
 - `reason` — `String`
 
 Reported by `cortex.instance.CreateInstance` on its `seed-refused` outcome.
+
+### `SeedTypesMissing`
+
+A node or edge type the spec's seed declares is not in the store's ontology. `types` lists them, separated by a comma and a space.
+
+It carries:
+
+- `types` — `String`
+
+Reported by `cortex.instance.AdoptInstance` on its `seed-types-missing` outcome.
 
 ### `SnapshotNotFound`
 
@@ -979,6 +1043,26 @@ Reported by `cortex.instance.RecordFailure` on its `no-such-source` outcome.
 
 Reported by `cortex.instance.RunSource` on its `no-such-source` outcome.
 
+### `StoreHeld`
+
+An active instance of the home, `name`, already grows this PostgreSQL lineage: the same `ekr.postgres/1` file and tenant.
+
+It carries:
+
+- `name` — `String`
+
+Reported by `cortex.instance.AdoptInstance` on its `store-held` outcome.
+
+### `StoreUnreadable`
+
+The store named for adoption cannot be read, or EKR cannot open it under the instance's host document (another tenant or authority than the store was seeded under, or no seed).
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.AdoptInstance` on its `store-unreadable` outcome.
+
 ## Actors
 
 An actor is who may ask this context for something. Every grant below points at a command this specification declares — a grant is a resolved reference, so "may invoke" something nobody wrote is not a permission this model can express, and an authorisation that authorises nothing cannot ship quietly.
@@ -987,7 +1071,7 @@ An actor is who may ask this context for something. Every grant below points at 
 
 `cortex.instance.Operator`, shown to a person as "Operator".
 
-It may invoke [`AddSource`](#addsource), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot) and [`UpdateInstance`](#updateinstance).
+It may invoke [`AddSource`](#addsource), [`AdoptInstance`](#adoptinstance), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot) and [`UpdateInstance`](#updateinstance).
 
 ### `Scheduler`
 
@@ -998,4 +1082,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d` · contract digest `slice-sha256/2:add61f1f192f4767e91f96690fe684e5461a92681a4000b4032423d92532ec30`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `0fc580942f295d0f5dc09e702a75e70eee57d08233671d7934b03e104c73ab85` · contract digest `slice-sha256/2:7942f8a668be6af9ca8b312816fa1ae3c7611158d27d675feb1728f83b6d8cbc`. Do not edit this file; change the specification and regenerate it with `task generate`.

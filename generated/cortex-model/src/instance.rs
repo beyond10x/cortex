@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d
-// contract digest add61f1f192f4767e91f96690fe684e5461a92681a4000b4032423d92532ec30
+// model digest 0fc580942f295d0f5dc09e702a75e70eee57d08233671d7934b03e104c73ab85
+// contract digest 7942f8a668be6af9ca8b312816fa1ae3c7611158d27d675feb1728f83b6d8cbc
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -1153,6 +1153,78 @@ pub enum AddSourceOutcome {
     },
 }
 
+/// Adopt an existing store — the input of `cortex.instance.AdoptInstance`.
+///
+/// Everything it can result in is [`AdoptInstanceOutcome`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdoptInstance {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `description` — `String`.
+    pub description: String,
+    /// `model` — `String`.
+    pub model: String,
+    /// `ekr_version` — `String`.
+    pub ekr_version: String,
+    /// `seed_digest` — `String`.
+    pub seed_digest: String,
+    /// `spec` — `cortex.instance.InstanceSpec`.
+    pub spec: InstanceSpec,
+    /// `store` — `String`.
+    pub store: String,
+}
+
+/// Everything `cortex.instance.AdoptInstance` can result in — one variant per declared outcome.
+///
+/// An infrastructure failure is deliberately not in here: a refusal is a fact about the domain,
+/// a transport fault is a fact about the run, and conflating the two is what the declared
+/// outcomes exist to prevent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AdoptInstanceOutcome {
+    /// `name-taken` — for an identity a record already carries.
+    ///
+    /// Nothing was adopted.
+    NameTaken {
+        /// Why it was refused: `cortex.instance.NameTaken`.
+        error: NameTaken,
+    },
+    /// `backend-mismatch` — externally decided (The store is not on the backend the spec's store names, or not the postgres configuration it names).
+    ///
+    /// Nothing was adopted.
+    BackendMismatch {
+        /// Why it was refused: `cortex.instance.BackendMismatch`.
+        error: BackendMismatch,
+    },
+    /// `store-unreadable` — externally decided (The store cannot be read, or EKR cannot open it under the instance's host document).
+    ///
+    /// Nothing was adopted.
+    StoreUnreadable {
+        /// Why it was refused: `cortex.instance.StoreUnreadable`.
+        error: StoreUnreadable,
+    },
+    /// `store-held` — externally decided (An active instance of the home already grows the PostgreSQL lineage, the same configuration and tenant).
+    ///
+    /// Nothing was adopted.
+    StoreHeld {
+        /// Why it was refused: `cortex.instance.StoreHeld`.
+        error: StoreHeld,
+    },
+    /// `seed-types-missing` — externally decided (A node or edge type of the spec's seed is not in the store's ontology).
+    ///
+    /// Nothing was adopted.
+    SeedTypesMissing {
+        /// Why it was refused: `cortex.instance.SeedTypesMissing`.
+        error: SeedTypesMissing,
+    },
+    /// `adopted` — otherwise.
+    ///
+    /// The store answers the head it had, `revision`; nothing was seeded, extracted or written to it. A SQLite store was copied into the instance directory, which grows the copy; a PostgreSQL store is used where it is. The sources are added by AddSource, one per source in the spec.
+    Adopted {
+        /// The `cortex.instance.InstanceAdopted` this outcome publishes.
+        instance_adopted: InstanceAdopted,
+    },
+}
+
 /// Create an instance — the input of `cortex.instance.CreateInstance`.
 ///
 /// Everything it can result in is [`CreateInstanceOutcome`].
@@ -1360,7 +1432,7 @@ pub enum RestoreSnapshotOutcome {
         /// Why it was refused: `cortex.instance.RestoreUnsupported`.
         error: RestoreUnsupported,
     },
-    /// `busy` — externally decided (Another cortex command holds the home's lock, or a process other than the viewer holds the store open).
+    /// `busy` — externally decided (Another cortex command holds the home's lock, or another connection holds the store's write lock for 5 seconds).
     ///
     /// Nothing was restored.
     Busy {
@@ -1504,6 +1576,17 @@ pub enum UpdateInstanceOutcome {
     },
 }
 
+/// InstanceAdopted — the event `cortex.instance.InstanceAdopted`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstanceAdopted {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `revision` — `Integer`.
+    pub revision: i64,
+    /// `view_port` — `Integer`.
+    pub view_port: i64,
+}
+
 /// InstanceCreated — the event `cortex.instance.InstanceCreated`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceCreated {
@@ -1592,6 +1675,15 @@ pub struct ApplyRefused {
     pub reason: String,
 }
 
+/// The declared error `cortex.instance.BackendMismatch`.
+///
+/// The store named for adoption is not a store on the backend the spec's `store` names: no SQLite database for `sqlite`, or not the `ekr.postgres/1` file `store.value.config` names for `postgres`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BackendMismatch {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
 /// The declared error `cortex.instance.ConnectionMissing`.
 ///
 /// Connectors lists no live connection with the id a source names. Run `connectors connections connect` for it, then try again.
@@ -1621,7 +1713,7 @@ pub struct FetchFailed {
 
 /// The declared error `cortex.instance.InstanceBusy`.
 ///
-/// Another cortex command holds the home's lock, or a process other than the viewer holds the store open; nothing was restored.
+/// Another cortex command holds the home's lock, or another connection held the store's write lock for 5 seconds; nothing was restored. A reader that holds the store open does not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceBusy {
     /// `reason` — `String`.
@@ -1682,6 +1774,15 @@ pub struct SeedRefused {
     pub reason: String,
 }
 
+/// The declared error `cortex.instance.SeedTypesMissing`.
+///
+/// A node or edge type the spec's seed declares is not in the store's ontology. `types` lists them, separated by a comma and a space.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SeedTypesMissing {
+    /// `types` — `String`.
+    pub types: String,
+}
+
 /// The declared error `cortex.instance.SnapshotNotFound`.
 ///
 /// The instance directory holds no snapshot by this name.
@@ -1716,6 +1817,24 @@ pub struct SourceNotDisabled {
 pub struct SourceNotFound {
     /// `source_id` — `cortex.instance.SourceId`.
     pub source_id: SourceId,
+}
+
+/// The declared error `cortex.instance.StoreHeld`.
+///
+/// An active instance of the home, `name`, already grows this PostgreSQL lineage: the same `ekr.postgres/1` file and tenant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreHeld {
+    /// `name` — `String`.
+    pub name: String,
+}
+
+/// The declared error `cortex.instance.StoreUnreadable`.
+///
+/// The store named for adoption cannot be read, or EKR cannot open it under the instance's host document (another tenant or authority than the store was seeded under, or no seed).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreUnreadable {
+    /// `reason` — `String`.
+    pub reason: String,
 }
 
 /// Instances — one row of the view `cortex.instance.Instances`.
@@ -1779,6 +1898,17 @@ pub mod obligations {
         ///
         /// `Err` is the typed refusal of a request the model declares no outcome for.
         fn add_source(&mut self, input: super::AddSource) -> Result<super::AddSourceOutcome, crate::obligation::UnmetObligation>;
+    }
+
+    /// The behaviour `cortex.instance.AdoptInstance` — generated.
+    ///
+    /// The specification fully determines it: [`crate::behaviour::Generated`] implements it
+    /// over the storage and context ports. Implement it yourself to replace that behaviour.
+    pub trait AdoptInstanceBehavior {
+        /// Decides and enacts exactly one declared outcome of `cortex.instance.AdoptInstance`.
+        ///
+        /// `Err` is the typed refusal of a request the model declares no outcome for.
+        fn adopt_instance(&mut self, input: super::AdoptInstance) -> Result<super::AdoptInstanceOutcome, crate::obligation::UnmetObligation>;
     }
 
     /// The behaviour `cortex.instance.CreateInstance` — generated.

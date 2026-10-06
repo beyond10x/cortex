@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BackendMismatch payload",
+  "description": "The store named for adoption is not a store on the backend the spec's `store` names: no SQLite database for `sqlite`, or not the `ekr.postgres/1` file `store.value.config` names for `postgres`.",
+  "x-ess-name": "cortex.instance.BackendMismatch",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "0fc580942f295d0f5dc09e702a75e70eee57d08233671d7934b03e104c73ab85",
+    "contract_digest": "slice-sha256/2:b5bd162e66f9f19ac092e8fb3e66ca9266810c8272923d0f49fae82f678a1c39",
+    "regenerate": "ess generate"
+  }
+}

@@ -7,6 +7,12 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Added
 
+- A run gate: `gate.checks` bound the run report's numbers or `ekr quality` measures, and a run
+  that fails its gate is undone from the snapshot taken before it. A restore now writes into the
+  live store, so an attached `ekr mcp` reader no longer blocks it.
+- `cortex adopt` turns an existing EKR store into an instance without reseeding: a SQLite store is
+  copied with its `-wal`, a PostgreSQL store is used in place, `--host` passes the store's own host
+  document and `--seen` carries what each source has seen.
 - A files source can yield one document per JSON line or per markdown section, with ids, authors
   and threads; unreadable lines and files are named in `skipped`.
 - Run snapshots: a run that applies something first copies the store and `state/`; `cortex restore`

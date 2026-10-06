@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d
-// contract digest add61f1f192f4767e91f96690fe684e5461a92681a4000b4032423d92532ec30
+// model digest 0fc580942f295d0f5dc09e702a75e70eee57d08233671d7934b03e104c73ab85
+// contract digest 7942f8a668be6af9ca8b312816fa1ae3c7611158d27d675feb1728f83b6d8cbc
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! The `cortex` system, v1: its components assembled, its bindings wired, and its one transport.
@@ -19,6 +19,8 @@
 /// escalates into.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SystemEvent {
+    /// `cortex.instance.InstanceAdopted`.
+    InstanceAdopted(crate::instance::InstanceAdopted),
     /// `cortex.instance.InstanceCreated`.
     InstanceCreated(crate::instance::InstanceCreated),
     /// `cortex.instance.InstanceRemoved`.
@@ -43,6 +45,7 @@ impl SystemEvent {
     /// The qualified name the specification declares this event under.
     pub fn name(&self) -> &'static str {
         match self {
+            Self::InstanceAdopted(_) => "cortex.instance.InstanceAdopted",
             Self::InstanceCreated(_) => "cortex.instance.InstanceCreated",
             Self::InstanceRemoved(_) => "cortex.instance.InstanceRemoved",
             Self::InstanceUpdated(_) => "cortex.instance.InstanceUpdated",
@@ -59,6 +62,7 @@ impl SystemEvent {
 impl From<crate::ports::cortex::PublishedEvent> for SystemEvent {
     fn from(event: crate::ports::cortex::PublishedEvent) -> Self {
         match event {
+            crate::ports::cortex::PublishedEvent::InstanceAdopted(event) => Self::InstanceAdopted(event),
             crate::ports::cortex::PublishedEvent::InstanceCreated(event) => Self::InstanceCreated(event),
             crate::ports::cortex::PublishedEvent::InstanceRemoved(event) => Self::InstanceRemoved(event),
             crate::ports::cortex::PublishedEvent::InstanceUpdated(event) => Self::InstanceUpdated(event),
@@ -115,7 +119,7 @@ impl<CortexBehaviors> System<CortexBehaviors> {
 
 impl<CortexBehaviors> System<CortexBehaviors>
 where
-    CortexBehaviors: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    CortexBehaviors: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
 {
     /// Delivers until quiescent: collects every component's outbox onto the log. No binding
     /// reacts to anything this specification publishes, so collecting is the whole delivery.

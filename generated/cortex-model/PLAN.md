@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d
-  contract digest add61f1f192f4767e91f96690fe684e5461a92681a4000b4032423d92532ec30
+  model digest 0fc580942f295d0f5dc09e702a75e70eee57d08233671d7934b03e104c73ab85
+  contract digest 7942f8a668be6af9ca8b312816fa1ae3c7611158d27d675feb1728f83b6d8cbc
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-101 capabilities: **97 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+108 capabilities: **104 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -70,6 +70,8 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | entity lifecycle | `cortex.instance.Source` |
 | command contract | `cortex.instance.AddSource` |
 | command behaviour | `cortex.instance.AddSource` |
+| command contract | `cortex.instance.AdoptInstance` |
+| command behaviour | `cortex.instance.AdoptInstance` |
 | command contract | `cortex.instance.CreateInstance` |
 | command behaviour | `cortex.instance.CreateInstance` |
 | command contract | `cortex.instance.EnableSource` |
@@ -82,6 +84,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | command contract | `cortex.instance.RunSource` |
 | command contract | `cortex.instance.UpdateInstance` |
 | command behaviour | `cortex.instance.UpdateInstance` |
+| event type | `cortex.instance.InstanceAdopted` |
 | event type | `cortex.instance.InstanceCreated` |
 | event type | `cortex.instance.InstanceRemoved` |
 | event type | `cortex.instance.InstanceUpdated` |
@@ -92,6 +95,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | event type | `cortex.instance.SourceEnabled` |
 | event type | `cortex.instance.SourceRan` |
 | error type | `cortex.instance.ApplyRefused` |
+| error type | `cortex.instance.BackendMismatch` |
 | error type | `cortex.instance.ConnectionMissing` |
 | error type | `cortex.instance.ExtractionFailed` |
 | error type | `cortex.instance.FetchFailed` |
@@ -102,10 +106,13 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | error type | `cortex.instance.RestoreUnsupported` |
 | error type | `cortex.instance.SeedChangeRefused` |
 | error type | `cortex.instance.SeedRefused` |
+| error type | `cortex.instance.SeedTypesMissing` |
 | error type | `cortex.instance.SnapshotNotFound` |
 | error type | `cortex.instance.SourceDisabledError` |
 | error type | `cortex.instance.SourceNotDisabled` |
 | error type | `cortex.instance.SourceNotFound` |
+| error type | `cortex.instance.StoreHeld` |
+| error type | `cortex.instance.StoreUnreadable` |
 | view type | `cortex.instance.Instances` |
 | view query | `cortex.instance.Instances` |
 | view type | `cortex.instance.Sources` |
@@ -132,5 +139,5 @@ What the specification fully determines is generated; what it cannot determine i
 
 | capability | source | stage | why |
 | --- | --- | --- | --- |
-| actor grants | `cortex.instance.Operator` | planning | may invoke `cortex.instance.AddSource`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.UpdateInstance`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |
+| actor grants | `cortex.instance.Operator` | planning | may invoke `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.UpdateInstance`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |
 | actor grants | `cortex.instance.Scheduler` | planning | may invoke `cortex.instance.RecordFailure`, `cortex.instance.RunSource`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |

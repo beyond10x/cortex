@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7f58879bc0bc35b334a4f6ffdf367092e75a7d64611d3c4c080f0898c8f7a28d",
-    "contract_digest": "add61f1f192f4767e91f96690fe684e5461a92681a4000b4032423d92532ec30"
+    "source_digest": "0fc580942f295d0f5dc09e702a75e70eee57d08233671d7934b03e104c73ab85",
+    "contract_digest": "7942f8a668be6af9ca8b312816fa1ae3c7611158d27d675feb1728f83b6d8cbc"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -404,6 +404,20 @@
     },
     {
       "kind": "command_contract",
+      "source": "cortex.instance.AdoptInstance",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_behavior",
+      "source": "cortex.instance.AdoptInstance",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_contract",
       "source": "cortex.instance.CreateInstance",
       "disposition": {
         "disposition": "generated"
@@ -512,6 +526,13 @@
     },
     {
       "kind": "event_type",
+      "source": "cortex.instance.InstanceAdopted",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "event_type",
       "source": "cortex.instance.InstanceCreated",
       "disposition": {
         "disposition": "generated"
@@ -576,6 +597,13 @@
     {
       "kind": "error_type",
       "source": "cortex.instance.ApplyRefused",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.instance.BackendMismatch",
       "disposition": {
         "disposition": "generated"
       }
@@ -652,6 +680,13 @@
     },
     {
       "kind": "error_type",
+      "source": "cortex.instance.SeedTypesMissing",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
       "source": "cortex.instance.SnapshotNotFound",
       "disposition": {
         "disposition": "generated"
@@ -674,6 +709,20 @@
     {
       "kind": "error_type",
       "source": "cortex.instance.SourceNotFound",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.instance.StoreHeld",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.instance.StoreUnreadable",
       "disposition": {
         "disposition": "generated"
       }
@@ -713,7 +762,7 @@
         "disposition": "refused",
         "reason": "needs_caller_identity",
         "stage": "planning",
-        "detail": "may invoke `cortex.instance.AddSource`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.UpdateInstance`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry"
+        "detail": "may invoke `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.UpdateInstance`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry"
       }
     },
     {

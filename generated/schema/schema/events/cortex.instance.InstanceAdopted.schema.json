@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InstanceAdopted payload",
+  "x-ess-name": "cortex.instance.InstanceAdopted",
+  "x-ess-kind": "event-payload",
+  "type": "object",
+  "properties": {
+    "name": {
+      "$ref": "#/$defs/cortex.instance.InstanceName"
+    },
+    "revision": {
+      "type": "integer"
+    },
+    "view_port": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "name",
+    "revision",
+    "view_port"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "0fc580942f295d0f5dc09e702a75e70eee57d08233671d7934b03e104c73ab85",
+    "contract_digest": "slice-sha256/2:1ff7c397d428de1a68ef3818f2b695d07ebf0f5f16f497d17d88fa0265da27a5",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.InstanceName": {
+      "title": "InstanceName",
+      "x-ess-name": "cortex.instance.InstanceName",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:run-gate
 kind: story
-status: draft
+status: implemented
 title: A run that fails its checks is undone
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -19,7 +19,11 @@ scope:
   path: src/run.rs
 - confidence: inferred
   path: tests/run_gate.rs
-revision: 7
+revision: 11
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-05T23:46:20Z", actor: "agent:claude", revision: 8, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-10-05T23:46:20Z", actor: "agent:claude", revision: 9, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "active", to: "implemented", at: "2026-10-06T00:23:50Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 
@@ -49,4 +53,9 @@ restore share the run path in `src/run.rs`).
 
 ## Scope
 
-`src/gate.rs` (new), `src/run.rs`, `src/lib.rs`, `tests/run_gate.rs` (new).
+Landed 2026-10-06 in `b5a2364` (wave 20261006a, merged `a5c9894`; spec wording `fc45e02`).
+
+- **Files:** `src/gate.rs` (new), `src/run.rs`, `src/lib.rs`, `src/snapshot.rs`, `tests/run_gate.rs` (new, 9 cases), `tests/snapshots.rs` (the busy case), `spec/domains/instance.yaml` (busy wording) and what it regenerates, `website/docs/spec-file.md`, `operating.md`
+- **Decided during the wave:** a failed gate is the `apply-refused` outcome and counts toward `record-failure`; a restore writes into the live store through the online backup and checkpoints the `-wal`, busy only while a writer holds the lock; a refused undo still rewinds `state/`; bounds compared at 4 decimals
+- **Documented limit:** a reader holding one read transaction open across a restore sees `store-replaced` until it closes it; cortex warns
+- **Review:** `review-result:adversary-run-gate-pass-1` (4, one blocker), fixed; coordinator check of the correction

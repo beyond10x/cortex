@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SeedTypesMissing payload",
+  "description": "A node or edge type the spec's seed declares is not in the store's ontology. `types` lists them, separated by a comma and a space.",
+  "x-ess-name": "cortex.instance.SeedTypesMissing",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "types": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "types"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "0fc580942f295d0f5dc09e702a75e70eee57d08233671d7934b03e104c73ab85",
+    "contract_digest": "slice-sha256/2:e6228176a28f5e2f95ca413e3ff046ea882528b6a586dd42928a08ca3fabf51e",
+    "regenerate": "ess generate"
+  }
+}

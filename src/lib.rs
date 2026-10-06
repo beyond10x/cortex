@@ -4,6 +4,7 @@ pub mod connectors;
 pub mod ekr;
 pub mod evidence;
 pub mod extract;
+pub mod gate;
 pub mod home;
 pub mod instance;
 pub mod mask;

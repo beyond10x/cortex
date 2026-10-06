@@ -374,6 +374,25 @@ snapshots: {keep: 3}
 |---|---|
 | `keep` | the newest snapshots cortex named that are kept; a new snapshot removes the oldest beyond it. Files of other names in `snapshots/` are never removed. 0 takes none. Without a `snapshots` section, 3 |
 
+## `gate`
+
+Optional. Checks a source run is held to once it applied something; a run that fails one is
+undone from the snapshot taken before it and fails as `apply-refused`. See
+[Operating](./operating.md#failures).
+
+```yaml
+gate:
+  checks:
+    - {measure: facts_refused, max: "0"}
+    - {measure: assertions.active, min: "100"}
+```
+
+| field | meaning |
+|---|---|
+| `checks` | the checks, each with a `measure` and a `min`, a `max` or both. Without a `gate` section, or with no checks, a run is not checked |
+| `measure` | a number of the run report `cortex run` prints: `documents_new`, `documents_applied`, `facts_refused`, `parts_rejected`, `masked`, `truncated`, `unrestored` or `cost_usd`. Any other name is the dotted path of a number in what `ekr quality` prints for the store after the run, such as `assertions.active` or `sharing_nodes` |
+| `min`, `max` | decimals, written as strings; the check fails when the measure is below `min` or above `max`. Both are compared at 4 decimal places, the precision `cortex run` prints a cost at, so a cost printed as `0.3000` is within `max: "0.3"`. A measure that cannot be read (a misspelt name, a `cost_usd` no answer carried, an `ekr quality` that fails) fails its check |
+
 ## `serve`
 
 | field | meaning |
