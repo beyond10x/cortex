@@ -639,7 +639,7 @@ fn create(
     units: Units,
     schema_config: Option<&Path>,
 ) -> ExitCode {
-    let loaded = match spec::load(path) {
+    let loaded = match spec::load_given(path) {
         Ok(l) => l,
         Err(e) => return fail(e),
     };
@@ -976,7 +976,7 @@ fn adopt_into(
 
 fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
     const CMD: &str = "cortex.instance.AdoptInstance";
-    let loaded = match spec::load(a.spec) {
+    let loaded = match spec::load_given(a.spec) {
         Ok(l) => l,
         Err(e) => return fail(e),
     };
@@ -1136,7 +1136,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
 }
 
 fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> ExitCode {
-    let loaded = match spec::load(path) {
+    let loaded = match spec::load_given(path) {
         Ok(l) => l,
         Err(e) => return fail(e),
     };
@@ -1411,6 +1411,14 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
             // Present only when a parent was skipped: a run that skipped none reports as before.
             if !report.skipped.is_empty() {
                 detail["skipped"] = json!(report.skipped);
+            }
+            // Present only when EKR rejected a part: a run that had none reports as before.
+            if !report.rejected.is_empty() {
+                detail["rejected"] = json!(report
+                    .rejected
+                    .iter()
+                    .map(run::Rejected::json)
+                    .collect::<Vec<_>>());
             }
             // Present only when the policy pseudonymises: a spec file without one reports as
             // before.

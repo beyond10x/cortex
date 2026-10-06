@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-06T02:33:11Z",
+  "actor": "agent:claude",
+  "artifact": "story:record-field-lookups",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261006c (EXIT=0, 353 tests)"
+  }
+}

@@ -190,6 +190,12 @@
         "author": {
           "type": "string"
         },
+        "fallback_text": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "filters": {
           "items": {
             "$ref": "#/$defs/cortex.instance.RecordFilter"
@@ -200,6 +206,9 @@
           "$ref": "#/$defs/cortex.instance.RecordFormat"
         },
         "id": {
+          "type": "string"
+        },
+        "lookup": {
           "type": "string"
         },
         "text": {
@@ -1178,8 +1187,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:861f6fd9ee1c1a7a1383b7bdf667ddb6ddcc698961ea1a16676b92dafbb35d6a",
-    "source_digest": "0fc580942f295d0f5dc09e702a75e70eee57d08233671d7934b03e104c73ab85",
+    "contract_digest": "slice-sha256/2:fc78f8e7cba21c9d7e60a40ba1766271d6ca594f74993e7d97ea7b60236709e9",
+    "source_digest": "46d14b665108bd7bba685ab525d1afaab8b67265939b431046efa7b3486ad936",
     "specification_version": "v1",
     "system": "cortex"
   }

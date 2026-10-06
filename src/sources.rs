@@ -676,9 +676,39 @@ fn fetch_records(
     })
 }
 
+/// `path` from a spec read against `base` with `~/` expanded, as `paths` and `lookup` are.
+fn under(base: &Path, path: &str) -> std::path::PathBuf {
+    let path = crate::ekr::expand(path);
+    if path.is_absolute() {
+        path
+    } else {
+        base.join(path)
+    }
+}
+
+/// The lookup file of a `records` spec, a JSON object of strings (an id to a name), read as a
+/// record file is: a leading byte-order mark is ignored, and a blank id or name is no value
+/// ([`scalar`]), so the id it would map is kept. A file that cannot be read, or holds anything
+/// else, fails the fetch with an error naming the file.
+fn read_lookup(path: &Path) -> Result<BTreeMap<String, String>, FetchError> {
+    let bytes = std::fs::read(path)
+        .map_err(|e| FetchError::Failed(format!("lookup {}: {e}", path.display())))?;
+    let unmarked = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
+    let lookup: BTreeMap<String, String> = serde_json::from_slice(unmarked).map_err(|e| {
+        FetchError::Failed(format!(
+            "lookup {}: not a JSON object of strings: {e}",
+            path.display()
+        ))
+    })?;
+    Ok(lookup
+        .into_iter()
+        .filter(|(id, name)| !id.trim().is_empty() && !name.trim().is_empty())
+        .collect())
+}
+
 /// The files of a `files` source: one document per file, or with `records`, one per record of
 /// each file ([`file_records`]), and what was left out as `skipped`. A record's thread context
-/// holds at most `max_context` characters.
+/// holds at most `max_context` characters. A `records` lookup file is read once, before any file.
 fn fetch_files(
     f: &m::FilesSource,
     base: &Path,
@@ -689,14 +719,12 @@ fn fetch_files(
         .compile_matcher();
     let mut docs = Vec::new();
     let mut read = RecordsRead::default();
+    if let Some(lookup) = f.records.as_ref().and_then(|r| r.lookup.as_deref()) {
+        read.lookup = read_lookup(&under(base, lookup))?;
+    }
     let mut skipped = Vec::new();
     for root in &f.paths {
-        let root = crate::ekr::expand(root);
-        let root = if root.is_absolute() {
-            root
-        } else {
-            base.join(root)
-        };
+        let root = under(base, root);
         for entry in walkdir::WalkDir::new(&root).sort_by_file_name() {
             let entry =
                 entry.map_err(|e| FetchError::Failed(format!("{}: {e}", root.display())))?;
@@ -753,6 +781,37 @@ struct RecordsRead {
     keys: BTreeSet<String>,
     /// The texts of the records read so far, per thread, oldest first.
     threads: BTreeMap<String, Vec<String>>,
+    /// The source's lookup file (an id to a name), empty without one.
+    lookup: BTreeMap<String, String>,
+}
+
+/// `text` with every `<@id>` or labelled `<@id|label>` whose id `lookup` holds replaced by
+/// `@<name>`; any other `<@…>` is kept as written.
+fn mentions(text: &str, lookup: &BTreeMap<String, String>) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find("<@") {
+        out.push_str(&rest[..open]);
+        let after = &rest[open + 2..];
+        let named = after.find('>').and_then(|close| {
+            let mention = &after[..close];
+            let id = mention.split_once('|').map_or(mention, |(id, _)| id);
+            Some((close, lookup.get(id)?))
+        });
+        match named {
+            Some((close, name)) => {
+                out.push('@');
+                out.push_str(name);
+                rest = &after[close + 1..];
+            }
+            None => {
+                out.push_str("<@");
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Where a record's thread context starts in its text: the first paragraph that opens with
@@ -773,11 +832,15 @@ pub fn split_context(text: &str) -> (&str, &str) {
 /// The documents of one file read as `r` says, `path` being the file's path and `content` its
 /// bytes. A leading byte-order mark is ignored. A record a filter leaves out, without an id, with
 /// empty text or with a key already read is skipped; a JSON line that is not UTF-8 or not JSON, a
-/// markdown file that is not UTF-8 or has no section, is named in `skipped`.
+/// markdown file that is not UTF-8 or has no section, is named in `skipped`. When `text` renders
+/// empty, the first `fallback_text` template that renders non-empty is the text; a record whose
+/// fallbacks all render empty too is skipped.
 ///
 /// A document's key is `<path>#<id>`; in a markdown file, the second section whose key is taken
 /// gets `<path>#<id>-2`, the third `-3`, counted in file order. Its text is `<author>: <text>`
-/// when the record has an author. When `r` names a `thread` field and the record has it, the text
+/// when the record has an author. With a lookup file (`read.lookup`), the author and every
+/// `<@id>` in the text ([`mentions`]) are mapped to their names; an id the file does not hold is
+/// kept as written. When `r` names a `thread` field and the record has it, the text
 /// is followed by the earlier records of that thread, nearest first, as `[context]` paragraphs
 /// ([`context`]); a record without the field carries no context and starts the thread named by
 /// its own id. `WholeFile` is the file as one document, as without `records`.
@@ -840,12 +903,23 @@ fn file_records(
             .collect::<Vec<_>>()
             .join("\n\n");
         if text.trim().is_empty() {
+            text = r
+                .fallback_text
+                .iter()
+                .flatten()
+                .map(|t| render(t, record))
+                .find(|t| !t.trim().is_empty())
+                .unwrap_or_default();
+        }
+        if text.trim().is_empty() {
             continue;
         }
         if !read.keys.insert(key.clone()) {
             continue;
         }
+        text = mentions(&text, &read.lookup);
         if let Some(author) = r.author.as_deref().and_then(|a| scalar(record, a)) {
+            let author = read.lookup.get(&author).cloned().unwrap_or(author);
             text = format!("{author}: {text}");
         }
         let mut full = text.clone();
@@ -1176,6 +1250,8 @@ mod file_records_tests {
             author: Some("user".into()),
             text: vec!["{text}".into()],
             thread: Some("thread".into()),
+            fallback_text: None,
+            lookup: None,
             filters,
         }
     }
@@ -1293,6 +1369,8 @@ mod file_records_tests {
             author: None,
             text: vec!["{body}".into()],
             thread: None,
+            fallback_text: None,
+            lookup: None,
             filters: Vec::new(),
         };
         let mut skipped = Vec::new();
@@ -1424,6 +1502,8 @@ mod file_records_tests {
             author: None,
             text: vec!["{heading}".into(), "{body}".into()],
             thread: None,
+            fallback_text: None,
+            lookup: None,
             filters: Vec::new(),
         };
         let mut skipped = Vec::new();
@@ -1449,6 +1529,64 @@ mod file_records_tests {
                 ("/x/notes.md#Two", "Two\n\nSecond."),
             ]
         );
+    }
+
+    #[test]
+    fn a_mention_is_mapped_only_when_the_lookup_holds_its_id() {
+        let lookup = BTreeMap::from([("U2".to_string(), "Ben".to_string())]);
+        assert_eq!(
+            mentions("hi <@U2>, <@U9>, <@U2 and <@>", &lookup),
+            "hi @Ben, <@U9>, <@U2 and <@>"
+        );
+        assert_eq!(mentions("<@U2><@U2>", &lookup), "@Ben@Ben");
+        assert_eq!(
+            mentions("<@U2|ben> <@U9|cem> <@|ben>", &lookup),
+            "@Ben <@U9|cem> <@|ben>"
+        );
+    }
+
+    #[test]
+    fn a_lookup_reads_like_a_record_file_a_mark_ignored_and_a_blank_value_absent() {
+        let dir = std::env::temp_dir().join(format!("cortex-lookup-forms-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("people.json");
+        std::fs::write(
+            &path,
+            "\u{feff}{\"U1\": \"Ana\", \"U2\": \"\", \"U3\": \" \\t\", \"\": \"Nobody\", \" \": \"Blank\"}",
+        )
+        .unwrap();
+        let lookup = read_lookup(&path).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(
+            lookup,
+            BTreeMap::from([("U1".to_string(), "Ana".to_string())])
+        );
+        assert_eq!(
+            mentions("<@U1> <@U2> <@U3> <@>", &lookup),
+            "@Ana <@U2> <@U3> <@>"
+        );
+    }
+
+    #[test]
+    fn a_lookup_file_that_is_not_a_json_object_of_strings_fails_and_names_the_file() {
+        let dir = std::env::temp_dir().join(format!("cortex-lookup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, content) in [
+            ("list.json", r#"["U1"]"#),
+            ("number.json", r#"{"U1": 1}"#),
+            ("broken.json", "{"),
+        ] {
+            let path = dir.join(name);
+            std::fs::write(&path, content).unwrap();
+            let Err(FetchError::Failed(why)) = read_lookup(&path) else {
+                panic!("{name} was read as a lookup");
+            };
+            assert!(why.contains(&path.display().to_string()), "{why}");
+        }
+        let good = dir.join("good.json");
+        std::fs::write(&good, r#"{"U1": "Ana"}"#).unwrap();
+        assert_eq!(read_lookup(&good).unwrap()["U1"], "Ana");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
 

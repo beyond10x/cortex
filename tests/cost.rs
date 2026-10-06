@@ -11,19 +11,25 @@ use std::path::PathBuf;
 
 use common::{ekr, executable, World};
 use serde_json::{json, Value};
-/// Two pages of about 40 000 characters each: with `max_chars_per_document` at 50 000 they do not
-/// fit one 60 000-character batch, so the run asks the model twice.
-fn two_batch_pages() -> String {
+/// `n` pages of about 41 000 characters each. Each is cut to what a 16 384-byte evidence payload
+/// holds (about 16 300 characters), so three fit one 60 000-character batch and a fourth starts
+/// the next.
+fn pages(n: usize) -> String {
     let body = "Example Labs develops the Widget engine. ".repeat(1000);
-    let page = |url: &str| {
-        json!({"url": url, "title": "T", "description": "D", "content": body,
-            "content_truncated": false, "published": null, "score": "0.9"})
+    let page = |n: usize| {
+        json!({"url": format!("https://example.org/{n}"), "title": "T", "description": "D",
+            "content": body, "content_truncated": false, "published": null, "score": "0.9"})
     };
-    let pages = json!({"results": [page("https://example.org/a"), page("https://example.org/b")],
+    let pages = json!({"results": (0..n).map(page).collect::<Vec<_>>(),
         "complete": false, "truncation": ["provider_limit"],
         "provenance": {"instance": "t", "profile": "tavily/2026-10",
             "received_at": "2026-10-05T00:00:00.000Z"}});
     common::answer(&pages.to_string())
+}
+
+/// Four pages: three in the first batch, one in the second, so the run asks the model twice.
+fn two_batch_pages() -> String {
+    pages(4)
 }
 
 /// A spec like `World::spec`, with large documents and the given budget.
@@ -102,7 +108,7 @@ fn run_with_costs(name: &str, budget: &str, costs: &[&str]) -> (World, Value) {
 fn two_costed_batches_report_the_sum_of_both_answers() {
     let (w, ran) = run_with_costs("sum", "5", &["0.25", "0.5"]);
     assert_eq!(w.lines("claude-calls.log").len(), 2, "two model calls");
-    assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 4, "{ran}");
     assert_eq!(ran["detail"]["cost_usd"], "0.7500", "{ran}");
     assert_eq!(last_log_line(&w, "sum")["cost_usd"], 0.75);
 }
@@ -136,12 +142,12 @@ fn uncosted_answers_spend_no_budget_and_costed_ones_do() {
     // Budget 0.1: two uncosted answers both run; two answers of 0.25 stop after the first.
     let (w, ran) = run_with_costs("free", "0.1", &["none", "none"]);
     assert_eq!(w.lines("claude-calls.log").len(), 2, "{ran}");
-    assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 4, "{ran}");
     assert_eq!(ran["detail"]["stopped"], Value::Null, "{ran}");
 
     let (w, ran) = run_with_costs("paid", "0.1", &["0.25", "0.25"]);
     assert_eq!(w.lines("claude-calls.log").len(), 1, "{ran}");
-    assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 3, "{ran}");
     assert_eq!(ran["detail"]["cost_usd"], "0.2500", "{ran}");
     assert!(
         ran["detail"]["stopped"]
@@ -152,20 +158,10 @@ fn uncosted_answers_spend_no_budget_and_costed_ones_do() {
     );
 }
 
-/// Three pages of about 41 000 characters each: with `max_chars_per_document` at 50 000 no two
-/// fit one 60 000-character batch, so the run asks the model three times.
+/// Seven pages: three in each of the first two batches, one in the third, so the run asks the
+/// model three times.
 fn three_batch_pages() -> String {
-    let body = "Example Labs develops the Widget engine. ".repeat(1000);
-    let page = |url: &str| {
-        json!({"url": url, "title": "T", "description": "D", "content": body,
-            "content_truncated": false, "published": null, "score": "0.9"})
-    };
-    let pages = json!({"results": [page("https://example.org/a"), page("https://example.org/b"),
-            page("https://example.org/c")],
-        "complete": false, "truncation": ["provider_limit"],
-        "provenance": {"instance": "t", "profile": "tavily/2026-10",
-            "received_at": "2026-10-05T00:00:00.000Z"}});
-    common::answer(&pages.to_string())
+    pages(7)
 }
 
 fn run_three(name: &str, budget: &str, costs: &[&str]) -> (World, Value) {
@@ -207,7 +203,7 @@ fn a_budget_spent_exactly_stops_the_next_call() {
     // 0.25 + 0.25 is exactly the budget of 0.5: nothing remains, so the third call is not made.
     let (w, ran) = run_three("exact", "0.5", &["0.25", "0.25", "0.25"]);
     assert_eq!(w.lines("claude-calls.log").len(), 2, "{ran}");
-    assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 6, "{ran}");
     assert_eq!(ran["detail"]["cost_usd"], "0.5000", "{ran}");
     assert!(stopped_by_budget(&ran), "{ran}");
 }
@@ -227,7 +223,7 @@ fn each_call_is_given_the_budget_that_remains() {
     // Budget 1: the calls are given 1, then 1 - 0.25, then 1 - 0.25 - 0.25.
     let (w, ran) = run_three("remain", "1", &["0.25", "0.25", "none"]);
     assert_eq!(budgets_given(&w), ["1.0000", "0.7500", "0.5000"], "{ran}");
-    assert_eq!(ran["detail"]["documents_applied"], 3, "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 7, "{ran}");
     assert_eq!(ran["detail"]["cost_usd"], Value::Null, "{ran}");
     assert_eq!(ran["detail"]["stopped"], Value::Null, "{ran}");
 }
