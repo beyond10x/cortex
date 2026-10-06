@@ -7,6 +7,8 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Added
 
+- A `records` spec can map its author field and inline `<@id>` mentions through a JSON lookup file
+  (`lookup`), and can name `fallback_text` templates used when `text` renders empty.
 - The test harness no longer fails with `Text file busy`: stand-ins are written by a child
   shell, never held open for writing by a test process.
 - A run gate: `gate.checks` bound the run report's numbers or `ekr quality` measures, and a run
