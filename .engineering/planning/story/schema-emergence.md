@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:schema-emergence
 kind: story
-status: draft
+status: active
 title: An operator triggers schema emergence on demand
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -23,7 +23,10 @@ scope:
   path: src/schema.rs
 - confidence: inferred
   path: tests/schema.rs
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-06T10:29:12Z", actor: "agent:claude", revision: 3}
+- {from: "proposed", to: "active", at: "2026-10-06T10:29:12Z", actor: "agent:claude", revision: 4}
 ---
 ## Outcome
 
