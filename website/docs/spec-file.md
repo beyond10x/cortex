@@ -23,7 +23,7 @@ Model Context Protocol specification, and a budget of $0.50 per run.
 format: cortex.instance/1
 name: example
 description: Developments in open-source vector databases and the companies behind them.
-ekr: {version: "0.0.30"}
+ekr: {version: "0.0.31"}
 seed: {schema: seed/schema.yaml, documents: []}
 model: {model: claude-sonnet-5-5, budget_usd: "1", timeout_s: 900}
 sources: []
@@ -131,7 +131,7 @@ The records of any operation a Connectors adapter admits.
 | `inputs` | a list of JSON inputs; the operation is invoked once per input. `{since}` and `{until}` in a string value are replaced by the run's window |
 | `records` | dotted path to the array of records in the answer, for example `issues` |
 | `id` | dotted path to a record's stable id |
-| `time` | optional dotted path to the record's publication time |
+| `time` | optional dotted path to the record's publication time, which dates its evidence and the facts drawn from it ([how](./operating.md#what-one-run-does)) |
 | `text` | templates whose `{a.b}` placeholders are filled from the record; the non-empty results, joined, are the document's text |
 | `paging` | optional: how to read every page of the answer (below) |
 | `child` | optional: an operation invoked once per record, whose records are added to that record's text (below) |
@@ -218,7 +218,7 @@ Files that are not UTF-8 text, or are empty, are skipped. A document's key is th
 |---|---|
 | `format` | `WholeFile` (each file is one document, as without `records`), `JsonLines` (each line is a JSON record) or `MarkdownSections` (each `##` section is a record) |
 | `id` | dotted path to a record's id |
-| `time` | optional dotted path to the record's publication time |
+| `time` | optional dotted path to the record's publication time, which dates its evidence and the facts drawn from it ([how](./operating.md#what-one-run-does)) |
 | `author` | optional dotted path to the record's author |
 | `text` | templates whose `{a.b}` placeholders are filled from the record; the non-empty results, joined, are the record's text |
 | `fallback_text` | optional templates tried in order only when every `text` template renders empty; the first non-empty result is the record's text |

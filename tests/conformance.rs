@@ -43,7 +43,7 @@ fn placeholder_spec() -> m::InstanceSpec {
         name: m::InstanceName("placeholder".into()),
         description: String::new(),
         ekr: m::EkrPin {
-            version: "0.0.30".into(),
+            version: "0.0.31".into(),
             bin: None,
         },
         seed: m::SeedSpec {

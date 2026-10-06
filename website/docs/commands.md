@@ -61,5 +61,5 @@ value to put back).
 
 | command | does |
 |---|---|
-| `cortex setup [--ekr-version <v>]` | install `ekr` at the version (default 0.0.30) with `cargo install` when it is missing |
+| `cortex setup [--ekr-version <v>]` | install `ekr` at the version (default 0.0.31) with `cargo install` when it is missing |
 | `cortex schema` | print the spec file's JSON Schema |

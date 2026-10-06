@@ -223,7 +223,7 @@ fn registered(w: &World) -> Vec<String> {
 }
 
 #[test]
-fn an_adopted_store_keeps_its_head_and_one_run_of_two_documents_adds_one_revision() {
+fn an_adopted_store_keeps_its_head_and_one_run_of_two_documents_adds_two_revisions() {
     let w = World::new();
     let legacy = Legacy::new(&w);
     let head = legacy.head();
@@ -260,7 +260,9 @@ fn an_adopted_store_keeps_its_head_and_one_run_of_two_documents_adds_one_revisio
     let (code, ran) = w.cortex(&["run", "brain/notes"]);
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
     assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
-    assert_eq!(instance_head(&w, "brain")["revision"], n + 1);
+    // EKR 0.0.31 commits a relation fact whose edge an earlier fact proposes in a later round:
+    // the two documents' `DEVELOPS` facts name one edge, so the one apply commits twice.
+    assert_eq!(instance_head(&w, "brain")["revision"], n + 2);
     assert_eq!(legacy.head(), head, "the run grew the instance's copy only");
 
     let (code, list) = w.cortex(&["list"]);
