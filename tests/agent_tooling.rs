@@ -47,7 +47,7 @@ fn created() -> (World, PathBuf) {
     std::fs::write(w.root.join("connection"), CONNECTION).unwrap();
     // The example names no `ekr.bin`, so cortex takes the pinned binary under `$HOME`.
     let user = w.root.join("user");
-    let pinned = user.join(".cache/cortex/bin/0.0.30/bin");
+    let pinned = user.join(".cache/cortex/bin/0.0.31/bin");
     std::fs::create_dir_all(&pinned).unwrap();
     std::os::unix::fs::symlink(ekr(), pinned.join("ekr")).unwrap();
     let dir = w.root.join("spec");

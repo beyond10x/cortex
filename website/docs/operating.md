@@ -91,7 +91,14 @@ version as `binary_version`. `--no-units`, and a spec with no source, leave the 
    evidence payload of at most 16,384 bytes, header included.
 3. **Keep** documents whose key was never applied, and documents whose text hash changed once
    their last application is `refresh_after_days` old, at most `max_documents_per_run`.
-4. **Issue evidence.** cortex mints one evidence item per document; the model never does.
+4. **Issue evidence.** cortex mints one evidence item per document; the model never does. The
+   item is observed when the document says it was written: a web page's published time or a
+   record's `time`, read as RFC 3339, as a date alone (00:00 UTC) or as epoch seconds with an
+   optional fraction (9 to 11 digits before it, as in a chat export's `ts`). A time that is none
+   of these, or lies before 1970 or after the run's start, and a document with no time, are
+   observed at the run's start. EKR dates each fact from the earliest observed time of the
+   evidence it cites, so a fact is valid from when its source said it. Which documents a run
+   keeps, and its window, still go by the run's own times.
 5. **Extract** in batches of up to 60,000 characters. Each batch is one `claude -p` call that
    answers in the JSON form of `ekr schema ekr.extraction-document/1`. The prompt carries the
    instance's description, its instructions, the store's node and edge types, and up to 50 known
