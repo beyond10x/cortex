@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:structured-children
 kind: story
-status: active
+status: implemented
 title: A structured source walks child operations and maps them as linked, timed nodes
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -37,10 +37,11 @@ scope:
   path: website/docs/spec-file.md
 - confidence: cited
   path: website/static/schemas/instance-spec.schema.json
-revision: 27
+revision: 28
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-07T07:43:13Z", actor: "human:timo", revision: 26, decided_on: {"recorded":{"review_outcome":8}}}
 - {from: "proposed", to: "active", at: "2026-10-07T07:43:13Z", actor: "human:timo", revision: 27, decided_on: {"recorded":{"review_outcome":8}}}
+- {from: "active", to: "implemented", at: "2026-10-07T09:03:53Z", actor: "human:timo", revision: 28, decided_on: {"recorded":{"test_result":1,"review_outcome":9}}}
 ---
 ## Outcome
 

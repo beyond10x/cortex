@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: specification:wave-20261007c-structured-children
 kind: specification
-status: approved
+status: implemented
 title: 'Wave 20261007c: structured children, conformance field shapes'
 relations:
 - specifies: story:structured-children
 - specifies: story:conformance-checks-field-shapes
-revision: 3
+revision: 5
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-07T07:43:31Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-07T07:43:31Z", actor: "human:timo", revision: 3}
+- {from: "approved", to: "implemented", at: "2026-10-07T09:03:53Z", actor: "human:timo", revision: 5}
 ---
 ## Wave 20261007c: structured children, conformance field shapes
 
@@ -64,3 +65,17 @@ The story leaves these open; the coordinator decided them before dispatch:
 One commit per unit through `b10x-gates bot`, plus the adversary's test commit; the merges into
 `wave/20261007c`; coordinator commits for the store and the changelog; the closing planning-store
 commit; the pull request into `main` and its merge.
+
+## Outcome
+
+Closed 2026-10-07. U1 `story:structured-children` (`e1447d0`, fix `c23a3ef`, merged `8f466bc`), U2 `story:conformance-checks-field-shapes` (`f3f007d`, merged `cb68473`). `task check` on `4686e44`, 8 steps each exit 0: 40 suites, 515 passed, 0 failed, 0 skipped; 515 names listed.
+
+| agent | tokens | tool uses | wall time |
+|---|---|---|---|
+| scoper, structured-children | 174,768 | 69 | 500 s |
+| implementor U1, first round | 325,038 | 148 | 1,494 s |
+| implementor U1, A1 correction | 379,960 | 25 | 545 s |
+| adversary U1 pass 1 (stopped once on HTTP 429, resumed) | 209,299 | 5 | 55 s after the resume |
+| implementor U2 | 117,030 | 55 | 389 s |
+
+U1 pass 1: 1 finding (A1, warning, introduced), fixed in `c23a3ef`, the coordinator read the correction (the adversary file unchanged). The A1 fix found a pre-existing case, filed as `story:parent-identity-prefix-unmasked`. U2 VERIFIED by a mutant the old runner passed and the new one fails.

@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-07T09:03:53Z",
+  "actor": "human:timo",
+  "artifact": "story:structured-children",
+  "kind": "story",
+  "revision": 27,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261007c 4686e44, 8 steps each exit 0: 515 passed, 0 failed, 0 skipped (ess 0.55.0, ekr 0.0.32)",
+    "reference": "4686e44aa2083abc1218966a260b568ae158db90"
+  }
+}
