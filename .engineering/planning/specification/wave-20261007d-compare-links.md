@@ -2,14 +2,15 @@
 format: aep.planning-md/3
 id: specification:wave-20261007d-compare-links
 kind: specification
-status: approved
+status: implemented
 title: 'Wave 20261007d: structured compare links'
 relations:
 - specifies: story:structured-compare-links
-revision: 3
+revision: 5
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-07T09:14:19Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-07T09:14:19Z", actor: "human:timo", revision: 3}
+- {from: "approved", to: "implemented", at: "2026-10-07T22:59:55Z", actor: "human:timo", revision: 4}
 ---
 ## Wave 20261007d: structured compare links
 
@@ -64,3 +65,33 @@ The story leaves these open; the coordinator decided them before dispatch:
 The unit commit through `b10x-gates bot`, the adversary's test commit and a fix commit; the merges
 into `wave/20261007d`; coordinator commits for the store and the changelog; the closing
 planning-store commit; the pull request into `main` and its merge.
+
+## Outcome
+
+Closed 2026-10-07. U1 `story:structured-compare-links`: `035e597`, adversary cases `da7c46f`,
+fix `262f0e8`, merged `9a40c5a`; review, changelog, status and docs `307261b`.
+
+Package-scoped steps on `307261b`, each exit 0: `ess specify validate`, `task drift`,
+`task docs-check`, `cargo fmt --check`, `cargo clippy -p cortex-cli -p cortex-docs --all-targets
+-D warnings`, `cargo test -p cortex-cli`, `cargo test -p cortex-docs`, `--list`: 42 suites, 536
+passed, 0 failed, 0 ignored. The pull request's CI runs the full gate.
+
+| agent | tokens | tool uses | wall time |
+|---|---|---|---|
+| implementor U1, round 1 (stopped by a usage limit; its uncommitted work was kept) | not recorded | not recorded | not recorded |
+| implementor U1, round 2 (fresh; checked and finished round 1's work) | 118,664 | 54 | 622 s |
+| adversary U1 pass 1 | 228,535 | 63 | 998 s |
+| implementor U1, round 3 (the pass 1 fixes) | 218,322 | 78 | 1,117 s |
+
+U1 pass 1: 3 findings, all introduced. (1) A change applied before its tag waited for the refresh
+window before gaining its edge: `SeenDocument.unlinked_hash` was added to the spec, and a change
+whose text differs only in its links no longer waits. (2) A link failure held every value of the
+parent's changes: it now holds only the link relation's assertions. (3) Four mutants the original
+suite missed: the adversary's green cases catch them. Fixed in `262f0e8`; the coordinator read the
+correction (no assertion dropped, the adversary file unchanged). The wave ran one adversary pass,
+as its rules say.
+
+Round 1 was cut off after its gate and a mutation run, before its report; the build directory was
+removed with `cargo clean` while it was stopped, and `ekr` 0.0.32 was rebuilt into the unit tree for
+the end-to-end tests. `b10x-gates scan-text` without `--policy` exits 1 with `protected file
+unavailable`; `AGENTS.md` now says to pass the policy.

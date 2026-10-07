@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:structured-compare-links
 kind: story
-status: active
+status: implemented
 title: A structured source links a merged change to the first tag that ships it
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -17,26 +17,33 @@ scope:
   path: spec/suite.json
 - confidence: cited
   path: src/model_map.rs
-- confidence: inferred
+- confidence: cited
   path: src/run.rs
 - confidence: cited
   path: src/sources.rs
-- confidence: inferred
+- confidence: cited
   path: src/spec.rs
+- confidence: cited
+  path: src/state.rs
 - confidence: cited
   path: src/structured.rs
 - confidence: cited
   path: tests/structured_compare.rs
+- confidence: cited
+  path: tests/structured_compare_adv.rs
+- confidence: cited
+  path: website/data/ess/cortex-instance.domain-graph.json
 - confidence: cited
   path: website/docs/reference/ess/cortex-instance.md
 - confidence: cited
   path: website/docs/spec-file.md
 - confidence: cited
   path: website/static/schemas/instance-spec.schema.json
-revision: 22
+revision: 27
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-07T09:14:18Z", actor: "human:timo", revision: 21}
 - {from: "proposed", to: "active", at: "2026-10-07T09:14:18Z", actor: "human:timo", revision: 22}
+- {from: "active", to: "implemented", at: "2026-10-07T22:59:55Z", actor: "human:timo", revision: 27, decided_on: {"recorded":{"test_result":1,"review_outcome":1,"verification":1}}}
 ---
 ## Outcome
 
@@ -57,7 +64,19 @@ The downstream deployment derives this link today; `story:structured-children` l
 
 ## Files (inferred)
 
-`spec/domains/instance.yaml`, `generated/`, `src/structured.rs`, `src/model_map.rs`, `tests/structured_compare.rs`.
+Confirmed from the merged diff (`git diff --name-only 7b92a35 262f0e8`, outside `generated/`):
+`spec/domains/instance.yaml`, `spec/suite.json`, `src/model_map.rs`, `src/run.rs`,
+`src/sources.rs`, `src/spec.rs`, `src/state.rs`, `src/structured.rs`,
+`tests/structured_compare.rs`, `tests/structured_compare_adv.rs`,
+`website/data/ess/cortex-instance.domain-graph.json`,
+`website/docs/reference/ess/cortex-instance.md`, `website/docs/spec-file.md`,
+`website/static/schemas/instance-spec.schema.json`.
+
+Corrections to the scoper's list: `src/run.rs` and `src/spec.rs` were inferred and are confirmed;
+`src/state.rs` was not listed and is touched (the seen-document hash without links, added after
+adversary pass 1); `src/sources.rs` holds the compare calls.
+
+The scoper's inferred lines in `## Scope` were checked by the implementor and hold: the refusal lands after `src/spec.rs:165-185` (at `:185-197`), `src/run.rs` needed the held prefix and the redactor before the fetch, and the Safety claim was confirmed by a mutant (hashing a change before its links are written turns the merged-before-its-tag case red).
 
 ## Scope
 

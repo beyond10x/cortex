@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-07T22:59:48Z",
+  "actor": "human:timo",
+  "artifact": "story:structured-compare-links",
+  "kind": "story",
+  "revision": 26,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test --locked -p cortex-cli --test structured_compare (acceptance: c1 one shipped_in edge to v1, c2 one to v2, a change in no tag none)",
+    "reference": "baseline 7b92a35: links is not in the spec, the 7 cases fail after the spec change and before the code (implementor red run); treatment 307261b: 8 passed. VERIFIED, new behaviour"
+  }
+}
