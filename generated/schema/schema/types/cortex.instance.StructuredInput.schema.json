@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "baa6b022b0cc1c204b3bf7ee74c0509918a69054e4dfa82fba89ab9da19c30e9",
-    "contract_digest": "slice-sha256/2:8ef7be8eb87f7f23282c51472ffd23f218fdb9226d201ccc5be606b86bd041a6",
+    "source_digest": "4487a02838aade2030f677471c9e9b85fd6311704607a6dc50426c77b894aecf",
+    "contract_digest": "slice-sha256/2:98ff0a56a15bc2cfebe7128ec0b789fec67709ba75fbf354e003fa841b863675",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -46,6 +46,127 @@
       ],
       "additionalProperties": false
     },
+    "cortex.instance.PropertyMapping": {
+      "title": "PropertyMapping",
+      "x-ess-name": "cortex.instance.PropertyMapping",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "property": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "property",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RecordMapping": {
+      "title": "RecordMapping",
+      "x-ess-name": "cortex.instance.RecordMapping",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "node_type": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.PropertyMapping"
+          }
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.RelationMapping"
+          }
+        }
+      },
+      "required": [
+        "node_type",
+        "id",
+        "name",
+        "aliases",
+        "properties",
+        "relations"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RelationMapping": {
+      "title": "RelationMapping",
+      "x-ess-name": "cortex.instance.RelationMapping",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "relation": {
+          "type": "string"
+        },
+        "target_type": {
+          "type": "string"
+        },
+        "target_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "relation",
+        "target_type",
+        "target_name"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.StructuredChild": {
+      "title": "StructuredChild",
+      "x-ess-name": "cortex.instance.StructuredChild",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string"
+        },
+        "input": {},
+        "records": {
+          "type": "string"
+        },
+        "paging": {
+          "$ref": "#/$defs/cortex.instance.Paging"
+        },
+        "mapping": {
+          "$ref": "#/$defs/cortex.instance.RecordMapping"
+        },
+        "time": {
+          "type": "string"
+        },
+        "parent": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation",
+        "input",
+        "records",
+        "mapping",
+        "parent"
+      ],
+      "additionalProperties": false
+    },
     "cortex.instance.StructuredConnectors": {
       "title": "StructuredConnectors",
       "x-ess-name": "cortex.instance.StructuredConnectors",
@@ -67,6 +188,12 @@
         },
         "paging": {
           "$ref": "#/$defs/cortex.instance.Paging"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.StructuredChild"
+          }
         }
       },
       "required": [

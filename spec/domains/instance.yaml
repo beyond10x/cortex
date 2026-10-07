@@ -190,6 +190,17 @@ types:
       - {name: properties, type: List<cortex.instance.PropertyMapping>}
       - {name: relations, type: List<cortex.instance.RelationMapping>}
 
+  - name: cortex.instance.StructuredChild
+    kind: struct
+    fields:
+      - {name: operation, type: String}
+      - {name: input, type: Json}
+      - {name: records, type: String}
+      - {name: paging, type: Optional<cortex.instance.Paging>}
+      - {name: mapping, type: cortex.instance.RecordMapping}
+      - {name: time, type: Optional<String>}
+      - {name: parent, type: String}
+
   - name: cortex.instance.StructuredConnectors
     kind: struct
     fields:
@@ -198,6 +209,7 @@ types:
       - {name: operation, type: String}
       - {name: inputs, type: List<Json>}
       - {name: paging, type: Optional<cortex.instance.Paging>}
+      - {name: children, type: Optional<List<cortex.instance.StructuredChild>>}
 
   - name: cortex.instance.StructuredFiles
     kind: struct

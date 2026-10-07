@@ -5,6 +5,13 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+### Added
+
+- A `structured` source with a Connectors input can call `children` operations per parent record
+  and map each child record to its own node, linked to its parent by the edge its `parent:` names and
+  dated by its `time` field. A child call that fails for one parent is named in `skipped`, and that
+  parent's earlier children of the operation are kept.
+
 ### Changed
 
 - cortex is specified and generated with ESS 0.55.0 (was 0.52.0); `spec/suite.json` is

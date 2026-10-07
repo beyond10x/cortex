@@ -212,11 +212,51 @@ fn file_records(r: &s::CortexInstanceFileRecords) -> m::FileRecords {
     }
 }
 
+fn record_mapping(mapping: &s::CortexInstanceRecordMapping) -> m::RecordMapping {
+    m::RecordMapping {
+        node_type: mapping.node_type.clone(),
+        id: mapping.id.clone(),
+        name: mapping.name.clone(),
+        aliases: mapping.aliases.clone(),
+        properties: mapping
+            .properties
+            .iter()
+            .map(|p| m::PropertyMapping {
+                property: p.property.clone(),
+                path: p.path.clone(),
+            })
+            .collect(),
+        relations: mapping
+            .relations
+            .iter()
+            .map(|r| m::RelationMapping {
+                relation: r.relation.clone(),
+                target_type: r.target_type.clone(),
+                target_name: r.target_name.clone(),
+            })
+            .collect(),
+    }
+}
+
+fn structured_child(
+    child: &s::CortexInstanceStructuredChild,
+    at: &str,
+) -> Result<m::StructuredChild, MapError> {
+    Ok(m::StructuredChild {
+        operation: child.operation.clone(),
+        input: json(&child.input),
+        records: child.records.clone(),
+        paging: paging(&child.paging, at)?,
+        mapping: record_mapping(&child.mapping),
+        time: opt(&child.time),
+        parent: child.parent.clone(),
+    })
+}
+
 fn structured(
     st: &s::CortexInstanceStructuredSource,
     at: &str,
 ) -> Result<m::StructuredSource, MapError> {
-    let mapping = &st.mapping;
     Ok(m::StructuredSource {
         input: match &*st.input {
             s::CortexInstanceStructuredInput::V0(c) => {
@@ -226,6 +266,18 @@ fn structured(
                     operation: c.value.operation.clone(),
                     inputs: c.value.inputs.iter().map(json).collect(),
                     paging: paging(&c.value.paging, at)?,
+                    children: match &c.value.children {
+                        EssPresence::Absent => None,
+                        EssPresence::Present(children) => Some(
+                            children
+                                .iter()
+                                .enumerate()
+                                .map(|(n, child)| {
+                                    structured_child(child, &format!("{at}.children[{n}]"))
+                                })
+                                .collect::<Result<_, _>>()?,
+                        ),
+                    },
                 })
             }
             s::CortexInstanceStructuredInput::V1(f) => {
@@ -236,29 +288,7 @@ fn structured(
             }
         },
         records: st.records.clone(),
-        mapping: m::RecordMapping {
-            node_type: mapping.node_type.clone(),
-            id: mapping.id.clone(),
-            name: mapping.name.clone(),
-            aliases: mapping.aliases.clone(),
-            properties: mapping
-                .properties
-                .iter()
-                .map(|p| m::PropertyMapping {
-                    property: p.property.clone(),
-                    path: p.path.clone(),
-                })
-                .collect(),
-            relations: mapping
-                .relations
-                .iter()
-                .map(|r| m::RelationMapping {
-                    relation: r.relation.clone(),
-                    target_type: r.target_type.clone(),
-                    target_name: r.target_name.clone(),
-                })
-                .collect(),
-        },
+        mapping: record_mapping(&st.mapping),
         dropped: opt(&st.dropped).map(|d| match *d {
             s::CortexInstanceDropPolicy::V0 => m::DropPolicy::Keep,
             s::CortexInstanceDropPolicy::V1 => m::DropPolicy::Supersede,

@@ -288,6 +288,18 @@ pub struct Fetched {
     pub skipped: Vec<String>,
     /// Consecutive failed child calls per parent key, after this fetch.
     pub child_failures: BTreeMap<String, u32>,
+    /// A `structured` source's child calls that failed, one per parent and operation. The parent
+    /// and the other children are read; the run names each in `skipped`.
+    pub failed_children: Vec<ChildFailure>,
+}
+
+/// A child call of a `structured` source that failed for one parent record.
+#[derive(Debug, Clone)]
+pub struct ChildFailure {
+    /// The parent record's raw id, at its mapping's `id`.
+    pub parent: String,
+    pub operation: String,
+    pub reason: String,
 }
 
 /// Consecutive runs a parent's child call may fail and still hold the window; from this many on,
@@ -311,6 +323,7 @@ pub fn fetch(
         unread: Vec::new(),
         skipped: Vec::new(),
         child_failures: child_failures.clone(),
+        failed_children: Vec::new(),
     };
     match settings {
         m::SourceSettings::Web(web) => fetch_web(web, connectors).map(documents),
@@ -341,21 +354,36 @@ pub fn fetch(
 /// Adds the documents of `records` to `docs`, one per record, as a structured source reads them:
 /// a record with no scalar at the mapping's `id` or `name` is left out, and so is a record whose
 /// id `keys` already holds. Its key is `<prefix>:<raw id>` ([`crate::structured::prefix`]).
-fn structured_records(
+/// Answers each record added, with its raw id.
+fn structured_records<'r>(
     st: &m::StructuredSource,
-    records: &[Value],
+    records: &'r [Value],
     keys: &mut BTreeSet<String>,
     docs: &mut Vec<Document>,
-) {
+) -> Vec<(String, &'r Value)> {
     let prefix = crate::structured::prefix(st);
+    mapped_records(&st.mapping, records, keys, docs, |id| {
+        format!("{prefix}:{id}")
+    })
+}
+
+/// [`structured_records`] by `mapping`, each record's key made from its raw id by `key`.
+fn mapped_records<'r>(
+    mapping: &m::RecordMapping,
+    records: &'r [Value],
+    keys: &mut BTreeSet<String>,
+    docs: &mut Vec<Document>,
+    key: impl Fn(&str) -> String,
+) -> Vec<(String, &'r Value)> {
+    let mut added = Vec::new();
     for record in records {
-        let Some(id) = crate::structured::text_at(record, &st.mapping.id) else {
+        let Some(id) = crate::structured::text_at(record, &mapping.id) else {
             continue;
         };
-        if crate::structured::text_at(record, &st.mapping.name).is_none() {
+        if crate::structured::text_at(record, &mapping.name).is_none() {
             continue;
         }
-        let key = format!("{prefix}:{id}");
+        let key = key(&id);
         if !keys.insert(key.clone()) {
             continue;
         }
@@ -368,7 +396,9 @@ fn structured_records(
             text: record.to_string(),
             hash: None,
         });
+        added.push((id, record));
     }
+    added
 }
 
 /// The records of a `structured` source's `files` input: every file under `paths` (read against
@@ -434,6 +464,13 @@ fn fetch_structured_files(
 /// `src/structured.rs` maps. Its key here, `<adapter>:<operation>:<raw id>`, only tells records
 /// apart: the run replaces it with the record's identity (`structured::Source::prepare`) before
 /// anything is stored, so a raw id that masking or a redaction rule would change is never stored.
+///
+/// Each of the source's `children` is called once per record read, its input filled from the
+/// record, and walked the same way; each of its records with an id and a name by the child's
+/// mapping is one document more, keyed `<child prefix>:<parent raw id>:<raw id>`
+/// ([`crate::structured::child_key`]). A child call that fails leaves that parent's records of
+/// the operation unread and is named in `failed_children`; the parent and its other children are
+/// read.
 fn fetch_structured(
     st: &m::StructuredSource,
     c: &m::StructuredConnectors,
@@ -443,22 +480,52 @@ fn fetch_structured(
     let mut docs = Vec::new();
     let mut unread = Vec::new();
     let mut keys = BTreeSet::new();
-    let mut invoke =
-        |input: &Value| Ok(connectors.invoke(&c.adapter, &c.connection, &c.operation, input)?);
+    let mut failed_children = Vec::new();
+    let prefix = crate::structured::prefix(st);
+    let children = c.children.as_deref().unwrap_or_default();
+    let invoker = |operation: &str| {
+        let operation = operation.to_string();
+        move |input: &Value| Ok(connectors.invoke(&c.adapter, &c.connection, &operation, input)?)
+    };
     for input in &c.inputs {
         let records = walk(
-            &mut invoke,
+            &mut invoker(&c.operation),
             &format!("{}.{}", c.adapter, c.operation),
             &with_window(&to_serde(input), window),
             &st.records,
             c.paging.as_ref(),
             &mut unread,
         )?;
-        structured_records(st, &records, &mut keys, &mut docs);
+        for (parent, record) in structured_records(st, &records, &mut keys, &mut docs) {
+            for child in children {
+                let found = walk(
+                    &mut invoker(&child.operation),
+                    &format!("{}.{}", c.adapter, child.operation),
+                    &render_json(&to_serde(&child.input), record),
+                    &child.records,
+                    child.paging.as_ref(),
+                    &mut unread,
+                );
+                match found {
+                    Ok(found) => {
+                        let at = crate::structured::child_prefix(&prefix, &child.operation);
+                        mapped_records(&child.mapping, &found, &mut keys, &mut docs, |id| {
+                            crate::structured::child_key(&at, &parent, id)
+                        });
+                    }
+                    Err(e) => failed_children.push(ChildFailure {
+                        parent: parent.clone(),
+                        operation: child.operation.clone(),
+                        reason: e.to_string(),
+                    }),
+                }
+            }
+        }
     }
     Ok(Fetched {
         documents: docs,
         unread,
+        failed_children,
         ..Fetched::default()
     })
 }
@@ -742,6 +809,7 @@ fn fetch_records(
         unread,
         skipped,
         child_failures: failures,
+        failed_children: Vec::new(),
     })
 }
 

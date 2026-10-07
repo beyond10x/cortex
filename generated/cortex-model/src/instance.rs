@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest baa6b022b0cc1c204b3bf7ee74c0509918a69054e4dfa82fba89ab9da19c30e9
-// contract digest 81310f63a3f86377583f8de316f242c2e516e5001c9a0c53de91cb771a7aac31
+// model digest 4487a02838aade2030f677471c9e9b85fd6311704607a6dc50426c77b894aecf
+// contract digest bfd8e8fad1346b12e8f4d4c8461f8d00bfe80b852f5491231c515012f28c7df0
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -711,6 +711,25 @@ pub enum StoreSpec {
     Sqlite(Option<SqliteStore>),
 }
 
+/// StructuredChild — `cortex.instance.StructuredChild`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StructuredChild {
+    /// `operation` — `String`.
+    pub operation: String,
+    /// `input` — `Json`.
+    pub input: crate::json::Value,
+    /// `records` — `String`.
+    pub records: String,
+    /// `paging` — `Optional<cortex.instance.Paging>`.
+    pub paging: Option<Paging>,
+    /// `mapping` — `cortex.instance.RecordMapping`.
+    pub mapping: RecordMapping,
+    /// `time` — `Optional<String>`.
+    pub time: Option<String>,
+    /// `parent` — `String`.
+    pub parent: String,
+}
+
 /// StructuredConnectors — `cortex.instance.StructuredConnectors`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructuredConnectors {
@@ -724,6 +743,8 @@ pub struct StructuredConnectors {
     pub inputs: Vec<crate::json::Value>,
     /// `paging` — `Optional<cortex.instance.Paging>`.
     pub paging: Option<Paging>,
+    /// `children` — `Optional<List<cortex.instance.StructuredChild>>`.
+    pub children: Option<Vec<StructuredChild>>,
 }
 
 /// StructuredFiles — `cortex.instance.StructuredFiles`.
