@@ -99,7 +99,7 @@ pub fn cost_text(cost_usd: Option<f64>) -> String {
 /// Names the store already holds, so the model reuses them.
 #[derive(Default)]
 pub struct Known {
-    /// `Type` or `Type(property, …)`.
+    /// `Type` or `Type(property: Kind, …)`: each property with its value kind.
     pub node_types: Vec<String>,
     /// `RELATION: Source -> Target`.
     pub edge_types: Vec<String>,
@@ -108,6 +108,8 @@ pub struct Known {
 }
 
 impl Known {
+    /// The names of `ontology` (`ekr ontology`), each node type's properties with their value
+    /// kind (`value_type.value_kind`) and nothing else of their declaration.
     pub fn from_ontology(ontology: &Value, entities: BTreeMap<String, Vec<String>>) -> Self {
         let names = |v: &Value| -> Vec<String> {
             v.as_array()
@@ -116,13 +118,26 @@ impl Known {
                 .filter_map(|t| t["name"].as_str().map(str::to_string))
                 .collect()
         };
+        let properties = |v: &Value| -> Vec<String> {
+            v.as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|p| {
+                    let name = p["name"].as_str()?;
+                    Some(match p["value_type"]["value_kind"].as_str() {
+                        Some(kind) => format!("{name}: {kind}"),
+                        None => name.to_string(),
+                    })
+                })
+                .collect()
+        };
         let node_types = ontology["node_types"]
             .as_array()
             .into_iter()
             .flatten()
             .filter_map(|t| {
                 let name = t["name"].as_str()?;
-                let props = names(&t["properties"]);
+                let props = properties(&t["properties"]);
                 Some(if props.is_empty() {
                     name.to_string()
                 } else {
@@ -546,6 +561,39 @@ mod tests {
             .unwrap_or_default();
         assert!(rule.contains("`!Property`"), "{SYSTEM_PROMPT}");
         assert!(rule.contains("changed"), "{SYSTEM_PROMPT}");
+    }
+
+    /// `story:prompt-names-value-kinds`: each existing property is named with its value kind, as
+    /// `ekr ontology` declares it (`value_type`, EKR 0.0.32), and with nothing else of its
+    /// declaration.
+    #[test]
+    fn the_prompt_names_each_existing_property_with_its_value_kind() {
+        let property = |name: &str, value_type: Value| {
+            json!({"id": "p", "name": name, "value_type": value_type, "cardinality": "One",
+                "required": false, "constraints": []})
+        };
+        let ontology = json!({"node_types": [
+            {"id": "t1", "name": "Release", "parents": [], "properties": [
+                property("version", json!({"value_kind": "String"})),
+                property("release_date", json!({"value_kind": "String"})),
+            ]},
+            {"id": "t2", "name": "Product", "parents": [], "properties": [
+                property("code", json!({"value_kind": "String", "parameters": {"max": 8}})),
+                {"id": "p", "name": "legacy"},
+            ]},
+            {"id": "t3", "name": "Organization", "parents": [], "properties": []},
+        ], "edge_types": []});
+        let known = Known::from_ontology(&ontology, BTreeMap::new());
+        let text = prompt("d", None, &known, &[]);
+        assert!(text.contains("release_date: String"), "{text}");
+        assert!(
+            text.contains(
+                "Existing node types: Release(version: String, release_date: String); \
+                 Product(code: String, legacy); Organization\n"
+            ),
+            "{text}"
+        );
+        assert!(!text.contains("max"), "only the kind is named: {text}");
     }
 
     #[test]
