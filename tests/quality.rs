@@ -292,6 +292,98 @@ fn a_judge_answer_without_a_cost_makes_the_measurements_cost_null() {
     assert_eq!(d["rate"], report["rate"], "{out} {report}");
 }
 
+/// Adversary, `story:events-carry-measurements`: a pass rate of 0 is a rate, not a missing one.
+/// The judge answers `no` for both facts of a sample of two, so `rate` is the number 0, as
+/// `fact-quality.json` holds it, and never null, which is kept for a store with no fact to draw.
+#[test]
+fn adv_every_fact_judged_no_is_a_rate_of_zero_not_a_null_rate() {
+    let w = instance("refuted", 30, "");
+    let (code, out) = w.cortex(&["quality", "refuted", "--sample", "2"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("measured")),
+        "{out}"
+    );
+    let d = &out["detail"];
+    assert_eq!(
+        (d["judged"].as_i64(), d["passed"].as_i64()),
+        (Some(2), Some(0)),
+        "{out}"
+    );
+    assert!(
+        d["rate"].is_number(),
+        "a rate of 0 printed as {}: {out}",
+        d["rate"]
+    );
+    assert_eq!(d["rate"].as_f64(), Some(0.0), "{out}");
+    let report: Value = serde_json::from_slice(
+        &std::fs::read(quality_dirs(&w, "refuted")[0].join("fact-quality.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        d["rate"].to_string(),
+        report["rate"].to_string(),
+        "{report}"
+    );
+    assert_eq!(d["cost_usd"], "0.0200", "{out}");
+}
+
+/// Adversary, `story:events-carry-measurements`: the decimals a `measured` line prints are the
+/// event's, digit for digit as `fact-quality.json` holds them and in the form the generated
+/// `QualityMeasured` schema states for each. One `yes` of three facts is a rate EKR prints with
+/// sixteen digits.
+#[test]
+fn adv_a_rate_of_one_third_is_printed_digit_for_digit_in_the_events_decimal_form() {
+    let w = instance("third", 30, "");
+    let (code, out) = w.cortex(&["quality", "third", "--sample", "3"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("measured")),
+        "{out}"
+    );
+    let d = &out["detail"];
+    assert_eq!(
+        (d["judged"].as_i64(), d["passed"].as_i64()),
+        (Some(3), Some(1)),
+        "{out}"
+    );
+    let report: Value = serde_json::from_slice(
+        &std::fs::read(quality_dirs(&w, "third")[0].join("fact-quality.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(d["rate"].to_string(), "0.3333333333333333", "{out}");
+    for key in ["rate", "lower", "upper"] {
+        assert!(d[key].is_number(), "{key}: {out}");
+        assert_eq!(
+            d[key].to_string(),
+            report[key].to_string(),
+            "{key}: {out} {report}"
+        );
+    }
+    let schema: Value = serde_json::from_slice(
+        &std::fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("generated/schema/schema/events/cortex.instance.QualityMeasured.schema.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    for key in ["rate", "lower", "upper", "cost_usd"] {
+        let pattern = schema["properties"][key]["pattern"]
+            .as_str()
+            .unwrap_or_else(|| panic!("QualityMeasured.{key} has no pattern: {schema}"));
+        let text = match &d[key] {
+            Value::String(s) => s.clone(),
+            v => v.to_string(),
+        };
+        assert!(
+            regex::Regex::new(pattern).unwrap().is_match(&text),
+            "{key} = {text} is not the event's decimal form {pattern}: {out}"
+        );
+    }
+    assert_eq!(d["cost_usd"], "0.0200", "{out}");
+}
+
 #[test]
 fn the_judge_is_shown_evidence_as_the_redaction_policy_shows_a_run() {
     let email = format!("{}@{}", "press", "example.org");

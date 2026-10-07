@@ -419,6 +419,40 @@ fn the_cost_is_null_as_soon_as_one_answer_carried_none() {
     assert_eq!(out["detail"].get("cost_usd"), Some(&Value::Null), "{out}");
 }
 
+/// Adversary, `story:events-carry-measurements`: with no fact to draw no model is asked, and
+/// `SchemaChangesProposed` carries a cost of 0, not null, in a dry run as when applying. The case
+/// `adv_an_empty_store_asks_no_model_and_applies_nothing` asserts the cost only when its outcome
+/// is `applied`; this one asserts both outcomes.
+#[test]
+fn adv_an_empty_store_costs_nothing_in_a_dry_run_and_when_applying() {
+    let w = World::new();
+    let path = w.spec("empty", "conn_test");
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    proposer(&w);
+    answer(&w, json!([]));
+    for (args, outcome) in [
+        (
+            &["schema", "empty", "--sample", "5", "--dry-run"][..],
+            "proposed",
+        ),
+        (&["schema", "empty", "--sample", "5"][..], "applied"),
+    ] {
+        let (code, out) = w.cortex(args);
+        assert_eq!(
+            (code, out["outcome"].as_str()),
+            (0, Some(outcome)),
+            "{args:?}: {out}"
+        );
+        assert_eq!(out["detail"]["proposed"], 0, "{args:?}: {out}");
+        assert_eq!(
+            out["detail"]["cost_usd"], "0.0000",
+            "{args:?}: no model was asked: {out}"
+        );
+    }
+    assert!(w.lines("schema-calls.log").is_empty());
+}
+
 /// Acceptance 5: `quality`'s masking case (`tests/quality.rs`, a rare name a fact and its
 /// evidence both hold), run through `schema`: the name the run's model was shown as a
 /// placeholder reaches the proposing model as a placeholder too.
