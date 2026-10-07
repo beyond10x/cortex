@@ -182,7 +182,10 @@ this repository and published by the organisation's reusable workflow.
   evidence for a tree, check that the test names it printed exist there (`cargo test -- --list`).
 - The end-to-end tests run a real `ekr` (`CORTEX_TEST_EKR`, default the 0.0.32 binary under
   `~/.cache/company-brain-v3/bin/0.0.32/bin/ekr`) with stand-in `connectors`, `claude` and
-  `systemctl`. A missing `ekr` fails them; it never skips them.
+  `systemctl`. A missing `ekr` fails them; it never skips them. When that file is missing, build
+  `ekr` as CI does into the tree,
+  `cargo install --locked --git https://github.com/beyond10x/epistemic-knowledge-runtime --tag 0.0.32 --bin ekr --root target/ekr-0.0.32 ekr`,
+  and set `CORTEX_TEST_EKR` to the absolute path of `target/ekr-0.0.32/bin/ekr`.
 - After a site change, `task website` must build; it fails on a broken link or anchor.
 
 ## Cutting a release

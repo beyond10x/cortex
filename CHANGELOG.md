@@ -5,6 +5,8 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+## 0.2.0 — 2026-10-07
+
 ### Added
 
 - A `structured` source with a Connectors input can call `children` operations per parent record
