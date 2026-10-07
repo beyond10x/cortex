@@ -23,7 +23,7 @@ Model Context Protocol specification, and a budget of $0.50 per run.
 format: cortex.instance/1
 name: example
 description: Developments in open-source vector databases and the companies behind them.
-ekr: {version: "0.0.31"}
+ekr: {version: "0.0.32"}
 seed: {schema: seed/schema.yaml, documents: []}
 model: {model: claude-sonnet-5-5, budget_usd: "1", timeout_s: 900}
 sources: []
@@ -482,6 +482,6 @@ With `connection`, cortex never reads the password: the operator saves it once w
 `connectors connections connect`, and pins the `ekr` binary in the Connectors configuration as
 the consumer `ekr`, with `pass_env = ["EKR_"]` so the `EKR_HOST`, `EKR_BACKEND` and `EKR_STORE`
 cortex sets reach it, and the connections' adapter alias in `permissions.connections`. That needs
-an `ekr` whose `ekr.postgres/1` reads `password_file` (EKR after 0.0.31). `cortex create` refuses
+an `ekr` whose `ekr.postgres/1` reads `password_file` (EKR 0.0.32 or later). `cortex create` refuses
 a spec whose connection Connectors does not list (`connection-missing`), and a `config` without
 that `password_file` (`seed-refused`, naming the field, never its value).

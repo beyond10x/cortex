@@ -166,8 +166,8 @@ this repository and published by the organisation's reusable workflow.
   `worktree finish --discard-cache --archive <tree>`, so its build cache goes with it. Check
   `df -h /` first; do not start a build with less than 10 GB free. Before a test run counts as
   evidence for a tree, check that the test names it printed exist there (`cargo test -- --list`).
-- The end-to-end tests run a real `ekr` (`CORTEX_TEST_EKR`, default the 0.0.31 binary under
-  `~/.cache/company-brain-v3/bin/0.0.31/bin/ekr`) with stand-in `connectors`, `claude` and
+- The end-to-end tests run a real `ekr` (`CORTEX_TEST_EKR`, default the 0.0.32 binary under
+  `~/.cache/company-brain-v3/bin/0.0.32/bin/ekr`) with stand-in `connectors`, `claude` and
   `systemctl`. A missing `ekr` fails them; it never skips them.
 - After a site change, `task website` must build; it fails on a broken link or anchor.
 

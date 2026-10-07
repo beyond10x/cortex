@@ -15,11 +15,11 @@ pub fn ekr() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             PathBuf::from(std::env::var_os("HOME").expect("HOME"))
-                .join(".cache/company-brain-v3/bin/0.0.31/bin/ekr")
+                .join(".cache/company-brain-v3/bin/0.0.32/bin/ekr")
         });
     assert!(
         bin.is_file(),
-        "the end-to-end test needs ekr 0.0.31 at {} (set CORTEX_TEST_EKR)",
+        "the end-to-end test needs ekr 0.0.32 at {} (set CORTEX_TEST_EKR)",
         bin.display()
     );
     bin
@@ -149,7 +149,7 @@ EOF
                 r#"format: cortex.instance/1
 name: {name}
 description: Test brain.
-ekr: {{version: "0.0.31", bin: "{ekr}"}}
+ekr: {{version: "0.0.32", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

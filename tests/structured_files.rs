@@ -58,7 +58,7 @@ fn create_with(w: &World, name: &str, dropped: Option<&str>, relations: &str) {
             r#"format: cortex.instance/1
 name: {name}
 description: Test brain.
-ekr: {{version: "0.0.31", bin: "{ekr}"}}
+ekr: {{version: "0.0.32", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:
@@ -500,7 +500,7 @@ fn two_file_sources_with_one_glob_under_different_roots_do_not_end_each_others_v
             r#"format: cortex.instance/1
 name: two
 description: Test brain.
-ekr: {{version: "0.0.31", bin: "{ekr}"}}
+ekr: {{version: "0.0.32", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:
@@ -616,7 +616,7 @@ fn adv_a_a_supersede_beside_a_connectors_source_on_the_same_operation_is_refused
             r#"format: cortex.instance/1
 name: both
 description: Test brain.
-ekr: {{version: "0.0.31", bin: "{ekr}"}}
+ekr: {{version: "0.0.32", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

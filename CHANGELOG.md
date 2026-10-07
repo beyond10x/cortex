@@ -92,6 +92,15 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 - A release workflow: a published GitHub Release `v<version>` gets
   `cortex-<version>-x86_64-unknown-linux-gnu.tar.gz` and `SHA256SUMS` attached; a manual run
   builds the same two files as a workflow artifact.
+- A PostgreSQL store can name a Connectors `connection` (and a `schema_connection` for
+  provisioning): every `ekr` that opens the store then starts through
+  `connectors connections launch --consumer ekr` and reads the password from descriptor 3 as its
+  `password_file`, so no file cortex writes holds it.
+
+### Changed
+
+- The EKR pin is 0.0.32 (`cortex setup` default, the examples and CI): its `ekr.postgres/1` takes a
+  `password_file`.
 
 ### Fixed
 
