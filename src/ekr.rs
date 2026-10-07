@@ -1,6 +1,6 @@
 //! The pinned `ekr` binary: seed, ontology, apply-extraction, and the formats cortex reads from it.
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -210,6 +210,7 @@ impl Launch {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let mut cmd = Command::new(&self.connectors);
+        remove_inherited_ekr(&mut cmd, std::env::vars_os().map(|(key, _)| key));
         cmd.args([
             "connections",
             "launch",
@@ -236,7 +237,25 @@ impl Launch {
     }
 }
 
+/// Removes from `cmd` every `EKR_*` variable of `inherited`, the names of the environment it would
+/// inherit. A launch hands its consumer every `EKR_*` variable it gets (`pass_env = ["EKR_"]`), so
+/// only the ones the caller sets afterwards reach the launched `ekr`, none this process inherited
+/// (such as `EKR_FULL_REPLAY` from the operator's shell).
+fn remove_inherited_ekr(cmd: &mut Command, inherited: impl IntoIterator<Item = OsString>) {
+    for key in inherited {
+        if key.as_encoded_bytes().starts_with(b"EKR_") {
+            cmd.env_remove(&key);
+        }
+    }
+}
+
 impl Store {
+    /// The connection every `ekr` that opens this store launches through, the viewer's included;
+    /// none for a store `ekr` opens directly. The schema connection is provisioning's alone.
+    pub fn launched_through(&self) -> Option<&Connection> {
+        self.launch.as_ref().map(|l| &l.connection)
+    }
+
     /// The `ekr` invocation of `args` on this store, built and not run: the pinned `ekr` itself, or
     /// for a launched store `connectors connections launch`, whose consumer gets the `EKR_*`
     /// variables (`pass_env`).
@@ -671,11 +690,12 @@ pub fn applied(report: &Value) -> Applied {
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::OsStr;
+    use std::ffi::{OsStr, OsString};
     use std::path::PathBuf;
 
     use super::{
-        transaction_document, Backend, Connection, Launch, Operation, PropertyDecl, Store,
+        remove_inherited_ekr, transaction_document, Backend, Connection, Launch, Operation,
+        PropertyDecl, Store,
     };
 
     #[test]
@@ -775,17 +795,17 @@ mod tests {
         }
     }
 
+    /// The variables the store's command sets. A launch also removes each `EKR_*` variable the
+    /// test runner inherited, which is no variable it sets.
     fn env(store: &Store) -> Vec<(String, String)> {
         let cmd = store.cmd(&[OsStr::new("head")]).unwrap();
         let mut out: Vec<_> = cmd
             .get_envs()
-            .map(|(k, v)| {
-                (
+            .filter_map(|(k, v)| {
+                Some((
                     k.to_string_lossy().into_owned(),
-                    v.map(OsStr::to_string_lossy)
-                        .unwrap_or_default()
-                        .into_owned(),
-                )
+                    v?.to_string_lossy().into_owned(),
+                ))
             })
             .collect();
         out.sort();
@@ -867,6 +887,62 @@ mod tests {
                 ("EKR_HOST".into(), "/i/host.json".into()),
                 ("EKR_STORE".into(), "/etc/brain/pg.json".into()),
             ]
+        );
+    }
+
+    #[test]
+    fn a_launch_removes_every_inherited_ekr_variable_and_keeps_the_rest() {
+        let mut cmd = std::process::Command::new("/opt/connectors");
+        remove_inherited_ekr(
+            &mut cmd,
+            [
+                "EKR_FULL_REPLAY",
+                "EKR_HOST",
+                "EKR_",
+                "PATH",
+                "CONNECTORS_HOME",
+                "ekr_lower",
+                "XEKR_",
+            ]
+            .map(OsString::from),
+        );
+        cmd.env("EKR_HOST", "/i/host.json");
+        let mut envs: Vec<_> = cmd
+            .get_envs()
+            .map(|(k, v)| {
+                (
+                    k.to_string_lossy().into_owned(),
+                    v.map(|v| v.to_string_lossy().into_owned()),
+                )
+            })
+            .collect();
+        envs.sort();
+        assert_eq!(
+            envs,
+            [
+                ("EKR_".to_string(), None),
+                ("EKR_FULL_REPLAY".to_string(), None),
+                ("EKR_HOST".to_string(), Some("/i/host.json".to_string())),
+            ]
+        );
+    }
+
+    /// What the viewer launches through: the application connection, never the schema
+    /// connection, which only provisioning uses.
+    #[test]
+    fn a_store_is_launched_through_its_connection_alone() {
+        let app = launched(false);
+        assert_eq!(
+            app.launched_through(),
+            Some(&Connection {
+                adapter: "pg".into(),
+                connection: "app".into(),
+            })
+        );
+        assert_eq!(launched(true).launched_through(), app.launched_through());
+        assert_eq!(
+            store(Backend::Postgres, "/etc/brain/pg.json").launched_through(),
+            None
         );
     }
 

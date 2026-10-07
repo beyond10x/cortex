@@ -68,7 +68,9 @@ home directory. So the source services carry, from the shell that ran `cortex cr
 
 A relative `--home` or `$CORTEX_HOME` is made absolute, so the units name the same home from any
 directory. Run `cortex create` from a shell where `connectors` and `claude` work; after changing
-either, `cortex update` writes the units again.
+either, `cortex update` writes the source units again. It writes the viewer unit only when the
+update adds, drops or changes a PostgreSQL store's connection (see "A PostgreSQL store's password"
+below).
 
 The timers run only while your systemd user manager runs. To have them run while you are logged
 out, enable lingering once: `loginctl enable-linger`.
@@ -281,15 +283,17 @@ personal data a `redaction` policy names replaced by placeholders (see [Limits](
 
 A `postgres` store whose spec names `store.value.connection` gets its password from Connectors:
 every `ekr` that opens the store, the viewer's and the MCP line's included, starts through
-`connectors connections launch --consumer ekr`, and `cortex update` rewrites the viewer unit when
-an update adds or drops the connection ([Spec file](./spec-file.md#store)).
+`connectors connections launch --consumer ekr`, and `cortex update` rewrites and starts the viewer
+unit when an update adds, drops or changes the connection ([Spec file](./spec-file.md#store)). Any
+other update leaves the viewer unit alone, so a viewer the operator stopped stays stopped.
 
 The one `ekr` cortex starts directly is the provisioning of `cortex create
 --postgres-schema-config <file>` when the spec names no `store.value.schema_connection`: it runs
 `ekr postgres-schema --config <file>` itself. That file is the operator's own schema-role
 configuration, given on the command line for this one call and never copied into the instance, so
 its password stays wherever the operator keeps it. Name `schema_connection` to start that `ekr`
-through Connectors too.
+through Connectors too; `<file>` must then name `"password_file": "/proc/self/fd/3"` and carry no
+`password` key, or `cortex create` refuses it as `seed-refused` before any `ekr` runs.
 
 ## Serving a store
 

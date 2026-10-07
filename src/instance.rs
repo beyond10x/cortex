@@ -214,9 +214,8 @@ fn launch(p: &m::PostgresStore) -> Option<ekr::Launch> {
 pub const LAUNCH_PASSWORD_FILE: &str = "/proc/self/fd/3";
 
 /// Why a `postgres` store's launch cannot be used: a `schema_connection` without a `connection`,
-/// or a `connection` whose `ekr.postgres/1` file does not take its password from
-/// [`LAUNCH_PASSWORD_FILE`]. The file is read for `password_file` alone, and a reason names
-/// fields, never a value of the file or the spec.
+/// or a `connection` whose `ekr.postgres/1` file does not take its password from the launch alone
+/// ([`descriptor_refusal`]). A reason names fields, never a value of the file or the spec.
 pub fn launch_refusal(spec: &m::InstanceSpec) -> Option<String> {
     let Some(m::StoreSpec::Postgres(p)) = &spec.store else {
         return None;
@@ -228,18 +227,52 @@ pub fn launch_refusal(spec: &m::InstanceSpec) -> Option<String> {
                 .to_string()
         });
     }
+    descriptor_refusal(
+        "store.value.config",
+        "store.value.connection",
+        &ekr::expand(&p.config),
+    )
+}
+
+/// Why `cortex create --postgres-schema-config <file>` cannot provision through the store's
+/// `schema_connection`: `<file>` does not take its password from the launch alone
+/// ([`descriptor_refusal`]). None without a `schema_connection`, where `ekr` reads `<file>`
+/// directly and the password stays wherever the operator keeps it.
+pub fn schema_launch_refusal(spec: &m::InstanceSpec, schema_config: &Path) -> Option<String> {
+    let Some(m::StoreSpec::Postgres(p)) = &spec.store else {
+        return None;
+    };
+    p.schema_connection.as_ref()?;
+    descriptor_refusal(
+        "--postgres-schema-config",
+        "store.value.schema_connection",
+        schema_config,
+    )
+}
+
+/// Why the `ekr.postgres/1` file at `path`, which `field` names and a launch through `through`
+/// opens, does not take its password from the launch alone: its `password_file` is not
+/// [`LAUNCH_PASSWORD_FILE`], or it also carries a `password` key. The file is read for those two
+/// keys, and a reason names fields, never a value of the file.
+fn descriptor_refusal(field: &str, through: &str, path: &Path) -> Option<String> {
     let needs = format!(
-        "store.value.config: a store with store.value.connection needs an ekr.postgres/1 file \
-         whose password_file is {LAUNCH_PASSWORD_FILE}, where connectors connections launch puts \
-         the connection's password"
+        "{field}: a store with {through} needs an ekr.postgres/1 file whose password_file is \
+         {LAUNCH_PASSWORD_FILE}, where connectors connections launch puts the connection's \
+         password"
     );
-    let config: serde_json::Value = match std::fs::read(ekr::expand(&p.config))
+    let config: serde_json::Value = match std::fs::read(path)
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
     {
         Some(config) => config,
         None => return Some(format!("{needs}; the file cannot be read as JSON")),
     };
+    if config.get("password").is_some() {
+        return Some(format!(
+            "{field}: a store with {through} takes its password from Connectors alone; remove \
+             the password key from the ekr.postgres/1 file"
+        ));
+    }
     (config["password_file"].as_str() != Some(LAUNCH_PASSWORD_FILE)).then_some(needs)
 }
 
@@ -545,6 +578,99 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    /// A launched store's `ekr.postgres/1` files, `store.value.config` and a schema config used
+    /// through `schema_connection`, take the password from the launch's descriptor and from
+    /// nowhere else. A refusal names fields, never a value of the file.
+    #[test]
+    fn a_launched_config_takes_its_password_from_the_descriptor_alone() {
+        const MARK: &str = "pw-mark-instance-test";
+        let dir = tempfile::tempdir().unwrap();
+        let write = |name: &str, document: serde_json::Value| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, document.to_string()).unwrap();
+            path
+        };
+        let good = write(
+            "good.json",
+            serde_json::json!({"format": "ekr.postgres/1", "password_file": LAUNCH_PASSWORD_FILE}),
+        );
+        let own_file = write(
+            "own-file.json",
+            serde_json::json!({"format": "ekr.postgres/1", "password_file": "/srv/pw"}),
+        );
+        let both = write(
+            "both.json",
+            serde_json::json!({
+                "format": "ekr.postgres/1",
+                "password_file": LAUNCH_PASSWORD_FILE,
+                "password": MARK,
+            }),
+        );
+        let null = write(
+            "null.json",
+            serde_json::json!({"password_file": LAUNCH_PASSWORD_FILE, "password": null}),
+        );
+        let launched = |config: &Path, schema: bool| {
+            spec(&format!(
+                "store: {{backend: postgres, value: {{config: \"{}\", connection: {{adapter: pg, \
+                 connection: app}}{}}}}}",
+                config.display(),
+                if schema {
+                    ", schema_connection: {adapter: pg, connection: owner}"
+                } else {
+                    ""
+                }
+            ))
+        };
+
+        assert_eq!(launch_refusal(&launched(&good, false)), None);
+        let refused = |reason: Option<String>, field: &str, key: &str| {
+            let reason = reason.unwrap_or_else(|| panic!("{field} with {key} was accepted"));
+            assert!(reason.starts_with(field), "{reason}");
+            assert!(reason.contains(key), "{reason}");
+            assert!(
+                !reason.contains(MARK) && !reason.contains("/srv/pw"),
+                "{reason}"
+            );
+        };
+        refused(
+            launch_refusal(&launched(&own_file, false)),
+            "store.value.config",
+            "password_file",
+        );
+        for config in [&both, &null] {
+            refused(
+                launch_refusal(&launched(config, false)),
+                "store.value.config",
+                "password",
+            );
+        }
+
+        // The schema config is checked only when `schema_connection` launches it.
+        assert_eq!(
+            schema_launch_refusal(&launched(&good, false), &own_file),
+            None
+        );
+        assert_eq!(schema_launch_refusal(&spec(""), &own_file), None);
+        let with_schema = launched(&good, true);
+        assert_eq!(schema_launch_refusal(&with_schema, &good), None);
+        refused(
+            schema_launch_refusal(&with_schema, &own_file),
+            "--postgres-schema-config",
+            "password_file",
+        );
+        refused(
+            schema_launch_refusal(&with_schema, &both),
+            "--postgres-schema-config",
+            "password",
+        );
+        refused(
+            schema_launch_refusal(&with_schema, &dir.path().join("none.json")),
+            "--postgres-schema-config",
+            "cannot be read",
+        );
     }
 
     fn names(dir: &Path) -> Vec<String> {

@@ -475,13 +475,19 @@ store:
 | field | meaning |
 |---|---|
 | `config` | absolute path, or one starting with `~/`, to the application role's `ekr.postgres/1` file. cortex passes the path to `ekr` |
-| `connection` | optional Connectors connection holding the application role's password. With it, every `ekr` that opens the store (runs, `create`, `adopt`, `quality`, `schema`, the viewer and the MCP line) starts through `connectors connections launch --consumer ekr`, which hands `ekr` the connection's `{"password": …}` document on descriptor 3; `config` must then name `"password_file": "/proc/self/fd/3"`. Without it, `ekr` starts directly and reads the password where `config` says |
-| `schema_connection` | optional Connectors connection of the schema-management role, used the same way for the `ekr postgres-schema --config` that `cortex create --postgres-schema-config` runs. It needs `connection` |
+| `connection` | optional Connectors connection holding the application role's password. With it, every `ekr` that opens the store (runs, `create`, `adopt`, `quality`, `schema`, the viewer and the MCP line) starts through `connectors connections launch --consumer ekr`, which hands `ekr` the connection's `{"password": …}` document on descriptor 3; `config` must then name `"password_file": "/proc/self/fd/3"` and carry no `password` key. Without it, `ekr` starts directly and reads the password where `config` says |
+| `schema_connection` | optional Connectors connection of the schema-management role, used the same way for the `ekr postgres-schema --config` that `cortex create --postgres-schema-config` runs: the file `--postgres-schema-config` names must then name `"password_file": "/proc/self/fd/3"` and carry no `password` key. It needs `connection` |
 
 With `connection`, cortex never reads the password: the operator saves it once with
 `connectors connections connect`, and pins the `ekr` binary in the Connectors configuration as
 the consumer `ekr`, with `pass_env = ["EKR_"]` so the `EKR_HOST`, `EKR_BACKEND` and `EKR_STORE`
-cortex sets reach it, and the connections' adapter alias in `permissions.connections`. That needs
+cortex sets reach it, and the connections' adapter alias in `permissions.connections`. cortex
+removes every other `EKR_*` variable of its own environment from the launches it starts, so none
+from the operator's shell reaches the launched `ekr`. That needs
 an `ekr` whose `ekr.postgres/1` reads `password_file` (EKR 0.0.32 or later). `cortex create` refuses
-a spec whose connection Connectors does not list (`connection-missing`), and a `config` without
-that `password_file` (`seed-refused`, naming the field, never its value).
+a spec whose connection Connectors does not list (`connection-missing`). A `config` without that
+`password_file`, or with a `password` key, is refused by `cortex create` (`seed-refused`),
+`cortex update` (`seed-change-refused`) and `cortex adopt` (exit 2), and with `schema_connection`
+`cortex create` refuses such a `--postgres-schema-config` file (`seed-refused`) before any `ekr`
+runs. Each refusal names the fields, never their values. cortex does not read the connection file
+a `config` names; an `ekr` refuses one that carries a password while `password_file` is set.

@@ -492,7 +492,9 @@ fn seed_instance(
     schema_config: Option<&Path>,
 ) -> Result<(), String> {
     let spec = &loaded.model;
-    if let Some(reason) = store_refusal(spec) {
+    if let Some(reason) = store_refusal(spec)
+        .or_else(|| schema_config.and_then(|c| instance::schema_launch_refusal(spec, c)))
+    {
         return Err(reason);
     }
     std::fs::create_dir_all(&layout.dir).map_err(|e| e.to_string())?;
@@ -1238,10 +1240,18 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
     if spec.name.0 != name {
         return fail(format!("the spec names {:?}, not {name:?}", spec.name.0));
     }
-    if let Some(reason) = foreign_units(ctx, name, &spec, units, true) {
+    let layout = Layout::new(ctx.home.instance_dir(name));
+    // The viewer unit is written only when the store's `ekr` now launches through another
+    // connection, or newly or no longer through one: an update that adds, drops or changes
+    // `store.value.connection`. Otherwise the update leaves the viewer alone, and a viewer the
+    // operator stopped stays stopped. A frozen spec that cannot be read writes it.
+    let relaunch = layout.load_spec().map_or(true, |old| {
+        layout.store_handle(&old).launched_through()
+            != layout.store_handle(&spec).launched_through()
+    });
+    if let Some(reason) = foreign_units(ctx, name, &spec, units, relaunch) {
         return fail(reason);
     }
-    let layout = Layout::new(ctx.home.instance_dir(name));
     // A store the spec cannot use, another store than the instance's (its history is in the store
     // it has), or a seed or instructions path `create` would refuse is a seed change. The input then
     // carries the refusal, which no stored digest equals, and a refused path is never hashed. The
@@ -1327,15 +1337,18 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
             let mut detail = json!({"name": instance_updated.name.0, "added_sources": added});
             if let Units::Install { replace_binary } = units {
                 let systemd = Systemd::from_env(&ctx.home.root);
-                // The viewer opens the store as the new spec does: through the launch exactly
-                // when it names a `connection`. It keeps the port it runs on.
-                let store = layout.store_handle(&spec);
-                let installed = layout
-                    .load_meta()
-                    .and_then(|meta| systemd.install_view(name, &store, meta.view_port))
-                    .and_then(|_| {
-                        install_sources(ctx, &systemd, name, &spec, replace_binary, &mut detail)
-                    });
+                // A rewritten viewer opens the store as the new spec does: through the launch
+                // exactly when it names a `connection`. It keeps the port it runs on.
+                let viewer = if relaunch {
+                    layout.load_meta().and_then(|meta| {
+                        systemd.install_view(name, &layout.store_handle(&spec), meta.view_port)
+                    })
+                } else {
+                    Ok(())
+                };
+                let installed = viewer.and_then(|_| {
+                    install_sources(ctx, &systemd, name, &spec, replace_binary, &mut detail)
+                });
                 units_detail(&systemd, installed, &mut detail);
             }
             Done {

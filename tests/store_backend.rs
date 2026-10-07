@@ -1826,3 +1826,349 @@ fn review_the_launched_viewer_exec_start_quotes_every_word() {
     );
     assert!(unit.contains(&expected), "{expected} in\n{unit}");
 }
+
+/// The marker [`fd3_logging_ekr`] writes for a variable that is not set.
+const UNSET: &str = "<unset>";
+
+/// An `ekr` at `<bin>/ekr-fd3` that logs every invocation to `<root>/ekr-fd3.log` as
+/// `<EKR_BACKEND>|<what descriptor 3 is>|<EKR_REVIEW_INHERITED>|<arguments>`, then runs
+/// [`sqlite_backed_ekr`]. Descriptor 3 is named with `readlink` and never read, so a descriptor
+/// the test runner left open is named and not consumed.
+fn fd3_logging_ekr(w: &World) -> PathBuf {
+    let inner = sqlite_backed_ekr(w);
+    let path = w.bin.join("ekr-fd3");
+    common::executable(
+        &path,
+        &format!(
+            r#"L=$(/usr/bin/readlink /proc/$$/fd/3 2>/dev/null || echo none)
+printf '%s|%s|%s|%s\n' "$EKR_BACKEND" "$L" "${{EKR_REVIEW_INHERITED-{UNSET}}}" "$*" >> "{root}/ekr-fd3.log"
+exec "{inner}" "$@"
+"#,
+            root = w.root.display(),
+            inner = inner.display()
+        ),
+    );
+    path
+}
+
+/// A world whose store is launched through connection `app` (and `owner`, held for a schema
+/// connection), every `ekr` of it [`fd3_logging_ekr`]: the application config, the connectors
+/// state directory and that `ekr`.
+fn fd3_world(w: &World) -> (PathBuf, PathBuf, PathBuf) {
+    let ekr = fd3_logging_ekr(w);
+    let config = w.root.join("pg/app.json");
+    let state = w.root.join("connectors-state");
+    std::fs::create_dir_all(&state).unwrap();
+    for connection in ["app", "owner"] {
+        std::fs::write(
+            state.join(format!("{connection}.json")),
+            serde_json::json!({ "password": review_password() }).to_string(),
+        )
+        .unwrap();
+    }
+    pg_config(&config, "/proc/self/fd/3");
+    launching_connectors(w, &state, &ekr);
+    (config, state, ekr)
+}
+
+/// The `postgres` invocations of `<root>/ekr-fd3.log`: (descriptor 3, inherited variable,
+/// arguments).
+fn store_invocations(w: &World) -> (String, Vec<(String, String, String)>) {
+    let log = std::fs::read_to_string(w.root.join("ekr-fd3.log")).unwrap_or_default();
+    let lines = log
+        .lines()
+        .filter_map(|l| {
+            let mut p = l.splitn(4, '|');
+            let (backend, fd3, inherited, args) = (p.next()?, p.next()?, p.next()?, p.next()?);
+            (backend == "postgres").then(|| (fd3.into(), inherited.into(), args.into()))
+        })
+        .collect();
+    (log, lines)
+}
+
+/// Invariant 4 at the binary: every `ekr` that opens a launched store, `create`'s, a run's and its
+/// gate's, `quality`'s and `schema`'s, holds the connection's document on descriptor 3, which only
+/// `connectors connections launch` opens there.
+#[test]
+fn security_every_ekr_that_opens_a_launched_store_holds_the_connection_on_descriptor_3() {
+    let w = World::new();
+    let (config, state, ekr) = fd3_world(&w);
+    let spec = spec_with_ekr(&w, "pg", &app_launched_store(&config), &ekr);
+    // A gate whose measure only `ekr quality` answers.
+    let mut text = std::fs::read_to_string(&spec).unwrap();
+    text.push_str("gate:\n  checks:\n    - {measure: assertions.active, min: \"0\"}\n");
+    std::fs::write(&spec, text).unwrap();
+    let (code, out, err) = cortex(
+        &w,
+        &[
+            "create",
+            "--spec",
+            spec.to_str().unwrap(),
+            "--no-units",
+            "--no-extract",
+        ],
+    );
+    assert_eq!(code, Some(0), "{out}{err}");
+    let (code, out, err) = cortex(&w, &["run", "pg/docs"]);
+    assert_eq!(code, Some(0), "{out}{err}");
+    // The stand-in model answers neither form; only the store reads before it count here.
+    let _ = cortex(&w, &["quality", "pg", "--sample", "1"]);
+    let _ = cortex(&w, &["schema", "pg", "--sample", "1", "--dry-run"]);
+
+    let (log, opened) = store_invocations(&w);
+    for verb in ["head", "seed", "apply-extraction", "quality", "sample"] {
+        assert!(
+            opened
+                .iter()
+                .any(|(_, _, args)| args.split(' ').next() == Some(verb)),
+            "no ekr {verb} opened the store:\n{log}"
+        );
+    }
+    let held = state.join("app.json");
+    for (fd3, _, args) in &opened {
+        assert_eq!(
+            Path::new(fd3),
+            held.as_path(),
+            "ekr {args} opened the store without the launch:\n{log}"
+        );
+    }
+}
+
+/// Invariant 2: only the `EKR_*` variables cortex sets reach a launched `ekr`. The stand-in
+/// `connectors` passes its own `EKR_*` environment to the consumer, as `pass_env = ["EKR_"]` does,
+/// so an `EKR_*` variable cortex inherited from the operator's shell must not be in what cortex
+/// hands the launch. EKR 0.0.32 reads `EKR_FULL_REPLAY` besides the three cortex sets.
+#[test]
+fn security_an_inherited_ekr_variable_does_not_reach_a_launched_ekr() {
+    let w = World::new();
+    let (config, _, ekr) = fd3_world(&w);
+    let spec = spec_with_ekr(&w, "pg", &app_launched_store(&config), &ekr);
+    let out = Command::new(env!("CARGO_BIN_EXE_cortex"))
+        .args([
+            "create",
+            "--spec",
+            spec.to_str().unwrap(),
+            "--no-units",
+            "--no-extract",
+        ])
+        .env("CORTEX_HOME", &w.home)
+        .env("CORTEX_CONNECTORS", w.bin.join("connectors"))
+        .env("CORTEX_CLAUDE", w.bin.join("claude"))
+        .env("CORTEX_SYSTEMCTL", w.bin.join("systemctl"))
+        .env("CORTEX_UNIT_DIR", &w.units)
+        .env("EKR_REVIEW_INHERITED", "from-the-operator-shell")
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    let (log, opened) = store_invocations(&w);
+    assert!(!opened.is_empty(), "no ekr opened the store:\n{log}");
+    for (_, inherited, args) in &opened {
+        assert_eq!(
+            inherited, UNSET,
+            "EKR_REVIEW_INHERITED, which cortex did not set, reached the launched ekr {args}:\n{log}"
+        );
+    }
+}
+
+/// Invariant 5, `update`: a launched store's `ekr.postgres/1` that names the descriptor and also
+/// carries a `password` is refused, and the refusal does not print it. `update` starts no `ekr`,
+/// so nothing but cortex's own check can refuse it.
+#[test]
+fn security_update_refuses_a_launched_config_that_also_carries_a_password() {
+    const MARK: &str = "pw-mark-7c41";
+    let w = World::new();
+    let (config, _, ekr) = fd3_world(&w);
+    let spec = spec_with_ekr(&w, "pg", &app_launched_store(&config), &ekr);
+    let (code, out, err) = cortex(
+        &w,
+        &[
+            "create",
+            "--spec",
+            spec.to_str().unwrap(),
+            "--no-units",
+            "--no-extract",
+        ],
+    );
+    assert_eq!(code, Some(0), "{out}{err}");
+
+    // The operator writes the password into the configuration as well.
+    let mut document: Value =
+        serde_json::from_str(&std::fs::read_to_string(&config).unwrap()).unwrap();
+    document["password"] = Value::String(MARK.into());
+    std::fs::write(&config, document.to_string()).unwrap();
+    let (code, out, err) = cortex(
+        &w,
+        &[
+            "update",
+            "pg",
+            "--spec",
+            spec.to_str().unwrap(),
+            "--no-units",
+        ],
+    );
+    assert!(
+        !out.contains(MARK) && !err.contains(MARK),
+        "the answer prints the password: {out}{err}"
+    );
+    assert_eq!(
+        (code, last_json(&out)["outcome"].as_str()),
+        (Some(1), Some("seed-change-refused")),
+        "an ekr.postgres/1 with store.value.connection and a password was accepted: {out}{err}"
+    );
+}
+
+/// Invariant 5, the schema connection: `create --postgres-schema-config <file>` with
+/// `store.value.schema_connection` launches `ekr postgres-schema` with the schema connection's
+/// document on descriptor 3, so a `<file>` that does not name `"password_file": "/proc/self/fd/3"`
+/// is refused before anything runs, as `store.value.config` is.
+#[test]
+fn security_create_refuses_a_schema_config_that_takes_no_password_from_the_launch() {
+    let w = World::new();
+    let (config, _, ekr) = fd3_world(&w);
+    // The schema role's file takes its password from a file of its own, not from the launch.
+    let owner = w.root.join("pg/owner.json");
+    let held = w.root.join("pg/owner-password.txt");
+    std::fs::write(&held, review_password()).unwrap();
+    pg_config(&owner, held.to_str().unwrap());
+    let spec = spec_with_ekr(&w, "pg", &launched_store(&config), &ekr);
+    let (code, out, err) = cortex(
+        &w,
+        &[
+            "create",
+            "--spec",
+            spec.to_str().unwrap(),
+            "--no-units",
+            "--no-extract",
+            "--postgres-schema-config",
+            owner.to_str().unwrap(),
+        ],
+    );
+    let (log, _) = store_invocations(&w);
+    assert_eq!(
+        (code, last_json(&out)["outcome"].as_str()),
+        (Some(1), Some("seed-refused")),
+        "a schema config without password_file was launched through \
+         store.value.schema_connection: {out}{err}\nekr:\n{log}"
+    );
+}
+
+/// Invariant 6: a store without `connection` behaves as before. Before this unit `update`
+/// installed only the source units; the viewer unit is rewritten only "when an update adds or
+/// drops the connection" (`website/docs/operating.md`), and a viewer the operator stopped is left
+/// stopped (`Systemd::restart_view`). An update of a SQLite instance that changes no store must not
+/// enable and start its viewer.
+#[test]
+fn security_an_update_of_a_store_without_a_connection_leaves_the_viewer_alone() {
+    let w = World::new();
+    let spec = write_spec(&w, "lite", "{backend: sqlite}");
+    let (code, out, err) = cortex(
+        &w,
+        &["create", "--spec", spec.to_str().unwrap(), "--no-extract"],
+    );
+    assert_eq!(code, Some(0), "{out}{err}");
+    let log = w.root.join("systemctl.log");
+    assert!(
+        std::fs::read_to_string(&log)
+            .unwrap()
+            .contains("enable --now cortex-lite-view.service"),
+        "create starts the viewer"
+    );
+    // The operator stops and disables the viewer; the stand-in only records calls.
+    std::fs::write(&log, "").unwrap();
+    let (code, out, err) = cortex(&w, &["update", "lite", "--spec", spec.to_str().unwrap()]);
+    assert_eq!(
+        (code, last_json(&out)["outcome"].as_str()),
+        (Some(0), Some("updated")),
+        "{out}{err}"
+    );
+    let calls = std::fs::read_to_string(&log).unwrap();
+    assert!(
+        !calls.contains("cortex-lite-view.service"),
+        "an update that changes no store enabled and started the viewer:\n{calls}"
+    );
+}
+
+/// Invariant 3 at the shell: the MCP line of a launched store is read back by `sh` word for word
+/// with quotes, spaces, a newline, `%`, `$`, `$(…)`, a backtick, a backslash and a leading `-` in
+/// the adapter alias and the connection id. A stand-in `claude` records its arguments
+/// NUL-separated.
+#[test]
+fn security_the_mcp_line_keeps_hostile_connection_words_one_word_each() {
+    let w = World::new();
+    let config = w.root.join("pg/app.json");
+    let dir = w.home.join("instances/pgl");
+    std::fs::create_dir_all(&dir).unwrap();
+    let adapter = "-a'd $HOME \\ \"q\" %i";
+    let connection = "-c\nnext; $(id) `id`";
+    let store = serde_json::json!({
+        "backend": "postgres",
+        "value": {"config": config, "connection": {"adapter": adapter, "connection": connection}},
+    });
+    std::fs::write(
+        dir.join("instance.yaml"),
+        spec_text("pgl", &store.to_string()),
+    )
+    .unwrap();
+    let connectors = w.root.join("my tools/connectors");
+    let out = Command::new(env!("CARGO_BIN_EXE_cortex"))
+        .args(["mcp-line", "pgl"])
+        .env("CORTEX_HOME", &w.home)
+        .env("CORTEX_CONNECTORS", &connectors)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    let line = String::from_utf8_lossy(&out.stdout)
+        .trim_end_matches('\n')
+        .to_string();
+
+    let stub = w.root.join("mcp-bin");
+    std::fs::create_dir_all(&stub).unwrap();
+    common::executable(
+        &stub.join("claude"),
+        &format!(
+            "printf '%s\\0' \"$@\" > \"{}/mcp-argv.bin\"\n",
+            w.root.display()
+        ),
+    );
+    let path = format!(
+        "{}:{}",
+        stub.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let status = Command::new("sh")
+        .arg("-c")
+        .arg(&line)
+        .env("PATH", path)
+        .status()
+        .unwrap();
+    assert!(status.success(), "{line}");
+    let bytes = std::fs::read(w.root.join("mcp-argv.bin")).unwrap();
+    let mut argv: Vec<String> = bytes
+        .split(|b| *b == 0)
+        .map(|a| String::from_utf8_lossy(a).into_owned())
+        .collect();
+    assert_eq!(argv.pop().as_deref(), Some(""), "{argv:?}");
+    let env = argv
+        .iter()
+        .position(|a| a == "env")
+        .unwrap_or_else(|| panic!("no env word in {argv:?}\nline: {line}"));
+    assert_eq!(
+        argv[env + 2..],
+        [
+            "EKR_BACKEND=postgres".to_string(),
+            format!("EKR_STORE={}", config.display()),
+            connectors.display().to_string(),
+            "connections".into(),
+            "launch".into(),
+            "--adapter".into(),
+            adapter.into(),
+            "--connection".into(),
+            connection.into(),
+            "--consumer".into(),
+            "ekr".into(),
+            "--args".into(),
+            r#"["mcp"]"#.into(),
+        ],
+        "line: {line}"
+    );
+}
