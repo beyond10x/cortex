@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-07T06:56:49Z",
+  "actor": "human:timo",
+  "artifact": "story:events-carry-measurements",
+  "kind": "story",
+  "revision": 23,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261007b 7130266, 8 steps each exit 0: 493 passed, 0 failed, 0 skipped (ess 0.55.0, ekr 0.0.32)",
+    "reference": "713026657a9f641851a5b685b608ec1f5851e517"
+  }
+}

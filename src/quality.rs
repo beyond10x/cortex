@@ -58,9 +58,9 @@ pub struct Measurement {
     pub judged: i64,
     pub passed: i64,
     pub unclear: i64,
-    /// `ekr.fact-quality/1`'s `rate`, `lower` and `upper`, as EKR printed them; `rate` is null when
-    /// nothing was judged.
-    pub rate: Value,
+    /// `ekr.fact-quality/1`'s `rate`, `lower` and `upper`, as EKR printed them; `rate` is `None`
+    /// when nothing was judged.
+    pub rate: Option<String>,
     pub lower: String,
     pub upper: String,
     /// The sum while every answer is costed, `None` as soon as one is not; `0` when no model was
@@ -670,7 +670,9 @@ pub fn judge(layout: &Layout, tools: &Tools, drawn: Drawn) -> Result<Measurement
         judged: all.len() as i64,
         passed: count(m::QualityVerdictKind::Yes),
         unclear: count(m::QualityVerdictKind::Unclear),
-        rate: report["rate"].clone(),
+        rate: report["rate"]
+            .is_number()
+            .then(|| report["rate"].to_string()),
         lower: report["lower"].to_string(),
         upper: report["upper"].to_string(),
         cost_usd,

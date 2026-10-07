@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 use cortex_cli::connectors::Connectors;
 use cortex_cli::home::Home;
 use cortex_cli::instance::{Layout, Meta};
-use cortex_cli::ports::{Ports, Shared, SharedRef};
+use cortex_cli::ports::{cost_decimal, Ports, Shared, SharedRef};
 use cortex_cli::schedule::{self, Systemd};
 use cortex_cli::snapshot::{self, Refusal, RestoreError};
 use cortex_cli::{ekr, home, instance, model_map, quality, run, schema, spec};
@@ -1496,7 +1496,7 @@ fn quality(app: &mut App, ctx: &Ctx, name: &str, sample: i64) -> ExitCode {
     const CMD: &str = "cortex.instance.MeasureQuality";
     // An unknown name measures nothing; the generated behaviour answers `no-such-instance`.
     let known = ctx.shared.borrow().registry.instances.contains_key(name);
-    let mut measured = None;
+    let mut dir = None;
     if known {
         let layout = Layout::new(ctx.home.instance_dir(name));
         // Only the draw reads the store, at one revision; the model calls and the files under
@@ -1514,7 +1514,10 @@ fn quality(app: &mut App, ctx: &Ctx, name: &str, sample: i64) -> ExitCode {
                 shared
                     .decimals
                     .extend([Decimal(q.lower.clone()), Decimal(q.upper.clone())]);
-                measured = Some(q);
+                shared
+                    .optional_decimals
+                    .extend([q.rate.map(Decimal), cost_decimal(q.cost_usd)]);
+                dir = Some(q.dir);
             }
             Err(quality::Failure::Sample(reason)) => {
                 shared.external.insert((CMD, "sample-failed"), true);
@@ -1543,14 +1546,14 @@ fn quality(app: &mut App, ctx: &Ctx, name: &str, sample: i64) -> ExitCode {
                 "judged": e.judged,
                 "passed": e.passed,
                 "unclear": e.unclear,
+                "rate": e.rate.as_ref().map(number),
                 "lower": number(&e.lower),
                 "upper": number(&e.upper),
+                "cost_usd": e.cost_usd.map(|c| c.0),
             });
-            // Not on the event (`spec/domains/instance.yaml`, `UNMAPPED:` on `measured`).
-            if let Some(q) = measured {
-                detail["rate"] = q.rate;
-                detail["cost_usd"] = json!(q.cost_usd.map(|c| format!("{c:.4}")));
-                detail["dir"] = json!(q.dir);
+            // The measurement's directory is not on the event.
+            if let Some(dir) = dir {
+                detail["dir"] = json!(dir);
             }
             Done {
                 outcome: "measured",
@@ -1581,7 +1584,7 @@ fn propose_schema(app: &mut App, ctx: &Ctx, name: &str, sample: i64, dry_run: bo
     const CMD: &str = "cortex.instance.ProposeSchemaChanges";
     // An unknown name proposes nothing; the generated behaviour answers `no-such-instance`.
     let known = ctx.shared.borrow().registry.instances.contains_key(name);
-    let mut proposed = None;
+    let mut dir = None;
     if known {
         let layout = Layout::new(ctx.home.instance_dir(name));
         // As `quality`: only the draw reads the store; the model calls need no lock, so scheduled
@@ -1625,7 +1628,8 @@ fn propose_schema(app: &mut App, ctx: &Ctx, name: &str, sample: i64, dry_run: bo
                     p.invalid,
                     p.dropped,
                 ]);
-                proposed = Some(p);
+                shared.optional_decimals.push_back(cost_decimal(p.cost_usd));
+                dir = Some(p.dir);
             }
             Err(schema::Failure::Sample(reason)) => {
                 shared.external.insert((CMD, "sample-failed"), true);
@@ -1648,10 +1652,11 @@ fn propose_schema(app: &mut App, ctx: &Ctx, name: &str, sample: i64, dry_run: bo
             "recorded_only": e.recorded_only,
             "invalid": e.invalid,
             "dropped": e.dropped,
+            "cost_usd": e.cost_usd.as_ref().map(|c| &c.0),
         });
-        // Not on the event (`spec/domains/instance.yaml`, `UNMAPPED:` on `proposed`).
-        if let (Some(p), Some(o)) = (&proposed, detail.as_object_mut()) {
-            o.extend(schema::extra(p));
+        // The round's directory is not on the event.
+        if let Some(dir) = &dir {
+            detail["dir"] = json!(dir);
         }
         detail
     };

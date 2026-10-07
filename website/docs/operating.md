@@ -103,7 +103,8 @@ version as `binary_version`. `--no-units`, and a spec with no source, leave the 
    keeps, and its window, still go by the run's own times.
 5. **Extract** in batches of up to 60,000 characters. Each batch is one `claude -p` call that
    answers in the JSON form of `ekr schema ekr.extraction-document/1`. The prompt carries the
-   instance's description, its instructions, the store's node and edge types, and up to 50 known
+   instance's description, its instructions, the store's node types with each property's value
+   kind (`Release(version: String, release_date: String)`), its edge types, and up to 50 known
    entity names per type. When the spec has a `redaction` policy, every value it finds in the
    documents and the known names is shown to the model as a placeholder (`[Email-1]`), and each
    placeholder in the answer is put back before merging; the mapping exists for that one call.

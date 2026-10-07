@@ -36,7 +36,9 @@ EOF
 
 /// A judge stand-in: records its arguments, its prompt and whether `ANTHROPIC_API_KEY` reached
 /// it, then answers `no` for the first two facts of its first call and `yes` for every other one,
-/// at a cost of 0.02 USD. With the file `judge-error` it answers an error instead.
+/// at a cost of 0.02 USD. With the file `judge-error` it answers an error instead. With the file
+/// `judge-no-cost`, which holds a call number counted from 0, that call and every later one answer
+/// with no cost.
 fn judge(w: &World) {
     executable(
         &w.bin.join("claude"),
@@ -60,7 +62,9 @@ for id in $(printf '%s\n' "$prompt" | grep -oE '^=== Fact [0-9a-f-]{{36}}' | cut
   k=$((k+1))
 done
 verdicts=${{verdicts%,}}
-echo "{{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"total_cost_usd\":0.02,\"structured_output\":{{\"verdicts\":[$verdicts]}}}}"
+COST='"total_cost_usd":0.02,'
+if [ -e "$R/judge-no-cost" ] && [ "$n" -ge "$(cat "$R/judge-no-cost")" ]; then COST=''; fi
+echo "{{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,$COST\"structured_output\":{{\"verdicts\":[$verdicts]}}}}"
 "#,
             root = w.root.display()
         ),
@@ -234,6 +238,150 @@ fn an_unknown_instance_is_not_measured() {
         (1, Some("no-such-instance")),
         "{out}"
     );
+}
+
+/// `story:events-carry-measurements`: `QualityMeasured` carries `rate` and `cost_usd`. A store
+/// holding no fact to draw is measured with no judge asked: `rate` is null, the interval is 0 to
+/// 1, and the cost is 0, as no answer went without one.
+#[test]
+fn a_store_with_no_fact_to_draw_is_measured_with_a_null_rate() {
+    let w = World::new();
+    let path = w.spec("empty", "conn_test");
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    judge(&w);
+    let (code, out) = w.cortex(&["quality", "empty", "--sample", "5"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("measured")),
+        "{out}"
+    );
+    let d = &out["detail"];
+    assert_eq!(d["judged"], 0, "{out}");
+    assert_eq!(d.get("rate"), Some(&Value::Null), "{out}");
+    assert_eq!(
+        (d["lower"].as_f64(), d["upper"].as_f64()),
+        (Some(0.0), Some(1.0)),
+        "{out}"
+    );
+    assert_eq!(d["cost_usd"], "0.0000", "{out}");
+    assert!(w.lines("judge-calls.log").is_empty(), "{out}");
+}
+
+/// `story:events-carry-measurements`: `cost_usd` is null as soon as one answer carried no cost,
+/// never the sum of the costed ones and never 0. Of two batches the first costs 0.02 USD and the
+/// second carries no cost; `rate` is still the pass rate `fact-quality.json` holds.
+#[test]
+fn a_judge_answer_without_a_cost_makes_the_measurements_cost_null() {
+    let w = instance("uncosted", 30, "");
+    std::fs::write(w.root.join("judge-no-cost"), "1").unwrap();
+    let (code, out) = w.cortex(&["quality", "uncosted", "--sample", "25"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("measured")),
+        "{out}"
+    );
+    assert_eq!(w.lines("judge-calls.log").len(), 2, "{out}");
+    let d = &out["detail"];
+    assert_eq!(d.get("cost_usd"), Some(&Value::Null), "{out}");
+    let report: Value = serde_json::from_slice(
+        &std::fs::read(quality_dirs(&w, "uncosted")[0].join("fact-quality.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(d["rate"].as_f64(), Some(0.92), "{out}");
+    assert_eq!(d["rate"], report["rate"], "{out} {report}");
+}
+
+/// Adversary, `story:events-carry-measurements`: a pass rate of 0 is a rate, not a missing one.
+/// The judge answers `no` for both facts of a sample of two, so `rate` is the number 0, as
+/// `fact-quality.json` holds it, and never null, which is kept for a store with no fact to draw.
+#[test]
+fn adv_every_fact_judged_no_is_a_rate_of_zero_not_a_null_rate() {
+    let w = instance("refuted", 30, "");
+    let (code, out) = w.cortex(&["quality", "refuted", "--sample", "2"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("measured")),
+        "{out}"
+    );
+    let d = &out["detail"];
+    assert_eq!(
+        (d["judged"].as_i64(), d["passed"].as_i64()),
+        (Some(2), Some(0)),
+        "{out}"
+    );
+    assert!(
+        d["rate"].is_number(),
+        "a rate of 0 printed as {}: {out}",
+        d["rate"]
+    );
+    assert_eq!(d["rate"].as_f64(), Some(0.0), "{out}");
+    let report: Value = serde_json::from_slice(
+        &std::fs::read(quality_dirs(&w, "refuted")[0].join("fact-quality.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        d["rate"].to_string(),
+        report["rate"].to_string(),
+        "{report}"
+    );
+    assert_eq!(d["cost_usd"], "0.0200", "{out}");
+}
+
+/// Adversary, `story:events-carry-measurements`: the decimals a `measured` line prints are the
+/// event's, digit for digit as `fact-quality.json` holds them and in the form the generated
+/// `QualityMeasured` schema states for each. One `yes` of three facts is a rate EKR prints with
+/// sixteen digits.
+#[test]
+fn adv_a_rate_of_one_third_is_printed_digit_for_digit_in_the_events_decimal_form() {
+    let w = instance("third", 30, "");
+    let (code, out) = w.cortex(&["quality", "third", "--sample", "3"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("measured")),
+        "{out}"
+    );
+    let d = &out["detail"];
+    assert_eq!(
+        (d["judged"].as_i64(), d["passed"].as_i64()),
+        (Some(3), Some(1)),
+        "{out}"
+    );
+    let report: Value = serde_json::from_slice(
+        &std::fs::read(quality_dirs(&w, "third")[0].join("fact-quality.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(d["rate"].to_string(), "0.3333333333333333", "{out}");
+    for key in ["rate", "lower", "upper"] {
+        assert!(d[key].is_number(), "{key}: {out}");
+        assert_eq!(
+            d[key].to_string(),
+            report[key].to_string(),
+            "{key}: {out} {report}"
+        );
+    }
+    let schema: Value = serde_json::from_slice(
+        &std::fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("generated/schema/schema/events/cortex.instance.QualityMeasured.schema.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    for key in ["rate", "lower", "upper", "cost_usd"] {
+        let pattern = schema["properties"][key]["pattern"]
+            .as_str()
+            .unwrap_or_else(|| panic!("QualityMeasured.{key} has no pattern: {schema}"));
+        let text = match &d[key] {
+            Value::String(s) => s.clone(),
+            v => v.to_string(),
+        };
+        assert!(
+            regex::Regex::new(pattern).unwrap().is_match(&text),
+            "{key} = {text} is not the event's decimal form {pattern}: {out}"
+        );
+    }
+    assert_eq!(d["cost_usd"], "0.0200", "{out}");
 }
 
 #[test]

@@ -23,7 +23,7 @@ scope:
   path: src/schema.rs
 - confidence: inferred
   path: tests/schema.rs
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-06T10:29:12Z", actor: "agent:claude", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-06T10:29:12Z", actor: "agent:claude", revision: 4}
@@ -64,4 +64,5 @@ Landed 2026-10-06 in `62f9f83` (wave 20261006h).
 
 - **Files:** `src/schema.rs` (new), `src/ekr.rs` (schema operations), `src/quality.rs` (shared sampling and masking), `src/main.rs`, `src/lib.rs`, `src/run.rs`, `spec/domains/instance.yaml`, `spec/components.yaml`, `generated/`, `tests/schema.rs` (new), `tests/conformance.rs`, `website/docs/commands.md`, `AGENTS.md`
 - **Review:** one adversary pass, 3 findings fixed (inherited property shadowing, redeclaration dropping required, placeholders in names), plus case-insensitive names
-- **Open:** EKR 0.0.31 takes no evidence on a schema transaction; `cost_usd` stays off the event, https://github.com/beyond10x/ess/issues/467
+- **Open:** EKR 0.0.31 takes no evidence on a schema transaction
+- **Closed 2026-10-07:** `cost_usd` is on `SchemaChangesProposed` since wave 20261007b (`story:events-carry-measurements`), after ESS 0.55.0 settled https://github.com/beyond10x/ess/issues/467

@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-07T06:31:00Z",
+  "actor": "human:timo",
+  "artifact": "story:prompt-names-value-kinds",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p cortex-cli --test value_kinds: on base 69434ee the prompt read 'Release(version, release_date)' (assertion at tests/value_kinds.rs:146 failed, every earlier one passed); on 289d952 it holds 'release_date: String' and the test passes. VERIFIED (new behaviour)",
+    "reference": "69434ee vs 289d952"
+  }
+}

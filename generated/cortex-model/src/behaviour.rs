@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest a5cdddd9e44c55f5312801a678ef3ff218957a546f5dc3e857e490a3aa3cca15
-// contract digest b5c1fffcca71606fe8e9c44e881856b37ae97c97a68cba6165d2449bad664144
+// model digest baa6b022b0cc1c204b3bf7ee74c0509918a69054e4dfa82fba89ab9da19c30e9
+// contract digest 81310f63a3f86377583f8de316f242c2e516e5001c9a0c53de91cb771a7aac31
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -107,6 +107,10 @@ pub trait Context {
     /// `{generated: true}` value, or an event field the model leaves undetermined.
     fn generate_integer(&mut self) -> i64;
 
+    /// A `Optional<Decimal>` the model says the implementation assigns — a `{generated: true}` value —
+    /// or `None` where there is nothing to report.
+    fn generate_optional_decimal(&mut self) -> Option<crate::primitives::Decimal>;
+
     /// A new `String`, which the model says the implementation assigns — a created identity, a
     /// `{generated: true}` value, or an event field the model leaves undetermined.
     fn generate_string(&mut self) -> String;
@@ -131,6 +135,8 @@ fn try_generate_decimal(&mut self) -> Result<crate::primitives::Decimal, UnmetOb
 /// Assigns the value, or names the unavailable answer.
 fn try_generate_integer(&mut self) -> Result<i64, UnmetObligation>;
 /// Assigns the value, or names the unavailable answer.
+fn try_generate_optional_decimal(&mut self) -> Result<Option<crate::primitives::Decimal>, UnmetObligation>;
+/// Assigns the value, or names the unavailable answer.
 fn try_generate_string(&mut self) -> Result<String, UnmetObligation>;
 /// Decides the named external branch, or names the unavailable answer.
 fn try_external(&mut self, command: ExternalCommand<'_>, outcome: &'static str) -> Result<bool, UnmetObligation>;
@@ -141,6 +147,7 @@ fn try_generate_cortex_instance_instance_state(&mut self) -> Result<crate::insta
 fn try_generate_cortex_instance_source_state(&mut self) -> Result<crate::instance::SourceState, UnmetObligation> { Ok(Context::generate_cortex_instance_source_state(self)) }
 fn try_generate_decimal(&mut self) -> Result<crate::primitives::Decimal, UnmetObligation> { Ok(Context::generate_decimal(self)) }
 fn try_generate_integer(&mut self) -> Result<i64, UnmetObligation> { Ok(Context::generate_integer(self)) }
+fn try_generate_optional_decimal(&mut self) -> Result<Option<crate::primitives::Decimal>, UnmetObligation> { Ok(Context::generate_optional_decimal(self)) }
 fn try_generate_string(&mut self) -> Result<String, UnmetObligation> { Ok(Context::generate_string(self)) }
 fn try_external(&mut self, command: ExternalCommand<'_>, outcome: &'static str) -> Result<bool, UnmetObligation> { Ok(Context::external(self, command, outcome)) }
 }
@@ -332,7 +339,7 @@ where
         };
         let _ = &held;
         let next = held;
-        let answer = crate::instance::MeasureQualityOutcome::Measured { quality_measured: crate::instance::QualityMeasured { name: input.name.clone(), stamp: self.ports.try_generate_string()?, revision: self.ports.try_generate_integer()?, seed: self.ports.try_generate_integer()?, judged: self.ports.try_generate_integer()?, passed: self.ports.try_generate_integer()?, unclear: self.ports.try_generate_integer()?, lower: self.ports.try_generate_decimal()?, upper: self.ports.try_generate_decimal()? } };
+        let answer = crate::instance::MeasureQualityOutcome::Measured { quality_measured: crate::instance::QualityMeasured { name: input.name.clone(), stamp: self.ports.try_generate_string()?, revision: self.ports.try_generate_integer()?, seed: self.ports.try_generate_integer()?, judged: self.ports.try_generate_integer()?, passed: self.ports.try_generate_integer()?, unclear: self.ports.try_generate_integer()?, rate: self.ports.try_generate_optional_decimal()?, lower: self.ports.try_generate_decimal()?, upper: self.ports.try_generate_decimal()?, cost_usd: self.ports.try_generate_optional_decimal()? } };
         InstanceStorage::put(&mut self.ports, next);
         return Ok(answer);
     }
@@ -360,7 +367,7 @@ where
             };
             let _ = &held;
             let next = held;
-            let answer = crate::instance::ProposeSchemaChangesOutcome::Proposed { schema_changes_proposed: crate::instance::SchemaChangesProposed { name: input.name.clone(), stamp: self.ports.try_generate_string()?, revision: self.ports.try_generate_integer()?, proposed: self.ports.try_generate_integer()?, applied: self.ports.try_generate_integer()?, refused: self.ports.try_generate_integer()?, recorded_only: self.ports.try_generate_integer()?, invalid: self.ports.try_generate_integer()?, dropped: self.ports.try_generate_integer()? } };
+            let answer = crate::instance::ProposeSchemaChangesOutcome::Proposed { schema_changes_proposed: crate::instance::SchemaChangesProposed { name: input.name.clone(), stamp: self.ports.try_generate_string()?, revision: self.ports.try_generate_integer()?, proposed: self.ports.try_generate_integer()?, applied: self.ports.try_generate_integer()?, refused: self.ports.try_generate_integer()?, recorded_only: self.ports.try_generate_integer()?, invalid: self.ports.try_generate_integer()?, dropped: self.ports.try_generate_integer()?, cost_usd: self.ports.try_generate_optional_decimal()? } };
             InstanceStorage::put(&mut self.ports, next);
             return Ok(answer);
         }
@@ -370,7 +377,7 @@ where
         };
         let _ = &held;
         let next = held;
-        let answer = crate::instance::ProposeSchemaChangesOutcome::Applied { schema_changes_proposed: crate::instance::SchemaChangesProposed { name: input.name.clone(), stamp: self.ports.try_generate_string()?, revision: self.ports.try_generate_integer()?, proposed: self.ports.try_generate_integer()?, applied: self.ports.try_generate_integer()?, refused: self.ports.try_generate_integer()?, recorded_only: self.ports.try_generate_integer()?, invalid: self.ports.try_generate_integer()?, dropped: self.ports.try_generate_integer()? } };
+        let answer = crate::instance::ProposeSchemaChangesOutcome::Applied { schema_changes_proposed: crate::instance::SchemaChangesProposed { name: input.name.clone(), stamp: self.ports.try_generate_string()?, revision: self.ports.try_generate_integer()?, proposed: self.ports.try_generate_integer()?, applied: self.ports.try_generate_integer()?, refused: self.ports.try_generate_integer()?, recorded_only: self.ports.try_generate_integer()?, invalid: self.ports.try_generate_integer()?, dropped: self.ports.try_generate_integer()?, cost_usd: self.ports.try_generate_optional_decimal()? } };
         InstanceStorage::put(&mut self.ports, next);
         return Ok(answer);
     }
