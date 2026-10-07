@@ -9,6 +9,12 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 - cortex is specified and generated with ESS 0.55.0 (was 0.52.0); `spec/suite.json` is
   `ess-conformance/34`, and the conformance runner checks `expect_event_values` steps.
+- The extraction prompt names each existing property with its value kind
+  (`Release(version: String, release_date: String)`), so the model answers in the kind the store
+  declares and EKR rejects fewer facts as `extraction-value-mismatch`.
+- The `QualityMeasured` event carries the measurement's `rate` and `cost_usd`, and
+  `SchemaChangesProposed` its `cost_usd`; `cortex quality` and `cortex schema` print them from the
+  event, under the same keys and in the same forms as before.
 
 ## 0.1.0 — 2026-10-07
 
