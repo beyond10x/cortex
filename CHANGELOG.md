@@ -23,7 +23,7 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 - The model marks a property value a document says changed as `replaces: true`, so the older value is
   superseded; a run names an EKR validator rejection by its issue codes (`invalid-supersession`).
 - Facts are dated by their document's time: evidence `observed_at` comes from the document's `time` or
-  `published` (RFC 3339, a bare date or epoch seconds), else the run start. The EKR pin is 0.0.31.
+  `published` (RFC 3339, a bare date or epoch seconds), else the run start.
 - A `records` spec can map its author field and inline `<@id>` mentions through a JSON lookup file
   (`lookup`), and can name `fallback_text` templates used when `text` renders empty.
 - `<home>/bin/cortex`, the copy every timer of a home runs, has its version recorded beside it.
