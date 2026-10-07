@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "a5cdddd9e44c55f5312801a678ef3ff218957a546f5dc3e857e490a3aa3cca15",
-    "contract_digest": "b5c1fffcca71606fe8e9c44e881856b37ae97c97a68cba6165d2449bad664144"
+    "source_digest": "baa6b022b0cc1c204b3bf7ee74c0509918a69054e4dfa82fba89ab9da19c30e9",
+    "contract_digest": "81310f63a3f86377583f8de316f242c2e516e5001c9a0c53de91cb771a7aac31"
   },
   "scope": {
     "profile": "component-skeletons",

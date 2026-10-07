@@ -40,7 +40,8 @@ EOF
 /// `ANTHROPIC_API_KEY` reached it, then answers `proposals-<call>.json`, or `proposals.json` when
 /// there is none, at 0.02 USD. In the answer, `FACT0` is the first fact id of its own prompt and
 /// `OTHER0` the first fact id of the first call's prompt. With the file `schema-error` it answers
-/// an error instead.
+/// an error instead. With the file `schema-no-cost`, which holds a call number counted from 0,
+/// that call and every later one answer with no cost.
 fn proposer(w: &World) {
     executable(
         &w.bin.join("claude"),
@@ -61,7 +62,9 @@ other=$(grep -oE '^=== Fact [0-9a-f-]{{36}}' "$R/schema-prompt-0.txt" | head -1 
 file="$R/proposals-$n.json"
 [ -e "$file" ] || file="$R/proposals.json"
 proposals=$(sed -e "s/FACT0/$fact/g" -e "s/OTHER0/$other/g" "$file")
-echo "{{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"total_cost_usd\":0.02,\"structured_output\":{{\"proposals\":$proposals}}}}"
+COST='"total_cost_usd":0.02,'
+if [ -e "$R/schema-no-cost" ] && [ "$n" -ge "$(cat "$R/schema-no-cost")" ]; then COST=''; fi
+echo "{{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,$COST\"structured_output\":{{\"proposals\":$proposals}}}}"
 "#,
             root = w.root.display()
         ),
@@ -379,6 +382,75 @@ fn a_dry_run_applies_nothing_and_writes_every_proposal() {
     let lines = lines(&schema_dirs(&w, "dry")[0]);
     let statuses: Vec<&str> = lines.iter().filter_map(|l| l["status"].as_str()).collect();
     assert_eq!(statuses, ["dry-run", "recorded-only"], "{lines:?}");
+}
+
+/// `story:events-carry-measurements`: `SchemaChangesProposed` carries `cost_usd`, in a dry run as
+/// when applying: the sum while every answer is costed, and null as soon as one answer carried
+/// no cost, never the sum of the costed ones and never 0.
+#[test]
+fn the_cost_is_null_as_soon_as_one_answer_carried_none() {
+    let w = instance("costed", 30);
+    answer(&w, json!([]));
+    let (code, out) = w.cortex(&["schema", "costed", "--sample", "25", "--dry-run"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("proposed")),
+        "{out}"
+    );
+    assert_eq!(out["detail"]["cost_usd"], "0.0400", "two calls: {out}");
+
+    // Calls 2 and 3 are this dry run's two batches; the second carries no cost.
+    std::fs::write(w.root.join("schema-no-cost"), "3").unwrap();
+    let (code, out) = w.cortex(&["schema", "costed", "--sample", "25", "--dry-run"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("proposed")),
+        "{out}"
+    );
+    assert_eq!(w.lines("schema-calls.log").len(), 4, "{out}");
+    assert_eq!(out["detail"].get("cost_usd"), Some(&Value::Null), "{out}");
+
+    let (code, out) = w.cortex(&["schema", "costed", "--sample", "5"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("applied")),
+        "{out}"
+    );
+    assert_eq!(out["detail"].get("cost_usd"), Some(&Value::Null), "{out}");
+}
+
+/// Adversary, `story:events-carry-measurements`: with no fact to draw no model is asked, and
+/// `SchemaChangesProposed` carries a cost of 0, not null, in a dry run as when applying. The case
+/// `adv_an_empty_store_asks_no_model_and_applies_nothing` asserts the cost only when its outcome
+/// is `applied`; this one asserts both outcomes.
+#[test]
+fn adv_an_empty_store_costs_nothing_in_a_dry_run_and_when_applying() {
+    let w = World::new();
+    let path = w.spec("empty", "conn_test");
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    proposer(&w);
+    answer(&w, json!([]));
+    for (args, outcome) in [
+        (
+            &["schema", "empty", "--sample", "5", "--dry-run"][..],
+            "proposed",
+        ),
+        (&["schema", "empty", "--sample", "5"][..], "applied"),
+    ] {
+        let (code, out) = w.cortex(args);
+        assert_eq!(
+            (code, out["outcome"].as_str()),
+            (0, Some(outcome)),
+            "{args:?}: {out}"
+        );
+        assert_eq!(out["detail"]["proposed"], 0, "{args:?}: {out}");
+        assert_eq!(
+            out["detail"]["cost_usd"], "0.0000",
+            "{args:?}: no model was asked: {out}"
+        );
+    }
+    assert!(w.lines("schema-calls.log").is_empty());
 }
 
 /// Acceptance 5: `quality`'s masking case (`tests/quality.rs`, a rare name a fact and its
@@ -1074,6 +1146,10 @@ fn adv_an_empty_store_asks_no_model_and_applies_nothing() {
     );
     if code == 0 {
         assert_eq!(out["detail"]["proposed"], 0, "{out}");
+        assert_eq!(
+            out["detail"]["cost_usd"], "0.0000",
+            "no model was asked: {out}"
+        );
     }
     assert!(w.lines("schema-calls.log").is_empty(), "{out}");
     assert_eq!(w.head("empty"), before);
