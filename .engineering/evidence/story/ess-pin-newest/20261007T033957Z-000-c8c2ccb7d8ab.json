@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-07T03:39:57Z",
+  "actor": "human:timo",
+  "artifact": "story:ess-pin-newest",
+  "kind": "story",
+  "revision": 16,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check with ess 0.55.0 in the unit tree, each step exit 0: 485 passed, 0 failed, 0 skipped; ess 0.52.0 refuses the spec (exit 1). The wave head differs from e53fa74 in CHANGELOG.md alone",
+    "reference": "e53fa74"
+  }
+}

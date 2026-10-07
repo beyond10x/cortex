@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ess-pin-newest
 kind: story
-status: active
+status: implemented
 title: cortex is specified and generated with the newest ESS (0.55.0)
 relations:
 - decomposes: epic:standalone-1-0
@@ -11,17 +11,24 @@ scope:
 - confidence: cited
   path: .github/workflows/check.yml
 - confidence: cited
+  path: .gitignore
+- confidence: cited
   path: AGENTS.md
-- confidence: inferred
+- confidence: cited
   path: generated
 - confidence: cited
   path: spec/ess-inputs.yaml
-- confidence: inferred
-  path: src/model_map.rs
-revision: 8
+- confidence: cited
+  path: spec/suite.json
+- confidence: cited
+  path: src/ports.rs
+- confidence: cited
+  path: tests/conformance.rs
+revision: 17
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-07T03:19:22Z", actor: "human:timo", revision: 7}
 - {from: "proposed", to: "active", at: "2026-10-07T03:19:22Z", actor: "human:timo", revision: 8}
+- {from: "active", to: "implemented", at: "2026-10-07T03:39:57Z", actor: "human:timo", revision: 17, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 
@@ -63,3 +70,15 @@ The two `UNMAPPED:` notes on `QualityMeasured` and `SchemaChangesProposed`
 (`spec/domains/instance.yaml`, `rate` and `cost_usd` left off the events because ESS 0.52.0 filled an
 `Optional` `{generated: true}` field with a constant `None`) may be settled by 0.55.0's context port;
 moving those fields onto the events is a separate story.
+
+## Scope
+
+Where the unit landed (`git diff --stat 1f9a77d e53fa74`, cited):
+
+- `spec/ess-inputs.yaml` (the requirement), `generated/` and `spec/suite.json` (regenerated; `ess-conformance/34`)
+- `src/ports.rs`: the generated `Context::external` takes an `ExternalCommand`; `RunSource`, an obligation, reads the decided branches directly
+- `tests/conformance.rs`: runs `expect_event_values` and refuses a `scenario_initial_state` other than `empty`
+- `.github/workflows/check.yml`, `AGENTS.md`
+- `.gitignore` and the four `generated/*/.ess-output/state.json` (no longer tracked, `84c925f`)
+
+Corrections to the inferred scope: `src/model_map.rs` was not touched; `src/ports.rs`, `tests/conformance.rs` and `.gitignore` were.
