@@ -397,10 +397,14 @@ operation, its parent's identity after the source's prefix (the parent's id, or 
 `%` and `:` written `%25` and `%3A`, and its own id; for example
 `forge:projects.list/tags.list:1:v1.0`. So the children of two parents stay two nodes even when
 their names and ids are equal, and a child's identity never holds an id masking or a rule would
-change. A child record without an id or a name by its mapping is skipped, and one whose identity
-was already read in the run counts once. A mapped alias of a child resolves across parents as any
-mapped alias does: mapping a tag's name as an alias makes the same-named tags of two projects one
-node.
+change. Masking reads a credential's name followed by `:` and six characters or more as an
+assigned value, so a parent whose part would end that way (an id such as `top-secret`) has it
+written as `%x` and the hex of its bytes in its children's identities
+(`forge:projects.list/tags.list:%x746f702d736563726574:v1.0.0`), and so has a child operation
+whose name would (`…client_secret`). A child record without an id or a name by its mapping is
+skipped, and one whose identity was already read in the run counts once. A mapped alias of a child
+resolves across parents as any mapped alias does: mapping a tag's name as an alias makes the
+same-named tags of two projects one node.
 
 Each child record has one relation, named by `parent`, to its parent's node, which it names by all
 the parent's aliases, so a parent the run does not apply (over the evidence bound) is still named

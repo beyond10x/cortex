@@ -18,6 +18,8 @@
 //! A source's `children` are mapped the same way, each by its own mapping. A child record's
 //! identity is `<prefix>/<operation>:<parent id>:<id>` ([`child_key`]): it holds its parent's, so
 //! the children of two parents stay apart, and no parent's identity starts with a child's prefix.
+//! A parent id or an operation masking would read with what follows it as an assigned credential
+//! is written in hex there ([`hex`]), so no child's identity is one masking changes.
 //! Each child record is linked to its parent's node by one relation named by the child's
 //! `parent`, the parent named by all its aliases.
 
@@ -77,10 +79,20 @@ pub fn prefix(st: &m::StructuredSource) -> String {
     }
 }
 
+/// What a part of a child's identity is tried with after its `:`: as long as an id's digest.
+const PROBE: &str = "0000000000000000";
+
 /// `<prefix>/<operation>`: what the identities of a structured source's child records of
 /// `operation` start with, `prefix` being the source's own ([`prefix`]). No identity of a parent
-/// record starts with it, as each holds `<prefix>:`.
+/// record starts with it, as each holds `<prefix>:`. An operation masking would read with what
+/// follows it as an assigned value (one ending in a credential's name, `…client_secret`) is
+/// written as [`hex`].
 pub fn child_prefix(prefix: &str, operation: &str) -> String {
+    let operation = if mask(&format!("{operation}:{PROBE}")).1 > 0 {
+        hex(operation)
+    } else {
+        operation.to_string()
+    };
     format!("{prefix}/{operation}")
 }
 
@@ -89,9 +101,22 @@ fn escape(text: &str) -> String {
     text.replace('%', "%25").replace(':', "%3A")
 }
 
-/// [`escape`] undone: every `%` of an escaped text starts `%25` or `%3A`.
-fn unescape(text: &str) -> String {
-    text.replace("%3A", ":").replace("%25", "%")
+/// `text` as `%x` and the hex of its bytes. No credential's name masking reads is spelled in hex
+/// digits, so a part written so never ends in one, and [`escape`] never writes `%x`.
+fn hex(text: &str) -> String {
+    format!("%x{}", crate::state::hex(text.as_bytes()))
+}
+
+/// [`escape`] or [`hex`] undone: every `%` of an escaped text starts `%25` or `%3A`.
+fn unescape(text: &str) -> Option<String> {
+    let Some(digits) = text.strip_prefix("%x") else {
+        return Some(text.replace("%3A", ":").replace("%25", "%"));
+    };
+    let bytes = (0..digits.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(digits.get(i..i + 2)?, 16).ok())
+        .collect::<Option<Vec<u8>>>()?;
+    String::from_utf8(bytes).ok()
 }
 
 /// `<child prefix>:<parent>:<id>`, `parent` [`escape`]d: a child record's key as the fetch reads
@@ -345,14 +370,22 @@ impl<'a> Source<'a> {
     }
 
     /// The scope of the records of child `n` whose parent's identity is `parent`.
+    /// The parent's part is [`escape`]d, or written as [`hex`] when masking or an irreversible
+    /// rule would change `<child prefix>:<part>:` and an id's digest (a parent id ending in a
+    /// credential's name, `top-secret`, reads with the id after it as an assigned value), so no
+    /// child's identity is one masking changes.
     fn child_scope(&self, n: usize, parent: &str) -> Scope<'a> {
         let (at, child) = &self.children[n];
         let part = parent
             .strip_prefix(self.prefix.as_str())
             .and_then(|p| p.strip_prefix(':'))
             .unwrap_or(parent);
+        let mut token = escape(part);
+        if self.cleaning_changes(&format!("{at}:{token}:{PROBE}")) {
+            token = hex(part);
+        }
         Scope {
-            prefix: format!("{at}:{}", escape(part)),
+            prefix: format!("{at}:{token}"),
             mapping: &child.mapping,
             time: child.time.as_deref(),
             parent: Some((child.parent.as_str(), parent.to_string())),
@@ -366,7 +399,7 @@ impl<'a> Source<'a> {
         self.children.iter().enumerate().find_map(|(n, (at, _))| {
             let rest = key.strip_prefix(at.as_str())?.strip_prefix(':')?;
             let (parent, _) = rest.split_once(':')?;
-            Some((n, unescape(parent)))
+            Some((n, unescape(parent)?))
         })
     }
 
@@ -1301,6 +1334,61 @@ mod tests {
         assert!(doc.key.starts_with(&held));
         assert!(!s.identity("P-1").starts_with(&held));
         assert_eq!(s.failed_child(&token, "events.list").1, None);
+    }
+
+    /// A part of a child's identity followed by `:` must not end in a credential's name: masking
+    /// would read the rest as an assigned value, digest or not, and the seen state would drop the
+    /// key (`SeenState::load`). A parent id (`top-secret`) or a child operation (`…client_secret`)
+    /// that would is written in hex; every identity stays one masking keeps, and gives back its
+    /// parent.
+    #[test]
+    fn no_part_of_a_child_identity_makes_masking_read_it_as_an_assignment() {
+        let m = mapping();
+        let mut child = tags_child();
+        for operation in ["tags.list", "vault.client_secret", "keys.api-key"] {
+            child.operation = operation.into();
+            let s = with_child(&m, &child);
+            let at = &s.children[0].0;
+            assert_eq!(
+                crate::mask::mask_key(&format!("{at}:p")).1,
+                0,
+                "{operation}: {at}"
+            );
+            for parent in [
+                "1",
+                "top-secret",
+                "my_password",
+                "x:api_key",
+                "secret=ab",
+                "a%3Ab",
+            ] {
+                for id in ["v1.0", "v1.0.0", "2026-10-07T00:00:00Z"] {
+                    let tag = json!({"id": id, "name": id});
+                    let mut doc = fetched(child_key(at, parent, id), tag);
+                    s.prepare(&mut doc);
+                    let identity = &doc.key;
+                    assert_eq!(mask(identity).1, 0, "{identity}");
+                    assert_eq!(crate::mask::mask_key(identity).1, 0, "{identity}");
+                    assert_eq!(
+                        s.scope(identity).parent,
+                        Some(("IN_PROJECT", s.identity(parent))),
+                        "{identity}"
+                    );
+                    let held = s.failed_child(parent, operation).1.expect("held");
+                    assert!(identity.starts_with(&held), "{identity} / {held}");
+                    assert!(s.owns(identity), "{identity}");
+                }
+            }
+        }
+        // A part masking reads as it is stays readable.
+        let tags = tags_child();
+        let s = with_child(&m, &tags);
+        let mut doc = fetched(
+            child_key("forge:projects.list/tags.list", "a%3Ab", "v1.0.0"),
+            json!({"id": "v1.0.0", "name": "v1.0.0"}),
+        );
+        s.prepare(&mut doc);
+        assert_eq!(doc.key, "forge:projects.list/tags.list:a%253Ab:v1.0.0");
     }
 
     #[test]
