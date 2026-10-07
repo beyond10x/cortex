@@ -21,6 +21,17 @@ and every secret belong to Connectors (`connectors` binary); extraction is a too
 | `examples/` | a complete spec file and its seed schema |
 | `.engineering/` | the AEP planning store |
 
+## Serves
+
+The objectives of the collection this repository moves, by id from `atlas/ROADMAP.md`:
+
+- **O2 — decisions as data, with evidence.** Every fact a run adds to a brain cites evidence cortex
+  minted for the document it came from, and EKR commits it only as a validated transaction.
+- **O5 — the generic agent platform.** A data source configured as a Connectors connection becomes
+  a brain on a schedule, which agents read through `ekr mcp`.
+
+A change here that moves none of these is a question for the operator, not a task.
+
 ## Commands
 
 | command | does |
