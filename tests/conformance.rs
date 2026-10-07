@@ -1,8 +1,8 @@
 //! Runs every scenario of `spec/suite.json` (written by `ess verify conform synthesize`) against
 //! the generated behaviours over cortex's ports, in process. External branches are forced the way
 //! each scenario says, through the context the ports ask first; `RunSource`'s pipeline is replaced
-//! by a stand-in that answers `ran`. Every scenario must answer; an unknown step or value kind
-//! fails rather than skips.
+//! by a stand-in that answers `ran`. Every scenario must answer; an unknown step, value kind or
+//! scenario initial state fails rather than skips.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -574,17 +574,24 @@ impl Scenario {
                 }
             }
             "expect_no_error" => assert_eq!(last().error, None),
-            "expect_event" => {
+            "expect_event" | "expect_event_values" => {
                 let name = step["event"].as_str().unwrap();
                 let (_, payload) = last()
                     .events
                     .iter()
                     .find(|(n, _)| n == name)
                     .unwrap_or_else(|| panic!("{name} was not published"));
+                let values = step["step"] == "expect_event_values";
                 if let Some(fields) = step["payload"].as_object() {
-                    // Each value is the literal the field must carry (`ess-conformance`'s
-                    // `ExpectEvent.payload`), not the name of an input field.
-                    for (field, want) in fields {
+                    // In `expect_event` each value is the literal the field must carry
+                    // (`ess-conformance`'s `ExpectEvent.payload`), not the name of an input
+                    // field; in `expect_event_values` it is a value to resolve, as an input's is.
+                    for (field, written) in fields {
+                        let want = &if values {
+                            self.resolve(written)
+                        } else {
+                            written.clone()
+                        };
                         assert!(
                             same(&payload[field], want),
                             "{name}.{field}: {} != {want}",
@@ -715,6 +722,13 @@ fn every_scenario_of_the_synthesized_suite_holds() {
         &std::fs::read(std::path::Path::new(&root).join("spec/suite.json")).unwrap(),
     )
     .unwrap();
+    // Every scenario starts from an empty registry (`Scenario::new`), which is the one initial
+    // state a suite names.
+    let initial = &suite["provenance"]["scenario_initial_state"];
+    assert!(
+        initial.is_null() || initial == "empty",
+        "unsupported scenario initial state {initial}"
+    );
     let scenarios = suite["scenarios"].as_object().expect("scenarios");
     let mut failed = Vec::new();
     for (name, scenario) in scenarios {

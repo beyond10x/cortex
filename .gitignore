@@ -2,3 +2,4 @@
 /.engineering/drafts/
 *.sqlite
 *.sqlite-*
+/generated/*/.ess-output/
