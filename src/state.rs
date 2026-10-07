@@ -3,7 +3,8 @@
 //! `RunSource`'s `ran` that writes and reads them. A document is new when its key was never
 //! applied, changed when its text hash differs, and skipped while its last application is younger
 //! than the policy's `refresh_after_days`, unless it is a record read from a file
-//! ([`Origin::FileRecord`]), which is delivered again as soon as it changed.
+//! ([`Origin::FileRecord`]), which is delivered again as soon as it changed, or a structured
+//! source's change whose text changed only in its links ([`SeenState::unlinked`]).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -19,6 +20,10 @@ pub struct Seen {
     pub hash: String,
     /// Milliseconds since the Unix epoch.
     pub applied_at: i64,
+    /// For a structured source's change record applied with links, the hash of its text without
+    /// them ([`crate::structured::LINKS`]); absent when the text held none, as its `hash` is that.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unlinked_hash: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -45,6 +50,12 @@ pub struct SeenState {
     /// removes the key; absent when no call is failing.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub child_failures: BTreeMap<String, u32>,
+    /// This run's, never written: by key, the hash of the text without its links of each change
+    /// record of a structured source's link ([`crate::structured::Source::link`]). A change whose
+    /// text differs from the one last applied only in its links is wanted at once and never held,
+    /// whatever `refresh_after_days`, and [`SeenState::record`] remembers it.
+    #[serde(skip)]
+    pub unlinked: BTreeMap<String, String>,
 }
 
 pub fn text_hash(text: &str) -> String {
@@ -92,6 +103,7 @@ impl SeenState {
                 held_since: None,
                 pending_since: None,
                 child_failures: BTreeMap::new(),
+                unlinked: BTreeMap::new(),
             }),
             Err(e) => Err(format!("cannot read {}: {e}", path.display())),
         }
@@ -136,24 +148,38 @@ impl SeenState {
     }
 
     /// Whether a run should extract `doc`: its key is new, or its text changed past the refresh
-    /// window, or changed at all for a record read from a file.
+    /// window, or changed at all for a record read from a file or in its links alone.
     pub fn wants(&self, doc: &Document, now_ms: i64, refresh_after_days: i64) -> bool {
         match self.documents.get(&doc.key) {
             None => true,
             Some(seen) => {
-                (!waits(doc) || now_ms - seen.applied_at >= refresh_after_days * DAY_MS)
+                (!waits(doc)
+                    || now_ms - seen.applied_at >= refresh_after_days * DAY_MS
+                    || self.relinked(doc, seen))
                     && seen.hash != doc_hash(doc)
             }
         }
     }
 
     /// Whether `doc` changed but is held back: its key was applied less than `refresh_after_days`
-    /// ago, with other text, and it is not a record read from a file.
+    /// ago, with other text, and it is not a record read from a file nor a change whose links
+    /// alone changed.
     pub fn holds(&self, doc: &Document, now_ms: i64, refresh_after_days: i64) -> bool {
         waits(doc)
             && self.documents.get(&doc.key).is_some_and(|seen| {
-                now_ms - seen.applied_at < refresh_after_days * DAY_MS && seen.hash != doc_hash(doc)
+                now_ms - seen.applied_at < refresh_after_days * DAY_MS
+                    && seen.hash != doc_hash(doc)
+                    && !self.relinked(doc, seen)
             })
+    }
+
+    /// Whether `doc`, a change record of a link, has the text `seen` was applied with but for its
+    /// links: its hash without them ([`SeenState::unlinked`]) is the one remembered, or, for a
+    /// text applied with none, its `hash`.
+    fn relinked(&self, doc: &Document, seen: &Seen) -> bool {
+        self.unlinked
+            .get(&doc.key)
+            .is_some_and(|unlinked| *unlinked == *seen.unlinked_hash.as_ref().unwrap_or(&seen.hash))
     }
 
     /// The seen documents of `source`, as `cortex.instance.SeenDocument` declares them, in key
@@ -166,17 +192,27 @@ impl SeenState {
                 source_id: source.clone(),
                 key: key.clone(),
                 content_hash: seen.hash.clone(),
+                unlinked_hash: seen.unlinked_hash.clone(),
                 applied_at: seen.applied_at,
             })
             .collect()
     }
 
+    /// Remembers `doc` as applied at `now_ms`: its hash, and for a change record whose text holds
+    /// links, its hash without them ([`SeenState::unlinked`]).
     pub fn record(&mut self, doc: &Document, now_ms: i64) {
+        let hash = doc_hash(doc);
+        let unlinked_hash = self
+            .unlinked
+            .get(&doc.key)
+            .filter(|unlinked| **unlinked != hash)
+            .cloned();
         self.documents.insert(
             doc.key.clone(),
             Seen {
-                hash: doc_hash(doc),
+                hash,
                 applied_at: now_ms,
+                unlinked_hash,
             },
         );
     }
@@ -303,6 +339,73 @@ mod tests {
         assert_eq!(held, ["c"]);
     }
 
+    /// A change record of a link whose text differs from the one last applied only in its links
+    /// is selected inside the refresh window and never held, whether it gains, changes or loses
+    /// them; one whose text changed besides waits, as does any other document. The hash without
+    /// the links is remembered only for a text that held some, and this run's map is never
+    /// written.
+    #[test]
+    fn a_change_whose_links_alone_changed_is_selected_inside_the_refresh_window() {
+        let keys = |docs: Vec<Document>| docs.into_iter().map(|d| d.key).collect::<Vec<_>>();
+        let mut state = SeenState {
+            unlinked: BTreeMap::from([
+                ("a".to_string(), text_hash("one")),
+                ("b".to_string(), text_hash("two")),
+            ]),
+            ..SeenState::default()
+        };
+        state.record(&doc("a", "one"), 0);
+        state.record(&doc("b", "two"), 0);
+        state.record(&doc("c", "three"), 0);
+        assert_eq!(state.documents["a"].unlinked_hash, None);
+
+        // `a` gains a link; `b` gains one and changed besides; `c` is no change of a link.
+        state.unlinked = BTreeMap::from([
+            ("a".to_string(), text_hash("one")),
+            ("b".to_string(), text_hash("two, edited")),
+        ]);
+        let fetched = || {
+            vec![
+                doc("a", "one+link"),
+                doc("b", "two, edited+link"),
+                doc("c", "three, edited"),
+            ]
+        };
+        assert_eq!(keys(state.select(fetched(), DAY_MS, 7, 10)), ["a"]);
+        let held: Vec<_> = fetched()
+            .into_iter()
+            .filter(|d| state.holds(d, DAY_MS, 7))
+            .map(|d| d.key)
+            .collect();
+        assert_eq!(held, ["b", "c"]);
+
+        // Applied with its link, `a` remembers its text without it: losing the link is a change
+        // of its links alone, an edit besides is not.
+        state.record(&doc("a", "one+link"), DAY_MS);
+        assert_eq!(state.documents["a"].unlinked_hash, Some(text_hash("one")));
+        assert_eq!(
+            keys(state.select(vec![doc("a", "one")], 2 * DAY_MS, 7, 10)),
+            ["a"]
+        );
+        state.unlinked.insert("a".into(), text_hash("one, edited"));
+        assert!(state
+            .select(vec![doc("a", "one, edited+link")], 2 * DAY_MS, 7, 10)
+            .is_empty());
+
+        // Written and read back: the hash without links stays, this run's map does not.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("projects.json");
+        state.save(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("\"unlinked\""), "{text}");
+        let loaded = SeenState::load(&path).unwrap();
+        assert_eq!(loaded.documents, state.documents);
+        assert!(loaded.unlinked.is_empty());
+        let rows = loaded.rows(&m::SourceId("t/projects".into()));
+        assert_eq!(rows[0].unlinked_hash, Some(text_hash("one")));
+        assert_eq!(rows[1].unlinked_hash, None);
+    }
+
     #[test]
     fn the_state_file_holds_the_seen_documents_the_specification_declares() {
         let mut state = SeenState::default();
@@ -318,6 +421,7 @@ mod tests {
                     source_id: source.clone(),
                     key: "https://example.org/a".into(),
                     content_hash: text_hash("one"),
+                    unlinked_hash: None,
                     applied_at: 5,
                 },
                 m::SeenDocumentData {
@@ -325,6 +429,7 @@ mod tests {
                     source_id: source.clone(),
                     key: "https://example.org/b".into(),
                     content_hash: text_hash("two"),
+                    unlinked_hash: None,
                     applied_at: 7,
                 },
             ]

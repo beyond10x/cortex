@@ -182,6 +182,19 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
                 ));
             }
         }
+        // A link orders the records of one child and links those of another: both are children
+        // of the source.
+        for (n, link) in c.links.iter().flatten().enumerate() {
+            for (field, operation) in [("tags", &link.tags), ("changes", &link.changes)] {
+                if !operations.contains(operation.as_str()) {
+                    return Err(format!(
+                        "sources.{}: links[{n}].{field}: {operation:?} names no child operation \
+                         of the source; name one of its children",
+                        source.name
+                    ));
+                }
+            }
+        }
     }
     let budget: f64 = spec.model.budget_usd.0.parse().map_err(|_| {
         format!(

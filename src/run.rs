@@ -170,34 +170,41 @@ pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Rep
         state.pending_since,
         source_spec.policy.refresh_after_days,
     );
-    let ran = sources::fetch(
-        &source_spec.settings,
-        &tools.connectors,
-        &meta.spec_dir,
-        &window,
-        &state.child_failures,
-        source_spec.policy.max_chars_per_document.max(0) as usize,
-    )
-    .map_err(|e| match e {
-        FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
-    })
-    .and_then(|fetched| {
-        let structured_source = match &source_spec.settings {
-            m::SourceSettings::Structured(st) => Some(st),
-            _ => None,
-        };
-        process(
-            layout,
-            tools,
-            &spec,
-            &source.name,
-            fetched,
-            &source_spec.policy,
-            Some(window),
-            structured_source,
-            true,
-        )
-    });
+    // A structured source's links order and match records by the identities the run gives them,
+    // which the redaction policy takes part in.
+    let ran = redact::compile(spec.redaction.as_ref())
+        .map_err(Failure::Extract)
+        .and_then(|redactor| {
+            sources::fetch(
+                &source_spec.settings,
+                &tools.connectors,
+                &meta.spec_dir,
+                &window,
+                &state.child_failures,
+                source_spec.policy.max_chars_per_document.max(0) as usize,
+                redactor.as_ref(),
+            )
+            .map_err(|e| match e {
+                FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
+            })
+        })
+        .and_then(|fetched| {
+            let structured_source = match &source_spec.settings {
+                m::SourceSettings::Structured(st) => Some(st),
+                _ => None,
+            };
+            process(
+                layout,
+                tools,
+                &spec,
+                &source.name,
+                fetched,
+                &source_spec.policy,
+                Some(window),
+                structured_source,
+                true,
+            )
+        });
     if ran.is_err() {
         // A failed run reads nothing it can be trusted to have read: the next run's `{since}` is
         // no later than this one's. The failure is the run's answer; a state that cannot be
@@ -254,6 +261,7 @@ fn seed_documents(layout: &Layout, tools: &Tools, undoable: bool) -> Result<Repo
         &window,
         &BTreeMap::new(),
         policy.max_chars_per_document as usize,
+        None,
     )
     .map_err(|e| match e {
         FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
@@ -325,11 +333,14 @@ fn process(
     let structured = structured_source.map(|st| structured::Source::new(st, redactor.as_ref()));
     // A child call that failed for one parent: the run names the parent, by its identity, and the
     // operation in `skipped`, and keeps the values of that parent's records of the operation.
-    let mut held: Vec<String> = Vec::new();
+    let mut held: Vec<structured::Held> = Vec::new();
     if let Some(s) = &structured {
         for f in &fetched.failed_children {
             let (parent, prefix) = s.failed_child(&f.parent, &f.operation);
-            held.extend(prefix);
+            held.extend(prefix.map(|prefix| structured::Held {
+                prefix,
+                relation: None,
+            }));
             let op = &f.operation;
             report.skipped.push(masked_key(
                 redactor.as_ref(),
@@ -340,7 +351,30 @@ fn process(
                 ),
             ));
         }
+        // A link not found in full for one parent: the run names the parent and the link, and
+        // keeps the links of that relation its changes hold in the store; every other value of
+        // those changes ends as it would without the link.
+        for f in &fetched.failed_links {
+            let (parent, prefix) = s.failed_child(&f.parent, &f.changes);
+            let (op, changes, relation) = (&f.operation, &f.changes, &f.relation);
+            held.extend(prefix.map(|prefix| structured::Held {
+                prefix,
+                relation: Some(relation.clone()),
+            }));
+            report.skipped.push(masked_key(
+                redactor.as_ref(),
+                &format!(
+                    "{op}: {relation} links of {parent} not found in full: {}; its {changes} \
+                     records not linked before that get no {relation} link in this run, and none \
+                     of their earlier {relation} links is ended",
+                    f.reason
+                ),
+            ));
+        }
     }
+    let fetched_links = &fetched.links;
+    // Each change record's hash without its links, by its key ([`structured::Source::link`]).
+    let mut unlinked: BTreeMap<String, String> = BTreeMap::new();
     let docs: Vec<_> = fetched
         .documents
         .into_iter()
@@ -350,6 +384,13 @@ fn process(
             if let Some(s) = &structured {
                 let (n, scrubbed) = s.prepare(&mut d);
                 report.masked += n;
+                // A change's links are part of the text the run hashes, so a change applied
+                // before its tag appeared is applied again with its link; its hash without them
+                // tells a change of its links alone, which no refresh window holds back.
+                let links = fetched_links.get(&d.key).map(Vec::as_slice);
+                if let Some(text) = s.link(&mut d, links.unwrap_or_default()) {
+                    unlinked.insert(d.key.clone(), text_hash(&text));
+                }
                 d.hash = Some(text_hash(&d.text));
                 record_scrubbed.insert(d.key.clone(), scrubbed);
                 return Some(d);
@@ -432,6 +473,7 @@ fn process(
         .unwrap_or_default();
     let seen_path = layout.seen(label);
     let mut seen = SeenState::load(&seen_path).map_err(Failure::Fetch)?;
+    seen.unlinked = unlinked;
     let wanted = docs
         .iter()
         .filter(|d| seen.wants(d, started, policy.refresh_after_days))
@@ -837,9 +879,9 @@ struct Records<'a> {
     scrubbed: &'a HashMap<String, BTreeMap<String, usize>>,
     /// Every parent record the run read ([`structured::Source::parents`]).
     parents: &'a structured::Parents,
-    /// What the identities of records a failed child call left unread start with
-    /// ([`structured::Source::failed_child`]).
-    held: &'a [String],
+    /// What the run keeps of the records a failed child call left unread, and of the changes of a
+    /// link not found in full ([`structured::Held`]).
+    held: &'a [structured::Held],
 }
 
 /// Applies the `selected` records of a structured source with no model call: each batch is one

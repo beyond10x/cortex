@@ -1,17 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$ref": "#/$defs/cortex.instance.ConnectorsSource",
+  "$ref": "#/$defs/cortex.instance.CompareLink",
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
     "source_digest": "724e4de48519154c6fb2cfa76120dddf9146deb7a9a2a170344f384298bf6ce0",
-    "contract_digest": "slice-sha256/2:61c9de75ead7850c2811652bbaf807f6337dc4b95a1eace2398040c586e36de2",
+    "contract_digest": "slice-sha256/2:067710eff8bd4f4eda1169d9ed7e206182501a8978dda295be1d2b72c72cb44c",
     "regenerate": "ess generate"
   },
   "$defs": {
-    "cortex.instance.ChildCall": {
-      "title": "ChildCall",
-      "x-ess-name": "cortex.instance.ChildCall",
+    "cortex.instance.CompareLink": {
+      "title": "CompareLink",
+      "x-ess-name": "cortex.instance.CompareLink",
       "x-ess-kind": "struct",
       "type": "object",
       "properties": {
@@ -24,64 +24,32 @@
         },
         "paging": {
           "$ref": "#/$defs/cortex.instance.Paging"
+        },
+        "tags": {
+          "type": "string"
+        },
+        "changes": {
+          "type": "string"
+        },
+        "order": {
+          "type": "string"
+        },
+        "change_id": {
+          "type": "string"
+        },
+        "relation": {
+          "type": "string"
         }
       },
       "required": [
         "operation",
         "input",
-        "records"
-      ],
-      "additionalProperties": false
-    },
-    "cortex.instance.ConnectorsSource": {
-      "title": "ConnectorsSource",
-      "x-ess-name": "cortex.instance.ConnectorsSource",
-      "x-ess-kind": "struct",
-      "type": "object",
-      "properties": {
-        "adapter": {
-          "type": "string"
-        },
-        "connection": {
-          "type": "string"
-        },
-        "operation": {
-          "type": "string"
-        },
-        "inputs": {
-          "type": "array",
-          "items": {}
-        },
-        "records": {
-          "type": "string"
-        },
-        "id": {
-          "type": "string"
-        },
-        "time": {
-          "type": "string"
-        },
-        "text": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "paging": {
-          "$ref": "#/$defs/cortex.instance.Paging"
-        },
-        "child": {
-          "$ref": "#/$defs/cortex.instance.ChildCall"
-        }
-      },
-      "required": [
-        "adapter",
-        "connection",
-        "operation",
-        "inputs",
         "records",
-        "id",
-        "text"
+        "tags",
+        "changes",
+        "order",
+        "change_id",
+        "relation"
       ],
       "additionalProperties": false
     },
