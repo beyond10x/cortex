@@ -2,33 +2,48 @@
 format: aep.planning-md/3
 id: story:postgres-credential-from-connectors
 kind: story
-status: active
+status: implemented
 title: A PostgreSQL store's credential comes from a Connectors connection
 relations:
 - decomposes: epic:organisation-scale-instance
 - depends_on: story:store-backend-per-instance
 - serves: vision:self-updating-instances
 scope:
-- confidence: inferred
+- confidence: cited
   path: spec/domains/instance.yaml
-- confidence: inferred
+- confidence: cited
+  path: src/connectors.rs
+- confidence: cited
   path: src/ekr.rs
-- confidence: inferred
+- confidence: cited
+  path: src/gate.rs
+- confidence: cited
   path: src/instance.rs
-- confidence: inferred
+- confidence: cited
   path: src/main.rs
-- confidence: inferred
+- confidence: cited
   path: src/model_map.rs
-- confidence: inferred
+- confidence: cited
+  path: src/quality.rs
+- confidence: cited
+  path: src/run.rs
+- confidence: cited
   path: src/schedule.rs
-- confidence: inferred
-  path: tests/common/mod.rs
-- confidence: inferred
+- confidence: cited
+  path: src/snapshot.rs
+- confidence: cited
+  path: tests/spec_forms.rs
+- confidence: cited
   path: tests/store_backend.rs
-revision: 7
+- confidence: cited
+  path: website/docs/operating.md
+- confidence: cited
+  path: website/docs/spec-file.md
+revision: 32
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-06T07:36:01Z", actor: "agent:claude", revision: 5}
 - {from: "proposed", to: "active", at: "2026-10-06T07:36:01Z", actor: "agent:claude", revision: 6}
+- {from: "active", to: "implemented", at: "2026-10-07T02:56:41Z", actor: "human:timo", revision: 32, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Outcome
 
@@ -68,3 +83,15 @@ Design B, chosen 2026-10-06 by the operator ("do it"), as built in `8514d95` (it
 - **Without `connection`:** `ekr` starts directly and reads the password where its configuration says, as before.
 
 Rejected alternatives are not recorded here: the design note that compared them was in the unit report of wave 20261006i, which was not kept.
+
+## Scope
+
+Where the unit landed, from `git diff --name-only 30fd665 8514d95` and the security fix `d63e8f5`, generated files left out (cited):
+
+- `spec/domains/instance.yaml` (`ConnectionRef`, `PostgresStore.connection`, `schema_connection`), regenerated
+- `src/ekr.rs` (`Launch`, `Store::cmd`, inherited `EKR_*` removal), `src/instance.rs` (launch refusals), `src/main.rs` (create, update, adopt, viewer reinstall), `src/model_map.rs`, `src/schedule.rs` (viewer unit), `src/connectors.rs`
+- every other `ekr` caller that opens the store: `src/gate.rs`, `src/quality.rs`, `src/run.rs`, `src/snapshot.rs`
+- `tests/store_backend.rs` (the Docker case and the security cases), `tests/spec_forms.rs`
+- `website/docs/spec-file.md`, `website/docs/operating.md`
+
+Corrections to the design's list: `tests/common/mod.rs` was not touched; `src/connectors.rs`, `src/gate.rs`, `src/quality.rs`, `src/run.rs`, `src/snapshot.rs`, `tests/spec_forms.rs` and the two documentation pages were not in it.
