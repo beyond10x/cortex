@@ -291,6 +291,12 @@ pub struct Fetched {
     /// A `structured` source's child calls that failed, one per parent and operation. The parent
     /// and the other children are read; the run names each in `skipped`.
     pub failed_children: Vec<ChildFailure>,
+    /// What a `structured` source's `links` found: by the identity of each change linked, the
+    /// link's relation and the identity of the tag it is linked to, in the order of `links`.
+    pub links: BTreeMap<String, Vec<(String, String)>>,
+    /// A `structured` source's links that could not be found in full for one parent. The run
+    /// names each in `skipped`.
+    pub failed_links: Vec<LinkFailure>,
 }
 
 /// A child call of a `structured` source that failed for one parent record.
@@ -302,6 +308,21 @@ pub struct ChildFailure {
     pub reason: String,
 }
 
+/// A link of a `structured` source that could not be found in full for one parent record: a
+/// compare call failed or left pages unread, a tag has no usable `order` value, or the tags were
+/// not all read. The changes the link found before it keep their link; the parent's other changes
+/// get none in that run.
+#[derive(Debug, Clone)]
+pub struct LinkFailure {
+    /// The parent record's raw id, at its mapping's `id`.
+    pub parent: String,
+    /// The link's compare operation, its `changes` operation and its relation.
+    pub operation: String,
+    pub changes: String,
+    pub relation: String,
+    pub reason: String,
+}
+
 /// Consecutive runs a parent's child call may fail and still hold the window; from this many on,
 /// the parent is skipped.
 pub const CHILD_FAILURE_LIMIT: u32 = 3;
@@ -309,7 +330,9 @@ pub const CHILD_FAILURE_LIMIT: u32 = 3;
 /// The documents of one source. `window` fills `{since}` and `{until}` in a `connectors`
 /// source's inputs, and `child_failures` counts the consecutive runs each parent's child call
 /// failed in; the other kinds use neither. `max_context` caps the characters of thread context a
-/// record of a `files` source carries (the policy's `max_chars_per_document`).
+/// record of a `files` source carries (the policy's `max_chars_per_document`). `redactor` is the
+/// instance's redaction policy, with which a `structured` source's links order and match records
+/// by the identities the run gives them.
 pub fn fetch(
     settings: &m::SourceSettings,
     connectors: &Connectors,
@@ -317,13 +340,12 @@ pub fn fetch(
     window: &Window,
     child_failures: &BTreeMap<String, u32>,
     max_context: usize,
+    redactor: Option<&crate::redact::Redactor>,
 ) -> Result<Fetched, FetchError> {
     let documents = |documents| Fetched {
         documents,
-        unread: Vec::new(),
-        skipped: Vec::new(),
         child_failures: child_failures.clone(),
-        failed_children: Vec::new(),
+        ..Fetched::default()
     };
     match settings {
         m::SourceSettings::Web(web) => fetch_web(web, connectors).map(documents),
@@ -336,7 +358,7 @@ pub fn fetch(
         }
         m::SourceSettings::Structured(st) => match &st.input {
             m::StructuredInput::Connectors(c) => {
-                fetch_structured(st, c, connectors, window).map(|mut fetched| {
+                fetch_structured(st, c, connectors, window, redactor).map(|mut fetched| {
                     fetched.child_failures = child_failures.clone();
                     fetched
                 })
@@ -471,17 +493,26 @@ fn fetch_structured_files(
 /// ([`crate::structured::child_key`]). A child call that fails leaves that parent's records of
 /// the operation unread and is named in `failed_children`; the parent and its other children are
 /// read.
+///
+/// After its children, each of the source's `links` is found for the parent ([`compare_links`]):
+/// what it links goes to `links`, by the identities the run gives the records (`redactor` is the
+/// instance's redaction policy, which they depend on), and a link not found in full goes to
+/// `failed_links`.
 fn fetch_structured(
     st: &m::StructuredSource,
     c: &m::StructuredConnectors,
     connectors: &Connectors,
     window: &Window,
+    redactor: Option<&crate::redact::Redactor>,
 ) -> Result<Fetched, FetchError> {
     let mut docs = Vec::new();
     let mut unread = Vec::new();
     let mut keys = BTreeSet::new();
     let mut failed_children = Vec::new();
+    let mut links: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
+    let mut failed_links = Vec::new();
     let prefix = crate::structured::prefix(st);
+    let source = crate::structured::Source::new(st, redactor);
     let children = c.children.as_deref().unwrap_or_default();
     let invoker = |operation: &str| {
         let operation = operation.to_string();
@@ -497,21 +528,32 @@ fn fetch_structured(
             &mut unread,
         )?;
         for (parent, record) in structured_records(st, &records, &mut keys, &mut docs) {
+            // Each child's records read for this parent, with their raw ids, and whether the
+            // call read them all.
+            let mut read: BTreeMap<&str, Read> = BTreeMap::new();
             for child in children {
+                let mut left = Vec::new();
                 let found = walk(
                     &mut invoker(&child.operation),
                     &format!("{}.{}", c.adapter, child.operation),
                     &render_json(&to_serde(&child.input), record),
                     &child.records,
                     child.paging.as_ref(),
-                    &mut unread,
+                    &mut left,
                 );
+                let whole = left.is_empty();
+                for why in left {
+                    note(&mut unread, why);
+                }
                 match found {
                     Ok(found) => {
                         let at = crate::structured::child_prefix(&prefix, &child.operation);
-                        mapped_records(&child.mapping, &found, &mut keys, &mut docs, |id| {
-                            crate::structured::child_key(&at, &parent, id)
-                        });
+                        let added =
+                            mapped_records(&child.mapping, &found, &mut keys, &mut docs, |id| {
+                                crate::structured::child_key(&at, &parent, id)
+                            });
+                        let records = added.into_iter().map(|(id, r)| (id, r.clone())).collect();
+                        read.insert(child.operation.as_str(), Read { records, whole });
                     }
                     Err(e) => failed_children.push(ChildFailure {
                         parent: parent.clone(),
@@ -520,14 +562,178 @@ fn fetch_structured(
                     }),
                 }
             }
+            for link in c.links.iter().flatten() {
+                let found = compare_links(
+                    &source,
+                    link,
+                    &mut invoker(&link.operation),
+                    &format!("{}.{}", c.adapter, link.operation),
+                    (&parent, record),
+                    read.get(link.tags.as_str()).filter(|r| r.whole),
+                    read.get(link.changes.as_str()),
+                );
+                for (change, tag) in found.links {
+                    links
+                        .entry(change)
+                        .or_default()
+                        .push((link.relation.clone(), tag));
+                }
+                if let Some(reason) = found.failure {
+                    failed_links.push(LinkFailure {
+                        parent: parent.clone(),
+                        operation: link.operation.clone(),
+                        changes: link.changes.clone(),
+                        relation: link.relation.clone(),
+                        reason,
+                    });
+                }
+            }
         }
     }
     Ok(Fetched {
         documents: docs,
         unread,
         failed_children,
+        links,
+        failed_links,
         ..Fetched::default()
     })
+}
+
+/// The records one child call read for one parent, each with its raw id, and whether the call read
+/// them all (no pages left unread).
+struct Read {
+    records: Vec<(String, Value)>,
+    whole: bool,
+}
+
+/// What one link found for one parent: each `(change identity, tag identity)` it links, and why it
+/// stopped short, when it did.
+struct Found {
+    links: Vec<(String, String)>,
+    failure: Option<String>,
+}
+
+/// `text` as an instant in milliseconds since the epoch, read as a document's `published` time is
+/// (`evidence::document_time_ms`: RFC 3339, a date alone, or epoch seconds).
+fn instant(text: &str) -> Option<i64> {
+    crate::evidence::document_time_ms(&Document {
+        key: String::new(),
+        origin: Origin::Record,
+        title: None,
+        description: None,
+        published: Some(text.to_string()),
+        text: String::new(),
+        hash: None,
+    })
+}
+
+/// The links `link` finds for one parent (its raw id and its record), from `tags`, the records of
+/// the link's `tags` operation read for the parent (`None` when they were not all read), and
+/// `changes`, those of its `changes` operation. A parent with no change read makes no call.
+///
+/// The tags are ordered by the time at `order`, ties by identity. One compare call per tag asks for
+/// the changes from the tag before it to it: its `input` is filled from the parent record, with
+/// `{from.…}` from the tag before and `{to.…}` from the tag, so the first tag's call fills
+/// `{from.…}` with nothing and asks for everything up to it. A record of the answer whose value at
+/// `change_id` is the id of one of the parent's changes, matched by the identity the run gives the
+/// change, links that change to the tag, unless an earlier tag already linked it: a change is
+/// linked to the first tag whose comparison holds it.
+///
+/// Nothing is linked from a call after one that failed or left pages unread, as a change of the
+/// range not read may be one a later range holds too; the links found before it stand. When a tag
+/// has no time at `order`, or the tags were not all read, no call is made: the tags cannot be put
+/// in order. Each of these is the answer's `failure`, naming the tag by its identity.
+fn compare_links(
+    source: &crate::structured::Source<'_>,
+    link: &m::CompareLink,
+    invoke: &mut dyn FnMut(&Value) -> Result<Value, FetchError>,
+    what: &str,
+    (parent, record): (&str, &Value),
+    tags: Option<&Read>,
+    changes: Option<&Read>,
+) -> Found {
+    let mut found = Found {
+        links: Vec::new(),
+        failure: None,
+    };
+    let identity = |operation: &str, raw: &str| source.child_identity(operation, parent, raw);
+    let changes: BTreeSet<String> = changes
+        .into_iter()
+        .flat_map(|r| &r.records)
+        .filter_map(|(raw, _)| identity(&link.changes, raw))
+        .collect();
+    if changes.is_empty() {
+        return found;
+    }
+    let Some(tags) = tags else {
+        found.failure = Some(format!("its {} records were not all read", link.tags));
+        return found;
+    };
+    let mut ordered: Vec<(i64, String, &Value)> = Vec::new();
+    let mut unusable: Vec<String> = Vec::new();
+    for (raw, tag) in &tags.records {
+        let Some(id) = identity(&link.tags, raw) else {
+            continue;
+        };
+        match crate::structured::text_at(tag, &link.order).and_then(|t| instant(&t)) {
+            Some(at) => ordered.push((at, id, tag)),
+            None => unusable.push(id),
+        }
+    }
+    if !unusable.is_empty() {
+        found.failure = Some(format!(
+            "{} {} no time at {:?} to order the tags by",
+            unusable.join(", "),
+            if unusable.len() == 1 { "has" } else { "have" },
+            link.order
+        ));
+        return found;
+    }
+    ordered.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
+    let mut linked: BTreeSet<String> = BTreeSet::new();
+    for (n, (_, tag, to)) in ordered.iter().enumerate() {
+        let mut context = match record {
+            Value::Object(fields) => fields.clone(),
+            _ => serde_json::Map::new(),
+        };
+        context.remove("from");
+        if let Some((_, _, from)) = n.checked_sub(1).map(|p| &ordered[p]) {
+            context.insert("from".into(), (*from).clone());
+        }
+        context.insert("to".into(), (*to).clone());
+        let mut left = Vec::new();
+        let answer = walk(
+            invoke,
+            what,
+            &render_json(&to_serde(&link.input), &Value::Object(context)),
+            &link.records,
+            link.paging.as_ref(),
+            &mut left,
+        );
+        let records = match answer {
+            Ok(records) if left.is_empty() => records,
+            Ok(_) => {
+                found.failure = Some(format!("the compare up to {tag}: {}", left.join("; ")));
+                return found;
+            }
+            Err(e) => {
+                found.failure = Some(format!("the compare up to {tag} failed: {e}"));
+                return found;
+            }
+        };
+        for r in &records {
+            let Some(change) = crate::structured::text_at(r, &link.change_id)
+                .and_then(|raw| identity(&link.changes, &raw))
+            else {
+                continue;
+            };
+            if changes.contains(&change) && linked.insert(change.clone()) {
+                found.links.push((change, tag.clone()));
+            }
+        }
+    }
+    found
 }
 
 fn s(v: &Value, key: &str) -> Option<String> {
@@ -809,7 +1015,7 @@ fn fetch_records(
         unread,
         skipped,
         child_failures: failures,
-        failed_children: Vec::new(),
+        ..Fetched::default()
     })
 }
 

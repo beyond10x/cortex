@@ -11,6 +11,12 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   and map each child record to its own node, linked to its parent by the edge its `parent:` names and
   dated by its `time` field. A child call that fails for one parent is named in `skipped`, and that
   parent's earlier children of the operation are kept.
+- A `structured` source can link each merged change to the first tag that ships it: a `links`
+  entry names the tag and change child operations and a compare operation, cortex calls the compare
+  once per tag (from the tag before it), and each change gets one edge, named by the link's
+  `relation`, to the earliest tag whose comparison holds it. A change merged before its tag gets its
+  edge in the run that first sees the tag. A failed compare call or a tag with no usable `order`
+  value is named in `skipped`, and that parent's edges already stored are kept.
 
 ### Changed
 

@@ -92,7 +92,9 @@ version as `binary_version`. `--no-units`, and a spec with no source, leave the 
    and further, at a character boundary, to what its evidence holds: EKR 0.0.30 takes an
    evidence payload of at most 16,384 bytes, header included.
 3. **Keep** documents whose key was never applied, and documents whose text hash changed once
-   their last application is `refresh_after_days` old, at most `max_documents_per_run`.
+   their last application is `refresh_after_days` old, at most `max_documents_per_run`. Two
+   changes do not wait for that window: a record read from a file, and a change of a `structured`
+   source whose text differs from the one last applied only in its links to tags.
 4. **Issue evidence.** cortex mints one evidence item per document; the model never does. The
    item is observed when the document says it was written: a web page's published time or a
    record's `time`, read as RFC 3339, as a date alone (00:00 UTC) or as epoch seconds with an

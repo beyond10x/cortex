@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-07T22:59:48Z",
+  "actor": "human:timo",
+  "artifact": "story:structured-compare-links",
+  "kind": "story",
+  "revision": 26,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "package-scoped steps on wave/20261007d 307261b, 8 steps each exit 0 (ess validate, task drift, task docs-check, fmt, clippy -D warnings, cargo test -p cortex-cli, cargo test -p cortex-docs, --list): 42 suites, 536 passed, 0 failed, 0 ignored (ess 0.55.0, ekr 0.0.32)",
+    "reference": "307261b4f6f52c974c5d262d31fcfad599f4c892"
+  }
+}

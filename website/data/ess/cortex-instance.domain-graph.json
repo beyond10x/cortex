@@ -67,6 +67,10 @@
           "type": "string"
         },
         {
+          "name": "unlinked_hash",
+          "type": "Optional<string>"
+        },
+        {
           "name": "applied_at",
           "type": "integer"
         }

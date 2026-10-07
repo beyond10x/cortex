@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 4487a02838aade2030f677471c9e9b85fd6311704607a6dc50426c77b894aecf
-// contract digest bfd8e8fad1346b12e8f4d4c8461f8d00bfe80b852f5491231c515012f28c7df0
+// model digest 724e4de48519154c6fb2cfa76120dddf9146deb7a9a2a170344f384298bf6ce0
+// contract digest 8e1213ec135a97d97b798315901e861ab9560bb7401301d5943fb3f16838dddd
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -27,6 +27,29 @@ pub struct ChildCall {
     pub records: String,
     /// `paging` — `Optional<cortex.instance.Paging>`.
     pub paging: Option<Paging>,
+}
+
+/// CompareLink — `cortex.instance.CompareLink`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompareLink {
+    /// `operation` — `String`.
+    pub operation: String,
+    /// `input` — `Json`.
+    pub input: crate::json::Value,
+    /// `records` — `String`.
+    pub records: String,
+    /// `paging` — `Optional<cortex.instance.Paging>`.
+    pub paging: Option<Paging>,
+    /// `tags` — `String`.
+    pub tags: String,
+    /// `changes` — `String`.
+    pub changes: String,
+    /// `order` — `String`.
+    pub order: String,
+    /// `change_id` — `String`.
+    pub change_id: String,
+    /// `relation` — `String`.
+    pub relation: String,
 }
 
 /// ConnectionRef — `cortex.instance.ConnectionRef`.
@@ -745,6 +768,8 @@ pub struct StructuredConnectors {
     pub paging: Option<Paging>,
     /// `children` — `Optional<List<cortex.instance.StructuredChild>>`.
     pub children: Option<Vec<StructuredChild>>,
+    /// `links` — `Optional<List<cortex.instance.CompareLink>>`.
+    pub links: Option<Vec<CompareLink>>,
 }
 
 /// StructuredFiles — `cortex.instance.StructuredFiles`.
@@ -1026,6 +1051,8 @@ pub struct SeenDocumentData {
     pub key: String,
     /// `content_hash` — `String`.
     pub content_hash: String,
+    /// `unlinked_hash` — `Optional<String>`.
+    pub unlinked_hash: Option<String>,
     /// `applied_at` — `Integer`.
     pub applied_at: i64,
 }

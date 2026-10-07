@@ -253,6 +253,20 @@ fn structured_child(
     })
 }
 
+fn compare_link(link: &s::CortexInstanceCompareLink, at: &str) -> Result<m::CompareLink, MapError> {
+    Ok(m::CompareLink {
+        operation: link.operation.clone(),
+        input: json(&link.input),
+        records: link.records.clone(),
+        paging: paging(&link.paging, at)?,
+        tags: link.tags.clone(),
+        changes: link.changes.clone(),
+        order: link.order.clone(),
+        change_id: link.change_id.clone(),
+        relation: link.relation.clone(),
+    })
+}
+
 fn structured(
     st: &s::CortexInstanceStructuredSource,
     at: &str,
@@ -275,6 +289,16 @@ fn structured(
                                 .map(|(n, child)| {
                                     structured_child(child, &format!("{at}.children[{n}]"))
                                 })
+                                .collect::<Result<_, _>>()?,
+                        ),
+                    },
+                    links: match &c.value.links {
+                        EssPresence::Absent => None,
+                        EssPresence::Present(links) => Some(
+                            links
+                                .iter()
+                                .enumerate()
+                                .map(|(n, link)| compare_link(link, &format!("{at}.links[{n}]")))
                                 .collect::<Result<_, _>>()?,
                         ),
                     },
