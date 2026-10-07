@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-07T07:50:51Z",
+  "actor": "human:timo",
+  "artifact": "story:conformance-checks-field-shapes",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "verification",
+    "source": "cargo test -p cortex-cli --test conformance with a mutant (QualityMeasured.cost_usd = \"twelve cents\"): old runner 1 passed, exit 0; new runner fails cortex.instance.MeasureQuality/outcome/measured 'is not of kind decimal', exit 101; without the mutant 2 passed, exit 0. VERIFIED",
+    "reference": "16c4b7d vs f3f007d"
+  }
+}
