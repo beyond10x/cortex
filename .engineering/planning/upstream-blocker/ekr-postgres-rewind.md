@@ -6,11 +6,11 @@ status: open
 title: EKR cannot put a PostgreSQL store's head back
 relations:
 - blocks: story:postgres-run-undo
-revision: 1
+revision: 2
 ---
 ## What would clear it
 
-An EKR release with a command that puts a PostgreSQL store's head back to an earlier revision (revision number and root) in one database transaction, refusing when the head is no longer where the caller expects (for example `ekr rewind --to <rev> --expect-head <rev>`), or a restore point it can create and restore. It must run through the Connectors launch like every other `ekr` of a connected store, so cortex never holds the credential.
+An EKR release with staged runs: a stage forked from the base at the head, every one-shot verb opening it with `EKR_STAGE=<id>` or `--stage <id>` (`ontology`, `snapshot`, `quality`, `propose`, `validate`, `commit`, `apply-extraction`), `ekr stage publish <id> --expect-head <rev>` and an abandon. The design is chosen (2026-10-07; `story:postgres-run-undo` § Design); the release is not out. A rewind command is not coming: EKR keeps committed revisions.
 
 ## Found
 
