@@ -451,7 +451,10 @@ A run writes the links it finds into each change's record, after cleaning, as th
 `cortex.links` (a list of `{"relation", "tag"}`, each tag by its identity), and the change's
 mapped values name each tag under the relation. So a link is part of the text the run compares with
 the text it last applied: a change applied before its tag existed is applied again in the run that
-first sees the tag, and gains its edge. The change names its tag by all the tag's aliases, and the
+first sees the tag, and gains its edge, whatever `refresh_after_days`. The run remembers each
+change's text without its links too, so a change whose text differs from the one it last applied
+only in its links is not held back by the refresh window; one whose text changed besides waits, as
+any document does. The change names its tag by all the tag's aliases, and the
 ontology gets the relation from the changes' node type to the tags'. A `cortex.links` member the
 provider wrote into a change is replaced, and none is read from any other record; no mapping path
 reads it, as a path splits at `.`. With `dropped: Supersede`, a link a change no longer has is ended
@@ -463,10 +466,13 @@ tags not all read (their child call failed or left pages unread). The run names 
 identity, the compare operation and the reason, the tag by its identity, in `skipped`. The changes
 the calls before it linked keep their links; the parent's other changes get none in that run, as
 the range not read may hold a change a later range holds too. With a tag out of order no range is
-known, so no call is made for that parent. None of that parent's changes has a value ended
-(`dropped: Supersede`), the links stored before among them; a change that loses its link for the
-run is applied again without it, and again with it once a run finds it. The failure does not hold
-the window, as a failed child call does not.
+known, so no call is made for that parent. With `dropped: Supersede`, the run ends none of the
+links of that relation the parent's changes hold in the store, for as long as the failure lasts,
+however many runs that is. Every other value of those
+changes ends as it would without the link, so a change the parent no longer lists loses its other
+values while its stored link stays. A change that loses its link for the run is applied again
+without it, at once whatever `refresh_after_days`, and again with it once a run finds it. The
+failure does not hold the window, as a failed child call does not.
 
 **Evidence and rejections.** Each record is stored as the evidence every fact from it cites: a
 `Source:` header, its mapped values (`Mapped values:`, one `<label>: <value>` line each for its
@@ -489,7 +495,7 @@ applies. Shorten or unmap the value at the source to clear it. Change detection,
 
 | field | meaning |
 |---|---|
-| `refresh_after_days` | a document whose text changed is extracted again only when it was last applied at least this many days ago; 0 or more |
+| `refresh_after_days` | a document whose text changed is extracted again only when it was last applied at least this many days ago; 0 or more. A record read from a file ([`kind: files`](#kind-files)) and a `structured` source's change whose text changed only in its links ([`kind: structured`](#kind-structured)) wait for nothing |
 | `change` | how a change is detected; `ContentHash` is the only value |
 | `max_documents_per_run` | the most documents one run extracts; above 0 |
 | `max_chars_per_document` | longer text is cut to this many characters; above 0. Text is also cut, at a character boundary, to what a 16,384-byte evidence payload holds after its header (EKR 0.0.30's bound), so about 5,400 characters of a three-byte script such as Chinese fit. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |

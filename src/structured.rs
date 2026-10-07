@@ -290,6 +290,16 @@ struct Scope<'s> {
 /// link's `tags`, which the changes linked to it name.
 pub type Parents = BTreeMap<String, Vec<String>>;
 
+/// Values a run keeps although it did not list them, with `dropped: Supersede`
+/// ([`Source::ended`]): those of the records whose identities start with `prefix`
+/// ([`Source::failed_child`]). Every value, after a child call that failed and left them unread;
+/// only the assertions of `relation`, after a link of that relation not found in full.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Held {
+    pub prefix: String,
+    pub relation: Option<String>,
+}
+
 /// One record of a run, as relation targets find it.
 struct Indexed {
     identity: String,
@@ -437,15 +447,22 @@ impl<'a> Source<'a> {
     /// Writes `links`, the `(relation, tag identity)` pairs the fetch found for record `doc`, whose
     /// key is its identity and whose text is cleaned ([`Source::prepare`]), into its text under
     /// [`LINKS`], so they are part of what the run hashes. For a record that is no link's change it
-    /// does nothing; a change with no link has the member removed, so its text holds only the
-    /// links this run found. An identity is clean, so the member needs no cleaning.
-    pub fn link(&self, doc: &mut Document, links: &[(String, String)]) {
+    /// does nothing and answers `None`; a change with no link has the member removed, so its text
+    /// holds only the links this run found. An identity is clean, so the member needs no cleaning.
+    ///
+    /// For a change, answers its text without the member: the run remembers the change by its
+    /// hash too (`unlinked_hash`, [`crate::state::SeenState::unlinked`]), so a change whose text
+    /// differs from the one last applied only in its links is applied again without waiting for
+    /// `refresh_after_days`.
+    pub fn link(&self, doc: &mut Document, links: &[(String, String)]) -> Option<String> {
         if self.scope(&doc.key).links.is_empty() {
-            return;
+            return None;
         }
         let Ok(Value::Object(mut record)) = serde_json::from_str::<Value>(&doc.text) else {
-            return;
+            return None;
         };
+        record.remove(LINKS);
+        let unlinked = Value::Object(record.clone()).to_string();
         let mut entries: Vec<Value> = Vec::new();
         for (relation, tag) in links {
             let entry = json!({"relation": relation, "tag": tag});
@@ -453,12 +470,11 @@ impl<'a> Source<'a> {
                 entries.push(entry);
             }
         }
-        if entries.is_empty() {
-            record.remove(LINKS);
-        } else {
+        if !entries.is_empty() {
             record.insert(LINKS.to_string(), Value::Array(entries));
         }
         doc.text = Value::Object(record).to_string();
+        Some(unlinked)
     }
 
     /// The links `record`, of `scope`, holds under [`LINKS`]: each `(relation, tag node type, tag
@@ -525,7 +541,8 @@ impl<'a> Source<'a> {
 
     /// For a child call of `operation` that failed for the parent whose raw id is `parent`: the
     /// parent's identity, and what the identities of its records of that operation start with,
-    /// whose values the run keeps ([`Source::ended`]).
+    /// whose values the run keeps ([`Held`]). A link not found in full for the parent names its
+    /// `changes` operation here, and the run keeps only that link's relation of those records.
     pub fn failed_child(&self, parent: &str, operation: &str) -> (String, Option<String>) {
         let identity = self.identity(parent);
         let held = self
@@ -723,9 +740,11 @@ impl<'a> Source<'a> {
     /// with that claim: a property with that value, or a relation of that name to a node one of
     /// whose names (its aliases and canonical name) is an alias of a target the record names now.
     /// A record in `unsettled` (read, but its current text not applied: held back, rejected, or
-    /// beyond the run) keeps every value, and so does a record whose identity starts with one of
-    /// `held` (the records of a child call that failed for their parent, which the run did not
-    /// read: [`Source::failed_child`]). Every other active assertion of this source is ended:
+    /// beyond the run) keeps every value, and so does a record whose identity starts with the
+    /// prefix of one of `held` with no relation (the records of a child call that failed for
+    /// their parent, which the run did not read: [`Source::failed_child`]); with a relation, the
+    /// record keeps the assertions of that relation only (the changes of a link not found in full
+    /// for their parent). Every other active assertion of this source is ended:
     /// a property is superseded by the latest active assertion of the same record, subject and
     /// property that is still listed and valid from no earlier than it (its replacement, which
     /// cites the evidence of the run that applied it); one with no such replacement — the record
@@ -738,7 +757,7 @@ impl<'a> Source<'a> {
         ontology: &Value,
         listed: &BTreeMap<String, Listed>,
         unsettled: &BTreeSet<String>,
-        held: &[String],
+        held: &[Held],
     ) -> Vec<crate::ekr::Operation> {
         use crate::ekr::Operation;
         let graph = &snapshot["graph"]["graph"];
@@ -824,9 +843,18 @@ impl<'a> Source<'a> {
                 }
                 true
             };
+            let relation = a["predicate"]["Relation"]
+                .as_str()
+                .and_then(|e| edge_types.get(e).copied());
+            let holds = |h: &Held, r: &str| {
+                r.starts_with(h.prefix.as_str())
+                    && h.relation
+                        .as_deref()
+                        .is_none_or(|name| relation == Some(name))
+            };
             let kept = records.iter().any(|r| {
                 unsettled.contains(r)
-                    || held.iter().any(|h| r.starts_with(h.as_str()))
+                    || held.iter().any(|h| holds(h, r))
                     || listed.get(r).is_some_and(lists)
             });
             mine.push(Mine { a, records, kept });
@@ -1388,6 +1416,57 @@ mod tests {
         );
     }
 
+    /// A held prefix with no relation keeps every value of its records; with a relation, only the
+    /// assertions of that relation, and every other value of those records ends as it would
+    /// without it. A record outside the prefix is not held.
+    #[test]
+    fn a_held_relation_keeps_only_its_own_assertions_of_the_records_it_holds() {
+        use crate::ekr::Operation;
+        let m = mapping();
+        let s = source(&m);
+        let (mut snapshot, mut ontology) = store(&[("age", "n1", "36", "e-1", 1)]);
+        let relation = |id: &str, edge_type: &str, object: &str, evidence: &str| {
+            json!({"id": id, "subject": {"Node": "n1"}, "predicate": {"Relation": edge_type},
+                "object": {"Node": object}, "evidence": [evidence], "lifecycle": "Active",
+                "valid_time": {"from": 1, "to": null}})
+        };
+        let assertions = snapshot["graph"]["graph"]["assertions"]
+            .as_object_mut()
+            .unwrap();
+        for (id, edge_type, object, evidence) in [
+            ("ship", "t-ship", "n9", "e-1"),
+            ("in", "t-in", "n8", "e-1"),
+            ("ship-2", "t-ship", "n9", "e-2"),
+        ] {
+            assertions.insert(id.into(), relation(id, edge_type, object, evidence));
+        }
+        ontology["edge_types"] = json!([{"id": "t-ship", "name": "shipped_in"},
+            {"id": "t-in", "name": "IN_PROJECT"}]);
+        // Neither record lists anything now.
+        let listed = BTreeMap::new();
+        let ended = |held: &[Held]| -> Vec<String> {
+            s.ended(&snapshot, &ontology, &listed, &BTreeSet::new(), held)
+                .into_iter()
+                .filter_map(|op| match op {
+                    Operation::Retract { assertion, .. } => Some(assertion),
+                    _ => None,
+                })
+                .collect()
+        };
+        let all = ["age", "in", "ship", "ship-2"];
+        let mut every = ended(&[]);
+        every.sort();
+        assert_eq!(every, all);
+        let held = |relation: Option<&str>| Held {
+            prefix: "dir:people.list:P-1".into(),
+            relation: relation.map(str::to_string),
+        };
+        assert_eq!(ended(&[held(None)]), ["ship-2"]);
+        let mut ended_with = ended(&[held(Some("shipped_in"))]);
+        ended_with.sort();
+        assert_eq!(ended_with, ["age", "in", "ship-2"]);
+    }
+
     /// A child of operation `tags.list`, dated at `$.at`, linked to its parent by `IN_PROJECT`.
     fn tags_child() -> m::StructuredChild {
         m::StructuredChild {
@@ -1643,14 +1722,21 @@ mod tests {
         // No link found: the provider's member is gone from the change, and kept on the parent,
         // where it is no link.
         let parent_text = parent.text.clone();
-        s.link(&mut parent, &[("shipped_in".into(), tag_id.clone())]);
+        assert_eq!(
+            s.link(&mut parent, &[("shipped_in".into(), tag_id.clone())]),
+            None
+        );
         assert_eq!(parent.text, parent_text);
-        s.link(&mut change, &[]);
+        let unlinked = s.link(&mut change, &[]);
         let record: Value = serde_json::from_str(&change.text).unwrap();
         assert!(record.get(LINKS).is_none(), "{record}");
+        assert_eq!(unlinked.as_deref(), Some(change.text.as_str()));
 
-        // A link found: in the text, leading the evidence, and named by the tag's aliases.
-        s.link(&mut change, &[("shipped_in".into(), tag_id.clone())]);
+        // A link found: in the text, leading the evidence, and named by the tag's aliases. The
+        // change's text without it is the text it had with none.
+        let without = change.text.clone();
+        let unlinked = s.link(&mut change, &[("shipped_in".into(), tag_id.clone())]);
+        assert_eq!(unlinked, Some(without));
         let record: Value = serde_json::from_str(&change.text).unwrap();
         assert_eq!(
             record[LINKS],

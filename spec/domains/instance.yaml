@@ -593,6 +593,7 @@ entities:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: key, type: String}
       - {name: content_hash, type: String}
+      - {name: unlinked_hash, type: Optional<String>}
       - {name: applied_at, type: Integer}
     invariants:
       - applied_at >= 0
@@ -1069,7 +1070,10 @@ commands:
       # tests/adversary_seed_partial.rs hold it.
       # UNMAPPED: `ran` records a SeenDocument of the source (content hash, time applied) for every
       # document it applied, and a run extracts only documents whose key no SeenDocument of the
-      # source carries, or whose hash differs once `refresh_after_days` have passed. ESS has no
+      # source carries, or whose hash differs once `refresh_after_days` have passed. A structured
+      # source's change record that holds links also records `unlinked_hash`, the hash of its text
+      # without them; a change whose text differs from the one applied only in its links is
+      # extracted at once, without waiting for `refresh_after_days`. ESS has no
       # effect that creates or updates one record per element of a collection (`instances:` is
       # refused on `creates:`, `affects:` only updates), so the per-source state file holds it and
       # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.
