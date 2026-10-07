@@ -1,8 +1,8 @@
 //! Runs every scenario of `spec/suite.json` (written by `ess verify conform synthesize`) against
 //! the generated behaviours over cortex's ports, in process. External branches are forced the way
 //! each scenario says, through the context the ports ask first; `RunSource`'s pipeline is replaced
-//! by a stand-in that answers `ran`. Every scenario must answer; an unknown step, value kind or
-//! scenario initial state fails rather than skips.
+//! by a stand-in that answers `ran`. Every scenario must answer; an unknown step, value kind,
+//! field shape or scenario initial state fails rather than skips.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -151,7 +151,96 @@ fn event(e: PublishedEvent) -> (String, Value) {
             }),
         ),
     };
+    // An `Optional` field the event leaves empty is absent, as the generated event schema states
+    // it (not required, never null). `json!` renders it null, and renders nothing else null.
+    let mut payload = payload;
+    if let Some(fields) = payload.as_object_mut() {
+        fields.retain(|_, value| !value.is_null());
+    }
     (format!("cortex.instance.{name}"), payload)
+}
+
+fn manifest_dir() -> std::path::PathBuf {
+    std::env::var("CARGO_MANIFEST_DIR")
+        .expect("cargo sets CARGO_MANIFEST_DIR")
+        .into()
+}
+
+fn suite() -> Value {
+    serde_json::from_slice(&std::fs::read(manifest_dir().join("spec/suite.json")).unwrap()).unwrap()
+}
+
+/// The pattern the generated event schema gives `field` of `event`, which a `decimal` must match.
+fn decimal_pattern(event: &str, field: &str) -> regex::Regex {
+    let path = manifest_dir()
+        .join("generated/schema/schema/events")
+        .join(format!("{event}.schema.json"));
+    let schema: Value = serde_json::from_slice(
+        &std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display())),
+    )
+    .unwrap();
+    let pattern = schema["properties"][field]["pattern"]
+        .as_str()
+        .unwrap_or_else(|| panic!("the {event} schema states no pattern for {field}"));
+    regex::Regex::new(pattern).unwrap()
+}
+
+/// Holds a published payload to the shape the suite states for its event: a field is present
+/// unless the suite marks it `optional`, a present value is of the stated `kind` (never null),
+/// and the payload carries no field the shape does not state.
+fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Value>) {
+    let fields = payload
+        .as_object()
+        .unwrap_or_else(|| panic!("{event}: {payload} is not an object"));
+    for field in fields.keys() {
+        assert!(
+            shape.contains_key(field),
+            "{event} carries {field}, which its shape does not state"
+        );
+    }
+    for (field, descriptor) in shape {
+        let descriptor = descriptor
+            .as_object()
+            .unwrap_or_else(|| panic!("{event}.{field}: unsupported shape {descriptor}"));
+        if let Some(key) = descriptor
+            .keys()
+            .find(|k| !matches!(k.as_str(), "holds" | "kind" | "optional"))
+        {
+            panic!("{event}.{field}: unsupported shape key {key}");
+        }
+        let holds = descriptor.get("holds").and_then(Value::as_str);
+        assert_eq!(
+            holds,
+            Some("primitive"),
+            "{event}.{field}: unsupported holds"
+        );
+        let optional = match descriptor.get("optional") {
+            None => false,
+            Some(Value::Bool(optional)) => *optional,
+            Some(other) => panic!("{event}.{field}: unsupported optional {other}"),
+        };
+        let kind = descriptor
+            .get("kind")
+            .and_then(Value::as_str)
+            .unwrap_or_else(|| panic!("{event}.{field}: no kind"));
+        assert!(
+            matches!(kind, "string" | "integer" | "decimal"),
+            "{event}.{field}: unsupported kind {kind}"
+        );
+        let Some(value) = fields.get(field) else {
+            assert!(optional, "{event} lacks {field}");
+            continue;
+        };
+        let of_kind = match kind {
+            "string" => value.is_string(),
+            "integer" => value.is_i64() || value.is_u64(),
+            "decimal" => value
+                .as_str()
+                .is_some_and(|v| decimal_pattern(event, field).is_match(v)),
+            _ => unreachable!("the kind was checked above"),
+        };
+        assert!(of_kind, "{event}.{field}: {value} is not of kind {kind}");
+    }
 }
 
 impl Scenario {
@@ -603,9 +692,7 @@ impl Scenario {
                     }
                 }
                 if let Some(shape) = step["shape"].as_object() {
-                    for field in shape.keys() {
-                        assert!(payload.get(field).is_some(), "{name} lacks {field}");
-                    }
+                    check_shape(name, payload, shape);
                 }
             }
             "expect_no_event" => {
@@ -720,11 +807,7 @@ impl Scenario {
 
 #[test]
 fn every_scenario_of_the_synthesized_suite_holds() {
-    let root = std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR");
-    let suite: Value = serde_json::from_slice(
-        &std::fs::read(std::path::Path::new(&root).join("spec/suite.json")).unwrap(),
-    )
-    .unwrap();
+    let suite = suite();
     // Every scenario starts from an empty registry (`Scenario::new`), which is the one initial
     // state a suite names.
     let initial = &suite["provenance"]["scenario_initial_state"];
@@ -763,4 +846,99 @@ fn every_scenario_of_the_synthesized_suite_holds() {
         scenarios.len(),
         failed.join("\n")
     );
+}
+
+/// The shape check, given the `QualityMeasured` shape the suite states, refuses every value that
+/// shape does not allow, so a scenario cannot pass on a key alone.
+#[test]
+fn the_shape_check_holds_each_field_to_the_shape_the_suite_states() {
+    let event = "cortex.instance.QualityMeasured";
+    let shape = suite()["scenarios"]["cortex.instance.MeasureQuality/outcome/measured"]["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .find(|step| step["event"] == event)
+        .and_then(|step| step["shape"].as_object())
+        .expect("the measured scenario states the QualityMeasured shape")
+        .clone();
+    let measured = json!({
+        "name": "n", "stamp": "s", "revision": 1, "seed": 2, "judged": 3, "passed": 2,
+        "unclear": 0, "rate": "0.6666", "lower": "0.2", "upper": "0.9", "cost_usd": "0.0200",
+    });
+    let holds = |payload: &Value, shape: &serde_json::Map<String, Value>| {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            check_shape(event, payload, shape)
+        }))
+        .is_ok()
+    };
+    let with = |field: &str, value: Value| {
+        let mut payload = measured.clone();
+        payload[field] = value;
+        payload
+    };
+    let without = |field: &str| {
+        let mut payload = measured.clone();
+        payload.as_object_mut().unwrap().remove(field);
+        payload
+    };
+    let restated = |field: &str, key: &str, value: Value| {
+        let mut shape = shape.clone();
+        shape[field][key] = value;
+        shape
+    };
+
+    assert!(holds(&measured, &shape), "a well-formed payload holds");
+    assert!(
+        holds(&without("cost_usd"), &shape),
+        "an optional field may be absent"
+    );
+    assert!(
+        holds(&without("rate"), &shape),
+        "an optional field may be absent"
+    );
+
+    let refused = [
+        (
+            "a decimal is a decimal string",
+            with("cost_usd", json!("twelve cents")),
+        ),
+        ("a decimal is a string", with("cost_usd", json!(0.02))),
+        (
+            "an empty optional is absent, not null",
+            with("cost_usd", Value::Null),
+        ),
+        (
+            "a decimal matches the schema's pattern",
+            with("lower", json!("1e-3")),
+        ),
+        ("a field not marked optional is present", without("lower")),
+        ("an integer is a number", with("judged", json!("3"))),
+        ("an integer has no fraction", with("judged", json!(1.5))),
+        ("a string is a string", with("stamp", json!(7))),
+        (
+            "no field the shape does not state",
+            with("dir", json!("runs/1")),
+        ),
+    ];
+    for (rule, payload) in &refused {
+        assert!(!holds(payload, &shape), "{rule}: {payload} held");
+    }
+    for (rule, shape) in [
+        (
+            "an unknown kind",
+            restated("cost_usd", "kind", json!("money")),
+        ),
+        (
+            "an unknown holds",
+            restated("cost_usd", "holds", json!("record")),
+        ),
+        ("an unknown key", restated("cost_usd", "unit", json!("USD"))),
+    ] {
+        // Refused whether or not the payload carries the field.
+        assert!(!holds(&measured, &shape), "{rule} was not refused");
+        assert!(
+            !holds(&without("cost_usd"), &shape),
+            "{rule} on an absent field was not refused"
+        );
+    }
 }
