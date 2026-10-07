@@ -25,7 +25,7 @@ scope:
   path: tests/common/mod.rs
 - confidence: inferred
   path: tests/store_backend.rs
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-06T07:36:01Z", actor: "agent:claude", revision: 5}
 - {from: "proposed", to: "active", at: "2026-10-06T07:36:01Z", actor: "agent:claude", revision: 6}
@@ -55,3 +55,16 @@ mimics only the Connectors verb.
 - A new unit test in `src/ekr.rs` asserts that the postgres `Store::cmd()` program is the `connectors` binary with `connections launch … -- ` before the `ekr` path.
 
 ## Files (from the design, unverified) `spec/domains/instance.yaml`, `generated/spec-types/types.rs` (regenerated), `src/model_map.rs`, `src/instance.rs`, `src/ekr.rs`, `src/schedule.rs`, `src/main.rs`, `tests/store_backend.rs`, `tests/common/mod.rs`.
+
+## Design
+
+Design B, chosen 2026-10-06 by the operator ("do it"), as built in `8514d95` (its commit message is the source of each line):
+
+- **Who holds the password:** Connectors, in its own secret backend. cortex never reads it, and no file cortex writes (spec copy, registry, unit files, logs) holds it.
+- **How `ekr` gets it:** every `ekr` that opens a PostgreSQL store with `connection` set (runs, the run gate, `quality`, `schema`, `adopt`, the printed MCP line, the viewer unit) starts as `connectors connections launch --adapter A --connection C --consumer ekr --args '<JSON array>'`, after `ensure_ready`. Connectors hands the connection's `{"password": …}` document on descriptor 3; the `ekr.postgres/1` names `"password_file": "/proc/self/fd/3"` (EKR 0.0.32).
+- **Which `ekr` runs:** the operator pins the binary as the Connectors consumer `ekr`, with `pass_env = ["EKR_"]`, so only the `EKR_*` environment cortex sets reaches it.
+- **Refusals:** `create`, `update` and `adopt` refuse a connection whose `ekr.postgres/1` does not name that `password_file`, and a `schema_connection` without `connection`; the reasons name fields, never values.
+- **Provisioning:** `schema_connection` launches `ekr postgres-schema` the same way; without it, provisioning runs directly with the operator's own owner configuration (`website/docs/operating.md`).
+- **Without `connection`:** `ekr` starts directly and reads the password where its configuration says, as before.
+
+Rejected alternatives are not recorded here: the design note that compared them was in the unit report of wave 20261006i, which was not kept.
