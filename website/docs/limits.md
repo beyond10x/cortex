@@ -90,7 +90,8 @@ stand; [Status](./status.mdx) lists what is planned.
   its URL. URL evidence waits on an EKR release that admits it.
 - **Change detection is a content hash.** `ContentHash` is the only `change` value. A document
   whose text changed is extracted again only after `refresh_after_days`; cortex retracts nothing
-  it applied from the earlier text.
+  it applied from the earlier text. A record read from a file, and a `structured` change whose
+  links to tags alone changed, are applied again on the next run.
 - **Text only.** A files source skips files that are not UTF-8 text; web sources read the text the
   websearch adapter returns.
 

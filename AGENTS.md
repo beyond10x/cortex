@@ -104,7 +104,10 @@ this repository and published by the organisation's reusable workflow.
   and open or merge pull requests with `b10x-gates api`. The shared `Security and privacy` gate
   refuses a commit after the enrolled baseline that is not authored by `b10x-bot[bot]`
   ("inadmissible authorship"), and a `/home/<name>/` path in any commit, which admits no exception.
-  Run `b10x-gates scan-text` on every staged file first and check its own exit status.
+  Run `b10x-gates scan-text --repository beyond10x/cortex --policy <policy>` on every staged file
+  first and check its own exit status. `<policy>` is `policy.json` in the private `gates-policy`
+  checkout; without `--policy` the scan exits 1 with `protected file unavailable` and has checked
+  nothing.
 - **Committed code is Rust.** Probes in other languages stay outside the repository. The one
   exception is `website/`, whose Docusaurus configuration is TypeScript as in canon and loom.
 - **Fetched text is untrusted.** It is masked for credential shapes (`src/mask.rs`), stored as
