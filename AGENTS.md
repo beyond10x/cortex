@@ -47,7 +47,7 @@ A change here that moves none of these is a question for the operator, not a tas
 
 ## The specification comes first
 
-`spec/` is an ESS specification (`ess/20`, pinned to ESS 0.52.0 in `spec/ess-inputs.yaml`). It is
+`spec/` is an ESS specification (`ess/20`, pinned to ESS 0.55.0 in `spec/ess-inputs.yaml`). It is
 the source of truth for every noun, command, outcome, error and event.
 
 - Change `spec/`, then run `task generate`. Never edit anything under `generated/` or
@@ -162,7 +162,7 @@ this repository and published by the organisation's reusable workflow.
 | `ekr apply-extraction` takes an evidence payload of at most 16,384 bytes: it reads the payload as a YAML sequence of one element per byte and rejects every fact citing a longer one (`transaction document limit: sequence_elements (at most 16384)`) | EKR 0.0.30 `ekr` help on `payload`; measured on 2026-10-06 (`tests/evidence_bound.rs`: 16,384 bytes apply) | `src/evidence.rs` cuts each payload at a character boundary to `PAYLOAD_MAX_BYTES`, and a run cuts the text it shows the model to what the payload holds. The cut keeps whole characters, not grapheme clusters (a letter can lose a following combining mark); the model text is cut at the same byte, so a citation still matches its evidence. A structured record's evidence leads with its mapped values; a record whose mapped values alone exceed the bound is skipped |
 | Claude's `--json-schema` refuses a schema that names draft 2020-12 in `$schema` | `claude` 2.1.289 | the `$schema` key is removed before the call |
 | A schema transaction cites no evidence: EKR holds `transaction.evidence` to the evidence its assertions cite, and a schema change travels alone, so a non-empty set is `evidence-set-mismatch` | EKR 0.0.31 `docs/cli.md` ("Evolve the schema"); measured on 2026-10-06 | `cortex schema` records each change's facts and evidence in `schema/<stamp>/proposals.jsonl` beside its transaction |
-| `ess generate --kind docs` titles the domain page with the domain's display name (`Instances`), which equals a view's name, and Docusaurus then moves that view's anchor | ESS 0.52.0, `spec/domains/instance.yaml` `naming.display` | `cortex-docs` drops the page's level-one heading; the front-matter title heads the page |
+| `ess generate --kind docs` titles the domain page with the domain's display name (`Instances`), which equals a view's name, and Docusaurus then moves that view's anchor | ESS 0.55.0, `spec/domains/instance.yaml` `naming.display` | `cortex-docs` drops the page's level-one heading; the front-matter title heads the page |
 
 ## Build and verify
 

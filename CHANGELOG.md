@@ -5,6 +5,11 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+### Changed
+
+- cortex is specified and generated with ESS 0.55.0 (was 0.52.0); `spec/suite.json` is
+  `ess-conformance/34`, and the conformance runner checks `expect_event_values` steps.
+
 ## 0.1.0 — 2026-10-07
 
 ### Added
