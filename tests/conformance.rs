@@ -120,8 +120,10 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "judged": e.judged,
                 "passed": e.passed,
                 "unclear": e.unclear,
+                "rate": e.rate.map(|r| r.0),
                 "lower": e.lower.0,
                 "upper": e.upper.0,
+                "cost_usd": e.cost_usd.map(|c| c.0),
             }),
         ),
         PublishedEvent::SchemaChangesProposed(e) => (
@@ -136,6 +138,7 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "recorded_only": e.recorded_only,
                 "invalid": e.invalid,
                 "dropped": e.dropped,
+                "cost_usd": e.cost_usd.map(|c| c.0),
             }),
         ),
         PublishedEvent::SourceRan(e) => (

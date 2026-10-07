@@ -28,6 +28,8 @@ pub struct Shared {
     pub strings: VecDeque<String>,
     pub integers: VecDeque<i64>,
     pub decimals: VecDeque<Decimal>,
+    /// Values for `Optional<Decimal>` fields: `None` where there is nothing to report.
+    pub optional_decimals: VecDeque<Option<Decimal>>,
     /// The report of the last run, for the caller to print.
     pub last_run: Option<Report>,
 }
@@ -133,6 +135,14 @@ impl Context for Ports {
             .pop_front()
             .unwrap_or_else(|| Decimal("0".into()))
     }
+    /// Nothing to report when the caller queued no value.
+    fn generate_optional_decimal(&mut self) -> Option<Decimal> {
+        self.shared
+            .borrow_mut()
+            .optional_decimals
+            .pop_front()
+            .flatten()
+    }
     fn generate_string(&mut self) -> String {
         self.shared
             .borrow_mut()
@@ -143,6 +153,11 @@ impl Context for Ports {
     fn external(&mut self, command: ExternalCommand<'_>, outcome: &'static str) -> bool {
         self.decided(command.name(), outcome)
     }
+}
+
+/// A cost in USD as an event carries it: four places, `None` when an answer carried no cost.
+pub fn cost_decimal(cost_usd: Option<f64>) -> Option<Decimal> {
+    cost_usd.map(|c| Decimal(format!("{c:.4}")))
 }
 
 fn store(ports: &mut Ports, data: m::SourceData, state: m::SourceState) {
@@ -255,7 +270,7 @@ impl Ports {
                     source_id,
                     documents_new: report.documents_new,
                     documents_applied: report.documents_applied,
-                    cost_usd: report.cost_usd.map(|c| Decimal(format!("{c:.4}"))),
+                    cost_usd: cost_decimal(report.cost_usd),
                 };
                 self.shared.borrow_mut().last_run = Some(report);
                 m::RunSourceOutcome::Ran { source_ran: ran }
@@ -339,7 +354,7 @@ impl RunSourceBehavior for Ports {
             source_id: input.source_id,
             documents_new: report.documents_new,
             documents_applied: report.documents_applied,
-            cost_usd: report.cost_usd.map(|c| Decimal(format!("{c:.4}"))),
+            cost_usd: cost_decimal(report.cost_usd),
         };
         self.shared.borrow_mut().last_run = Some(report);
         Ok(m::RunSourceOutcome::Ran { source_ran: ran })

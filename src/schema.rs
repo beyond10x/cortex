@@ -17,7 +17,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use cortex_model::instance as m;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 use crate::ekr::{Operation, PropertyDecl, Store};
 use crate::extract::{cost_text, Model};
@@ -1008,17 +1008,6 @@ fn apply(
             record.note = Some(e);
         }
     }
-}
-
-/// The JSON object of a [`Proposed`] beside the event's fields: what the event cannot carry.
-pub fn extra(p: &Proposed) -> Map<String, Value> {
-    let mut m = Map::new();
-    m.insert(
-        "cost_usd".into(),
-        json!(p.cost_usd.map(|c| format!("{c:.4}"))),
-    );
-    m.insert("dir".into(), json!(p.dir));
-    m
 }
 
 #[cfg(test)]

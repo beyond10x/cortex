@@ -1261,11 +1261,6 @@ commands:
             reason: {generated: true}
         summary: No pass rate was written; the verdicts of the batches judged before stay.
 
-      # UNMAPPED: the measurement's `rate` (null when nothing was judged) and `cost_usd` (null as
-      # soon as one answer carried no cost, never 0) are not on QualityMeasured: ESS 0.52.0
-      # synthesis answers an `Optional` `{generated: true}` payload field with a constant `None`,
-      # so the event could not carry them. The command line prints both beside the event's fields,
-      # `fact-quality.json` holds `rate`, and tests/quality.rs holds both. https://github.com/beyond10x/ess/issues/467
       - name: measured
         updates: cortex.instance.Instance
         instance: name
@@ -1280,13 +1275,17 @@ commands:
             judged: {generated: true}
             passed: {generated: true}
             unclear: {generated: true}
+            rate: {generated: true}
             lower: {generated: true}
             upper: {generated: true}
+            cost_usd: {generated: true}
         summary: >-
           Every sampled fact was judged. `judged` counts them, `passed` those judged `yes` and
-          `unclear` those the judge could not tell, which count as failed. `lower` and `upper` are
-          the Wilson interval of the pass rate at 95 %, 0 and 1 when the store holds no fact to
-          draw. `revision` and `seed` draw the same sample again.
+          `unclear` those the judge could not tell, which count as failed. `rate` is the pass rate,
+          absent when the store holds no fact to draw; `lower` and `upper` are its Wilson interval
+          at 95 %, 0 and 1 then. `cost_usd` is what the judge's model calls cost in USD, absent as
+          soon as one answer carried no cost and never 0 for it. `revision` and `seed` draw the
+          same sample again.
 
       - name: no-such-instance
         unknown_instance: true
@@ -1334,10 +1333,6 @@ commands:
             reason: {generated: true}
         summary: Nothing was applied and no `proposals.jsonl` was written.
 
-      # UNMAPPED: the cost of the model calls (null as soon as one answer carried no cost) is not on
-      # SchemaChangesProposed, as for QualityMeasured: ESS 0.52.0 synthesis answers an `Optional`
-      # `{generated: true}` payload field with a constant `None`. The command line prints it beside
-      # the event's fields, and tests/schema.rs holds it. https://github.com/beyond10x/ess/issues/467
       - name: proposed
         when: dry_run
         updates: cortex.instance.Instance
@@ -1355,9 +1350,12 @@ commands:
             recorded_only: {generated: true}
             invalid: {generated: true}
             dropped: {generated: true}
+            cost_usd: {generated: true}
         summary: >-
           A dry run: every proposal not dropped is recorded and none is applied; `applied` and
-          `refused` are 0, and a change EKR would be asked to apply is `dry-run`.
+          `refused` are 0, and a change EKR would be asked to apply is `dry-run`. `cost_usd` is
+          what the model calls cost in USD, absent as soon as one answer carried no cost and never
+          0 for it.
 
       - name: applied
         updates: cortex.instance.Instance
@@ -1375,10 +1373,13 @@ commands:
             recorded_only: {generated: true}
             invalid: {generated: true}
             dropped: {generated: true}
+            cost_usd: {generated: true}
         summary: >-
           Every proposal EKR accepted is committed, each as its own schema transaction and schema
           version; `applied` counts them, 0 when it accepted none. `revision` is the head the
           sample was drawn at, so `ekr ontology --at <revision>` still answers the schema before.
+          `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no
+          cost and never 0 for it.
 
       - name: no-such-instance
         unknown_instance: true
@@ -1448,8 +1449,10 @@ events:
       - {name: judged, type: Integer}
       - {name: passed, type: Integer}
       - {name: unclear, type: Integer}
+      - {name: rate, type: Optional<Decimal>}
       - {name: lower, type: Decimal}
       - {name: upper, type: Decimal}
+      - {name: cost_usd, type: Optional<Decimal>}
 
   # `proposed` counts the lines of `proposals.jsonl`; `applied`, `refused`, `recorded_only` and
   # `invalid` count them by status, and the rest are `dry-run`. `dropped` counts the proposals
@@ -1465,6 +1468,7 @@ events:
       - {name: recorded_only, type: Integer}
       - {name: invalid, type: Integer}
       - {name: dropped, type: Integer}
+      - {name: cost_usd, type: Optional<Decimal>}
 
 views:
   - name: cortex.instance.Instances

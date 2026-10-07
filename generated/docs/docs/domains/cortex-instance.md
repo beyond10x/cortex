@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest a5cdddd9e44c55f5312801a678ef3ff218957a546f5dc3e857e490a3aa3cca15
-contract digest slice-sha256/2:b5c1fffcca71606fe8e9c44e881856b37ae97c97a68cba6165d2449bad664144
+model digest baa6b022b0cc1c204b3bf7ee74c0509918a69054e4dfa82fba89ab9da19c30e9
+contract digest slice-sha256/2:81310f63a3f86377583f8de316f242c2e516e5001c9a0c53de91cb771a7aac31
 do not edit: regenerate with `ess generate`
 -->
 
@@ -782,7 +782,7 @@ It has four outcomes.
 
 **`judge-failed`** — No pass rate was written; the verdicts of the batches judged before stay. Decided outside the input: A judge's model call fails, times out, answers no valid verdicts or finds the budget spent, or the redaction policy refuses what the judge would be shown. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.JudgeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`measured`** — Every sampled fact was judged. `judged` counts them, `passed` those judged `yes` and `unclear` those the judge could not tell, which count as failed. `lower` and `upper` are the Wilson interval of the pass rate at 95 %, 0 and 1 when the store holds no fact to draw. `revision` and `seed` draw the same sample again. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.QualityMeasured`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+**`measured`** — Every sampled fact was judged. `judged` counts them, `passed` those judged `yes` and `unclear` those the judge could not tell, which count as failed. `rate` is the pass rate, absent when the store holds no fact to draw; `lower` and `upper` are its Wilson interval at 95 %, 0 and 1 then. `cost_usd` is what the judge's model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. `revision` and `seed` draw the same sample again. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.QualityMeasured`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
 **`no-such-instance`** — Nothing was measured. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
@@ -802,9 +802,9 @@ It has five outcomes.
 
 **`propose-failed`** — Nothing was applied and no `proposals.jsonl` was written. Decided outside the input: A model call fails, times out, answers no valid proposals or finds the budget spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ProposeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`proposed`** — A dry run: every proposal not dropped is recorded and none is applied; `applied` and `refused` are 0, and a change EKR would be asked to apply is `dry-run`. Taken when `dry_run` holds of the input. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaChangesProposed`. A test reaches it by constructing an input that satisfies that condition.
+**`proposed`** — A dry run: every proposal not dropped is recorded and none is applied; `applied` and `refused` are 0, and a change EKR would be asked to apply is `dry-run`. `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. Taken when `dry_run` holds of the input. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaChangesProposed`. A test reaches it by constructing an input that satisfies that condition.
 
-**`applied`** — Every proposal EKR accepted is committed, each as its own schema transaction and schema version; `applied` counts them, 0 when it accepted none. `revision` is the head the sample was drawn at, so `ekr ontology --at <revision>` still answers the schema before. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaChangesProposed`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+**`applied`** — Every proposal EKR accepted is committed, each as its own schema transaction and schema version; `applied` counts them, 0 when it accepted none. `revision` is the head the sample was drawn at, so `ekr ontology --at <revision>` still answers the schema before. `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaChangesProposed`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
 **`no-such-instance`** — Nothing was proposed. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
@@ -974,8 +974,10 @@ It carries:
 - `judged` — `Integer`
 - `passed` — `Integer`
 - `unclear` — `Integer`
+- `rate` — `Optional<Decimal>`, which may be absent
 - `lower` — `Decimal`
 - `upper` — `Decimal`
+- `cost_usd` — `Optional<Decimal>`, which may be absent
 
 Emitted by `cortex.instance.MeasureQuality` on its `measured` outcome.
 
@@ -1009,6 +1011,7 @@ It carries:
 - `recorded_only` — `Integer`
 - `invalid` — `Integer`
 - `dropped` — `Integer`
+- `cost_usd` — `Optional<Decimal>`, which may be absent
 
 Emitted by `cortex.instance.ProposeSchemaChanges` on its `proposed` and `applied` outcomes.
 
@@ -1341,4 +1344,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `a5cdddd9e44c55f5312801a678ef3ff218957a546f5dc3e857e490a3aa3cca15` · contract digest `slice-sha256/2:b5c1fffcca71606fe8e9c44e881856b37ae97c97a68cba6165d2449bad664144`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `baa6b022b0cc1c204b3bf7ee74c0509918a69054e4dfa82fba89ab9da19c30e9` · contract digest `slice-sha256/2:81310f63a3f86377583f8de316f242c2e516e5001c9a0c53de91cb771a7aac31`. Do not edit this file; change the specification and regenerate it with `ess generate`.

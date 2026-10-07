@@ -26,12 +26,22 @@
     "unclear": {
       "type": "integer"
     },
+    "rate": {
+      "type": "string",
+      "format": "decimal",
+      "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
     "lower": {
       "type": "string",
       "format": "decimal",
       "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
     },
     "upper": {
+      "type": "string",
+      "format": "decimal",
+      "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
+    "cost_usd": {
       "type": "string",
       "format": "decimal",
       "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
@@ -52,8 +62,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "a5cdddd9e44c55f5312801a678ef3ff218957a546f5dc3e857e490a3aa3cca15",
-    "contract_digest": "slice-sha256/2:be43c818591fbe5f6f36021cec0dc3794145c0f395ad0720c7cb6dc17731e0d5",
+    "source_digest": "baa6b022b0cc1c204b3bf7ee74c0509918a69054e4dfa82fba89ab9da19c30e9",
+    "contract_digest": "slice-sha256/2:2ef494f8abdbae585877f8557a977cabbd56c93342535e1feba1c4be3a023cd5",
     "regenerate": "ess generate"
   },
   "$defs": {

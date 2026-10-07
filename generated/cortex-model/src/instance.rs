@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest a5cdddd9e44c55f5312801a678ef3ff218957a546f5dc3e857e490a3aa3cca15
-// contract digest b5c1fffcca71606fe8e9c44e881856b37ae97c97a68cba6165d2449bad664144
+// model digest baa6b022b0cc1c204b3bf7ee74c0509918a69054e4dfa82fba89ab9da19c30e9
+// contract digest 81310f63a3f86377583f8de316f242c2e516e5001c9a0c53de91cb771a7aac31
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -1583,7 +1583,7 @@ pub enum MeasureQualityOutcome {
     },
     /// `measured` — otherwise.
     ///
-    /// Every sampled fact was judged. `judged` counts them, `passed` those judged `yes` and `unclear` those the judge could not tell, which count as failed. `lower` and `upper` are the Wilson interval of the pass rate at 95 %, 0 and 1 when the store holds no fact to draw. `revision` and `seed` draw the same sample again.
+    /// Every sampled fact was judged. `judged` counts them, `passed` those judged `yes` and `unclear` those the judge could not tell, which count as failed. `rate` is the pass rate, absent when the store holds no fact to draw; `lower` and `upper` are its Wilson interval at 95 %, 0 and 1 then. `cost_usd` is what the judge's model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. `revision` and `seed` draw the same sample again.
     Measured {
         /// The `cortex.instance.QualityMeasured` this outcome publishes.
         quality_measured: QualityMeasured,
@@ -1633,14 +1633,14 @@ pub enum ProposeSchemaChangesOutcome {
     },
     /// `proposed` — when `dry_run`.
     ///
-    /// A dry run: every proposal not dropped is recorded and none is applied; `applied` and `refused` are 0, and a change EKR would be asked to apply is `dry-run`.
+    /// A dry run: every proposal not dropped is recorded and none is applied; `applied` and `refused` are 0, and a change EKR would be asked to apply is `dry-run`. `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it.
     Proposed {
         /// The `cortex.instance.SchemaChangesProposed` this outcome publishes.
         schema_changes_proposed: SchemaChangesProposed,
     },
     /// `applied` — otherwise.
     ///
-    /// Every proposal EKR accepted is committed, each as its own schema transaction and schema version; `applied` counts them, 0 when it accepted none. `revision` is the head the sample was drawn at, so `ekr ontology --at <revision>` still answers the schema before.
+    /// Every proposal EKR accepted is committed, each as its own schema transaction and schema version; `applied` counts them, 0 when it accepted none. `revision` is the head the sample was drawn at, so `ekr ontology --at <revision>` still answers the schema before. `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it.
     Applied {
         /// The `cortex.instance.SchemaChangesProposed` this outcome publishes.
         schema_changes_proposed: SchemaChangesProposed,
@@ -1961,10 +1961,14 @@ pub struct QualityMeasured {
     pub passed: i64,
     /// `unclear` — `Integer`.
     pub unclear: i64,
+    /// `rate` — `Optional<Decimal>`.
+    pub rate: Option<crate::primitives::Decimal>,
     /// `lower` — `Decimal`.
     pub lower: crate::primitives::Decimal,
     /// `upper` — `Decimal`.
     pub upper: crate::primitives::Decimal,
+    /// `cost_usd` — `Optional<Decimal>`.
+    pub cost_usd: Option<crate::primitives::Decimal>,
 }
 
 /// RunFailed — the event `cortex.instance.RunFailed`.
@@ -1997,6 +2001,8 @@ pub struct SchemaChangesProposed {
     pub invalid: i64,
     /// `dropped` — `Integer`.
     pub dropped: i64,
+    /// `cost_usd` — `Optional<Decimal>`.
+    pub cost_usd: Option<crate::primitives::Decimal>,
 }
 
 /// SnapshotRestored — the event `cortex.instance.SnapshotRestored`.
