@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:events-carry-measurements
 kind: story
-status: active
+status: implemented
 title: QualityMeasured and SchemaChangesProposed carry rate and cost_usd
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -33,10 +33,11 @@ scope:
   path: tests/schema.rs
 - confidence: cited
   path: website/docs/reference/ess/cortex-instance.md
-revision: 23
+revision: 24
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-07T06:23:04Z", actor: "human:timo", revision: 22}
 - {from: "proposed", to: "active", at: "2026-10-07T06:23:04Z", actor: "human:timo", revision: 23}
+- {from: "active", to: "implemented", at: "2026-10-07T06:56:49Z", actor: "human:timo", revision: 24, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: specification:wave-20261007b-kinds-and-measurements
 kind: specification
-status: approved
+status: implemented
 title: 'Wave 20261007b: value kinds in the prompt, measurements on the events'
 relations:
 - specifies: story:prompt-names-value-kinds
 - specifies: story:events-carry-measurements
-revision: 3
+revision: 5
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-07T06:23:20Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-07T06:23:21Z", actor: "human:timo", revision: 3}
+- {from: "approved", to: "implemented", at: "2026-10-07T06:56:49Z", actor: "human:timo", revision: 5}
 ---
 ## Wave 20261007b: value kinds in the prompt, measurements on the events
 
@@ -54,3 +55,15 @@ Integration branch `wave/20261007b`, tree `cortex-w18-int`.
 One commit per unit through `b10x-gates bot`; the merges into `wave/20261007b`; coordinator commits
 for the store and the changelog; the closing planning-store commit; the pull request into `main`
 and its merge.
+
+## Outcome
+
+Closed 2026-10-07. U1 `story:prompt-names-value-kinds` (`289d952`, merged `15c2c2d`), U2 `story:events-carry-measurements` (`705a234`, adversary guard tests `2069597`, merged `9eb7e51`). `task check` on `7130266`, 8 steps each exit 0: 38 suites, 493 passed, 0 failed, 0 skipped; 493 names listed.
+
+| agent | tokens | tool uses | wall time |
+|---|---|---|---|
+| implementor U1 | 115,014 | 60 | 389 s |
+| implementor U2 | 192,939 | 105 | 1,002 s |
+| adversary U2 pass 1 | 180,710 | 63 | 580 s |
+
+U2 pass 1: 2 notes; F1 fixed in the store, F2 filed as `story:conformance-checks-field-shapes`. `story:postgres-run-undo` left the wave: `upstream-blocker:ekr-postgres-rewind`, planned against EKR staged runs.
