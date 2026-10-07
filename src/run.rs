@@ -170,34 +170,41 @@ pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Rep
         state.pending_since,
         source_spec.policy.refresh_after_days,
     );
-    let ran = sources::fetch(
-        &source_spec.settings,
-        &tools.connectors,
-        &meta.spec_dir,
-        &window,
-        &state.child_failures,
-        source_spec.policy.max_chars_per_document.max(0) as usize,
-    )
-    .map_err(|e| match e {
-        FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
-    })
-    .and_then(|fetched| {
-        let structured_source = match &source_spec.settings {
-            m::SourceSettings::Structured(st) => Some(st),
-            _ => None,
-        };
-        process(
-            layout,
-            tools,
-            &spec,
-            &source.name,
-            fetched,
-            &source_spec.policy,
-            Some(window),
-            structured_source,
-            true,
-        )
-    });
+    // A structured source's links order and match records by the identities the run gives them,
+    // which the redaction policy takes part in.
+    let ran = redact::compile(spec.redaction.as_ref())
+        .map_err(Failure::Extract)
+        .and_then(|redactor| {
+            sources::fetch(
+                &source_spec.settings,
+                &tools.connectors,
+                &meta.spec_dir,
+                &window,
+                &state.child_failures,
+                source_spec.policy.max_chars_per_document.max(0) as usize,
+                redactor.as_ref(),
+            )
+            .map_err(|e| match e {
+                FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
+            })
+        })
+        .and_then(|fetched| {
+            let structured_source = match &source_spec.settings {
+                m::SourceSettings::Structured(st) => Some(st),
+                _ => None,
+            };
+            process(
+                layout,
+                tools,
+                &spec,
+                &source.name,
+                fetched,
+                &source_spec.policy,
+                Some(window),
+                structured_source,
+                true,
+            )
+        });
     if ran.is_err() {
         // A failed run reads nothing it can be trusted to have read: the next run's `{since}` is
         // no later than this one's. The failure is the run's answer; a state that cannot be
@@ -254,6 +261,7 @@ fn seed_documents(layout: &Layout, tools: &Tools, undoable: bool) -> Result<Repo
         &window,
         &BTreeMap::new(),
         policy.max_chars_per_document as usize,
+        None,
     )
     .map_err(|e| match e {
         FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
@@ -340,7 +348,24 @@ fn process(
                 ),
             ));
         }
+        // A link not found in full for one parent: the run names the parent and the link, and
+        // keeps the values of that parent's changes, their stored links among them.
+        for f in &fetched.failed_links {
+            let (parent, prefix) = s.failed_child(&f.parent, &f.changes);
+            held.extend(prefix);
+            let (op, changes, relation) = (&f.operation, &f.changes, &f.relation);
+            report.skipped.push(masked_key(
+                redactor.as_ref(),
+                &format!(
+                    "{op}: {relation} links of {parent} not found in full: {}; its {changes} \
+                     records not linked before that get no {relation} link in this run, and none \
+                     of their earlier values is ended",
+                    f.reason
+                ),
+            ));
+        }
     }
+    let fetched_links = &fetched.links;
     let docs: Vec<_> = fetched
         .documents
         .into_iter()
@@ -350,6 +375,10 @@ fn process(
             if let Some(s) = &structured {
                 let (n, scrubbed) = s.prepare(&mut d);
                 report.masked += n;
+                // A change's links are part of the text the run hashes, so a change applied
+                // before its tag appeared is applied again with its link.
+                let links = fetched_links.get(&d.key).map(Vec::as_slice);
+                s.link(&mut d, links.unwrap_or_default());
                 d.hash = Some(text_hash(&d.text));
                 record_scrubbed.insert(d.key.clone(), scrubbed);
                 return Some(d);

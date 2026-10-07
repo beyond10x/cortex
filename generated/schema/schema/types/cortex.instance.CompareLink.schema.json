@@ -1,17 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$ref": "#/$defs/cortex.instance.ChildCall",
+  "$ref": "#/$defs/cortex.instance.CompareLink",
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
     "source_digest": "d4b5e72ecf324368a8a929cadd028f8042ea4de12b04155a592b428bc11088b1",
-    "contract_digest": "slice-sha256/2:088b9a20f777a3881442e9d2f5a4349326725ac398c613b801895b71f8b4c4db",
+    "contract_digest": "slice-sha256/2:067710eff8bd4f4eda1169d9ed7e206182501a8978dda295be1d2b72c72cb44c",
     "regenerate": "ess generate"
   },
   "$defs": {
-    "cortex.instance.ChildCall": {
-      "title": "ChildCall",
-      "x-ess-name": "cortex.instance.ChildCall",
+    "cortex.instance.CompareLink": {
+      "title": "CompareLink",
+      "x-ess-name": "cortex.instance.CompareLink",
       "x-ess-kind": "struct",
       "type": "object",
       "properties": {
@@ -24,12 +24,32 @@
         },
         "paging": {
           "$ref": "#/$defs/cortex.instance.Paging"
+        },
+        "tags": {
+          "type": "string"
+        },
+        "changes": {
+          "type": "string"
+        },
+        "order": {
+          "type": "string"
+        },
+        "change_id": {
+          "type": "string"
+        },
+        "relation": {
+          "type": "string"
         }
       },
       "required": [
         "operation",
         "input",
-        "records"
+        "records",
+        "tags",
+        "changes",
+        "order",
+        "change_id",
+        "relation"
       ],
       "additionalProperties": false
     },

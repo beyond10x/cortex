@@ -422,10 +422,57 @@ in the `inputs`, a parent the next run does not list is not asked again. A child
 pages unread (its `max_pages` reached) leaves records unread as the input's walk does: the run
 says so in `stopped`, and ends nothing.
 
+**Links.** A `from: connectors` input with `children` may list `links`: each links every record
+of one child (a change) to the first record of another child (a tag) whose comparison holds it,
+by one relation, so an agent can ask which tag shipped a change.
+
+| `links` field | meaning |
+|---|---|
+| `operation` | the compare operation, on the input's `adapter` and `connection` |
+| `input` | the operation's input: `{a.b}` in a string value is filled from the parent record, as a child's is, and `{from.a.b}` and `{to.a.b}` from the two tags that bound the range, `to` the tag and `from` the tag before it. The first tag has none before it, so its call fills `{from.…}` with nothing and asks for everything up to the first tag. A parent field named `from` or `to` cannot be read here |
+| `records` | path to the array of records in the compare answer |
+| `paging` | optional, as for the input |
+| `tags` | the child operation whose records are the tags. `create` and `update` refuse one that names no child of the source, naming the field |
+| `changes` | the child operation whose records are the changes, refused the same way |
+| `order` | dotted path to a time in each tag record, read as a `time` is ([how](./operating.md#what-one-run-does)); the tags are ordered by it, earliest first, and tags of one time by identity |
+| `change_id` | dotted path to the value of a compare record that is a change's id, as the changes' mapping reads its `id` |
+| `relation` | the name of the relation from a change's node to its tag's node (`shipped_in`, say) |
+
+For each parent it reads, the run orders the parent's tags and makes one compare call per tag,
+from the tag before it to it. A compare record whose `change_id` value is the id of one of that
+parent's changes links that change to the tag; the change is matched by the identity the run gives
+it, so the tags and changes of two parents stay apart even when their names and ids are equal. A
+change two ranges hold is linked to the earliest tag only; a change no range holds has no link. For
+a parent with no change read, no compare call is made; otherwise every run makes one per tag,
+whether or not anything changed. cortex reads only what the compare answers: it tells no branches
+apart, and a change reverted after its tag keeps its link.
+
+A run writes the links it finds into each change's record, after cleaning, as the member
+`cortex.links` (a list of `{"relation", "tag"}`, each tag by its identity), and the change's
+mapped values name each tag under the relation. So a link is part of the text the run compares with
+the text it last applied: a change applied before its tag existed is applied again in the run that
+first sees the tag, and gains its edge. The change names its tag by all the tag's aliases, and the
+ontology gets the relation from the changes' node type to the tags'. A `cortex.links` member the
+provider wrote into a change is replaced, and none is read from any other record; no mapping path
+reads it, as a path splits at `.`. With `dropped: Supersede`, a link a change no longer has is ended
+as any value is.
+
+A link that cannot be found in full for one parent does not fail the run: a compare call that fails
+(Connectors answers `forbidden`, say) or leaves pages unread, a tag with no time at `order`, or
+tags not all read (their child call failed or left pages unread). The run names the parent's
+identity, the compare operation and the reason, the tag by its identity, in `skipped`. The changes
+the calls before it linked keep their links; the parent's other changes get none in that run, as
+the range not read may hold a change a later range holds too. With a tag out of order no range is
+known, so no call is made for that parent. None of that parent's changes has a value ended
+(`dropped: Supersede`), the links stored before among them; a change that loses its link for the
+run is applied again without it, and again with it once a run finds it. The failure does not hold
+the window, as a failed child call does not.
+
 **Evidence and rejections.** Each record is stored as the evidence every fact from it cites: a
 `Source:` header, its mapped values (`Mapped values:`, one `<label>: <value>` line each for its
-id, name, aliases, properties and relation targets, and for a child record its parent's identity
-under the `parent` name), then the record's JSON, cut at a character
+id, name, aliases, properties and relation targets, for a child record its parent's identity
+under the `parent` name, and for a change the identity of each tag it is linked to under the
+link's `relation`), then the record's JSON, cut at a character
 boundary to 16,384 bytes (EKR 0.0.30's bound on one evidence payload). The mapped values come
 first, so the cut never takes a value a fact cites. A record whose header and mapped values alone
 are over the bound is not applied: the run names it in `skipped` with the reason and records it as

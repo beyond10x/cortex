@@ -201,6 +201,19 @@ types:
       - {name: time, type: Optional<String>}
       - {name: parent, type: String}
 
+  - name: cortex.instance.CompareLink
+    kind: struct
+    fields:
+      - {name: operation, type: String}
+      - {name: input, type: Json}
+      - {name: records, type: String}
+      - {name: paging, type: Optional<cortex.instance.Paging>}
+      - {name: tags, type: String}
+      - {name: changes, type: String}
+      - {name: order, type: String}
+      - {name: change_id, type: String}
+      - {name: relation, type: String}
+
   - name: cortex.instance.StructuredConnectors
     kind: struct
     fields:
@@ -210,6 +223,7 @@ types:
       - {name: inputs, type: List<Json>}
       - {name: paging, type: Optional<cortex.instance.Paging>}
       - {name: children, type: Optional<List<cortex.instance.StructuredChild>>}
+      - {name: links, type: Optional<List<cortex.instance.CompareLink>>}
 
   - name: cortex.instance.StructuredFiles
     kind: struct

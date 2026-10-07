@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "4487a02838aade2030f677471c9e9b85fd6311704607a6dc50426c77b894aecf",
-    "contract_digest": "bfd8e8fad1346b12e8f4d4c8461f8d00bfe80b852f5491231c515012f28c7df0",
+    "spec_digest": "d4b5e72ecf324368a8a929cadd028f8042ea4de12b04155a592b428bc11088b1",
+    "contract_digest": "2ee77abc2353cd0d427a8b02a9b4c4898f9b2902ef33d95e8718cab47a96ee4c",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
@@ -568,6 +568,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.CompareLink"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ConnectionRef"
         },
         {
@@ -983,6 +987,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CompareLink"
         },
         {
           "kind": "type",
@@ -1801,6 +1809,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.CompareLink"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ConnectionRef"
         },
         {
@@ -2212,6 +2224,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CompareLink"
         },
         {
           "kind": "type",
@@ -2629,6 +2645,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.CompareLink"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ConnectionRef"
         },
         {
@@ -3036,6 +3056,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CompareLink"
         },
         {
           "kind": "type",
@@ -3486,6 +3510,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CompareLink"
         },
         {
           "kind": "type",
@@ -4661,6 +4689,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.CompareLink"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ConnectionRef"
         },
         {
@@ -5072,6 +5104,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CompareLink"
         },
         {
           "kind": "type",
@@ -18176,6 +18212,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.CompareLink"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ConnectionRef"
         },
         {
@@ -18898,6 +18938,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.CompareLink"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.ConnectionRef"
         },
         {
@@ -19507,6 +19551,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CompareLink"
         },
         {
           "kind": "type",

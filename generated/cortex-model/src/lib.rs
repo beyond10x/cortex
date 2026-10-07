@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 4487a02838aade2030f677471c9e9b85fd6311704607a6dc50426c77b894aecf
-// contract digest bfd8e8fad1346b12e8f4d4c8461f8d00bfe80b852f5491231c515012f28c7df0
+// model digest d4b5e72ecf324368a8a929cadd028f8042ea4de12b04155a592b428bc11088b1
+// contract digest 2ee77abc2353cd0d427a8b02a9b4c4898f9b2902ef33d95e8718cab47a96ee4c
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Semantic types synthesised from the `cortex` specification, v1.

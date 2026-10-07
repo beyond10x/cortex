@@ -22,6 +22,12 @@
 //! is written in hex there ([`hex`]), so no child's identity is one masking changes.
 //! Each child record is linked to its parent's node by one relation named by the child's
 //! `parent`, the parent named by all its aliases.
+//!
+//! A source's `links` link each record of one child (a change) to the first record of another (a
+//! tag) whose comparison holds it. The fetch asks for the comparisons and matches their records to
+//! the changes by identity (`src/sources.rs`); [`Source::link`] writes what it found into the
+//! change's cleaned text, under [`LINKS`], so the link is part of the content the run hashes and
+//! a change whose tag appears after it is applied again with its edge.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -95,6 +101,11 @@ pub fn child_prefix(prefix: &str, operation: &str) -> String {
     };
     format!("{prefix}/{operation}")
 }
+
+/// The member of a change record's cleaned text that holds its links: a list of
+/// `{"relation": <relation>, "tag": <tag identity>}`. A mapping path splits at `.`, so no mapping
+/// reads it.
+pub const LINKS: &str = "cortex.links";
 
 /// `text` with `%` and `:` written `%25` and `%3A`, so it holds no `:`.
 fn escape(text: &str) -> String {
@@ -254,6 +265,8 @@ pub struct Source<'a> {
     pub redactor: Option<&'a Redactor>,
     /// Each child operation, with what its records' identities start with ([`child_prefix`]).
     pub children: Vec<(String, &'a m::StructuredChild)>,
+    /// The source's compare links.
+    pub links: Vec<&'a m::CompareLink>,
 }
 
 /// What one record of a source is mapped by: the source's own mapping, or a child's.
@@ -266,10 +279,15 @@ struct Scope<'s> {
     time: Option<&'s str>,
     /// A child record's relation to its parent, and the parent's identity.
     parent: Option<(&'s str, String)>,
+    /// The links whose `changes` are this scope's records.
+    links: Vec<&'s m::CompareLink>,
+    /// Whether this scope's records are the `tags` of a link, which a change names.
+    named: bool,
 }
 
-/// Every parent record a run read, by its identity, with the aliases of its entity: a child names
-/// its parent by them.
+/// Every record a run read that another names by all its aliases, by its identity, with the
+/// aliases of its entity: each parent record, which its children name, and each record of a
+/// link's `tags`, which the changes linked to it name.
 pub type Parents = BTreeMap<String, Vec<String>>;
 
 /// One record of a run, as relation targets find it.
@@ -290,8 +308,8 @@ pub struct Index {
 }
 
 impl Index {
-    /// The aliases a child names the parent whose identity is `parent` by: all its entity's, or
-    /// the identity alone when the run did not read it.
+    /// The aliases a child names the parent whose identity is `parent` by, or a change the tag it
+    /// is linked to: all its entity's, or the identity alone when the run did not read it.
     fn parent(&self, parent: &str) -> Vec<String> {
         self.parents
             .get(parent)
@@ -319,20 +337,23 @@ pub struct Mapped {
 impl<'a> Source<'a> {
     pub fn new(st: &'a m::StructuredSource, redactor: Option<&'a Redactor>) -> Self {
         let prefix = prefix(st);
-        let children = match &st.input {
-            m::StructuredInput::Connectors(c) => c
-                .children
-                .iter()
-                .flatten()
-                .map(|child| (child_prefix(&prefix, &child.operation), child))
-                .collect(),
-            m::StructuredInput::Files(_) => Vec::new(),
+        let (children, links) = match &st.input {
+            m::StructuredInput::Connectors(c) => (
+                c.children
+                    .iter()
+                    .flatten()
+                    .map(|child| (child_prefix(&prefix, &child.operation), child))
+                    .collect(),
+                c.links.iter().flatten().collect(),
+            ),
+            m::StructuredInput::Files(_) => (Vec::new(), Vec::new()),
         };
         Self {
             prefix,
             mapping: &st.mapping,
             redactor,
             children,
+            links,
         }
     }
 
@@ -366,6 +387,8 @@ impl<'a> Source<'a> {
             mapping: self.mapping,
             time: None,
             parent: None,
+            links: Vec::new(),
+            named: false,
         }
     }
 
@@ -384,12 +407,101 @@ impl<'a> Source<'a> {
         if self.cleaning_changes(&format!("{at}:{token}:{PROBE}")) {
             token = hex(part);
         }
+        let operation = child.operation.as_str();
         Scope {
             prefix: format!("{at}:{token}"),
             mapping: &child.mapping,
             time: child.time.as_deref(),
             parent: Some((child.parent.as_str(), parent.to_string())),
+            links: self
+                .links
+                .iter()
+                .copied()
+                .filter(|l| l.changes == operation)
+                .collect(),
+            named: self.links.iter().any(|l| l.tags == operation),
         }
+    }
+
+    /// The identity [`Source::prepare`] gives the record of child `operation` whose raw id is
+    /// `raw_id` and whose parent's raw id is `parent`; `None` when no child has that operation.
+    pub fn child_identity(&self, operation: &str, parent: &str, raw_id: &str) -> Option<String> {
+        let n = self
+            .children
+            .iter()
+            .position(|(_, child)| child.operation == operation)?;
+        let scope = self.child_scope(n, &self.identity(parent));
+        Some(self.identity_in(&scope.prefix, raw_id))
+    }
+
+    /// Writes `links`, the `(relation, tag identity)` pairs the fetch found for record `doc`, whose
+    /// key is its identity and whose text is cleaned ([`Source::prepare`]), into its text under
+    /// [`LINKS`], so they are part of what the run hashes. For a record that is no link's change it
+    /// does nothing; a change with no link has the member removed, so its text holds only the
+    /// links this run found. An identity is clean, so the member needs no cleaning.
+    pub fn link(&self, doc: &mut Document, links: &[(String, String)]) {
+        if self.scope(&doc.key).links.is_empty() {
+            return;
+        }
+        let Ok(Value::Object(mut record)) = serde_json::from_str::<Value>(&doc.text) else {
+            return;
+        };
+        let mut entries: Vec<Value> = Vec::new();
+        for (relation, tag) in links {
+            let entry = json!({"relation": relation, "tag": tag});
+            if !entries.contains(&entry) {
+                entries.push(entry);
+            }
+        }
+        if entries.is_empty() {
+            record.remove(LINKS);
+        } else {
+            record.insert(LINKS.to_string(), Value::Array(entries));
+        }
+        doc.text = Value::Object(record).to_string();
+    }
+
+    /// The links `record`, of `scope`, holds under [`LINKS`]: each `(relation, tag node type, tag
+    /// identity)` whose relation is one of the scope's links and whose tag is a record of that
+    /// link's `tags` of the same parent, each once.
+    fn linked(&self, scope: &Scope<'a>, record: &Value) -> Vec<(&'a str, &'a str, String)> {
+        let mut out: Vec<(&'a str, &'a str, String)> = Vec::new();
+        let Some((_, parent)) = &scope.parent else {
+            return out;
+        };
+        for entry in record
+            .get(LINKS)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let (Some(relation), Some(tag)) = (entry["relation"].as_str(), entry["tag"].as_str())
+            else {
+                continue;
+            };
+            let Some((n, part)) = self.child_of(tag) else {
+                continue;
+            };
+            if *parent != format!("{}:{part}", self.prefix) {
+                continue;
+            }
+            let child = self.children[n].1;
+            let found = scope
+                .links
+                .iter()
+                .find(|l| l.relation == relation && l.tags == child.operation);
+            if let Some(link) = found {
+                let one = (
+                    link.relation.as_str(),
+                    child.mapping.node_type.as_str(),
+                    tag.to_string(),
+                );
+                if !out.contains(&one) {
+                    out.push(one);
+                }
+            }
+        }
+        out
     }
 
     /// For the key of one of the source's child records ([`child_key`]), the child it is of and
@@ -451,8 +563,9 @@ impl<'a> Source<'a> {
 
     /// The values the mapping takes from record `doc`, whose key is its identity, one `<label>:
     /// <value>` line each, under `Mapped values:` and ending in an empty line: its id, its name, its
-    /// mapped aliases, each mapped property, each relation's targets and, for a child record, its
-    /// parent's identity under its relation to the parent. It leads the record's evidence
+    /// mapped aliases, each mapped property, each relation's targets, for a child record, its
+    /// parent's identity under its relation to the parent, and for a change, the identity of each
+    /// tag it is linked to under the link's relation. It leads the record's evidence
     /// (`evidence::issue_led`), so every value a fact from the record cites is in the payload
     /// before the cut. Empty for a text that is not JSON.
     pub fn lead(&self, doc: &Document) -> String {
@@ -480,6 +593,9 @@ impl<'a> Source<'a> {
         if let Some((relation, parent)) = &scope.parent {
             lines.push((relation, parent.clone()));
         }
+        for (relation, _, tag) in self.linked(&scope, &record) {
+            lines.push((relation, tag));
+        }
         let mut out = String::from("Mapped values:\n");
         for (label, value) in lines {
             out.push_str(&format!("{label}: {value}\n"));
@@ -497,8 +613,8 @@ impl<'a> Source<'a> {
         }
     }
 
-    /// The parent records of `read`, every record a run read: none when the source has no
-    /// children.
+    /// The parent records of `read`, every record a run read, and the records of each link's
+    /// `tags` ([`Parents`]): none when the source has no children.
     pub fn parents(&self, read: &[Document]) -> Parents {
         if self.children.is_empty() {
             return Parents::new();
@@ -521,7 +637,7 @@ impl<'a> Source<'a> {
             let Some(aliases) = aliases(mapping, &record, &doc.key) else {
                 continue;
             };
-            if scope.parent.is_none() {
+            if scope.parent.is_none() || scope.named {
                 index.parents.insert(doc.key.clone(), aliases.clone());
             }
             let names = text_at(&record, &mapping.name)
@@ -540,7 +656,8 @@ impl<'a> Source<'a> {
 
     /// What each of `listed`, every record the run read, lists now, by its identity: the
     /// `(property, value)` pairs and the `(relation, target aliases)` its mapping gives, a child
-    /// record's relation to its parent among them, as [`Source::document`] would assert them.
+    /// record's relation to its parent and a change's links among them, as [`Source::document`]
+    /// would assert them.
     pub fn listed(&self, listed: &[Document]) -> BTreeMap<String, Listed> {
         let index = self.index_documents(listed.iter());
         let mut out = BTreeMap::new();
@@ -571,6 +688,9 @@ impl<'a> Source<'a> {
             if let Some((relation, parent)) = &scope.parent {
                 l.relations
                     .push((relation.to_string(), index.parent(parent)));
+            }
+            for (relation, _, tag) in self.linked(&scope, &record) {
+                l.relations.push((relation.to_string(), index.parent(&tag)));
             }
             out.insert(doc.key.clone(), l);
         }
@@ -823,8 +943,9 @@ impl<'a> Source<'a> {
     /// The ontology the source's mappings write: the source's node type with every mapped property
     /// as a `String`, each relation's target type, and each relation as an edge type from the node
     /// type to its target; then each child's node type, relations and relation to the parent's
-    /// node type, an edge type of one name declared once ([`join`]). `apply-extraction` adds only
-    /// what the store does not hold yet.
+    /// node type, and each link's relation from its changes' node type to its tags', an edge type
+    /// of one name declared once ([`join`]). `apply-extraction` adds only what the store does not
+    /// hold yet.
     fn ontology(&self) -> Value {
         let mapping = self.mapping;
         let mut node_types: NodeTypes<'_> = Vec::new();
@@ -848,6 +969,17 @@ impl<'a> Source<'a> {
                 &mapping.node_type,
             );
         }
+        let node_type = |operation: &str| {
+            self.children
+                .iter()
+                .find(|(_, child)| child.operation == operation)
+                .map(|(_, child)| child.mapping.node_type.as_str())
+        };
+        for link in &self.links {
+            if let (Some(changes), Some(tags)) = (node_type(&link.changes), node_type(&link.tags)) {
+                join(&mut edge_types, &link.relation, changes, tags);
+            }
+        }
         let node_types: Vec<Value> = node_types
             .iter()
             .map(|(name, properties)| {
@@ -867,10 +999,11 @@ impl<'a> Source<'a> {
     /// was issued. Each record whose text is JSON and has a name at its mapping's `name` is one
     /// entity of the mapping's node type, named by its aliases; each mapped property with a scalar
     /// value is a `String` property; each relation target named at `target_name` (a scalar, or
-    /// each scalar of an array) is a relation to the named thing [`Source::target`] answers; and a
+    /// each scalar of an array) is a relation to the named thing [`Source::target`] answers; a
     /// child record has one relation, named by its child's `parent`, to its parent's entity, named
-    /// by all the parent's aliases ([`Index::parent`]). Every fact cites the evidence id of its
-    /// record.
+    /// by all the parent's aliases ([`Index::parent`]); and a change has one relation, named by the
+    /// link's `relation`, to each tag it is linked to ([`LINKS`]), named by all the tag's aliases.
+    /// Every fact cites the evidence id of its record.
     pub fn document(&self, batch: &[Issued], index: &Index) -> Mapped {
         let mut entities: Vec<Value> = Vec::new();
         let mut entity_owners: Vec<Vec<String>> = Vec::new();
@@ -930,6 +1063,12 @@ impl<'a> Source<'a> {
                 relate(
                     relation,
                     json!({"node_type": self.mapping.node_type, "aliases": index.parent(parent)}),
+                );
+            }
+            for (relation, node_type, tag) in self.linked(&scope, &record) {
+                relate(
+                    relation,
+                    json!({"node_type": node_type, "aliases": index.parent(&tag)}),
                 );
             }
         }
@@ -1032,6 +1171,7 @@ mod tests {
             mapping,
             redactor: None,
             children: Vec::new(),
+            links: Vec::new(),
         }
     }
 
@@ -1276,6 +1416,7 @@ mod tests {
             prefix,
             mapping,
             redactor: None,
+            links: Vec::new(),
         }
     }
 
@@ -1442,6 +1583,135 @@ mod tests {
             listed[&tag.key].relations,
             [("IN_PROJECT".to_string(), ada)]
         );
+    }
+
+    /// A change's links are written into its cleaned text, lead its evidence and name the tag by
+    /// all its aliases. A `cortex.links` member the provider wrote is read from no record: a
+    /// change's is replaced by what the run found, and a parent's is never a link.
+    #[test]
+    fn a_change_holds_its_links_in_its_text_and_a_member_the_provider_wrote_is_no_link() {
+        let (m, tags) = (mapping(), tags_child());
+        let mut changes = tags_child();
+        changes.operation = "changes.list".into();
+        changes.mapping.node_type = "Change".into();
+        let link = m::CompareLink {
+            operation: "compare".into(),
+            input: cortex_model::json::Value::Null,
+            records: "$.commits".into(),
+            paging: None,
+            tags: "tags.list".into(),
+            changes: "changes.list".into(),
+            order: "$.at".into(),
+            change_id: "$.id".into(),
+            relation: "shipped_in".into(),
+        };
+        let prefix = "forge:projects.list".to_string();
+        let s = Source {
+            children: vec![
+                (child_prefix(&prefix, "tags.list"), &tags),
+                (child_prefix(&prefix, "changes.list"), &changes),
+            ],
+            prefix,
+            mapping: &m,
+            redactor: None,
+            links: vec![&link],
+        };
+        let tag_id = s.child_identity("tags.list", "7", "v1").expect("a child");
+        assert_eq!(tag_id, "forge:projects.list/tags.list:7:v1");
+        let stray =
+            json!([{"relation": "shipped_in", "tag": "forge:projects.list/tags.list:7:v9"}]);
+        let mut parent = fetched(
+            "forge:projects.list:7".into(),
+            json!({"id": 7, "name": "Ada", LINKS: stray}),
+        );
+        let mut tag = fetched(
+            child_key("forge:projects.list/tags.list", "7", "v1"),
+            json!({"id": "v1", "name": "v1"}),
+        );
+        let mut change = fetched(
+            child_key("forge:projects.list/changes.list", "7", "c1"),
+            json!({"id": "c1", "name": "c1", LINKS: stray}),
+        );
+        for doc in [&mut parent, &mut tag, &mut change] {
+            s.prepare(doc);
+        }
+        assert_eq!(
+            s.child_identity("changes.list", "7", "c1").as_deref(),
+            Some(change.key.as_str())
+        );
+
+        // No link found: the provider's member is gone from the change, and kept on the parent,
+        // where it is no link.
+        let parent_text = parent.text.clone();
+        s.link(&mut parent, &[("shipped_in".into(), tag_id.clone())]);
+        assert_eq!(parent.text, parent_text);
+        s.link(&mut change, &[]);
+        let record: Value = serde_json::from_str(&change.text).unwrap();
+        assert!(record.get(LINKS).is_none(), "{record}");
+
+        // A link found: in the text, leading the evidence, and named by the tag's aliases.
+        s.link(&mut change, &[("shipped_in".into(), tag_id.clone())]);
+        let record: Value = serde_json::from_str(&change.text).unwrap();
+        assert_eq!(
+            record[LINKS],
+            json!([{"relation": "shipped_in", "tag": tag_id}])
+        );
+        assert!(s.lead(&change).contains(&format!("shipped_in: {tag_id}\n")));
+        let read = [parent.clone(), tag.clone(), change.clone()];
+        let parents = s.parents(&read);
+        let v1 = vec![format!("v1 ({tag_id})"), tag_id.clone()];
+        assert_eq!(parents[&tag_id], v1);
+        let batch = [
+            Issued {
+                id: "e1".into(),
+                item: serde_yaml_ng::Value::Null,
+                doc: parent.clone(),
+            },
+            Issued {
+                id: "e3".into(),
+                item: serde_yaml_ng::Value::Null,
+                doc: change.clone(),
+            },
+        ];
+        let doc = s.document(&batch, &s.index(&batch, &parents)).document;
+        let shipped: Vec<&Value> = doc["facts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|f| f["!Relation"]["relation"] == "shipped_in")
+            .collect();
+        assert_eq!(shipped.len(), 1, "{doc}");
+        assert_eq!(
+            shipped[0]["!Relation"]["object"],
+            json!({"node_type": "Tag", "aliases": v1})
+        );
+        assert_eq!(shipped[0]["!Relation"]["evidence"], json!(["e3"]));
+        assert!(doc["ontology"]["edge_types"]
+            .as_array()
+            .unwrap()
+            .contains(&json!({"name": "shipped_in", "source_types": ["Change"],
+                "target_types": ["Tag"], "cardinality": "Many", "properties": []})));
+        let listed = s.listed(&read);
+        assert!(listed[&change.key]
+            .relations
+            .contains(&("shipped_in".to_string(), v1.clone())));
+        assert!(listed[&parent.key]
+            .relations
+            .iter()
+            .all(|(r, _)| r != "shipped_in"));
+
+        // An entry of another relation, naming a record that is no tag, or a tag of another
+        // parent, is no link.
+        let mut forged = change.clone();
+        let mut record: Value = serde_json::from_str(&forged.text).unwrap();
+        record[LINKS] = json!([
+            {"relation": "other", "tag": tag_id},
+            {"relation": "shipped_in", "tag": "forge:projects.list:7"},
+            {"relation": "shipped_in", "tag": change.key},
+            {"relation": "shipped_in", "tag": "forge:projects.list/tags.list:8:v1"},
+        ]);
+        forged.text = record.to_string();
+        assert!(s.linked(&s.scope(&forged.key), &record).is_empty());
     }
 
     #[test]

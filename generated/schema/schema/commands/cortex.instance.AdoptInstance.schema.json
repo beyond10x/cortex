@@ -40,8 +40,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "4487a02838aade2030f677471c9e9b85fd6311704607a6dc50426c77b894aecf",
-    "contract_digest": "slice-sha256/2:aac7939850916091d07822b6bf53fd27e33d863b8fd9126da54995c0ad8e5cc4",
+    "source_digest": "d4b5e72ecf324368a8a929cadd028f8042ea4de12b04155a592b428bc11088b1",
+    "contract_digest": "slice-sha256/2:0a5e285dc11c7a3e72a5d7579e855f97968641773acf5a748ee9bd4837bd30b4",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -75,6 +75,50 @@
         "operation",
         "input",
         "records"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.CompareLink": {
+      "title": "CompareLink",
+      "x-ess-name": "cortex.instance.CompareLink",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string"
+        },
+        "input": {},
+        "records": {
+          "type": "string"
+        },
+        "paging": {
+          "$ref": "#/$defs/cortex.instance.Paging"
+        },
+        "tags": {
+          "type": "string"
+        },
+        "changes": {
+          "type": "string"
+        },
+        "order": {
+          "type": "string"
+        },
+        "change_id": {
+          "type": "string"
+        },
+        "relation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation",
+        "input",
+        "records",
+        "tags",
+        "changes",
+        "order",
+        "change_id",
+        "relation"
       ],
       "additionalProperties": false
     },
@@ -1104,6 +1148,12 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/cortex.instance.StructuredChild"
+          }
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.CompareLink"
           }
         }
       },
