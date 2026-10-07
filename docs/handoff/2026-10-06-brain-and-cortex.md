@@ -1,7 +1,7 @@
 # Hand-over: session brain-and-cortex, 2026-10-06
 
-Written at the conductor's wrap-up dispatch DSP-20261006-13 (DEC-20261006-06). The session ends
-after this file; the next owner starts from here.
+Written at the session's wrap-up. The session ends after this file; the next owner starts from
+here.
 
 ## Open wave
 
@@ -33,7 +33,7 @@ The wave branch's `Taskfile.yml` still defaults `CARGO_TARGET_DIR` to a shared c
 
 | PR | what |
 |---|---|
-| https://github.com/beyond10x/cortex/pull/48 | wave 20261006j: builds go into the tree's own `target/` (DSP-20261006-04, DEC-20261006-02) |
+| https://github.com/beyond10x/cortex/pull/48 | wave 20261006j: builds go into the tree's own `target/` |
 
 ## Worktrees
 
@@ -43,10 +43,3 @@ branch push. Recreate a tree from `wave/20261006i` to continue.
 ## Open pull requests
 
 None from this session.
-
-## Dispatches
-
-| id | state |
-|---|---|
-| DSP-20261006-04 | done, reported (PR 48) |
-| DSP-20261006-13 | this hand-over |
