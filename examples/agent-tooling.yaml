@@ -5,7 +5,7 @@ description: >-
   and releases of AI agent frameworks written in Rust, with the projects and organisations behind
   them and what each release or project depends on.
 ekr:
-  version: "0.0.31"
+  version: "0.0.32"
 seed:
   schema: seed/agent-tooling.yaml
   documents: []

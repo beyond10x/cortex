@@ -266,10 +266,23 @@ types:
     fields:
       - {name: path, type: Optional<String>}
 
+  # A saved Connectors connection whose document a launched `ekr` reads on descriptor 3
+  # (`connectors connections launch --consumer ekr`); cortex names it and never reads it.
+  - name: cortex.instance.ConnectionRef
+    kind: struct
+    fields:
+      - {name: adapter, type: String}
+      - {name: connection, type: String}
+
+  # With `connection`, every `ekr` of the store starts through `connectors connections launch`,
+  # and `config` must name `password_file`; `schema_connection` does the same for
+  # `--postgres-schema-config`. Without `connection`, `ekr` starts directly, as before.
   - name: cortex.instance.PostgresStore
     kind: struct
     fields:
       - {name: config, type: String}
+      - {name: connection, type: Optional<cortex.instance.ConnectionRef>}
+      - {name: schema_connection, type: Optional<cortex.instance.ConnectionRef>}
 
   - name: cortex.instance.StoreSpec
     kind: union
@@ -588,7 +601,7 @@ actors:
 errors:
   - name: cortex.instance.ConnectionMissing
     summary: >-
-      Connectors lists no live connection with the id a source names. Run
+      Connectors lists no live connection with the id a source or the postgres store names. Run
       `connectors connections connect` for it, then try again.
     fields:
       - {name: connection, type: String}
@@ -824,7 +837,7 @@ commands:
         summary: Nothing was created.
 
       - name: connection-missing
-        external: Connectors lists no live connection for a connection id a source of the spec names
+        external: Connectors lists no live connection for a connection id a source or the postgres store of the spec names
         error: cortex.instance.ConnectionMissing
         payload:
           cortex.instance.ConnectionMissing:

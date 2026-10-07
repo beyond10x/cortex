@@ -25,7 +25,7 @@ cargo install --locked --path .
 cortex setup
 ```
 
-`cortex setup` installs the pinned `ekr` (0.0.31 unless you pass `--ekr-version`) with
+`cortex setup` installs the pinned `ekr` (0.0.32 unless you pass `--ekr-version`) with
 `cargo install` under `~/.cache/cortex/bin/<version>/`, and does nothing when it is already there.
 
 ## 2. Connect a web search provider

@@ -468,17 +468,9 @@ pub(crate) fn new_dir(
 
 /// `ekr sample --seed <seed> --size <size>` over the instance's store.
 fn sample(store: &Store, seed: i64, size: i64) -> Result<Value, String> {
-    let out = Command::new(&store.bin)
-        .args([
-            "sample",
-            "--seed",
-            &seed.to_string(),
-            "--size",
-            &size.to_string(),
-        ])
-        .env("EKR_HOST", &store.host)
-        .env("EKR_BACKEND", store.backend.name())
-        .env("EKR_STORE", &store.store)
+    let (seed, size) = (seed.to_string(), size.to_string());
+    let out = store
+        .command(&["sample", "--seed", &seed, "--size", &size].map(std::ffi::OsStr::new))?
         .output()
         .map_err(|e| format!("cannot run ekr sample: {e}"))?;
     if !out.status.success() {

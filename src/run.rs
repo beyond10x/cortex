@@ -1244,6 +1244,7 @@ mod tests {
             host: layout.host(),
             backend: crate::ekr::Backend::Sqlite,
             store: layout.store(),
+            launch: None,
         };
         let mut before = BeforeApply::new(&layout, &store, "news", 1000, 3);
         before.take().unwrap();

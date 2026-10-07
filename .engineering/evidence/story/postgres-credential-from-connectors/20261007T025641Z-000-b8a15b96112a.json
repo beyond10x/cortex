@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-07T02:56:41Z",
+  "actor": "human:timo",
+  "artifact": "story:postgres-credential-from-connectors",
+  "kind": "story",
+  "revision": 31,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check steps on wave/20261006i 15842e3, local, all exit 0: 485 passed, 0 failed, 0 skipped, Docker PostgreSQL case included, ekr 0.0.32",
+    "reference": "15842e33126e91cc72f21437836e58e65eab5b05"
+  }
+}

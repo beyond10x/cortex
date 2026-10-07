@@ -95,7 +95,27 @@ fn every_sqlite_form_the_published_schema_accepts_parses_to_sqlite() {
     assert_eq!(
         parsed_store("{backend: postgres, value: {config: pg.yaml}}"),
         Ok(Some(m::StoreSpec::Postgres(m::PostgresStore {
-            config: "pg.yaml".into()
+            config: "pg.yaml".into(),
+            connection: None,
+            schema_connection: None,
+        })))
+    );
+    assert_eq!(
+        parsed_store(
+            "{backend: postgres, value: {config: pg.json, \
+             connection: {adapter: pg, connection: app}, \
+             schema_connection: {adapter: pg, connection: owner}}}"
+        ),
+        Ok(Some(m::StoreSpec::Postgres(m::PostgresStore {
+            config: "pg.json".into(),
+            connection: Some(m::ConnectionRef {
+                adapter: "pg".into(),
+                connection: "app".into(),
+            }),
+            schema_connection: Some(m::ConnectionRef {
+                adapter: "pg".into(),
+                connection: "owner".into(),
+            }),
         })))
     );
 }

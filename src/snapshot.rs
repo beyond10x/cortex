@@ -667,6 +667,7 @@ mod tests {
             host: layout.host(),
             backend: ekr::Backend::Sqlite,
             store: layout.store(),
+            launch: None,
         }
     }
 

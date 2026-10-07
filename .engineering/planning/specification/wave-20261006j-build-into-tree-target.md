@@ -4,7 +4,7 @@ id: specification:wave-20261006j-build-into-tree-target
 kind: specification
 status: implemented
 title: 'Wave 20261006j: build into the tree''s own target/'
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-06T20:07:13Z", actor: "agent:claude", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-06T20:07:13Z", actor: "agent:claude", revision: 3}
@@ -12,7 +12,7 @@ transitions:
 ---
 ## Wave 20261006j: build into the tree's own target/
 
-Opened 2026-10-06 by the coordinating session for conductor dispatch DSP-20261006-04 (DEC-20261006-02).
+Opened 2026-10-06 by the coordinating session: builds go into each tree's own `target/`, so a gate runs only the binaries its own tree built and a finished tree's build cache leaves with it.
 
 **Approval:** the operator approved every wave up front on 2026-10-05 and again on 2026-10-06 ("do it. dispatch next waves. i approved them").
 

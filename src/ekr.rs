@@ -1,5 +1,6 @@
 //! The pinned `ekr` binary: seed, ontology, apply-extraction, and the formats cortex reads from it.
 
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -158,23 +159,157 @@ impl Backend {
     }
 }
 
+/// The name of the `[consumers]` entry in the operator's Connectors configuration that pins the
+/// `ekr` binary a launch runs, with `pass_env = ["EKR_"]`.
+pub const CONSUMER: &str = "ekr";
+
+/// A saved Connectors connection: its adapter alias and id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Connection {
+    pub adapter: String,
+    pub connection: String,
+}
+
+/// How a PostgreSQL store's `ekr` gets the database password: `connectors connections launch`
+/// starts the `ekr` the operator pinned as consumer [`CONSUMER`], with the connection's saved
+/// `{"password": …}` document on descriptor 3, which the `ekr.postgres/1` file names as its
+/// `password_file`. cortex never reads the document.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Launch {
+    /// The `connectors` binary.
+    pub connectors: PathBuf,
+    /// The application role's connection, for every `ekr` that opens the store.
+    pub connection: Connection,
+    /// The schema-management role's connection, for [`Store::provision`].
+    pub schema_connection: Option<Connection>,
+}
+
 /// One instance's store, through its host.
 pub struct Store {
     pub bin: PathBuf,
     pub host: PathBuf,
     pub backend: Backend,
-    /// `EKR_STORE`: the SQLite file, or the `ekr.postgres/1` file. cortex passes the path and never
-    /// reads the file, which references the database credential.
+    /// `EKR_STORE`: the SQLite file, or the `ekr.postgres/1` file. cortex passes the path; for a
+    /// launched store it reads only the file's `password_file` (`instance::launch_refusal`).
     pub store: PathBuf,
+    /// For a PostgreSQL store that names a connection: every `ekr` starts through the launch.
+    pub launch: Option<Launch>,
+}
+
+impl Launch {
+    /// `connectors connections launch --adapter A --connection C --consumer ekr --args '<JSON>'`:
+    /// the pinned `ekr` with `args`, as one JSON array of strings, after the consumer's pinned
+    /// argument prefix. Built and not run.
+    fn command(&self, connection: &Connection, args: &[&OsStr]) -> Result<Command, String> {
+        let args = args
+            .iter()
+            .map(|a| {
+                a.to_str()
+                    .map(str::to_string)
+                    .ok_or_else(|| format!("an ekr argument is not UTF-8: {}", a.to_string_lossy()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut cmd = Command::new(&self.connectors);
+        remove_inherited_ekr(&mut cmd, std::env::vars_os().map(|(key, _)| key));
+        cmd.args([
+            "connections",
+            "launch",
+            "--adapter",
+            &connection.adapter,
+            "--connection",
+            &connection.connection,
+            "--consumer",
+            CONSUMER,
+            "--args",
+        ])
+        .arg(serde_json::to_string(&args).expect("plain JSON"));
+        Ok(cmd)
+    }
+
+    /// Renews `connection`'s validation evidence when it lapsed: a launch with lapsed evidence is
+    /// refused (`unavailable` at `readiness`).
+    fn ready(&self, connection: &Connection) -> Result<(), String> {
+        crate::connectors::Connectors {
+            bin: self.connectors.clone(),
+        }
+        .ensure_ready(&connection.adapter, &connection.connection)
+        .map_err(|e| format!("{}:{}: {e}", connection.adapter, connection.connection))
+    }
+}
+
+/// Removes from `cmd` every `EKR_*` variable of `inherited`, the names of the environment it would
+/// inherit. A launch hands its consumer every `EKR_*` variable it gets (`pass_env = ["EKR_"]`), so
+/// only the ones the caller sets afterwards reach the launched `ekr`, none this process inherited
+/// (such as `EKR_FULL_REPLAY` from the operator's shell).
+fn remove_inherited_ekr(cmd: &mut Command, inherited: impl IntoIterator<Item = OsString>) {
+    for key in inherited {
+        if key.as_encoded_bytes().starts_with(b"EKR_") {
+            cmd.env_remove(&key);
+        }
+    }
 }
 
 impl Store {
-    fn cmd(&self) -> Command {
-        let mut cmd = Command::new(&self.bin);
+    /// The connection every `ekr` that opens this store launches through, the viewer's included;
+    /// none for a store `ekr` opens directly. The schema connection is provisioning's alone.
+    pub fn launched_through(&self) -> Option<&Connection> {
+        self.launch.as_ref().map(|l| &l.connection)
+    }
+
+    /// The `ekr` invocation of `args` on this store, built and not run: the pinned `ekr` itself, or
+    /// for a launched store `connectors connections launch`, whose consumer gets the `EKR_*`
+    /// variables (`pass_env`).
+    fn cmd(&self, args: &[&OsStr]) -> Result<Command, String> {
+        let mut cmd = match &self.launch {
+            Some(launch) => launch.command(&launch.connection, args)?,
+            None => {
+                let mut cmd = Command::new(&self.bin);
+                cmd.args(args);
+                cmd
+            }
+        };
         cmd.env("EKR_HOST", &self.host)
             .env("EKR_BACKEND", self.backend.name())
             .env("EKR_STORE", &self.store);
-        cmd
+        Ok(cmd)
+    }
+
+    /// [`Store::cmd`], after a launched store's connection is ready.
+    pub fn command(&self, args: &[&OsStr]) -> Result<Command, String> {
+        if let Some(launch) = &self.launch {
+            launch.ready(&launch.connection)?;
+        }
+        self.cmd(args)
+    }
+
+    /// The connection [`Store::provision`] launches through: the schema connection, when the
+    /// store names one.
+    fn schema_launch(&self) -> Option<(&Launch, &Connection)> {
+        self.launch
+            .as_ref()
+            .and_then(|l| l.schema_connection.as_ref().map(|c| (l, c)))
+    }
+
+    /// `ekr postgres-schema --config <schema_config>`, built and not run, with no store variables:
+    /// through the schema connection's launch, or the pinned `ekr` itself.
+    fn schema_cmd(&self, schema_config: &Path) -> Result<Command, String> {
+        let args = [
+            OsStr::new("postgres-schema"),
+            OsStr::new("--config"),
+            schema_config.as_os_str(),
+        ];
+        let mut cmd = match self.schema_launch() {
+            Some((launch, connection)) => launch.command(connection, &args)?,
+            None => {
+                let mut cmd = Command::new(&self.bin);
+                cmd.args(args);
+                cmd
+            }
+        };
+        cmd.env_remove("EKR_HOST")
+            .env_remove("EKR_BACKEND")
+            .env_remove("EKR_STORE");
+        Ok(cmd)
     }
 
     /// `ekr postgres-schema --config <schema_config>`: the provider's tables, created under the
@@ -182,12 +317,10 @@ impl Store {
     /// DML-only application role, which EKR 0.0.30 refuses schema DDL; only creating an instance
     /// provisions, never a run.
     pub fn provision(&self, schema_config: &Path) -> Result<(), String> {
-        let mut cmd = Command::new(&self.bin);
-        cmd.args(["postgres-schema", "--config"])
-            .arg(schema_config)
-            .env_remove("EKR_HOST")
-            .env_remove("EKR_BACKEND")
-            .env_remove("EKR_STORE");
+        if let Some((launch, connection)) = self.schema_launch() {
+            launch.ready(connection)?;
+        }
+        let cmd = self.schema_cmd(schema_config)?;
         let receipt = json(&run(cmd, "postgres-schema")?, "postgres-schema")?;
         if receipt["format"] == "ekr.postgres-schema/1" && receipt["ready"] == true {
             Ok(())
@@ -201,9 +334,8 @@ impl Store {
     /// Whether the store's lineage holds a seed: `ekr head` answers a head, or says "the lineage
     /// has no seed" (EKR 0.0.30, measured on PostgreSQL). Any other answer is an error.
     pub fn seeded(&self) -> Result<bool, String> {
-        let mut cmd = self.cmd();
-        cmd.arg("head");
-        let out = cmd
+        let out = self
+            .command(&[OsStr::new("head")])?
             .output()
             .map_err(|e| format!("cannot run ekr for head: {e}"))?;
         if out.status.success() {
@@ -221,8 +353,7 @@ impl Store {
     /// `ekr.seed-result/1`. Seeding an identical seed again exits 0 with the first seed's result,
     /// so a `committed_at` from before this call means another caller wrote the seed.
     pub fn seed(&self, seed: &Path) -> Result<i64, String> {
-        let mut cmd = self.cmd();
-        cmd.arg("seed").arg(seed);
+        let cmd = self.command(&[OsStr::new("seed"), seed.as_os_str()])?;
         let result = json(&run(cmd, "seed")?, "seed")?;
         result["committed_at"]
             .as_i64()
@@ -231,14 +362,12 @@ impl Store {
 
     /// The `ekr.integrate.ExtractionReport` of applying `doc`.
     pub fn apply(&self, doc: &Path) -> Result<Value, String> {
-        let mut cmd = self.cmd();
-        cmd.arg("apply-extraction").arg(doc);
+        let cmd = self.command(&[OsStr::new("apply-extraction"), doc.as_os_str()])?;
         json(&run(cmd, "apply-extraction")?, "apply-extraction")
     }
 
     pub fn ontology(&self) -> Result<Value, String> {
-        let mut cmd = self.cmd();
-        cmd.arg("ontology");
+        let cmd = self.command(&[OsStr::new("ontology")])?;
         json(&run(cmd, "ontology")?, "ontology")
     }
 
@@ -246,8 +375,7 @@ impl Store {
     /// and `evidence`, each a map keyed by id, every assertion with its `lifecycle`, retracted and
     /// superseded ones included (EKR 0.0.31 `docs/cli.md`, `ekr snapshot`).
     pub fn snapshot(&self) -> Result<Value, String> {
-        let mut cmd = self.cmd();
-        cmd.arg("snapshot");
+        let cmd = self.command(&[OsStr::new("snapshot")])?;
         json(&run(cmd, "snapshot")?, "snapshot")
     }
 
@@ -281,8 +409,7 @@ impl Store {
     /// A fresh id of `kind` (`ekr mint <kind>`): `transaction`, `type`, `property`,
     /// `schema-version`, ….
     pub fn mint(&self, kind: &str) -> Result<String, String> {
-        let mut mint = self.cmd();
-        mint.args(["mint", kind]);
+        let mint = self.command(&[OsStr::new("mint"), OsStr::new(kind)])?;
         let minted = json(&run(mint, "mint")?, "mint")?;
         minted["id"]
             .as_str()
@@ -305,11 +432,9 @@ impl Store {
             transaction_document(&id, proposer, operations, schema_version),
         )
         .map_err(|e| format!("{}: {e}", path.display()))?;
-        let mut propose = self.cmd();
-        propose.arg("propose").arg(path);
+        let propose = self.command(&[OsStr::new("propose"), path.as_os_str()])?;
         run(propose, "propose")?;
-        let mut validate = self.cmd();
-        validate.args(["validate", &id]);
+        let validate = self.command(&[OsStr::new("validate"), OsStr::new(&id)])?;
         let validated = json(&run(validate, "validate")?, "validate")?;
         if validated["kind"] != "Validated" {
             let issues = validated["issues"]
@@ -326,8 +451,7 @@ impl Store {
                 issues,
             }));
         }
-        let mut commit = self.cmd();
-        commit.args(["commit", &id]);
+        let commit = self.command(&[OsStr::new("commit"), OsStr::new(&id)])?;
         let committed = json(&run(commit, "commit")?, "commit")?;
         match committed["kind"].as_str() {
             Some("Committed") => committed["result"]["revision"]
@@ -566,10 +690,13 @@ pub fn applied(report: &Value) -> Applied {
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::OsStr;
+    use std::ffi::{OsStr, OsString};
     use std::path::PathBuf;
 
-    use super::{transaction_document, Backend, Operation, PropertyDecl, Store};
+    use super::{
+        remove_inherited_ekr, transaction_document, Backend, Connection, Launch, Operation,
+        PropertyDecl, Store,
+    };
 
     #[test]
     fn a_transaction_document_names_its_format_first_and_tags_each_operation() {
@@ -668,17 +795,17 @@ mod tests {
         }
     }
 
+    /// The variables the store's command sets. A launch also removes each `EKR_*` variable the
+    /// test runner inherited, which is no variable it sets.
     fn env(store: &Store) -> Vec<(String, String)> {
-        let cmd = store.cmd();
+        let cmd = store.cmd(&[OsStr::new("head")]).unwrap();
         let mut out: Vec<_> = cmd
             .get_envs()
-            .map(|(k, v)| {
-                (
+            .filter_map(|(k, v)| {
+                Some((
                     k.to_string_lossy().into_owned(),
-                    v.map(OsStr::to_string_lossy)
-                        .unwrap_or_default()
-                        .into_owned(),
-                )
+                    v?.to_string_lossy().into_owned(),
+                ))
             })
             .collect();
         out.sort();
@@ -691,7 +818,178 @@ mod tests {
             host: PathBuf::from("/i/host.json"),
             backend,
             store: PathBuf::from(store),
+            launch: None,
         }
+    }
+
+    fn launched(schema: bool) -> Store {
+        let connection = |id: &str| Connection {
+            adapter: "pg".into(),
+            connection: id.into(),
+        };
+        Store {
+            bin: PathBuf::from("/opt/ekr/bin/ekr"),
+            launch: Some(Launch {
+                connectors: PathBuf::from("/opt/connectors"),
+                connection: connection("app"),
+                schema_connection: schema.then(|| connection("owner")),
+            }),
+            ..store(Backend::Postgres, "/etc/brain/pg.json")
+        }
+    }
+
+    fn argv(cmd: &std::process::Command) -> (String, Vec<String>) {
+        (
+            cmd.get_program().to_string_lossy().into_owned(),
+            cmd.get_args()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn a_launched_store_starts_ekr_through_connectors_connections_launch() {
+        let store = launched(false);
+        let cmd = store
+            .cmd(&[OsStr::new("seed"), OsStr::new("/i/seed \"x\".yaml")])
+            .unwrap();
+        assert_eq!(
+            argv(&cmd),
+            (
+                "/opt/connectors".to_string(),
+                [
+                    "connections",
+                    "launch",
+                    "--adapter",
+                    "pg",
+                    "--connection",
+                    "app",
+                    "--consumer",
+                    "ekr",
+                    "--args",
+                    r#"["seed","/i/seed \"x\".yaml"]"#,
+                ]
+                .map(String::from)
+                .to_vec()
+            )
+        );
+        // The operator's consumer entry pins the `ekr`; cortex names no binary of its own.
+        assert!(
+            !cmd.get_args()
+                .any(|a| a == store.bin.as_os_str() || a == "--"),
+            "{cmd:?}"
+        );
+        // `pass_env = ["EKR_"]` hands these to the launched `ekr`.
+        assert_eq!(
+            env(&store),
+            [
+                ("EKR_BACKEND".into(), "postgres".into()),
+                ("EKR_HOST".into(), "/i/host.json".into()),
+                ("EKR_STORE".into(), "/etc/brain/pg.json".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_launch_removes_every_inherited_ekr_variable_and_keeps_the_rest() {
+        let mut cmd = std::process::Command::new("/opt/connectors");
+        remove_inherited_ekr(
+            &mut cmd,
+            [
+                "EKR_FULL_REPLAY",
+                "EKR_HOST",
+                "EKR_",
+                "PATH",
+                "CONNECTORS_HOME",
+                "ekr_lower",
+                "XEKR_",
+            ]
+            .map(OsString::from),
+        );
+        cmd.env("EKR_HOST", "/i/host.json");
+        let mut envs: Vec<_> = cmd
+            .get_envs()
+            .map(|(k, v)| {
+                (
+                    k.to_string_lossy().into_owned(),
+                    v.map(|v| v.to_string_lossy().into_owned()),
+                )
+            })
+            .collect();
+        envs.sort();
+        assert_eq!(
+            envs,
+            [
+                ("EKR_".to_string(), None),
+                ("EKR_FULL_REPLAY".to_string(), None),
+                ("EKR_HOST".to_string(), Some("/i/host.json".to_string())),
+            ]
+        );
+    }
+
+    /// What the viewer launches through: the application connection, never the schema
+    /// connection, which only provisioning uses.
+    #[test]
+    fn a_store_is_launched_through_its_connection_alone() {
+        let app = launched(false);
+        assert_eq!(
+            app.launched_through(),
+            Some(&Connection {
+                adapter: "pg".into(),
+                connection: "app".into(),
+            })
+        );
+        assert_eq!(launched(true).launched_through(), app.launched_through());
+        assert_eq!(
+            store(Backend::Postgres, "/etc/brain/pg.json").launched_through(),
+            None
+        );
+    }
+
+    #[test]
+    fn a_store_without_a_connection_starts_ekr_itself() {
+        let cmd = store(Backend::Postgres, "/etc/brain/pg.json")
+            .cmd(&[OsStr::new("head")])
+            .unwrap();
+        assert_eq!(argv(&cmd), ("ekr".to_string(), vec!["head".to_string()]));
+    }
+
+    #[test]
+    fn provisioning_launches_through_the_schema_connection_with_no_store_variables() {
+        let schema = PathBuf::from("/etc/brain/owner.json");
+        let cmd = launched(true).schema_cmd(&schema).unwrap();
+        let (program, args) = argv(&cmd);
+        assert_eq!(program, "/opt/connectors");
+        assert_eq!(
+            args[..8],
+            [
+                "connections",
+                "launch",
+                "--adapter",
+                "pg",
+                "--connection",
+                "owner",
+                "--consumer",
+                "ekr"
+            ]
+        );
+        assert_eq!(
+            args[8..],
+            [
+                "--args".to_string(),
+                r#"["postgres-schema","--config","/etc/brain/owner.json"]"#.to_string()
+            ]
+        );
+        let removed: Vec<_> = cmd
+            .get_envs()
+            .map(|(k, v)| (k.to_string_lossy().into_owned(), v.is_none()))
+            .collect();
+        for key in ["EKR_HOST", "EKR_BACKEND", "EKR_STORE"] {
+            assert!(removed.contains(&(key.to_string(), true)), "{removed:?}");
+        }
+        // Without a schema connection the schema role's own file is used by `ekr` directly.
+        let direct = launched(false).schema_cmd(&schema).unwrap();
+        assert_eq!(argv(&direct).0, "/opt/ekr/bin/ekr");
     }
 
     #[test]

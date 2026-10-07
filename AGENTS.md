@@ -21,6 +21,17 @@ and every secret belong to Connectors (`connectors` binary); extraction is a too
 | `examples/` | a complete spec file and its seed schema |
 | `.engineering/` | the AEP planning store |
 
+## Serves
+
+The objectives of the collection this repository moves, by id from `atlas/ROADMAP.md`:
+
+- **O2 — decisions as data, with evidence.** Every fact a run adds to a brain cites evidence cortex
+  minted for the document it came from, and EKR commits it only as a validated transaction.
+- **O5 — the generic agent platform.** A data source configured as a Connectors connection becomes
+  a brain on a schedule, which agents read through `ekr mcp`.
+
+A change here that moves none of these is a question for the operator, not a task.
+
 ## Commands
 
 | command | does |
@@ -166,8 +177,8 @@ this repository and published by the organisation's reusable workflow.
   `worktree finish --discard-cache --archive <tree>`, so its build cache goes with it. Check
   `df -h /` first; do not start a build with less than 10 GB free. Before a test run counts as
   evidence for a tree, check that the test names it printed exist there (`cargo test -- --list`).
-- The end-to-end tests run a real `ekr` (`CORTEX_TEST_EKR`, default the 0.0.31 binary under
-  `~/.cache/company-brain-v3/bin/0.0.31/bin/ekr`) with stand-in `connectors`, `claude` and
+- The end-to-end tests run a real `ekr` (`CORTEX_TEST_EKR`, default the 0.0.32 binary under
+  `~/.cache/company-brain-v3/bin/0.0.32/bin/ekr`) with stand-in `connectors`, `claude` and
   `systemctl`. A missing `ekr` fails them; it never skips them.
 - After a site change, `task website` must build; it fails on a broken link or anchor.
 
