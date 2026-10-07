@@ -323,6 +323,24 @@ fn process(
     // A record's matches of the irreversible rules, counted when the record is applied.
     let mut record_scrubbed: HashMap<String, BTreeMap<String, usize>> = HashMap::new();
     let structured = structured_source.map(|st| structured::Source::new(st, redactor.as_ref()));
+    // A child call that failed for one parent: the run names the parent, by its identity, and the
+    // operation in `skipped`, and keeps the values of that parent's records of the operation.
+    let mut held: Vec<String> = Vec::new();
+    if let Some(s) = &structured {
+        for f in &fetched.failed_children {
+            let (parent, prefix) = s.failed_child(&f.parent, &f.operation);
+            held.extend(prefix);
+            let op = &f.operation;
+            report.skipped.push(masked_key(
+                redactor.as_ref(),
+                &format!(
+                    "{op}: child call failed for {parent}: {}; its {op} records were not read, \
+                     and none of its earlier ones is ended",
+                    f.reason
+                ),
+            ));
+        }
+    }
     let docs: Vec<_> = fetched
         .documents
         .into_iter()
@@ -406,6 +424,12 @@ fn process(
     let listed: Option<Vec<sources::Document>> = structured_source
         .filter(|st| st.dropped == Some(m::DropPolicy::Supersede))
         .map(|_| docs.clone());
+    // Every parent record the run read, so a child names its parent by all its aliases whether or
+    // not the parent is applied in this run.
+    let parents = structured
+        .as_ref()
+        .map(|s| s.parents(&docs))
+        .unwrap_or_default();
     let seen_path = layout.seen(label);
     let mut seen = SeenState::load(&seen_path).map_err(Failure::Fetch)?;
     let wanted = docs
@@ -460,6 +484,8 @@ fn process(
             applied_at,
             run_dir: &run_dir,
             scrubbed: &record_scrubbed,
+            parents: &parents,
+            held: &held,
         };
         apply_records(
             layout,
@@ -809,6 +835,11 @@ struct Records<'a> {
     run_dir: &'a std::path::Path,
     /// Each record's matches of the irreversible rules, by document key.
     scrubbed: &'a HashMap<String, BTreeMap<String, usize>>,
+    /// Every parent record the run read ([`structured::Source::parents`]).
+    parents: &'a structured::Parents,
+    /// What the identities of records a failed child call left unread start with
+    /// ([`structured::Source::failed_child`]).
+    held: &'a [String],
 }
 
 /// Applies the `selected` records of a structured source with no model call: each batch is one
@@ -833,7 +864,7 @@ fn apply_records(
     let mut entities = load_entities(layout);
     let mut issued = Vec::new();
     for d in selected {
-        let lead = r.source.lead(&d.text);
+        let lead = r.source.lead(&d);
         let bytes = evidence::lead_bytes(&d, &lead);
         if bytes > evidence::PAYLOAD_MAX_BYTES {
             report.skipped.push(format!(
@@ -850,7 +881,7 @@ fn apply_records(
     if issued.is_empty() {
         return Ok(());
     }
-    let index = r.source.index(&issued);
+    let index = r.source.index(&issued, r.parents);
     for (n, batch) in batches(issued).into_iter().enumerate() {
         let mapped = r.source.document(&batch, &index);
         let (doc, refused) = extract::merge(&mapped.document, &batch);
@@ -941,15 +972,19 @@ fn end_dropped(
             seen.documents
                 .get(&d.key)
                 .is_none_or(|s| s.hash != crate::state::doc_hash(d))
-                || evidence::lead_bytes(d, &r.source.lead(&d.text)) > evidence::PAYLOAD_MAX_BYTES
+                || evidence::lead_bytes(d, &r.source.lead(d)) > evidence::PAYLOAD_MAX_BYTES
         })
         .map(|d| d.key.clone())
         .collect();
     let snapshot = r.store.snapshot().map_err(Failure::Apply)?;
     let ontology = r.store.ontology().map_err(Failure::Apply)?;
-    let ops = r
-        .source
-        .ended(&snapshot, &ontology, &r.source.listed(listed), &unsettled);
+    let ops = r.source.ended(
+        &snapshot,
+        &ontology,
+        &r.source.listed(listed),
+        &unsettled,
+        r.held,
+    );
     if ops.is_empty() {
         return Ok(());
     }

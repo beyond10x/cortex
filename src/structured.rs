@@ -14,6 +14,12 @@
 //! record's aliases are `<name> (<identity>)`, which names the node, the identity, and the mapped
 //! aliases, which resolve across records on purpose. The bare name and the bare id are not
 //! aliases: two people of one name, or one record's id equal to another's handle, stay apart.
+//!
+//! A source's `children` are mapped the same way, each by its own mapping. A child record's
+//! identity is `<prefix>/<operation>:<parent id>:<id>` ([`child_key`]): it holds its parent's, so
+//! the children of two parents stay apart, and no parent's identity starts with a child's prefix.
+//! Each child record is linked to its parent's node by one relation named by the child's
+//! `parent`, the parent named by all its aliases.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -71,6 +77,30 @@ pub fn prefix(st: &m::StructuredSource) -> String {
     }
 }
 
+/// `<prefix>/<operation>`: what the identities of a structured source's child records of
+/// `operation` start with, `prefix` being the source's own ([`prefix`]). No identity of a parent
+/// record starts with it, as each holds `<prefix>:`.
+pub fn child_prefix(prefix: &str, operation: &str) -> String {
+    format!("{prefix}/{operation}")
+}
+
+/// `text` with `%` and `:` written `%25` and `%3A`, so it holds no `:`.
+fn escape(text: &str) -> String {
+    text.replace('%', "%25").replace(':', "%3A")
+}
+
+/// [`escape`] undone: every `%` of an escaped text starts `%25` or `%3A`.
+fn unescape(text: &str) -> String {
+    text.replace("%3A", ":").replace("%25", "%")
+}
+
+/// `<child prefix>:<parent>:<id>`, `parent` [`escape`]d: a child record's key as the fetch reads
+/// it (its parent's raw id and its own), and its identity once the run cleaned them
+/// ([`Source::prepare`]: its parent's identity after the source's prefix, and its own id).
+pub fn child_key(child_prefix: &str, parent: &str, id: &str) -> String {
+    format!("{child_prefix}:{}:{id}", escape(parent))
+}
+
 /// `text`, a record's JSON, with credential shapes masked and the irreversible rules of
 /// `redactor` applied in every string value; how many credentials were masked; and how many
 /// matches each irreversible rule replaced. A text that is not JSON is masked as a whole.
@@ -122,54 +152,105 @@ fn string_property(name: &str) -> Value {
     json!({"name": name, "value": {"value_kind": "String"}, "cardinality": "One", "required": false})
 }
 
-/// The ontology a mapping writes: its node type with every mapped property as a `String`, each
-/// relation's target type, and each relation as an edge type from the node type to its target.
-/// `apply-extraction` adds only what the store does not hold yet.
-fn ontology(mapping: &m::RecordMapping) -> Value {
-    let mut properties: Vec<&str> = Vec::new();
-    for p in &mapping.properties {
-        if !properties.contains(&p.property.as_str()) {
-            properties.push(&p.property);
+/// Node types by name, each with its properties, in the order first declared.
+type NodeTypes<'m> = Vec<(&'m str, Vec<&'m str>)>;
+
+/// Declares node type `name` with `properties`, adding those it lacks when it is declared.
+fn declare<'m>(types: &mut NodeTypes<'m>, name: &'m str, properties: &[&'m str]) {
+    let at = match types.iter().position(|(n, _)| *n == name) {
+        Some(at) => at,
+        None => {
+            types.push((name, Vec::new()));
+            types.len() - 1
+        }
+    };
+    for p in properties {
+        if !types[at].1.contains(p) {
+            types[at].1.push(p);
         }
     }
-    let mut node_types = vec![json!({
-        "name": mapping.node_type,
-        "parents": [],
-        "abstract_type": false,
-        "properties": properties.iter().map(|p| string_property(p)).collect::<Vec<_>>(),
-    })];
-    let mut declared = vec![mapping.node_type.as_str()];
-    let mut edge_types = Vec::new();
-    for r in &mapping.relations {
-        if !declared.contains(&r.target_type.as_str()) {
-            declared.push(&r.target_type);
-            node_types.push(json!({
-                "name": r.target_type, "parents": [], "abstract_type": false, "properties": [],
-            }));
-        }
-        edge_types.push(json!({
-            "name": r.relation,
-            "source_types": [mapping.node_type],
-            "target_types": [r.target_type],
-            "cardinality": "Many",
-            "properties": [],
-        }));
-    }
-    json!({"node_types": node_types, "edge_types": edge_types})
 }
 
-/// One structured source as a run maps it: its identity prefix, its mapping and the instance's
-/// redaction policy.
+fn edge_type(name: &str, source: &str, target: &str) -> Value {
+    json!({
+        "name": name,
+        "source_types": [source],
+        "target_types": [target],
+        "cardinality": "Many",
+        "properties": [],
+    })
+}
+
+/// Declares edge type `name` from `source` to `target`: one edge type of one name, from and to
+/// every type it joins.
+fn join(edge_types: &mut Vec<Value>, name: &str, source: &str, target: &str) {
+    let Some(e) = edge_types.iter_mut().find(|e| e["name"] == name) else {
+        edge_types.push(edge_type(name, source, target));
+        return;
+    };
+    for (key, t) in [("source_types", source), ("target_types", target)] {
+        if let Some(types) = e[key].as_array_mut() {
+            if !types.iter().any(|x| x == t) {
+                types.push(json!(t));
+            }
+        }
+    }
+}
+
+/// The properties a mapping maps, in its order; [`declare`] keeps each once.
+fn properties(mapping: &m::RecordMapping) -> Vec<&str> {
+    mapping
+        .properties
+        .iter()
+        .map(|p| p.property.as_str())
+        .collect()
+}
+
+/// The aliases of a record's entity by `mapping`, given its identity: `<name> (<identity>)`
+/// first, so it names the node, then the identity, then the mapped aliases, each once. `None`
+/// without a name.
+fn aliases(mapping: &m::RecordMapping, record: &Value, identity: &str) -> Option<Vec<String>> {
+    let name = text_at(record, &mapping.name)?;
+    let mut out = vec![format!("{name} ({identity})"), identity.to_string()];
+    for alias in mapping.aliases.iter().flat_map(|p| texts_at(record, p)) {
+        if !out.contains(&alias) {
+            out.push(alias);
+        }
+    }
+    Some(out)
+}
+
+/// One structured source as a run maps it: its identity prefix, its mapping, its child operations
+/// and the instance's redaction policy.
 pub struct Source<'a> {
     /// `<adapter>:<operation>` ([`prefix`]).
     pub prefix: String,
     pub mapping: &'a m::RecordMapping,
     pub redactor: Option<&'a Redactor>,
+    /// Each child operation, with what its records' identities start with ([`child_prefix`]).
+    pub children: Vec<(String, &'a m::StructuredChild)>,
 }
+
+/// What one record of a source is mapped by: the source's own mapping, or a child's.
+struct Scope<'s> {
+    /// What the record's identity holds before `:<id>`: the source's prefix, or a child record's
+    /// `<child prefix>:<parent>`, its parent's identity after the source's prefix, escaped.
+    prefix: String,
+    mapping: &'s m::RecordMapping,
+    /// The path to the record's time.
+    time: Option<&'s str>,
+    /// A child record's relation to its parent, and the parent's identity.
+    parent: Option<(&'s str, String)>,
+}
+
+/// Every parent record a run read, by its identity, with the aliases of its entity: a child names
+/// its parent by them.
+pub type Parents = BTreeMap<String, Vec<String>>;
 
 /// One record of a run, as relation targets find it.
 struct Indexed {
     identity: String,
+    node_type: String,
     /// The record's name and mapped aliases, as a relation target may name it.
     names: Vec<String>,
     /// Every alias of the record's entity.
@@ -177,8 +258,22 @@ struct Indexed {
 }
 
 /// The records of one run, so a relation names a target of the run by all its aliases, whichever
-/// batch the target is in.
-pub struct Index(Vec<Indexed>);
+/// batch the target is in; and the parents the run read.
+pub struct Index {
+    records: Vec<Indexed>,
+    parents: Parents,
+}
+
+impl Index {
+    /// The aliases a child names the parent whose identity is `parent` by: all its entity's, or
+    /// the identity alone when the run did not read it.
+    fn parent(&self, parent: &str) -> Vec<String> {
+        self.parents
+            .get(parent)
+            .cloned()
+            .unwrap_or_else(|| vec![parent.to_string()])
+    }
+}
 
 /// What one record lists now ([`Source::listed`]).
 #[derive(Debug, Default)]
@@ -198,10 +293,21 @@ pub struct Mapped {
 
 impl<'a> Source<'a> {
     pub fn new(st: &'a m::StructuredSource, redactor: Option<&'a Redactor>) -> Self {
+        let prefix = prefix(st);
+        let children = match &st.input {
+            m::StructuredInput::Connectors(c) => c
+                .children
+                .iter()
+                .flatten()
+                .map(|child| (child_prefix(&prefix, &child.operation), child))
+                .collect(),
+            m::StructuredInput::Files(_) => Vec::new(),
+        };
         Self {
-            prefix: prefix(st),
+            prefix,
             mapping: &st.mapping,
             redactor,
+            children,
         }
     }
 
@@ -215,56 +321,113 @@ impl<'a> Source<'a> {
     /// `<adapter>:<operation>:` and the first 16 hex digits of the id's SHA-256, so the id itself
     /// is never stored and two ids cleaned to one text stay two identities.
     pub fn identity(&self, raw_id: &str) -> String {
-        let plain = format!("{}:{raw_id}", self.prefix);
+        self.identity_in(&self.prefix, raw_id)
+    }
+
+    /// [`Source::identity`] of a record whose identity starts with `prefix` ([`Scope::prefix`]).
+    fn identity_in(&self, prefix: &str, raw_id: &str) -> String {
+        let plain = format!("{prefix}:{raw_id}");
         if !self.cleaning_changes(raw_id) && !self.cleaning_changes(&plain) {
             return plain;
         }
         let digest = crate::state::hex(&Sha256::digest(raw_id.as_bytes()));
-        format!("{}:{}", self.prefix, &digest[..16])
+        format!("{prefix}:{}", &digest[..16])
+    }
+
+    /// The scope of the source's own records.
+    fn own(&self) -> Scope<'a> {
+        Scope {
+            prefix: self.prefix.clone(),
+            mapping: self.mapping,
+            time: None,
+            parent: None,
+        }
+    }
+
+    /// The scope of the records of child `n` whose parent's identity is `parent`.
+    fn child_scope(&self, n: usize, parent: &str) -> Scope<'a> {
+        let (at, child) = &self.children[n];
+        let part = parent
+            .strip_prefix(self.prefix.as_str())
+            .and_then(|p| p.strip_prefix(':'))
+            .unwrap_or(parent);
+        Scope {
+            prefix: format!("{at}:{}", escape(part)),
+            mapping: &child.mapping,
+            time: child.time.as_deref(),
+            parent: Some((child.parent.as_str(), parent.to_string())),
+        }
+    }
+
+    /// For the key of one of the source's child records ([`child_key`]), the child it is of and
+    /// its parent's part, unescaped: the parent's raw id in a fetched key, the parent's identity
+    /// after the source's prefix in an identity.
+    fn child_of(&self, key: &str) -> Option<(usize, String)> {
+        self.children.iter().enumerate().find_map(|(n, (at, _))| {
+            let rest = key.strip_prefix(at.as_str())?.strip_prefix(':')?;
+            let (parent, _) = rest.split_once(':')?;
+            Some((n, unescape(parent)))
+        })
+    }
+
+    /// The scope of the record whose identity is `key`.
+    fn scope(&self, key: &str) -> Scope<'a> {
+        match self.child_of(key) {
+            Some((n, part)) => self.child_scope(n, &format!("{}:{part}", self.prefix)),
+            None => self.own(),
+        }
+    }
+
+    /// For a child call of `operation` that failed for the parent whose raw id is `parent`: the
+    /// parent's identity, and what the identities of its records of that operation start with,
+    /// whose values the run keeps ([`Source::ended`]).
+    pub fn failed_child(&self, parent: &str, operation: &str) -> (String, Option<String>) {
+        let identity = self.identity(parent);
+        let held = self
+            .children
+            .iter()
+            .position(|(_, child)| child.operation == operation)
+            .map(|n| format!("{}:", self.child_scope(n, &identity).prefix));
+        (identity, held)
     }
 
     /// Readies a fetched record: its key becomes the identity of its raw id, and its text is
-    /// [`clean`]ed. Answers how many credentials were masked and what each irreversible rule
-    /// replaced.
+    /// [`clean`]ed. A child record's identity holds its parent's, made from the parent's raw id in
+    /// its fetched key as the parent's own is; it is dated by the value at its child's `time`, read
+    /// from the cleaned text. Answers how many credentials were masked and what each irreversible
+    /// rule replaced.
     pub fn prepare(&self, doc: &mut Document) -> (usize, BTreeMap<String, usize>) {
+        let scope = match self.child_of(&doc.key) {
+            Some((n, parent)) => self.child_scope(n, &self.identity(&parent)),
+            None => self.own(),
+        };
         let raw_id = serde_json::from_str::<Value>(&doc.text)
             .ok()
-            .and_then(|r| text_at(&r, &self.mapping.id))
+            .and_then(|r| text_at(&r, &scope.mapping.id))
             .unwrap_or_default();
-        doc.key = self.identity(&raw_id);
+        doc.key = self.identity_in(&scope.prefix, &raw_id);
         let (text, masked, scrubbed) = clean(&doc.text, self.redactor);
         doc.text = text;
+        if let Some(time) = scope.time {
+            doc.published = serde_json::from_str::<Value>(&doc.text)
+                .ok()
+                .and_then(|r| text_at(&r, time));
+        }
         (masked, scrubbed)
     }
 
-    /// The record's entity aliases, given its identity: `<name> (<identity>)` first, so it names
-    /// the node, then the identity, then the mapped aliases, each once. `None` without a name.
-    fn aliases(&self, record: &Value, identity: &str) -> Option<Vec<String>> {
-        let name = text_at(record, &self.mapping.name)?;
-        let mut out = vec![format!("{name} ({identity})"), identity.to_string()];
-        for alias in self
-            .mapping
-            .aliases
-            .iter()
-            .flat_map(|p| texts_at(record, p))
-        {
-            if !out.contains(&alias) {
-                out.push(alias);
-            }
-        }
-        Some(out)
-    }
-
-    /// The values the mapping takes from a record whose text is `text`, one `<label>: <value>`
-    /// line each, under `Mapped values:` and ending in an empty line: its id, its name, its mapped
-    /// aliases, each mapped property and each relation's targets. It leads the record's evidence
+    /// The values the mapping takes from record `doc`, whose key is its identity, one `<label>:
+    /// <value>` line each, under `Mapped values:` and ending in an empty line: its id, its name, its
+    /// mapped aliases, each mapped property, each relation's targets and, for a child record, its
+    /// parent's identity under its relation to the parent. It leads the record's evidence
     /// (`evidence::issue_led`), so every value a fact from the record cites is in the payload
     /// before the cut. Empty for a text that is not JSON.
-    pub fn lead(&self, text: &str) -> String {
-        let Ok(record) = serde_json::from_str::<Value>(text) else {
+    pub fn lead(&self, doc: &Document) -> String {
+        let Ok(record) = serde_json::from_str::<Value>(&doc.text) else {
             return String::new();
         };
-        let mapping = self.mapping;
+        let scope = self.scope(&doc.key);
+        let mapping = scope.mapping;
         let mut lines: Vec<(&str, String)> = Vec::new();
         lines.extend(text_at(&record, &mapping.id).map(|v| ("id", v)));
         lines.extend(text_at(&record, &mapping.name).map(|v| ("name", v)));
@@ -281,6 +444,9 @@ impl<'a> Source<'a> {
                     .map(|v| (r.relation.as_str(), v)),
             );
         }
+        if let Some((relation, parent)) = &scope.parent {
+            lines.push((relation, parent.clone()));
+        }
         let mut out = String::from("Mapped values:\n");
         for (label, value) in lines {
             out.push_str(&format!("{label}: {value}\n"));
@@ -289,39 +455,59 @@ impl<'a> Source<'a> {
         out
     }
 
-    /// The run's records, whose keys are their identities ([`Source::prepare`]).
-    pub fn index(&self, records: &[Issued]) -> Index {
-        self.index_documents(records.iter().map(|issued| &issued.doc))
+    /// The run's records, whose keys are their identities ([`Source::prepare`]), and `parents`,
+    /// the parents the run read ([`Source::parents`]).
+    pub fn index(&self, records: &[Issued], parents: &Parents) -> Index {
+        Index {
+            parents: parents.clone(),
+            ..self.index_documents(records.iter().map(|issued| &issued.doc))
+        }
     }
 
-    /// [`Source::index`] of documents.
+    /// The parent records of `read`, every record a run read: none when the source has no
+    /// children.
+    pub fn parents(&self, read: &[Document]) -> Parents {
+        if self.children.is_empty() {
+            return Parents::new();
+        }
+        self.index_documents(read.iter()).parents
+    }
+
+    /// [`Source::index`] of documents, the parents among them.
     fn index_documents<'d>(&self, docs: impl Iterator<Item = &'d Document>) -> Index {
-        Index(
-            docs.filter_map(|doc| {
-                let record: Value = serde_json::from_str(&doc.text).ok()?;
-                let aliases = self.aliases(&record, &doc.key)?;
-                let names = text_at(&record, &self.mapping.name)
-                    .into_iter()
-                    .chain(
-                        self.mapping
-                            .aliases
-                            .iter()
-                            .flat_map(|p| texts_at(&record, p)),
-                    )
-                    .collect();
-                Some(Indexed {
-                    identity: doc.key.clone(),
-                    names,
-                    aliases,
-                })
-            })
-            .collect(),
-        )
+        let mut index = Index {
+            records: Vec::new(),
+            parents: Parents::new(),
+        };
+        for doc in docs {
+            let Ok(record) = serde_json::from_str::<Value>(&doc.text) else {
+                continue;
+            };
+            let scope = self.scope(&doc.key);
+            let mapping = scope.mapping;
+            let Some(aliases) = aliases(mapping, &record, &doc.key) else {
+                continue;
+            };
+            if scope.parent.is_none() {
+                index.parents.insert(doc.key.clone(), aliases.clone());
+            }
+            let names = text_at(&record, &mapping.name)
+                .into_iter()
+                .chain(mapping.aliases.iter().flat_map(|p| texts_at(&record, p)))
+                .collect();
+            index.records.push(Indexed {
+                identity: doc.key.clone(),
+                node_type: mapping.node_type.clone(),
+                names,
+                aliases,
+            });
+        }
+        index
     }
 
     /// What each of `listed`, every record the run read, lists now, by its identity: the
-    /// `(property, value)` pairs and the `(relation, target aliases)` its mapping gives, as
-    /// [`Source::document`] would assert them.
+    /// `(property, value)` pairs and the `(relation, target aliases)` its mapping gives, a child
+    /// record's relation to its parent among them, as [`Source::document`] would assert them.
     pub fn listed(&self, listed: &[Document]) -> BTreeMap<String, Listed> {
         let index = self.index_documents(listed.iter());
         let mut out = BTreeMap::new();
@@ -329,15 +515,16 @@ impl<'a> Source<'a> {
             let Ok(record) = serde_json::from_str::<Value>(&doc.text) else {
                 continue;
             };
+            let scope = self.scope(&doc.key);
             let mut l = Listed::default();
-            for p in &self.mapping.properties {
+            for p in &scope.mapping.properties {
                 if let Some(value) = text_at(&record, &p.path) {
                     l.properties.insert((p.property.clone(), value));
                 }
             }
-            for r in &self.mapping.relations {
+            for r in &scope.mapping.relations {
                 for target in texts_at(&record, &r.target_name) {
-                    let object = self.target(&index, &r.target_type, &target);
+                    let object = self.target(&scope, &index, &r.target_type, &target);
                     let aliases = object["aliases"]
                         .as_array()
                         .into_iter()
@@ -348,20 +535,30 @@ impl<'a> Source<'a> {
                     l.relations.push((r.relation.clone(), aliases));
                 }
             }
+            if let Some((relation, parent)) = &scope.parent {
+                l.relations
+                    .push((relation.to_string(), index.parent(parent)));
+            }
             out.insert(doc.key.clone(), l);
         }
         out
     }
 
+    /// Whether `identity` is one of this source's records: `<prefix>:<id>`, or a child record's
+    /// [`child_key`].
+    fn owns(&self, identity: &str) -> bool {
+        identity
+            .strip_prefix(self.prefix.as_str())
+            .is_some_and(|rest| rest.starts_with(':'))
+            || self.child_of(identity).is_some()
+    }
+
     /// The record identity an evidence item of the store names, when it is one of this source's
-    /// records: its `!HumanStatement` identity is `record:<prefix>:<id>` (`evidence::identity`).
+    /// records: its `!HumanStatement` identity is `record:<identity>` (`evidence::identity`).
     fn owner(&self, evidence: &Value) -> Option<String> {
         let identity = evidence["source"]["HumanStatement"]["identity"].as_str()?;
         let identity = identity.strip_prefix("record:")?;
-        identity
-            .strip_prefix(&self.prefix)?
-            .starts_with(':')
-            .then(|| identity.to_string())
+        self.owns(identity).then(|| identity.to_string())
     }
 
     /// What ends the values this source asserted earlier and no longer lists (`dropped:
@@ -373,7 +570,9 @@ impl<'a> Source<'a> {
     /// with that claim: a property with that value, or a relation of that name to a node one of
     /// whose names (its aliases and canonical name) is an alias of a target the record names now.
     /// A record in `unsettled` (read, but its current text not applied: held back, rejected, or
-    /// beyond the run) keeps every value. Every other active assertion of this source is ended:
+    /// beyond the run) keeps every value, and so does a record whose identity starts with one of
+    /// `held` (the records of a child call that failed for their parent, which the run did not
+    /// read: [`Source::failed_child`]). Every other active assertion of this source is ended:
     /// a property is superseded by the latest active assertion of the same record, subject and
     /// property that is still listed and valid from no earlier than it (its replacement, which
     /// cites the evidence of the run that applied it); one with no such replacement — the record
@@ -386,6 +585,7 @@ impl<'a> Source<'a> {
         ontology: &Value,
         listed: &BTreeMap<String, Listed>,
         unsettled: &BTreeSet<String>,
+        held: &[String],
     ) -> Vec<crate::ekr::Operation> {
         use crate::ekr::Operation;
         let graph = &snapshot["graph"]["graph"];
@@ -471,9 +671,11 @@ impl<'a> Source<'a> {
                 }
                 true
             };
-            let kept = records
-                .iter()
-                .any(|r| unsettled.contains(r) || listed.get(r).is_some_and(lists));
+            let kept = records.iter().any(|r| {
+                unsettled.contains(r)
+                    || held.iter().any(|h| r.starts_with(h.as_str()))
+                    || listed.get(r).is_some_and(lists)
+            });
             mine.push(Mine { a, records, kept });
         }
         let from = |a: &Value| a["valid_time"]["from"].as_i64();
@@ -557,22 +759,23 @@ impl<'a> Source<'a> {
         ops
     }
 
-    /// The named thing a relation's `target` text names, of `node_type`. Of the mapping's own node
-    /// type, it is the run's record whose identity is the target's as an id, else the one record of
-    /// the run with it as its name or a mapped alias, named by all that record's aliases; else
-    /// the target and its identity as an id, so it reaches a record of an earlier run by its id or
-    /// by a mapped alias. Of another type, the target alone.
-    fn target(&self, index: &Index, node_type: &str, target: &str) -> Value {
-        if node_type != self.mapping.node_type {
+    /// The named thing a relation's `target` text names, of `node_type`, from a record of `scope`.
+    /// Of the scope's own node type, it is the run's record whose identity is the target's as an
+    /// id in the scope (for a child, of the same parent), else the one record of the run of that
+    /// type with it as its name or a mapped alias, named by all that record's aliases; else the
+    /// target and its identity as an id, so it reaches a record of an earlier run by its id or by
+    /// a mapped alias. Of another type, the target alone.
+    fn target(&self, scope: &Scope<'_>, index: &Index, node_type: &str, target: &str) -> Value {
+        if node_type != scope.mapping.node_type {
             return json!({"node_type": node_type, "aliases": [target]});
         }
-        let identity = self.identity(target);
-        let by_id = index.0.iter().find(|r| r.identity == identity);
+        let identity = self.identity_in(&scope.prefix, target);
+        let by_id = index.records.iter().find(|r| r.identity == identity);
         let by_name = || {
             let mut named = index
-                .0
+                .records
                 .iter()
-                .filter(|r| r.names.iter().any(|n| n == target));
+                .filter(|r| r.node_type == node_type && r.names.iter().any(|n| n == target));
             match (named.next(), named.next()) {
                 (Some(one), None) => Some(one),
                 _ => None,
@@ -584,15 +787,58 @@ impl<'a> Source<'a> {
         }
     }
 
+    /// The ontology the source's mappings write: the source's node type with every mapped property
+    /// as a `String`, each relation's target type, and each relation as an edge type from the node
+    /// type to its target; then each child's node type, relations and relation to the parent's
+    /// node type, an edge type of one name declared once ([`join`]). `apply-extraction` adds only
+    /// what the store does not hold yet.
+    fn ontology(&self) -> Value {
+        let mapping = self.mapping;
+        let mut node_types: NodeTypes<'_> = Vec::new();
+        let mut edge_types = Vec::new();
+        declare(&mut node_types, &mapping.node_type, &properties(mapping));
+        for r in &mapping.relations {
+            declare(&mut node_types, &r.target_type, &[]);
+            edge_types.push(edge_type(&r.relation, &mapping.node_type, &r.target_type));
+        }
+        for (_, child) in &self.children {
+            let c = &child.mapping;
+            declare(&mut node_types, &c.node_type, &properties(c));
+            for r in &c.relations {
+                declare(&mut node_types, &r.target_type, &[]);
+                join(&mut edge_types, &r.relation, &c.node_type, &r.target_type);
+            }
+            join(
+                &mut edge_types,
+                &child.parent,
+                &c.node_type,
+                &mapping.node_type,
+            );
+        }
+        let node_types: Vec<Value> = node_types
+            .iter()
+            .map(|(name, properties)| {
+                json!({
+                    "name": name,
+                    "parents": [],
+                    "abstract_type": false,
+                    "properties": properties.iter().map(|p| string_property(p)).collect::<Vec<_>>(),
+                })
+            })
+            .collect();
+        json!({"node_types": node_types, "edge_types": edge_types})
+    }
+
     /// The `ekr.extraction-document/1` of one batch of records, in the JSON form the model path
     /// answers in (`"!Property"` keys), without its evidence: `extract::merge` adds the items `batch`
-    /// was issued. Each record whose text is JSON and has a name at the mapping's `name` is one
+    /// was issued. Each record whose text is JSON and has a name at its mapping's `name` is one
     /// entity of the mapping's node type, named by its aliases; each mapped property with a scalar
     /// value is a `String` property; each relation target named at `target_name` (a scalar, or
-    /// each scalar of an array) is a relation to the named thing [`Source::target`] answers. Every
-    /// fact cites the evidence id of its record.
+    /// each scalar of an array) is a relation to the named thing [`Source::target`] answers; and a
+    /// child record has one relation, named by its child's `parent`, to its parent's entity, named
+    /// by all the parent's aliases ([`Index::parent`]). Every fact cites the evidence id of its
+    /// record.
     pub fn document(&self, batch: &[Issued], index: &Index) -> Mapped {
-        let mapping = self.mapping;
         let mut entities: Vec<Value> = Vec::new();
         let mut entity_owners: Vec<Vec<String>> = Vec::new();
         let mut entity = |e: Value, owner: &str| {
@@ -613,7 +859,9 @@ impl<'a> Source<'a> {
             let Ok(record) = serde_json::from_str::<Value>(&issued.doc.text) else {
                 continue;
             };
-            let Some(aliases) = self.aliases(&record, &issued.doc.key) else {
+            let scope = self.scope(&issued.doc.key);
+            let mapping = scope.mapping;
+            let Some(aliases) = aliases(mapping, &record, &issued.doc.key) else {
                 continue;
             };
             let subject = json!({"node_type": mapping.node_type, "aliases": aliases});
@@ -628,23 +876,34 @@ impl<'a> Source<'a> {
                     }}));
                 }
             }
+            let mut relate = |relation: &str, object: Value| {
+                entity(object.clone(), &issued.id);
+                facts.push(json!({"!Relation": {
+                    "subject": subject,
+                    "relation": relation,
+                    "object": object,
+                    "evidence": [issued.id],
+                }}));
+            };
             for r in &mapping.relations {
                 for target in texts_at(&record, &r.target_name) {
-                    let object = self.target(index, &r.target_type, &target);
-                    entity(object.clone(), &issued.id);
-                    facts.push(json!({"!Relation": {
-                        "subject": subject,
-                        "relation": r.relation,
-                        "object": object,
-                        "evidence": [issued.id],
-                    }}));
+                    relate(
+                        &r.relation,
+                        self.target(&scope, index, &r.target_type, &target),
+                    );
                 }
+            }
+            if let Some((relation, parent)) = &scope.parent {
+                relate(
+                    relation,
+                    json!({"node_type": self.mapping.node_type, "aliases": index.parent(parent)}),
+                );
             }
         }
         Mapped {
             document: json!({
                 "format": "ekr.extraction-document/1",
-                "ontology": ontology(mapping),
+                "ontology": self.ontology(),
                 "entities": entities,
                 "facts": facts,
             }),
@@ -739,6 +998,7 @@ mod tests {
             prefix: "dir:people.list".into(),
             mapping,
             redactor: None,
+            children: Vec::new(),
         }
     }
 
@@ -773,7 +1033,7 @@ mod tests {
             ),
             issued(&s, "e2", json!({"id": "8", "handles": "nameless"})),
         ];
-        let mapped = s.document(&batch, &s.index(&batch));
+        let mapped = s.document(&batch, &s.index(&batch, &Parents::new()));
         let doc = &mapped.document;
         let ada = json!({"node_type": "Person",
             "aliases": ["Ada (dir:people.list:7)", "dir:people.list:7", "ada", "Ada"]});
@@ -813,7 +1073,7 @@ mod tests {
             "e2",
             json!({"id": "P-2", "name": "Grace", "manager": ["P-1", "Ada", "P-9"]}),
         );
-        let index = s.index(&[ada, grace]);
+        let index = s.index(&[ada, grace], &Parents::new());
         let batch = [issued(
             &s,
             "e2",
@@ -863,7 +1123,7 @@ mod tests {
             ),
             issued(&s, "e3", json!({"id": 3, "name": "Cy", "age": 3})),
         ];
-        let mapped = s.document(&batch, &s.index(&batch));
+        let mapped = s.document(&batch, &s.index(&batch, &Parents::new()));
         let rejected = |items: &[&str]| -> Vec<String> {
             let parts: Vec<_> = items.iter().map(|i| json!({"item": i})).collect();
             mapped
@@ -929,7 +1189,7 @@ mod tests {
         // P-1 lists 37 now, P-2 is gone, P-3 lists 61 but its text is not applied yet.
         let listed = s.listed(&[doc("P-1", 37), doc("P-3", 61)]);
         let unsettled = BTreeSet::from(["dir:people.list:P-3".to_string()]);
-        let ops = s.ended(&snapshot, &ontology, &listed, &unsettled);
+        let ops = s.ended(&snapshot, &ontology, &listed, &unsettled, &[]);
         assert_eq!(
             ops,
             [
@@ -948,10 +1208,151 @@ mod tests {
         // A value the record no longer has at all, with no replacement, is retracted.
         let listed = s.listed(&[doc("P-1", 37)]);
         let (snapshot, _) = store(&[("a-old", "n1", "36", "e-1", 1)]);
-        let ops = s.ended(&snapshot, &ontology, &listed, &BTreeSet::new());
+        let ops = s.ended(&snapshot, &ontology, &listed, &BTreeSet::new(), &[]);
         assert!(
             matches!(&ops[..], [Operation::Retract { assertion, .. }] if assertion == "a-old"),
             "{ops:?}"
+        );
+    }
+
+    /// A child of operation `tags.list`, dated at `$.at`, linked to its parent by `IN_PROJECT`.
+    fn tags_child() -> m::StructuredChild {
+        m::StructuredChild {
+            operation: "tags.list".into(),
+            input: cortex_model::json::Value::Null,
+            records: "$.tags".into(),
+            paging: None,
+            mapping: m::RecordMapping {
+                node_type: "Tag".into(),
+                id: "$.id".into(),
+                name: "$.name".into(),
+                aliases: Vec::new(),
+                properties: Vec::new(),
+                relations: Vec::new(),
+            },
+            time: Some("$.at".into()),
+            parent: "IN_PROJECT".into(),
+        }
+    }
+
+    /// A source `forge:projects.list` of `Person` records with `child`.
+    fn with_child<'a>(mapping: &'a m::RecordMapping, child: &'a m::StructuredChild) -> Source<'a> {
+        let prefix = "forge:projects.list".to_string();
+        Source {
+            children: vec![(child_prefix(&prefix, &child.operation), child)],
+            prefix,
+            mapping,
+            redactor: None,
+        }
+    }
+
+    /// A fetched record with key `key`.
+    fn fetched(key: String, record: Value) -> Document {
+        Document {
+            key,
+            origin: Origin::Record,
+            title: None,
+            description: None,
+            published: None,
+            text: record.to_string(),
+            hash: None,
+        }
+    }
+
+    #[test]
+    fn a_child_identity_holds_its_parents_escaped_and_never_a_raw_id_cleaning_would_change() {
+        let (m, child) = (mapping(), tags_child());
+        let s = with_child(&m, &child);
+        let at = "forge:projects.list/tags.list";
+        let tag = json!({"id": "v1", "name": "v1", "at": "2026-01-02"});
+
+        // A parent id holding `:` and `%` is escaped, and read back whole.
+        let mut doc = fetched(child_key(at, "a:b%3A", "v1"), tag.clone());
+        s.prepare(&mut doc);
+        assert_eq!(doc.key, "forge:projects.list/tags.list:a%3Ab%253A:v1");
+        assert_eq!(doc.published.as_deref(), Some("2026-01-02"));
+        assert_eq!(
+            s.scope(&doc.key).parent,
+            Some(("IN_PROJECT", "forge:projects.list:a:b%3A".to_string()))
+        );
+
+        // A parent id masking would change: the child holds the parent's digest, never the id.
+        let token = format!("glpat-{}", "abcdefghijklmnopqrstuvwx");
+        let parent = s.identity(&token);
+        let mut doc = fetched(child_key(at, &token, "v1"), tag);
+        s.prepare(&mut doc);
+        assert!(!doc.key.contains("glpat"), "{}", doc.key);
+        assert_eq!(
+            doc.key,
+            format!("{at}:{}:v1", &parent["forge:projects.list:".len()..])
+        );
+        assert_eq!(
+            s.scope(&doc.key).parent,
+            Some(("IN_PROJECT", parent.clone()))
+        );
+
+        // The source owns its records and its children's, and no other operation's; a failed
+        // child call holds exactly that parent's children of its operation.
+        assert!(s.owns(&doc.key) && s.owns(&parent));
+        assert!(!s.owns("forge:tags.list:v1") && !s.owns("forge:projects.list/other:1:v1"));
+        let (identity, held) = s.failed_child(&token, "tags.list");
+        assert_eq!(identity, parent);
+        let held = held.expect("a held prefix");
+        assert!(doc.key.starts_with(&held));
+        assert!(!s.identity("P-1").starts_with(&held));
+        assert_eq!(s.failed_child(&token, "events.list").1, None);
+    }
+
+    #[test]
+    fn a_child_maps_to_its_own_node_with_one_relation_to_its_parent_named_by_all_its_aliases() {
+        let (m, child) = (mapping(), tags_child());
+        let s = with_child(&m, &child);
+        let mut parent = fetched(
+            "forge:projects.list:7".into(),
+            json!({"id": 7, "name": "Ada"}),
+        );
+        let mut tag = fetched(
+            child_key("forge:projects.list/tags.list", "7", "v1"),
+            json!({"id": "v1", "name": "v1"}),
+        );
+        s.prepare(&mut parent);
+        s.prepare(&mut tag);
+        let parents = s.parents(&[parent.clone(), tag.clone()]);
+        let ada = vec![
+            "Ada (forge:projects.list:7)".to_string(),
+            "forge:projects.list:7".to_string(),
+        ];
+        assert_eq!(parents, Parents::from([(parent.key.clone(), ada.clone())]));
+        // The parent is not in the batch: the child names it by the aliases the run read.
+        let batch = [Issued {
+            id: "e2".into(),
+            item: serde_yaml_ng::Value::Null,
+            doc: tag.clone(),
+        }];
+        let doc = s.document(&batch, &s.index(&batch, &parents)).document;
+        assert_eq!(
+            doc["facts"],
+            json!([{"!Relation": {
+                "subject": {"node_type": "Tag", "aliases": [
+                    "v1 (forge:projects.list/tags.list:7:v1)", "forge:projects.list/tags.list:7:v1"]},
+                "relation": "IN_PROJECT",
+                "object": {"node_type": "Person", "aliases": ada},
+                "evidence": ["e2"],
+            }}])
+        );
+        let edges = doc["ontology"]["edge_types"].as_array().unwrap();
+        assert_eq!(edges.len(), 2, "{edges:?}");
+        assert_eq!(
+            edges[1],
+            json!({"name": "IN_PROJECT", "source_types": ["Tag"], "target_types": ["Person"],
+                "cardinality": "Many", "properties": []})
+        );
+        assert!(s.lead(&tag).contains("IN_PROJECT: forge:projects.list:7\n"));
+        // What the child lists now holds its relation to the parent.
+        let listed = s.listed(&[parent, tag.clone()]);
+        assert_eq!(
+            listed[&tag.key].relations,
+            [("IN_PROJECT".to_string(), ada)]
         );
     }
 

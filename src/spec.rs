@@ -162,6 +162,27 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
             ));
         }
     }
+    // A child record's identity names its child by the operation (`structured::child_key`), so the
+    // records of two children of one operation would be one record set, mapped by the first.
+    for source in &spec.sources {
+        let m::SourceSettings::Structured(m::StructuredSource {
+            input: m::StructuredInput::Connectors(c),
+            ..
+        }) = &source.settings
+        else {
+            continue;
+        };
+        let mut operations = std::collections::BTreeSet::new();
+        for child in c.children.iter().flatten() {
+            if !operations.insert(child.operation.as_str()) {
+                return Err(format!(
+                    "sources.{}: children: operation {:?} appears twice; give each child \
+                     operation one entry",
+                    source.name, child.operation
+                ));
+            }
+        }
+    }
     let budget: f64 = spec.model.budget_usd.0.parse().map_err(|_| {
         format!(
             "model.budget_usd {:?} is not a number",

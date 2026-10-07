@@ -289,7 +289,7 @@ a structured run costs 0.
 
 | field | meaning |
 |---|---|
-| `input` | `from: connectors` with its `value`: `adapter`, `connection`, `operation`, `inputs` and an optional `paging`, as for [`kind: connectors`](#kind-connectors), window included. Or `from: files` with its `value`: `paths` and `glob`, as for [`kind: files`](#kind-files); each matching file is one JSON document (a leading byte-order mark is ignored) |
+| `input` | `from: connectors` with its `value`: `adapter`, `connection`, `operation`, `inputs` and an optional `paging`, as for [`kind: connectors`](#kind-connectors), window included, and optional `children` (below). Or `from: files` with its `value`: `paths` and `glob`, as for [`kind: files`](#kind-files); each matching file is one JSON document (a leading byte-order mark is ignored) |
 | `records` | path to the array of records in the answer or in each file, for example `$.people` |
 | `mapping` | how a record becomes an entity (below) |
 | `dropped` | optional: `Keep` (the default) leaves every value the source asserted earlier; `Supersede` ends each value the source no longer lists (below) |
@@ -331,7 +331,9 @@ The bare name and the bare id are not aliases. Two records of one name, or one r
 to another's alias, are two nodes, and a record whose name changes stays the same node. A mapped
 alias resolves on purpose: records, and nodes from other sources, that share one are one node. To
 merge a record with nodes known by its plain name, map the name as an alias too
-(`aliases: ["$.name"]`).
+(`aliases: ["$.name"]`). EKR adds no alias to a node an extraction matches, so a record whose
+mapped alias changes (a renamed path) keeps its node and its old alias, and the new value is not
+added as an alias; the property holding it is set as any changed value is.
 
 **Values.** A property's value is stored as text (a number or a boolean as written in JSON); a
 property whose value is absent, empty, null, a list or an object is not set. A changed value adds
@@ -349,6 +351,10 @@ and ends the ones it no longer lists, in transactions of their own (`runs/<run>/
   relation) is **retracted**, with a reason naming the record: EKR 0.0.31 supersedes an assertion
   only by another. The node itself stays. A retracted relation's edge is removed when no other
   active assertion of that relation joins the two nodes.
+
+A child record is ended as any record of the source is: a child its parent no longer lists, and
+every child of a parent the source no longer lists, has its values ended, its relation to the
+parent among them.
 
 The run reports `superseded` and `retracted` when it ended any. Nothing is ended when the fetch
 left records unread (a `max_pages` reached, an empty page that named a next one), or when the
@@ -373,9 +379,49 @@ record of an earlier run by its id, or a node by a mapped alias; a target of ano
 named by the target text. The mapping's node type, its properties, the target types and the
 relations are added to the store's ontology where it does not hold them yet.
 
+**Children.** A `from: connectors` input may list `children`: operations called once for each
+record the source read, whose records become nodes of their own, each linked to its parent's node.
+
+| `children` field | meaning |
+|---|---|
+| `operation` | the child operation, on the input's `adapter` and `connection`. An operation appears once among a source's `children`: `create` and `update` refuse a second entry |
+| `input` | the operation's input: `{a.b}` in a string value is filled from the parent record, as a [`kind: connectors`](#kind-connectors) `child` is |
+| `records` | path to the array of records in the child's answer |
+| `paging` | optional, as for the input |
+| `mapping` | how a child record becomes an entity, as `mapping` above, relations included |
+| `time` | optional dotted path to the child record's publication time, which dates its evidence and the facts drawn from it ([how](./operating.md#what-one-run-does)); without it, a child's facts are dated by the run |
+| `parent` | the name of the relation from each child record's node to its parent's node |
+
+A child record's identity is `<prefix>/<operation>:<parent>:<id>`: the source's prefix, the child
+operation, its parent's identity after the source's prefix (the parent's id, or its digest), with
+`%` and `:` written `%25` and `%3A`, and its own id; for example
+`forge:projects.list/tags.list:1:v1.0`. So the children of two parents stay two nodes even when
+their names and ids are equal, and a child's identity never holds an id masking or a rule would
+change. A child record without an id or a name by its mapping is skipped, and one whose identity
+was already read in the run counts once. A mapped alias of a child resolves across parents as any
+mapped alias does: mapping a tag's name as an alias makes the same-named tags of two projects one
+node.
+
+Each child record has one relation, named by `parent`, to its parent's node, which it names by all
+the parent's aliases, so a parent the run does not apply (over the evidence bound) is still named
+`<name> (<identity>)`. The ontology gets each child's node type, properties and relations, and
+the `parent` relation from the child's node type to the parent's; children with one `parent` name
+share one edge type.
+
+Every run calls each child once for every parent it reads (more with `paging`), whether or not the
+parent changed. A child call that fails for one parent (Connectors answers `forbidden`, say, or the
+answer has no array at `records`) does not fail the run: the parent and its other children are
+read and applied, and the run names the parent's identity and the operation, with the reason, in
+`skipped`. That parent's records of that operation are not read in that run, and none of its
+earlier ones is ended (`dropped: Supersede`). The failure does not hold the window: with `{since}`
+in the `inputs`, a parent the next run does not list is not asked again. A child whose walk leaves
+pages unread (its `max_pages` reached) leaves records unread as the input's walk does: the run
+says so in `stopped`, and ends nothing.
+
 **Evidence and rejections.** Each record is stored as the evidence every fact from it cites: a
 `Source:` header, its mapped values (`Mapped values:`, one `<label>: <value>` line each for its
-id, name, aliases, properties and relation targets), then the record's JSON, cut at a character
+id, name, aliases, properties and relation targets, and for a child record its parent's identity
+under the `parent` name), then the record's JSON, cut at a character
 boundary to 16,384 bytes (EKR 0.0.30's bound on one evidence payload). The mapped values come
 first, so the cut never takes a value a fact cites. A record whose header and mapped values alone
 are over the bound is not applied: the run names it in `skipped` with the reason and records it as
