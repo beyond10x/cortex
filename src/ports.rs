@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
 
-use cortex_model::behaviour::{Context, InstanceStorage, SourceStorage};
+use cortex_model::behaviour::{Context, ExternalCommand, InstanceStorage, SourceStorage};
 use cortex_model::instance as m;
 use cortex_model::instance::obligations::{RecordFailureBehavior, RunSourceBehavior};
 use cortex_model::obligation::UnmetObligation;
@@ -140,13 +140,8 @@ impl Context for Ports {
             .pop_front()
             .unwrap_or_default()
     }
-    fn external(&mut self, command: &'static str, outcome: &'static str) -> bool {
-        self.shared
-            .borrow()
-            .external
-            .get(&(command, outcome))
-            .copied()
-            .unwrap_or(false)
+    fn external(&mut self, command: ExternalCommand<'_>, outcome: &'static str) -> bool {
+        self.decided(command.name(), outcome)
     }
 }
 
@@ -203,6 +198,18 @@ impl RecordFailureBehavior for Ports {
 }
 
 impl Ports {
+    /// Whether the caller has already decided the `external:` branch `outcome` of `command`, by
+    /// the command's qualified name. `RunSource` is an obligation, not a generated behaviour, so
+    /// it has no [`ExternalCommand`] and asks here directly.
+    fn decided(&self, command: &'static str, outcome: &'static str) -> bool {
+        self.shared
+            .borrow()
+            .external
+            .get(&(command, outcome))
+            .copied()
+            .unwrap_or(false)
+    }
+
     /// The active instance `<instance>/seed` names, when the instance has no source of that name:
     /// its seed documents, which `create` extracts as the pseudo-source `seed`.
     fn seed_of(&self, source_id: &m::SourceId) -> Option<m::InstanceName> {
@@ -266,19 +273,19 @@ impl RunSourceBehavior for Ports {
         // taken first, in declaration order. A real run decides none in advance; the pipeline
         // below decides them.
         const RUN: &str = "cortex.instance.RunSource";
-        if self.external(RUN, "fetch-failed") {
+        if self.decided(RUN, "fetch-failed") {
             let reason = self.generate_string();
             return Ok(m::RunSourceOutcome::FetchFailed {
                 error: m::FetchFailed { reason },
             });
         }
-        if self.external(RUN, "extraction-failed") {
+        if self.decided(RUN, "extraction-failed") {
             let reason = self.generate_string();
             return Ok(m::RunSourceOutcome::ExtractionFailed {
                 error: m::ExtractionFailed { reason },
             });
         }
-        if self.external(RUN, "apply-refused") {
+        if self.decided(RUN, "apply-refused") {
             let reason = self.generate_string();
             return Ok(m::RunSourceOutcome::ApplyRefused {
                 error: m::ApplyRefused { reason },

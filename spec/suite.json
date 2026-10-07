@@ -1,10 +1,11 @@
 {
   "provenance": {
-    "suite_version": "ess-conformance/12",
+    "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
     "spec_digest": "a5cdddd9e44c55f5312801a678ef3ff218957a546f5dc3e857e490a3aa3cca15",
-    "contract_digest": "b5c1fffcca71606fe8e9c44e881856b37ae97c97a68cba6165d2449bad664144"
+    "contract_digest": "b5c1fffcca71606fe8e9c44e881856b37ae97c97a68cba6165d2449bad664144",
+    "scenario_initial_state": "empty"
   },
   "scenarios": {
     "cortex.instance.AddSource/outcome/added": {
@@ -145,10 +146,17 @@
           }
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.SourceAdded",
           "payload": {
-            "source_id": "source_id"
+            "instance_name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "source_id": {
+              "kind": "literal",
+              "value": "source_id"
+            }
           },
           "shape": {
             "instance_name": {
@@ -5541,8 +5549,14 @@
           }
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.SourceEnabled",
+          "payload": {
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          },
           "shape": {
             "source_id": {
               "holds": "primitive",
@@ -6386,8 +6400,14 @@
           }
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.InstanceRemoved",
+          "payload": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            }
+          },
           "shape": {
             "name": {
               "holds": "primitive",
@@ -6851,8 +6871,14 @@
           }
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.QualityMeasured",
+          "payload": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            }
+          },
           "shape": {
             "judged": {
               "holds": "primitive",
@@ -7507,8 +7533,14 @@
           }
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.SchemaChangesProposed",
+          "payload": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            }
+          },
           "shape": {
             "applied": {
               "holds": "primitive",
@@ -8171,8 +8203,14 @@
           }
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.SchemaChangesProposed",
+          "payload": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            }
+          },
           "shape": {
             "applied": {
               "holds": "primitive",
@@ -8741,10 +8779,17 @@
           "step": "expect_no_error"
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.RunFailed",
           "payload": {
-            "reason": "reason"
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
           },
           "shape": {
             "reason": {
@@ -8965,6 +9010,10 @@
         {
           "kind": "view",
           "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
         },
         {
           "kind": "actor",
@@ -9217,10 +9266,17 @@
           "step": "expect_no_error"
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.SourceDisabled",
           "payload": {
-            "reason": "reason"
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
           },
           "shape": {
             "reason": {
@@ -9448,6 +9504,10 @@
         {
           "kind": "view",
           "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
         },
         {
           "kind": "actor",
@@ -9883,8 +9943,14 @@
           }
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.InstanceRemoved",
+          "payload": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            }
+          },
           "shape": {
             "name": {
               "holds": "primitive",
@@ -10827,10 +10893,17 @@
           }
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.SnapshotRestored",
           "payload": {
-            "snapshot": "snapshot"
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "snapshot": {
+              "kind": "literal",
+              "value": "snapshot"
+            }
           },
           "shape": {
             "name": {
@@ -11018,6 +11091,268 @@
       "purpose": "`cortex.instance.RunSource` answers `apply-refused` for the cause it declares as external, injected",
       "steps": [
         {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "budget_usd": 1.0,
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AddSource",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "instance_name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "Web"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "schedule": {
+              "kind": "literal",
+              "value": "schedule"
+            },
+            "source_id": {
+              "kind": "literal",
+              "value": "source_id"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "source",
+          "entity": "cortex.instance.Source",
+          "event": "cortex.instance.SourceAdded",
+          "field": "source_id"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "consecutive_failures": {
+                "kind": "literal",
+                "value": 0.0
+              },
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RecordFailure",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "counted"
+          }
+        },
+        {
+          "step": "expect_no_error"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "consecutive_failures": {
+                "kind": "literal",
+                "value": 1.0
+              },
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RecordFailure",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "disabled"
+          }
+        },
+        {
+          "step": "expect_no_error"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Disabled"
+              }
+            }
+          }
+        },
+        {
           "step": "configure_external_outcome",
           "force": {
             "command": "cortex.instance.RunSource",
@@ -11030,8 +11365,8 @@
           "actor": "cortex.instance.Scheduler",
           "input": {
             "source_id": {
-              "kind": "literal",
-              "value": "source_id"
+              "kind": "instance",
+              "instance": "source"
             }
           }
         },
@@ -11102,7 +11437,47 @@
         },
         {
           "kind": "command",
+          "name": "cortex.instance.AddSource"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RecordFailure"
+        },
+        {
+          "kind": "command",
           "name": "cortex.instance.RunSource"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "counted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "disabled"
+          }
         },
         {
           "kind": "outcome",
@@ -11162,6 +11537,10 @@
         {
           "kind": "error",
           "name": "cortex.instance.ApplyRefused"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Sources"
         },
         {
           "kind": "actor",
@@ -11715,6 +12094,268 @@
       "purpose": "`cortex.instance.RunSource` answers `extraction-failed` for the cause it declares as external, injected",
       "steps": [
         {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "budget_usd": 1.0,
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AddSource",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "instance_name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "Web"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "schedule": {
+              "kind": "literal",
+              "value": "schedule"
+            },
+            "source_id": {
+              "kind": "literal",
+              "value": "source_id"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "source",
+          "entity": "cortex.instance.Source",
+          "event": "cortex.instance.SourceAdded",
+          "field": "source_id"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "consecutive_failures": {
+                "kind": "literal",
+                "value": 0.0
+              },
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RecordFailure",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "counted"
+          }
+        },
+        {
+          "step": "expect_no_error"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "consecutive_failures": {
+                "kind": "literal",
+                "value": 1.0
+              },
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RecordFailure",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "disabled"
+          }
+        },
+        {
+          "step": "expect_no_error"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Disabled"
+              }
+            }
+          }
+        },
+        {
           "step": "configure_external_outcome",
           "force": {
             "command": "cortex.instance.RunSource",
@@ -11727,8 +12368,8 @@
           "actor": "cortex.instance.Scheduler",
           "input": {
             "source_id": {
-              "kind": "literal",
-              "value": "source_id"
+              "kind": "instance",
+              "instance": "source"
             }
           }
         },
@@ -11799,7 +12440,47 @@
         },
         {
           "kind": "command",
+          "name": "cortex.instance.AddSource"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RecordFailure"
+        },
+        {
+          "kind": "command",
           "name": "cortex.instance.RunSource"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "counted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "disabled"
+          }
         },
         {
           "kind": "outcome",
@@ -11861,6 +12542,10 @@
           "name": "cortex.instance.ExtractionFailed"
         },
         {
+          "kind": "view",
+          "name": "cortex.instance.Sources"
+        },
+        {
           "kind": "actor",
           "name": "cortex.instance.Scheduler"
         }
@@ -11869,6 +12554,268 @@
     "cortex.instance.RunSource/outcome/fetch-failed": {
       "purpose": "`cortex.instance.RunSource` answers `fetch-failed` for the cause it declares as external, injected",
       "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "budget_usd": 1.0,
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AddSource",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "instance_name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "Web"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "schedule": {
+              "kind": "literal",
+              "value": "schedule"
+            },
+            "source_id": {
+              "kind": "literal",
+              "value": "source_id"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "source",
+          "entity": "cortex.instance.Source",
+          "event": "cortex.instance.SourceAdded",
+          "field": "source_id"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "consecutive_failures": {
+                "kind": "literal",
+                "value": 0.0
+              },
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RecordFailure",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "counted"
+          }
+        },
+        {
+          "step": "expect_no_error"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "consecutive_failures": {
+                "kind": "literal",
+                "value": 1.0
+              },
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RecordFailure",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "disabled"
+          }
+        },
+        {
+          "step": "expect_no_error"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Disabled"
+              }
+            }
+          }
+        },
         {
           "step": "configure_external_outcome",
           "force": {
@@ -11882,8 +12829,8 @@
           "actor": "cortex.instance.Scheduler",
           "input": {
             "source_id": {
-              "kind": "literal",
-              "value": "source_id"
+              "kind": "instance",
+              "instance": "source"
             }
           }
         },
@@ -11954,7 +12901,47 @@
         },
         {
           "kind": "command",
+          "name": "cortex.instance.AddSource"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RecordFailure"
+        },
+        {
+          "kind": "command",
           "name": "cortex.instance.RunSource"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "counted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "disabled"
+          }
         },
         {
           "kind": "outcome",
@@ -12014,6 +13001,10 @@
         {
           "kind": "error",
           "name": "cortex.instance.FetchFailed"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Sources"
         },
         {
           "kind": "actor",
@@ -12377,8 +13368,14 @@
           }
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.SourceRan",
+          "payload": {
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          },
           "shape": {
             "cost_usd": {
               "holds": "primitive",
@@ -12582,6 +13579,10 @@
         {
           "kind": "view",
           "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
         },
         {
           "kind": "actor",
@@ -13444,6 +14445,10 @@
         },
         {
           "kind": "actor",
+          "name": "cortex.instance.Operator"
+        },
+        {
+          "kind": "actor",
           "name": "cortex.instance.Scheduler"
         }
       ]
@@ -13780,6 +14785,10 @@
         },
         {
           "kind": "actor",
+          "name": "cortex.instance.Operator"
+        },
+        {
+          "kind": "actor",
           "name": "cortex.instance.Scheduler"
         }
       ]
@@ -14066,6 +15075,10 @@
         {
           "kind": "view",
           "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
         },
         {
           "kind": "actor",
@@ -14587,6 +15600,10 @@
         {
           "kind": "view",
           "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
         },
         {
           "kind": "actor",
@@ -15687,10 +16704,17 @@
           "step": "expect_no_error"
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.SourceDisabled",
           "payload": {
-            "reason": "reason"
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
           },
           "shape": {
             "reason": {
@@ -15918,6 +16942,10 @@
         {
           "kind": "view",
           "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
         },
         {
           "kind": "actor",
@@ -16188,8 +17216,14 @@
           }
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.SourceEnabled",
+          "payload": {
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          },
           "shape": {
             "source_id": {
               "holds": "primitive",
@@ -18279,8 +19313,14 @@
           "step": "expect_no_error"
         },
         {
-          "step": "expect_event",
+          "step": "expect_event_values",
           "event": "cortex.instance.InstanceUpdated",
+          "payload": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance-2"
+            }
+          },
           "shape": {
             "name": {
               "holds": "primitive",
