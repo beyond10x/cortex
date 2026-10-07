@@ -23,7 +23,7 @@ scope:
   path: src/quality.rs
 - confidence: inferred
   path: tests/quality.rs
-revision: 16
+revision: 17
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-06T09:15:47Z", actor: "agent:claude", revision: 13, decided_on: {"recorded":{"review_outcome":4}}}
 - {from: "proposed", to: "active", at: "2026-10-06T09:15:47Z", actor: "agent:claude", revision: 14, decided_on: {"recorded":{"review_outcome":4}}}
@@ -66,4 +66,5 @@ Landed 2026-10-06 in `fdfdbbd` (wave 20261006g), with a test fix `1bf9fd3`.
 
 - **Files:** `src/quality.rs` (new), `src/extract.rs` (`Model::ask_with`, `Refused` with cost), `src/main.rs`, `src/lib.rs`, `src/ports.rs`, `spec/domains/instance.yaml` and `spec/components.yaml` (`MeasureQuality`, `QualityMeasured`, `QualityVerdict`), `generated/`, `tests/quality.rs` (new), `tests/conformance.rs`, `website/docs/commands.md`, `AGENTS.md` (scenario count)
 - **Review:** one adversary pass, 4 findings fixed (rare names reached the judge, a failed call's cost, unclear untested, the home lock held through model calls)
-- **Open:** `rate` and `cost_usd` stay off the event, https://github.com/beyond10x/ess/issues/467; a failed extraction call's cost never reaches a run's `cost_usd` (`src/run.rs`), pre-existing
+- **Open:** a failed extraction call's cost never reaches a run's `cost_usd` (`src/run.rs`), pre-existing
+- **Closed 2026-10-07:** `rate` and `cost_usd` are on `QualityMeasured` since wave 20261007b (`story:events-carry-measurements`), after ESS 0.55.0 settled https://github.com/beyond10x/ess/issues/467
