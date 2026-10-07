@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:structured-children
 kind: story
-status: draft
+status: active
 title: A structured source walks child operations and maps them as linked, timed nodes
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -13,21 +13,34 @@ relations:
 - depends_on: story:structured-from-files-and-drops
 - depends_on: story:record-field-lookups
 scope:
-- confidence: inferred
+- confidence: cited
   path: generated
-- confidence: inferred
+- confidence: cited
   path: spec/domains/instance.yaml
-- confidence: inferred
+- confidence: cited
   path: spec/suite.json
-- confidence: inferred
+- confidence: cited
   path: src/model_map.rs
 - confidence: inferred
+  path: src/run.rs
+- confidence: cited
   path: src/sources.rs
 - confidence: inferred
+  path: src/spec.rs
+- confidence: cited
   path: src/structured.rs
-- confidence: inferred
+- confidence: cited
   path: tests/structured_children.rs
-revision: 5
+- confidence: cited
+  path: website/docs/reference/ess/cortex-instance.md
+- confidence: cited
+  path: website/docs/spec-file.md
+- confidence: cited
+  path: website/static/schemas/instance-spec.schema.json
+revision: 27
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-07T07:43:13Z", actor: "human:timo", revision: 26, decided_on: {"recorded":{"review_outcome":8}}}
+- {from: "proposed", to: "active", at: "2026-10-07T07:43:13Z", actor: "human:timo", revision: 27, decided_on: {"recorded":{"review_outcome":8}}}
 ---
 ## Outcome
 
@@ -58,3 +71,23 @@ The derived link through a compare operation (a change to the first tag that con
 ## Files (from the inventory, unverified)
 
 `spec/domains/instance.yaml` (`StructuredSource.children`), `generated/`, `spec/suite.json`, `src/model_map.rs`, `src/structured.rs`, `src/sources.rs`, `tests/structured_children.rs`.
+
+## Scope
+
+Derived 2026-10-07 by `story-scoper`. Every line is **cited** (read from the story or the tree) or
+**inferred** (a reading that could be wrong).
+
+- **Primary surface:** `src/structured.rs` and the structured branch of `src/sources.rs` — cited
+- **Files:** `spec/domains/instance.yaml:183-225` (new `StructuredChild`; `children: Optional<List<…>>`) — cited, validated on a scratch copy with ESS 0.55.0 (all five generators exit 0, obligations stay 2)
+- **Files:** `generated`, `spec/suite.json` (digests and 12 scenario type lists; steps unchanged) — cited, scratch regeneration
+- **Files:** `src/model_map.rs:215-267` (`structured()`) — cited
+- **Files:** `src/sources.rs:324-464` (`fetch`, `structured_records`, `fetch_structured`), reusing `walk`/`render_json` at :145-258 — cited
+- **Files:** `src/structured.rs` (`Source::{prepare,document,index,listed,ended,owner,target}`, `ontology`) — cited
+- **Files:** `tests/structured_children.rs` (new) — cited
+- **Also likely:** `src/run.rs:325-479, 824-960` (one `Source` per mapping; dropped-record ending at :474, :938-952) and `src/spec.rs:139-163` (the shared-prefix refusal covering child operations) — inferred
+- **Documents:** `website/docs/spec-file.md:285` (`kind: structured`) — cited; derived pages regenerate
+- **Not touched:** `tests/conformance.rs` — cited: it reads only `scenario_initial_state` (:730) and `steps` (:738), and neither changes
+- **Today:** `ChildCall` is only a field of `ConnectorsSource` (`spec/domains/instance.yaml:137`) and only `fetch_records` uses it (`src/sources.rs:688-723`); `fetch_structured` (`:437-464`) walks the parent operation alone — cited
+- **EKR 0.0.32, probed on a scratch store:** an id-based alias keeps one node across a rename, and the old path stays an alias; `apply-extraction` never adds new aliases to a matched node (an `AddAlias` transaction could); things of one type sharing any alias are one node — cited
+- **Safety:** a child's identity must include its parent's id, or same-named children of two parents merge; acceptance 4 must keep a failed parent's earlier children from being retracted as dropped (`src/structured.rs:474-476, 503-512`, `src/run.rs:474`) — inferred
+- **Confidence:** medium: the primary surfaces are cited and the spec shape was generated on a scratch copy; whether `src/run.rs` and `src/spec.rs` change depends on design choices

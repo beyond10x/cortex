@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:conformance-checks-field-shapes
 kind: story
-status: draft
+status: active
 title: The conformance runner checks each event field's shape, not only its key
 relations:
 - decomposes: epic:standalone-1-0
@@ -10,7 +10,10 @@ relations:
 scope:
 - confidence: cited
   path: tests/conformance.rs
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-07T07:43:13Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-10-07T07:43:13Z", actor: "human:timo", revision: 4}
 ---
 ## Outcome
 
