@@ -5,6 +5,8 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+## 0.1.0 — 2026-10-07
+
 ### Added
 
 - `cortex schema <instance> [--sample N] [--dry-run]` proposes ontology changes from a sample of facts
