@@ -12,7 +12,7 @@ scope:
   path: AGENTS.md
 - confidence: cited
   path: Taskfile.yml
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-06T20:07:12Z", actor: "agent:claude", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-06T20:07:12Z", actor: "agent:claude", revision: 4}
@@ -24,7 +24,7 @@ Every cortex worktree builds into its own `target/`, and a finished tree's build
 
 ## Why
 
-Conductor decision DEC-20261006-02 (dispatch DSP-20261006-04, 2026-10-06): a shared `~/.cache/b10x-target/cortex` let one tree's gate run another tree's test binaries, and its size was invisible to worktree cleanup. Building into the tree's own `target/` ties the cache to the tree and lets `worktree finish --discard-cache --archive` remove it.
+Operator rule, 2026-10-06: a shared `~/.cache/b10x-target/cortex` let one tree's gate run another tree's test binaries, and its size was invisible to worktree cleanup. Building into the tree's own `target/` ties the cache to the tree and lets `worktree finish --discard-cache --archive` remove it.
 
 ## Work
 
