@@ -14,6 +14,8 @@ stand; [Status](./status.mdx) lists what is planned.
 - **Linux with systemd user units only.** Timers and the viewer are systemd user units; there is
   no other scheduler. `cortex create --no-units` creates an instance without them, and its sources
   then run only when you call `cortex run`.
+- **One released target.** A release carries a binary for `x86_64-unknown-linux-gnu` only; on any
+  other machine, build cortex from source.
 - **One EKR version per instance**, pinned in the spec file. `cortex setup` installs EKR with
   `cargo install`, so it needs a Rust toolchain.
 
@@ -85,9 +87,15 @@ stand; [Status](./status.mdx) lists what is planned.
 - **Some numbers that are not personal data are hidden from the model, but kept in the store.**
   Four-part version numbers and long digit ids that look like an IP address or a card number are
   replaced by a placeholder in the prompt.
-- **A web page is cited as a statement, not as a URL.** EKR 0.0.30 admits only `HumanStatement`
-  evidence in an extraction document, so cortex files a page as a `HumanStatement` whose identity is
-  its URL. URL evidence waits on an EKR release that admits it.
+- **A web page is cited as a statement, not as a URL.** EKR 0.0.32 admits only `HumanStatement`
+  evidence in an extraction document (`extraction-evidence-kind-unsupported` for any other), so
+  cortex files a page as a `HumanStatement` whose identity is its URL. URL evidence waits on an EKR
+  release that admits it (EKR `story:extraction-admits-url-evidence`; here
+  `upstream-blocker:ekr-url-evidence`).
+- **Relations in a store extracted before EKR 0.0.31 are not graph edges.** Since EKR 0.0.31 an
+  extracted relation is also written as an edge, so `search` counts it in a node's `degree` and
+  `expand` walks it. EKR does not backfill: relations a store took under EKR 0.0.30 or earlier stay
+  assertions without an edge, and graph reads do not walk them.
 - **Change detection is a content hash.** `ContentHash` is the only `change` value. A document
   whose text changed is extracted again only after `refresh_after_days`; cortex retracts nothing
   it applied from the earlier text. A record read from a file, and a `structured` change whose
@@ -106,6 +114,8 @@ stand; [Status](./status.mdx) lists what is planned.
 
 ## The model
 
-- **Extraction uses `claude -p`.** There is no other model runner. The model needs a signed-in
-  `claude`; an `ANTHROPIC_API_KEY` in the environment is ignored.
+- **Extraction uses `claude -p`.** There is no other working model runner. The model needs a
+  signed-in `claude`; an `ANTHROPIC_API_KEY` in the environment is ignored. The spec accepts
+  `model.backend: Codex`, but that backend extracts nothing in this release: every run, quality
+  measurement and schema round of such an instance fails, naming `story:codex-model-backend`.
 - **The budget is per run.** `budget_usd` limits one run of one source, not a day or an instance.

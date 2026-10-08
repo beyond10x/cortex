@@ -64,7 +64,10 @@ home directory. So the source services carry, from the shell that ran `cortex cr
   `~/.cache/cortex` under the same `HOME`;
 - `CORTEX_CONNECTORS`, `CORTEX_CLAUDE` and `CORTEX_CODEX`: the binaries that command ran, from
   `--connectors`, `--claude` and `--codex` or their defaults. A path is made absolute; a bare name
-  is looked up on the unit's `PATH`.
+  is looked up on the unit's `PATH`. `CORTEX_CODEX` is written for every source service, but the
+  Codex model backend is not available in this release: an instance whose spec names
+  `model.backend: Codex` fails every run without starting `codex` (see
+  [Commands](./commands.md#global-options)).
 
 A relative `--home` or `$CORTEX_HOME` is made absolute, so the units name the same home from any
 directory. Run `cortex create` from a shell where `connectors` and `claude` work; after changing
@@ -89,7 +92,7 @@ version as `binary_version`. `--no-units`, and a spec with no source, leave the 
 
 1. **Fetch** the source's documents (web pages or records through `connectors`, or local files).
 2. **Mask** credential-shaped text in each document, then cut it to `max_chars_per_document`,
-   and further, at a character boundary, to what its evidence holds: EKR 0.0.30 takes an
+   and further, at a character boundary, to what its evidence holds: EKR 0.0.32 takes an
    evidence payload of at most 16,384 bytes, header included.
 3. **Keep** documents whose key was never applied, and documents whose text hash changed once
    their last application is `refresh_after_days` old, at most `max_documents_per_run`. Two
@@ -206,7 +209,7 @@ To undo a restore, restore its `before_restore` snapshot.
 A reader attached during a restore keeps a consistent view: a read it has started finishes on
 the store as it was, and its next read sees the restored store. After the copy, cortex waits up
 to 5 seconds for such reads to finish and writes SQLite's write-ahead log back into the store
-file, because until then EKR 0.0.30 refuses to open the store (`store-replaced`). A connection that
+file, because until then EKR 0.0.32 refuses to open the store (`store-replaced`). A connection that
 keeps one read transaction open for longer delays that: the restore still succeeds, cortex says
 so on stderr, and EKR opens the store again once that reader lets go and the next connection to
 close the store writes the log back.
