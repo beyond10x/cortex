@@ -84,7 +84,11 @@ fn adv_timeout_then_lapsed_then_answer_applies_in_three_invocations() {
 #[test]
 fn adv_lapsed_timeout_lapsed_fails_after_three_invocations() {
     let w = world();
-    created(&w, "d", &["lapsed", "timeout", "lapsed", "timeout", "lapsed"]);
+    created(
+        &w,
+        "d",
+        &["lapsed", "timeout", "lapsed", "timeout", "lapsed"],
+    );
     let (code, ran) = w.cortex(&["run", "d/news"]);
     assert_eq!(code, 1, "{ran}");
     assert_eq!(w.lines("invocations.log").len(), 3, "bounded at three");
