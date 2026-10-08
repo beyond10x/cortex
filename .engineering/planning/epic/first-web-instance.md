@@ -2,11 +2,14 @@
 format: aep.planning-md/3
 id: epic:first-web-instance
 kind: epic
-status: draft
+status: active
 title: The first real web instance runs unattended for a week
 relations:
 - serves: vision:self-updating-instances
-revision: 3
+revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-08T14:07:50Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-08T14:07:50Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":1}}}
 ---
 ## Outcome
 

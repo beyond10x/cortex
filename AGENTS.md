@@ -209,7 +209,8 @@ the build host's Cargo registry paths.
 1. On a `release/<version>` branch from current `origin/main`: set `version` in `Cargo.toml` and
    let a build update the `cortex-cli` entry in `Cargo.lock` (`--locked` refuses a lock file that
    disagrees). In `CHANGELOG.md`, turn `## Unreleased` into `## <version> — <YYYY-MM-DD>` and put
-   a new, empty `## Unreleased` above it.
+   a new, empty `## Unreleased` above it. Set the version in the install commands of `README.md`
+   and `website/docs/quickstart.md` (`version=`) to `<version>`.
 2. `task check`, exit 0.
 3. Commit and push through the bot (`b10x-gates bot --repository beyond10x/cortex -- commit`,
    `... -- push`), open the pull request with `b10x-gates api`, and merge it once `Check` and the

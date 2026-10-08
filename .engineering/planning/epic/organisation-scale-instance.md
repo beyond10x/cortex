@@ -2,11 +2,14 @@
 format: aep.planning-md/3
 id: epic:organisation-scale-instance
 kind: epic
-status: draft
+status: active
 title: An organisation's own sources run through cortex at production volume
 relations:
 - serves: vision:self-updating-instances
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-08T14:07:50Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-08T14:07:50Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":1}}}
 ---
 ## Outcome
 
