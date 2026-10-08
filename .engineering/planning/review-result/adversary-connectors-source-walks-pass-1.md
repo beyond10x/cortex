@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-connectors-source-walks-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: connectors-source-walks (wave 20261005d)'
 relations:
 - reviews: story:connectors-source-walks
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:36Z", actor: "human:timo", revision: 2}
 ---
 unit: U1 story:connectors-source-walks, working tree ~/.local/state/worktree/trees/b10x/cortex/cortex-w3-walks (uncommitted on base 90ae12b)
 verdict: NEEDS-CHANGE

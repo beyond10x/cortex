@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-record-field-lookups-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: record-field-lookups'
 relations:
 - reviews: story:record-field-lookups
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:36Z", actor: "human:timo", revision: 2}
 ---
 ```
 unit: story:record-field-lookups (U1, wave 20261006c), uncommitted working tree at ~/.local/state/worktree/trees/b10x/cortex/cortex-w10-a on base a80c9f6

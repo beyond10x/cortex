@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-structured-source-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: structured-source (wave 20261005e)'
 relations:
 - reviews: story:structured-source
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:38Z", actor: "human:timo", revision: 2}
 ---
 unit: U1 story:structured-source, uncommitted working tree on b920177 in ~/.local/state/worktree/trees/b10x/cortex/cortex-w4-structured
 verdict: NEEDS-CHANGE

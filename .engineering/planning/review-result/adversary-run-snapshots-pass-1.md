@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-run-snapshots-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: run-snapshots (wave 20261005h)'
 relations:
 - reviews: story:run-snapshots
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:37Z", actor: "human:timo", revision: 2}
 ---
 unit: story:run-snapshots (U3, wave 20261005h), uncommitted working tree on base dfe3fc1 in ~/.local/state/worktree/trees/b10x/cortex/cortex-w7-snap
 verdict: CONFIRMED (6 red cases; 1 warning holds for this unit, 5 are notes or warnings)

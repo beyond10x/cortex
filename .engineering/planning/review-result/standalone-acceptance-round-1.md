@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: review-result:standalone-acceptance-round-1
 kind: review-result
-status: active
+status: archived
 title: Acceptance critic, standalone 1.0, round 1
 relations:
 - reviews: epic:standalone-1-0
@@ -16,7 +16,9 @@ relations:
 - reviews: story:release-pipeline
 - reviews: story:docs-for-1-0
 - reviews: story:release-1-0
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:39Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 story:spec-standalone-types — the acceptance joins three independent outcomes (`task check` passes, an unchanged `examples/example.yaml` behaves as on `main`, five non-default settings are refused), so one can pass while another fails — .engineering/planning/story/spec-standalone-types.md:57

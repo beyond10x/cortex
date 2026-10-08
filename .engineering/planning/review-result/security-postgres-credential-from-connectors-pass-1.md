@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:security-postgres-credential-from-connectors-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Security review pass 1: postgres-credential-from-connectors (wave 20261006i)'
 relations:
 - reviews: story:postgres-credential-from-connectors
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:39Z", actor: "human:timo", revision: 2}
 ---
 ```
 unit: story:postgres-credential-from-connectors

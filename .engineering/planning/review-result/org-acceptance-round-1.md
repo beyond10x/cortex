@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: review-result:org-acceptance-round-1
 kind: review-result
-status: active
+status: archived
 title: Acceptance critic, organisation scale, round 1
 relations:
 - reviews: epic:organisation-scale-instance
@@ -14,7 +14,9 @@ relations:
 - reviews: story:document-time-as-valid-time
 - reviews: story:run-gate
 - reviews: story:quality-judge
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:38Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 story:spec-organisation-types — the acceptance joins two independent outcomes ("`tests/spec_compat.rs` still passes unchanged, and a spec setting every new field to its default … equal the run without those fields"), and the second has no named test, because `tests/spec_compat.rs` is declared unchanged yet is the only candidate and does not yet set the new fields — .engineering/planning/story/spec-organisation-types.md:200

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: review-result:standalone-parallel-safety-round-1
 kind: review-result
-status: active
+status: archived
 title: Parallel-safety critic, standalone 1.0, round 1
 relations:
 - reviews: epic:standalone-1-0
@@ -18,7 +18,9 @@ relations:
 - reviews: story:release-1-0
 - reviews: story:web-pages-cited-as-urls
 - reviews: story:first-web-instance
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:39Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 story:spec-standalone-types — the refusals for the five non-default settings will land in the one validator `check` in `src/spec.rs:49-95` (inferred: the refusal does not exist yet and `spec.rs` is where `create` validates), and `store-backend-per-instance`, `redaction-before-model` and `codex-model-backend` each remove their own refusal there in the same wave, yet no scope lists `src/spec.rs`; the body must either name the file as shared (ordering edge) or put each refusal in its own seam — .engineering/planning/story/spec-standalone-types.md:47

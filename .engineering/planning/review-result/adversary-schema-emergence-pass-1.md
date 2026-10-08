@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-schema-emergence-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: schema-emergence'
 relations:
 - reviews: story:schema-emergence
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:37Z", actor: "human:timo", revision: 2}
 ---
 unit: story:schema-emergence (wave 20261006h, unit a): the uncommitted working tree at `~/.local/state/worktree/trees/b10x/cortex/cortex-w15-a` on base `53acc86`
 verdict: NEEDS-CHANGE

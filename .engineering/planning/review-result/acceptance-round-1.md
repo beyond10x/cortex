@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: review-result:acceptance-round-1
 kind: review-result
-status: active
+status: archived
 title: Acceptance critic, round 1
 relations:
 - reviews: epic:first-web-instance
@@ -12,7 +12,9 @@ relations:
 - reviews: story:timer-runs-unattended
 - reviews: story:first-web-instance
 - reviews: story:web-pages-cited-as-urls
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:36Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 story:timer-runs-unattended — the acceptance joins four independent outcomes with semicolons (journal completeness, `runs` advancing, no model call on an unchanged run, failure counter raised then reset), so one can fail while the others pass and the story is neither done nor not done; the body should state one checkable outcome, or move the others to separate stories — .engineering/planning/story/timer-runs-unattended.md:29

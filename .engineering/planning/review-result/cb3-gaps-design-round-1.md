@@ -2,14 +2,16 @@
 format: aep.planning-md/3
 id: review-result:cb3-gaps-design-round-1
 kind: review-result
-status: active
+status: archived
 title: 'Plan critic (design), round 1: cb3 gap stories'
 relations:
 - reviews: story:structured-children
 - reviews: story:extraction-supersedes
 - reviews: story:postgres-run-undo
 - reviews: story:record-field-lookups
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:38Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 

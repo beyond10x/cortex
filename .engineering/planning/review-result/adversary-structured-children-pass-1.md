@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-structured-children-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: structured-children (wave 20261007c)'
 relations:
 - reviews: story:structured-children
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:37Z", actor: "human:timo", revision: 2}
 ---
 ```
 unit: story:structured-children; commit e1447d0 plus the untracked tests/structured_children_adv.rs, tree cortex-w19-a

@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-quality-judge-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: quality-judge'
 relations:
 - reviews: story:quality-judge
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:36Z", actor: "human:timo", revision: 2}
 ---
 unit: story:quality-judge (wave 20261006g, unit a). Findings cover the uncommitted working tree at ~/.local/state/worktree/trees/b10x/cortex/cortex-w14-a, base 750e084
 verdict: NEEDS-CHANGE

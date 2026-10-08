@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-08T13:29:23Z",
+  "actor": "human:timo",
+  "artifact": "story:connectors-admission-timeout-retry",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test -p cortex-cli --test connectors_admission_retry --test connectors_admission_retry_adv",
+    "reference": "0e4bccc"
+  }
+}

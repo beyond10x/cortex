@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: review-result:scope-round-1
 kind: review-result
-status: active
+status: archived
 title: Scope critic, round 1
 relations:
 - reviews: epic:first-web-instance
@@ -12,7 +12,9 @@ relations:
 - reviews: story:timer-runs-unattended
 - reviews: story:first-web-instance
 - reviews: story:web-pages-cited-as-urls
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:39Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 story:first-web-instance — the epic promises the result is "inspected through `ekr view` and the MCP server", but the acceptance names only `ekr mcp` `search`, so the `ekr view` half is narrowed away; the acceptance should require an `ekr view` inspection of the 7-day store — .engineering/planning/epic/first-web-instance.md:15
