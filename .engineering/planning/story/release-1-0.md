@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:release-1-0
 kind: story
-status: draft
+status: active
 title: cortex 1.0.0 is released and installable
 relations:
 - decomposes: epic:standalone-1-0
@@ -10,6 +10,7 @@ relations:
 - depends_on: story:release-pipeline
 - depends_on: story:docs-for-1-0
 - depends_on: story:timer-runs-unattended
+- depends_on: story:first-web-instance
 scope:
 - confidence: inferred
   path: CHANGELOG.md
@@ -17,7 +18,10 @@ scope:
   path: Cargo.lock
 - confidence: cited
   path: Cargo.toml
-revision: 5
+revision: 8
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-08T14:08:18Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-08T14:08:18Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"review_outcome":1}}}
 ---
 ## Outcome
 
@@ -40,7 +44,12 @@ completes the quickstart with `cortex create` exit 0, `cortex run` exit 0 with
 ## Depends on
 
 `story:release-pipeline`, `story:docs-for-1-0`, `story:timer-runs-unattended` (1.0 claims unattended
-scheduled runs, which that story proves).
+scheduled runs, which that story proves), and `story:first-web-instance`: the `v1.0.0` tag waits
+until its 7-day run passes, read on day 8 (2026-10-16).
+
+Before then, wave 20261008c writes the 1.0 summary into `CHANGELOG.md` under `## Unreleased` and
+rehearses this story's acceptance from the `v0.2.2` tarball in an empty home. The version bump, the
+tag and the Release are cut after the run passes, through the process in `AGENTS.md`.
 
 ## Scope
 

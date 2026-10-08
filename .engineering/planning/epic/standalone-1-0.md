@@ -2,11 +2,14 @@
 format: aep.planning-md/3
 id: epic:standalone-1-0
 kind: epic
-status: draft
+status: active
 title: cortex 1.0 runs any instance on its own
 relations:
 - serves: vision:self-updating-instances
-revision: 3
+revision: 7
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-08T14:07:50Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-08T14:07:50Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":1}}}
 ---
 ## Outcome
 
@@ -40,7 +43,7 @@ needs) is written in the dependent story's "Depends on" section.
 | story | after |
 |---|---|
 | `spec-standalone-types` | nothing; it also moves the shared test fixtures to `tests/common/` and makes model cost optional, so the feature stories below touch disjoint files |
-| `store-backend-per-instance`, `redaction-before-model`, `codex-model-backend` | `spec-standalone-types` |
+| `store-backend-per-instance`, `redaction-before-model` | `spec-standalone-types` |
 | `structured-source` | `redaction-before-model` (`src/run.rs`) |
 | `run-snapshots` | `structured-source` (`src/run.rs`), `seen-documents-modelled` (spec), `store-backend-per-instance` (`src/main.rs`) |
 | `adopt-existing-store` | `run-snapshots`, `store-backend-per-instance` |
@@ -55,3 +58,9 @@ its behaviour, `main` parses the setting without acting on it, and no release is
 
 Company-specific migration work (it belongs to the company's own repository); a hosted runner other
 than systemd; multi-user access control on the MCP server; Slack reads (a Connectors story).
+
+`story:codex-model-backend` left this epic on 2026-10-08. `decision-blocker:codex-exec-keeps-shell`
+has blocked it since 2026-10-05 (`codex exec` keeps a shell tool, which breaks the rule that the
+model has no tools), and the 1.0 documentation states the Codex backend as unavailable. 1.0 ships
+with the Claude backend only. The story stays active and serves the vision directly; it lands in a
+later release once the blocker clears.

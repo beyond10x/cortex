@@ -9,7 +9,6 @@ relations:
 - serves: vision:self-updating-instances
 - depends_on: story:ci-runs-task-check
 - depends_on: story:extraction-links-facts
-- depends_on: story:codex-model-backend
 - depends_on: story:store-backend-per-instance
 - depends_on: story:adopt-existing-store
 - depends_on: story:docs-for-1-0
@@ -41,7 +40,7 @@ scope:
   path: website/docs/quickstart.md
 - confidence: cited
   path: website/docs/spec-file.md
-revision: 21
+revision: 22
 ---
 ## Outcome
 
@@ -64,11 +63,16 @@ e2e test asserts the evidence kind, and the `AGENTS.md` upstream row is removed.
 ## Depends on
 
 `story:ci-runs-task-check` (the workflow it adds pins the EKR binary this story moves),
-`story:extraction-links-facts`, `story:codex-model-backend` and `story:document-time-as-valid-time`
-(all edit `src/extract.rs`; the last also `src/evidence.rs`), `story:store-backend-per-instance`
-(both edit `src/main.rs`), `story:adopt-existing-store` (both edit `tests/conformance.rs`), and
-`story:docs-for-1-0` (both edit the four docs pages; the docs story writes the URL-evidence limit as
-open, and this story closes it).
+`story:extraction-links-facts` and `story:document-time-as-valid-time` (both edit `src/extract.rs`;
+the last also `src/evidence.rs`), `story:store-backend-per-instance` (both edit `src/main.rs`),
+`story:adopt-existing-store` (both edit `tests/conformance.rs`), and `story:docs-for-1-0` (both
+edit the four docs pages; the docs story writes the URL-evidence limit as open, and this story
+closes it).
+
+`story:codex-model-backend` also edits `src/extract.rs`, but nothing of it is on `main`: its unit
+is archived until `decision-blocker:codex-exec-keeps-shell` clears. The edge was removed on
+2026-10-08 so that this story waits only on its own upstream blocker; whichever of the two lands
+second rebases onto the first.
 
 ## Scope
 

@@ -5,7 +5,6 @@ kind: story
 status: active
 title: An instance can extract with Codex instead of Claude
 relations:
-- decomposes: epic:standalone-1-0
 - serves: vision:self-updating-instances
 - depends_on: story:spec-standalone-types
 scope:
