@@ -23,6 +23,14 @@ errors and events.
 | `--home <dir>` | `CORTEX_HOME` | `~/.local/share/cortex` |
 | `--connectors <bin>` | `CORTEX_CONNECTORS` | `connectors` |
 | `--claude <bin>` | `CORTEX_CLAUDE` | `claude` |
+| `--codex <bin>` | `CORTEX_CODEX` | `codex` |
+
+:::note[The Codex backend does not extract]
+`--codex` names the binary for a spec whose `model.backend` is `Codex`. In this release that
+backend calls no model: every run of such an instance fails as `extraction-failed`, with a reason
+naming `story:codex-model-backend`, and `codex` is never started; `cortex quality` and
+`cortex schema` fail the same way (`judge-failed`, `propose-failed`). Use `Claude`, the default.
+:::
 
 ## Instances
 
@@ -131,7 +139,9 @@ A source id is `<instance>/<source>`.
 
 A `ran` line's detail carries `documents_new`, `documents_applied`, `cost_usd`, `facts_refused`
 (facts the model cited unissued evidence for), `parts_rejected` (parts EKR rejected), `rejected` (each document a rejected part belongs to, with EKR's refusal, or the codes of the issues validation raised, such as `invalid-supersession`; present only when there is one), `masked`
-(credential shapes replaced) and `stopped` (why the run ended early, if it did). When the spec
+(credential shapes replaced) and `stopped` (why the run ended early, if it did). `cost_usd` is
+`"0.0000"` when no model was asked, the sum of the answers' costs when every answer carried one,
+and `null` when any answer carried none; a missing cost is never written as `0`. When the spec
 has a `redaction` policy it also carries `redacted` (values replaced by placeholders in the
 prompts sent, per class or rule) and `unrestored` (placeholders in the model's answers that had no
 value to put back).
