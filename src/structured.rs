@@ -75,29 +75,25 @@ fn texts_at(record: &Value, path: &str) -> Vec<String> {
 /// prefix, with what follows it as an assigned value (one ending in a credential's name,
 /// `vault.secret`, followed by `:`) is written as [`hex`] instead, so no record's identity is
 /// one masking changes. Every other part keeps its text (a path ending so but followed by `,`
-/// among them), so the identities of other sources are as they were ([`base_prefix`]).
+/// among them), so the identities of other sources are as they were ([`base_prefix`]). When
+/// masking still reads the prefix then, by what only its parts together make, every part is in hex.
 pub fn prefix(st: &m::StructuredSource) -> String {
     let (parts, join) = prefix_parts(st);
-    let mut written: Vec<String> = parts.iter().map(|(w, _)| w.clone()).collect();
-    let mut hexed = vec![false; parts.len()];
-    let masked = |w: &[String]| mask(&format!("{}:{PROBE}", join(w))).1;
-    let mut count = masked(&written);
-    // Each round writes in hex the first part whose hex leaves masking less to read: the part
-    // masking reads as a credential's name or value. A part whose hex changes nothing keeps its
-    // text.
-    while count > 0 {
-        let found = (0..parts.len()).filter(|&n| !hexed[n]).find_map(|n| {
-            let mut tried = written.clone();
-            tried[n] = hex(&parts[n].1);
-            let left = masked(&tried);
-            (left < count).then_some((n, tried, left))
-        });
-        let Some((n, tried, left)) = found else {
-            break;
-        };
-        hexed[n] = true;
-        written = tried;
-        count = left;
+    // A part is tried with what stands after it (`:` or `,`) and an id's digest.
+    let mut written: Vec<String> = parts
+        .iter()
+        .map(|(w, raw, after)| {
+            if mask(&format!("{w}{after}{PROBE}")).1 > 0 {
+                hex(raw)
+            } else {
+                w.clone()
+            }
+        })
+        .collect();
+    // Masking that only the parts together make is ended by writing every part in hex: no
+    // credential's name is spelled in hex digits, so nothing of the prefix is read then.
+    if mask(&format!("{}:{PROBE}", join(&written))).1 > 0 {
+        written = parts.iter().map(|(_, raw, _)| hex(raw)).collect();
     }
     join(&written)
 }
@@ -106,19 +102,21 @@ pub fn prefix(st: &m::StructuredSource) -> String {
 /// which the identities of evidence applied then still start with.
 fn base_prefix(st: &m::StructuredSource) -> String {
     let (parts, join) = prefix_parts(st);
-    join(&parts.into_iter().map(|(w, _)| w).collect::<Vec<_>>())
+    join(&parts.into_iter().map(|(w, _, _)| w).collect::<Vec<_>>())
 }
 
-/// The parts of a structured source's prefix, each as written in text and the text it was
-/// written from, and how they are joined: `<adapter>:<operation>`, or
-/// `files:<path>,…,<path>:<glob>`, a path and the glob escaped.
+/// The parts of a structured source's prefix, each as written in text, the text it was written
+/// from and what stands after it in an identity, and how they are joined:
+/// `<adapter>:<operation>`, or `files:<path>,…,<path>:<glob>`, a path and the glob escaped.
 #[allow(clippy::type_complexity)]
-fn prefix_parts(st: &m::StructuredSource) -> (Vec<(String, String)>, fn(&[String]) -> String) {
+fn prefix_parts(
+    st: &m::StructuredSource,
+) -> (Vec<(String, String, char)>, fn(&[String]) -> String) {
     match &st.input {
         m::StructuredInput::Connectors(c) => (
             vec![
-                (c.adapter.clone(), c.adapter.clone()),
-                (c.operation.clone(), c.operation.clone()),
+                (c.adapter.clone(), c.adapter.clone(), ':'),
+                (c.operation.clone(), c.operation.clone(), ':'),
             ],
             |w| w.join(":"),
         ),
@@ -128,15 +126,46 @@ fn prefix_parts(st: &m::StructuredSource) -> (Vec<(String, String)>, fn(&[String
                     .replace('%', "%25")
                     .replace(':', "%3A")
                     .replace(',', "%2C");
-                (escaped, t.clone())
+                (escaped, t.clone(), ':')
             };
-            let parts = f.paths.iter().chain([&f.glob]).map(escape).collect();
+            let mut parts: Vec<(String, String, char)> =
+                f.paths.iter().chain([&f.glob]).map(escape).collect();
+            // Every path but the last is followed by `,`.
+            let commas = parts.len().saturating_sub(2);
+            for part in &mut parts[..commas] {
+                part.2 = ',';
+            }
             (parts, |w| match w.split_last() {
                 Some((glob, paths)) => format!("files:{}:{glob}", paths.join(",")),
                 None => "files::".to_string(),
             })
         }
     }
+}
+
+/// A record of a source as its identity names it: the child it is of, with its parent's part
+/// unescaped (none for one of the source's own records), and its id.
+type Record<'k> = (Option<(usize, String)>, &'k str);
+
+/// `key` read as the identity of a record of the source whose prefix is `prefix` and whose
+/// children's prefixes are `children` ([`child_prefix`]): `<child prefix>:<parent>:<id>` (a
+/// parent part is required, as [`Source::child_of`] requires it) or `<prefix>:<id>`.
+fn split<'k, 'p>(
+    key: &'k str,
+    prefix: &str,
+    children: impl Iterator<Item = &'p str>,
+) -> Option<Record<'k>> {
+    for (n, at) in children.enumerate() {
+        let Some(rest) = key.strip_prefix(at).and_then(|r| r.strip_prefix(':')) else {
+            continue;
+        };
+        if let Some((parent, id)) = rest.split_once(':') {
+            return Some((Some((n, unescape(parent)?)), id));
+        }
+    }
+    key.strip_prefix(prefix)?
+        .strip_prefix(':')
+        .map(|id| (None, id))
 }
 
 /// What a part of an identity is tried with after its `:`: as long as an id's digest.
@@ -322,8 +351,10 @@ pub struct Source<'a> {
     /// The source's compare links.
     pub links: Vec<&'a m::CompareLink>,
     /// What the identities of the source's records and child records started with before a part
-    /// of its prefix was written in hex ([`base_prefix`]), when that differs from today: evidence
-    /// applied then is still the source's, so its values still end ([`Source::ended`]).
+    /// of its prefix was written in hex, when that differs from today: [`base_prefix`], then the
+    /// prefix of each of `children` under it, in their order. Evidence applied then is still the
+    /// source's, so its values still end, and are kept as the record they name today is kept
+    /// ([`Source::ended`]).
     pub earlier: Vec<String>,
 }
 
@@ -786,14 +817,52 @@ impl<'a> Source<'a> {
     /// [`child_key`], or one of these as written before a part of the prefix was in hex
     /// ([`Source::earlier`]).
     fn owns(&self, identity: &str) -> bool {
-        let under = |prefix: &str| {
-            identity
-                .strip_prefix(prefix)
-                .is_some_and(|rest| rest.starts_with(':'))
+        let children = self.children.iter().map(|(at, _)| at.as_str());
+        split(identity, &self.prefix, children).is_some() || self.earlier_record(identity).is_some()
+    }
+
+    /// For an identity under [`Source::earlier`], the record it names as [`split`] reads it.
+    fn earlier_record<'k>(&self, identity: &'k str) -> Option<Record<'k>> {
+        let (base, children) = self.earlier.split_first()?;
+        split(identity, base, children.iter().map(String::as_str))
+    }
+
+    /// Whether `old`, an identity under [`Source::earlier`], names the record whose identity
+    /// today is `new`: the same child of a parent named alike, and an id named alike. A part is
+    /// named alike when it is the same text, or `old` holds the digest [`Source::identity`]
+    /// writes for `new`'s (the old prefix was masked, so an id was written as its digest).
+    fn was(&self, old: &str, new: &str) -> bool {
+        let alike = |o: &str, n: &str| {
+            o == n || o == &crate::state::hex(&Sha256::digest(n.as_bytes()))[..16]
         };
-        under(&self.prefix)
-            || self.child_of(identity).is_some()
-            || self.earlier.iter().any(|p| under(p))
+        let children = self.children.iter().map(|(at, _)| at.as_str());
+        match (self.earlier_record(old), split(new, &self.prefix, children)) {
+            (Some((None, o)), Some((None, n))) => alike(o, n),
+            (Some((Some((m, po)), o)), Some((Some((n, pn)), i))) => {
+                m == n && alike(&po, &pn) && alike(o, i)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether `old`, an identity under [`Source::earlier`], names a record of a child whose call
+    /// failed for its parent: one `held` holds ([`Source::failed_child`], `<child prefix>:<parent
+    /// part>:`).
+    fn was_held(&self, old: &str, held: &Held) -> bool {
+        let Some((Some((m, po)), _)) = self.earlier_record(old) else {
+            return false;
+        };
+        let Some((at, _)) = self.children.get(m) else {
+            return false;
+        };
+        held.prefix
+            .strip_prefix(at.as_str())
+            .and_then(|r| r.strip_prefix(':'))
+            .and_then(|r| r.strip_suffix(':'))
+            .and_then(unescape)
+            .is_some_and(|pn| {
+                po == pn || po == crate::state::hex(&Sha256::digest(pn.as_bytes()))[..16]
+            })
     }
 
     /// The record identity an evidence item of the store names, when it is one of this source's
@@ -925,10 +994,23 @@ impl<'a> Source<'a> {
                         .as_deref()
                         .is_none_or(|name| relation == Some(name))
             };
+            // A record named under an earlier prefix is kept as the record it names today is:
+            // when the run did not apply it, or its child call failed.
+            let earlier = |r: &str| {
+                self.earlier_record(r).is_some()
+                    && (unsettled.iter().any(|u| self.was(r, u))
+                        || held.iter().any(|h| {
+                            self.was_held(r, h)
+                                && h.relation
+                                    .as_deref()
+                                    .is_none_or(|name| relation == Some(name))
+                        }))
+            };
             let kept = records.iter().any(|r| {
                 unsettled.contains(r)
                     || held.iter().any(|h| holds(h, r))
                     || listed.get(r).is_some_and(lists)
+                    || earlier(r)
             });
             mine.push(Mine { a, records, kept });
         }
