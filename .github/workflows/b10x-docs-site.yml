@@ -29,7 +29,7 @@ jobs:
       pages: write
       id-token: write
       actions: read
-    uses: beyond10x/website/.github/workflows/project-site.yml@fffaaeb204e4fd80bac86f94a9396a996dcdc58e
+    uses: beyond10x/website/.github/workflows/project-site.yml@90959a14014a085ace946a37a6cc4db1dbb9320b
     with:
       repository: cortex
       control_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
