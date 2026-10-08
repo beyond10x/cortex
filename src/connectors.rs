@@ -49,6 +49,10 @@ impl std::fmt::Display for InvokeError {
     }
 }
 
+/// The end of the message [`envelope`] writes for a `timeout` at `admission`: Connectors' own
+/// deadline ran out. The operation is a read, so repeating it costs at most one more provider call.
+const TIMEOUT_AT_ADMISSION: &str = ": timeout at admission";
+
 fn envelope(doc: Value, what: &str) -> Result<Value, InvokeError> {
     if doc["ok"] == Value::Bool(true) {
         return Ok(doc["result"].clone());
@@ -210,12 +214,20 @@ impl Connectors {
     ) -> Result<Value, InvokeError> {
         self.ensure_ready(adapter, connection)?;
         // Evidence listed as ready can lapse before the read is admitted; renew once and retry.
-        let answer = match self.invoke_once(adapter, connection, operation, input) {
-            Err(InvokeError::Lapsed(_)) => {
-                self.revalidate(adapter, connection, true)?;
-                self.invoke_once(adapter, connection, operation, input)?
+        // A timeout at admission is Connectors' deadline running out on a read; retry that once
+        // too. Each retry is spent at most once, so the loop runs at most three invocations.
+        let (mut renew, mut timeout) = (true, true);
+        let answer = loop {
+            match self.invoke_once(adapter, connection, operation, input) {
+                Err(InvokeError::Lapsed(_)) if renew => {
+                    renew = false;
+                    self.revalidate(adapter, connection, true)?;
+                }
+                Err(InvokeError::Failed(m)) if timeout && m.ends_with(TIMEOUT_AT_ADMISSION) => {
+                    timeout = false;
+                }
+                other => break other?,
             }
-            other => other?,
         };
         match answer.get("result") {
             Some(Value::String(text)) => serde_json::from_str(text).map_err(|e| {
