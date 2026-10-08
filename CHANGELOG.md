@@ -5,6 +5,36 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+### What 1.0 holds
+
+1.0 is the first release whose interface is stable. It adds no feature over 0.2.2; it is 0.2.2's
+feature set after a real instance ran for 7 days with nobody at the keyboard.
+
+- **Instances.** One spec file makes an instance: an EKR store on SQLite or PostgreSQL, a viewer,
+  an MCP line, and one systemd user timer per source. `cortex update` changes sources, model and
+  serve settings; `cortex adopt` turns an existing store into an instance without reseeding;
+  `cortex remove` keeps the data.
+- **Sources.** Web (search, or listed sites read as pages or crawled), Connectors (records of any
+  admitted operation, with pages, child calls and a time window), files (local files or records
+  read from them, with lookups), and structured imports that need no model call, map child
+  operations as linked nodes, link changes to the first tag that ships them, and end what a source
+  dropped.
+- **Runs.** Only new or changed documents are extracted, by a model call with no tools. cortex
+  mints every evidence id, dates facts by when their source said them, supersedes a changed value,
+  and writes extracted relations as edges. Credentials are masked before storage; a `redaction`
+  policy keeps personal data from the model and a gate refuses a batch it still finds. A snapshot
+  before each run makes `cortex restore` undo a bad one; two failed runs in a row disable a source.
+  `cortex quality` judges a sample of facts; `cortex schema` proposes schema changes.
+- **Project.** Specified in ESS with 55 conformance scenarios; CI runs `task check` on every pull
+  request; each release carries an `x86_64-unknown-linux-gnu` binary checked against `SHA256SUMS`.
+
+Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
+
+- `model.backend: Codex` is accepted and fails every run; extraction uses `claude -p` only.
+- A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
+- A run on a PostgreSQL store cannot be undone; `cortex restore` covers SQLite stores.
+- Linux with systemd user units only, and one released target.
+
 ## 0.2.2 — 2026-10-08
 
 ### Fixed
