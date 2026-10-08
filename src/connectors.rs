@@ -203,7 +203,8 @@ impl Connectors {
         )))
     }
 
-    /// Invokes `operation` once and answers the adapter's own result. The CLI wraps it as
+    /// Invokes `operation` and answers the adapter's own result; a lapse is renewed and a timeout at
+    /// admission retried, each at most once. The CLI wraps it as
     /// `{adapter, operation, revision, result}`, with `result` a JSON document in a string.
     pub fn invoke(
         &self,
