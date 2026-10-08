@@ -35,6 +35,11 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A run on a PostgreSQL store cannot be undone; `cortex restore` covers SQLite stores.
 - Linux with systemd user units only, and one released target.
 
+### Documentation
+
+- The install commands in the README and the quickstart name the current release; they named
+  0.2.0 after 0.2.1 and 0.2.2 were out.
+
 ## 0.2.2 — 2026-10-08
 
 ### Fixed
