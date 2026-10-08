@@ -2,14 +2,15 @@
 format: aep.planning-md/3
 id: specification:wave-20261008c-toward-1-0
 kind: specification
-status: approved
+status: implemented
 title: 'Wave 20261008c: toward 1.0'
 relations:
 - specifies: story:release-1-0
-revision: 3
+revision: 5
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-08T14:24:03Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-08T14:24:04Z", actor: "human:timo", revision: 3}
+- {from: "approved", to: "implemented", at: "2026-10-08T14:27:06Z", actor: "human:timo", revision: 5}
 ---
 ## Wave 20261008c: toward 1.0
 
@@ -44,3 +45,9 @@ request into `main` and its merge.
   artifact yet, and every re-run of that job finds the earlier attempt's artifact as well (run
   37791160685, attempts 1 and 2). Both steps are in the shared `project-site.yml`; the fix is
   there, and the pin moves when it lands.
+
+## Outcome
+
+Pull request https://github.com/beyond10x/cortex/pull/61 from `wave/20261008c`; CI on `ac12e56`:
+`task check`, `Build documentation` and `Security and privacy` pass. Local: `task docs-check`
+exit 0, `aep plan artifact validate` valid. No crate changed, so no package gate ran.
