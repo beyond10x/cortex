@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-store-backend-per-instance-pass-2
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 2: store-backend-per-instance (wave 20261005c)'
 relations:
 - reviews: story:store-backend-per-instance
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:37Z", actor: "human:timo", revision: 2}
 ---
 ```
 unit: U1 story:store-backend-per-instance, uncommitted working tree cortex-w2-store on base 6352006 (pass 2)

@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-events-carry-measurements-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: events-carry-measurements (wave 20261007b)'
 relations:
 - reviews: story:events-carry-measurements
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:36Z", actor: "human:timo", revision: 2}
 ---
 ```
 unit: story:events-carry-measurements

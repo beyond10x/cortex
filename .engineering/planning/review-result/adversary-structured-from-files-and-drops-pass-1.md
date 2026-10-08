@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-structured-from-files-and-drops-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: structured-from-files-and-drops'
 relations:
 - reviews: story:structured-from-files-and-drops
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:38Z", actor: "human:timo", revision: 2}
 ---
 unit: cortex wave 20261006f unit a, story:structured-from-files-and-drops; uncommitted working tree on base `bc3df39` at ~/.local/state/worktree/trees/b10x/cortex/cortex-w13-a
 verdict: NEEDS-CHANGE (1 blocker, 2 warnings)

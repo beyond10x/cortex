@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: review-result:design-round-1
 kind: review-result
-status: active
+status: archived
 title: Design critic, round 1
 relations:
 - reviews: epic:first-web-instance
@@ -12,7 +12,9 @@ relations:
 - reviews: story:timer-runs-unattended
 - reviews: story:first-web-instance
 - reviews: story:web-pages-cited-as-urls
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:38Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 epic:first-web-instance — the Order line (1, then 2 and 3, then 4, then 5) disagrees with the declared edges: story:seen-documents-modelled and story:extraction-links-facts carry no edge to story:ci-runs-task-check, and story:timer-runs-unattended has no edge to either of them; revise the line or add the `depends_on` edges, whichever the drafter means — .engineering/planning/epic/first-web-instance.md:37; `aep plan artifact graph` (timer-runs-unattended depends_on only ci-runs-task-check)

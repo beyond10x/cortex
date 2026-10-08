@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-redaction-names-and-gate-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: redaction-names-and-gate (wave 20261005f)'
 relations:
 - reviews: story:redaction-names-and-gate
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:36Z", actor: "human:timo", revision: 2}
 ---
 unit: story:redaction-names-and-gate (U1, wave 20261005f), uncommitted working tree on base fc7a332 in `~/.local/state/worktree/trees/b10x/cortex/cortex-w5-names`
 verdict: NEEDS-CHANGE

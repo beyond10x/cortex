@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: review-result:org-design-round-1
 kind: review-result
-status: active
+status: archived
 title: Design critic, organisation scale, round 1
 relations:
 - reviews: epic:organisation-scale-instance
@@ -14,7 +14,9 @@ relations:
 - reviews: story:document-time-as-valid-time
 - reviews: story:run-gate
 - reviews: story:quality-judge
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:38Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 story:spec-organisation-types — its diff replaces `StructuredSource`'s flat `adapter/connection/operation/inputs` fields with `input: StructuredInput`, which `story:structured-source` reads in `src/sources.rs` and `src/structured.rs`, yet no `depends_on` orders the two and this story's scope lists neither file; add `depends_on story:structured-source` and put those two files in scope, or move the reshape into `story:structured-from-files-and-drops` — .engineering/planning/story/spec-organisation-types.md:111-141

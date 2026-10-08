@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-release-pipeline-pass-2
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 2: release-pipeline (wave 20261005a)'
 relations:
 - reviews: story:release-pipeline
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:37Z", actor: "human:timo", revision: 2}
 ---
 unit: U2 story:release-pipeline, pass 2, uncommitted working tree on fe85624 (AGENTS.md diff, untracked release.yml and CHANGELOG.md)
 verdict: CONFIRMED (3 notes; no blocker and no warning)

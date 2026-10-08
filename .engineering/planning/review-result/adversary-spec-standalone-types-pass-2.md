@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-spec-standalone-types-pass-2
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 2: spec-standalone-types (wave 20261005a)'
 relations:
 - reviews: story:spec-standalone-types
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:37Z", actor: "human:timo", revision: 2}
 ---
 unit: U1 story:spec-standalone-types, pass 2, uncommitted working tree on fe85624 in cortex-w1-spec
 verdict: CONFIRMED

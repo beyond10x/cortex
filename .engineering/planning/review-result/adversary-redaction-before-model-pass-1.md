@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-redaction-before-model-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: redaction-before-model (wave 20261005c)'
 relations:
 - reviews: story:redaction-before-model
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:36Z", actor: "human:timo", revision: 2}
 ---
 unit: U3 story:redaction-before-model, uncommitted working tree on base 6352006 (cortex-w2-redact)
 verdict: NEEDS-CHANGE

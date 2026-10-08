@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-seen-documents-modelled-pass-1-report
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: seen-documents-modelled (wave 20261005c, by reading; disk full)'
 relations:
 - reviews: story:seen-documents-modelled
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:37Z", actor: "human:timo", revision: 2}
 ---
 The pass was cut short. The root filesystem filled up (0 MB free) before any adversary case was saved, so none ran red. Every finding below comes from reading the code and was not checked by a test, except the ESS probe in finding 4.
 

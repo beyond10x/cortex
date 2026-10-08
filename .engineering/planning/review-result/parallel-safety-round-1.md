@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: review-result:parallel-safety-round-1
 kind: review-result
-status: active
+status: archived
 title: Parallel-safety critic, round 1
 relations:
 - reviews: epic:first-web-instance
@@ -12,7 +12,9 @@ relations:
 - reviews: story:timer-runs-unattended
 - reviews: story:first-web-instance
 - reviews: story:web-pages-cited-as-urls
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:38Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 story:web-pages-cited-as-urls — its scope item "the EKR pin" is unplaced, and the pin sits in files that `story:ci-runs-task-check` will hard-code (`.github/workflows/check.yml`, a file that does not exist yet) and in `AGENTS.md`, `tests/e2e.rs` and `src/main.rs`; the body should name the pin's files and either order after the CI story or leave the workflow's pin out of the bump (inferred, the pin files are cited in the tree) — .engineering/planning/story/web-pages-cited-as-urls.md:28

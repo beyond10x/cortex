@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: review-result:org-scope-round-1
 kind: review-result
-status: active
+status: archived
 title: Scope critic, organisation scale, round 1
 relations:
 - reviews: epic:organisation-scale-instance
@@ -14,7 +14,9 @@ relations:
 - reviews: story:document-time-as-valid-time
 - reviews: story:run-gate
 - reviews: story:quality-judge
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:38Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 story:structured-from-files-and-drops — the epic promises "paged and nested Connectors reads" and the spec adds `paging` to `StructuredConnectors`; this body says "now with `paging`", but its Work and Acceptance have no paging step and `story:connectors-source-walks` claims paging only for a `connectors` source, so paged structured imports are claimed by no one — .engineering/planning/story/structured-from-files-and-drops.md:28 (promise: .engineering/planning/epic/organisation-scale-instance.md:14; connectors-source-walks.md:24)

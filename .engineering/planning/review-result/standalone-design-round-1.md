@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: review-result:standalone-design-round-1
 kind: review-result
-status: active
+status: archived
 title: Design critic, standalone 1.0, round 1
 relations:
 - reviews: epic:standalone-1-0
@@ -17,7 +17,9 @@ relations:
 - reviews: story:docs-for-1-0
 - reviews: story:release-1-0
 - reviews: story:web-pages-cited-as-urls
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:39Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 story:redaction-before-model — its Work never says it lifts the `redaction` refusal that `story:spec-standalone-types` adds, and its e2e acceptance cannot create an instance with `redaction` while that refusal stands; add the lift to Work (store-backend-per-instance already does this for postgres) — .engineering/planning/story/redaction-before-model.md:29 vs .engineering/planning/story/spec-standalone-types.md:47

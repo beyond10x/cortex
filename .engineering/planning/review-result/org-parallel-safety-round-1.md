@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: review-result:org-parallel-safety-round-1
 kind: review-result
-status: active
+status: archived
 title: Parallel-safety critic, organisation scale, round 1
 relations:
 - reviews: epic:organisation-scale-instance
@@ -14,7 +14,9 @@ relations:
 - reviews: story:document-time-as-valid-time
 - reviews: story:run-gate
 - reviews: story:quality-judge
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:38Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 story:spec-organisation-types — edits `spec/domains/instance.yaml`, `generated/` and `spec/suite.json` (cited), the same three files as story:seen-documents-modelled, story:run-snapshots and story:adopt-existing-store, and its Depends on names only story:spec-standalone-types. Add ordering edges that record the shared spec files, or split the surface — .engineering/planning/story/spec-organisation-types.md:206

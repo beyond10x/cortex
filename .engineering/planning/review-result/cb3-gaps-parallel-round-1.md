@@ -2,14 +2,16 @@
 format: aep.planning-md/3
 id: review-result:cb3-gaps-parallel-round-1
 kind: review-result
-status: active
+status: archived
 title: 'Plan critic (parallel), round 1: cb3 gap stories'
 relations:
 - reviews: story:structured-children
 - reviews: story:extraction-supersedes
 - reviews: story:postgres-run-undo
 - reviews: story:record-field-lookups
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:38Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 structured-children — its `src/structured.rs` and the Structured-input arm and `fetch_structured` of `src/sources.rs` are also edited by structured-from-files-and-drops (cited, both bodies), and neither says so; add an ordering edge naming those files or split the surface — .engineering/planning/story/structured-children.md:34

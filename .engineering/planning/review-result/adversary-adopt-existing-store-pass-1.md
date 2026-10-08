@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-adopt-existing-store-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: adopt-existing-store (wave 20261006a)'
 relations:
 - reviews: story:adopt-existing-store
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:36Z", actor: "human:timo", revision: 2}
 ---
 The adopt unit is red: 5 new cases fail, and 1 of them is a blocker. When `--store` is a symlink to a store that another process holds open, `adopt` drops the newest revision and still reports `adopted`.
 

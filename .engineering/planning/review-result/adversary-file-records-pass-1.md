@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: review-result:adversary-file-records-pass-1
 kind: review-result
-status: active
+status: archived
 title: 'Adversary pass 1: file-records (wave 20261005h)'
 relations:
 - reviews: story:file-records
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:36Z", actor: "human:timo", revision: 2}
 ---
 ```
 unit: story:file-records (U1, wave 20261005h), working tree on base dfe3fc1 plus the uncommitted change

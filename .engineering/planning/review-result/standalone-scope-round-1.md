@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: review-result:standalone-scope-round-1
 kind: review-result
-status: active
+status: archived
 title: Scope critic, standalone 1.0, round 1
 relations:
 - reviews: epic:standalone-1-0
@@ -16,7 +16,9 @@ relations:
 - reviews: story:release-pipeline
 - reviews: story:docs-for-1-0
 - reviews: story:release-1-0
-revision: 1
+revision: 2
+transitions:
+- {from: "active", to: "archived", at: "2026-10-08T13:07:39Z", actor: "human:timo", revision: 2}
 ---
 needs-revision
 epic:standalone-1-0 — "anyone can install a released cortex … and read the documentation that says all of it" is promised, but no item documents installing the released binary: `story:docs-for-1-0` scopes five files and omits `website/docs/quickstart.md`, whose step 1 is still `git clone` plus `cargo install --locked --path .`. `story:docs-for-1-0` is the natural owner — .engineering/planning/epic/standalone-1-0.md:13

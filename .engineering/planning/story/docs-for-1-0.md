@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:docs-for-1-0
 kind: story
-status: draft
+status: active
 title: The public documentation describes every 1.0 feature
 relations:
 - decomposes: epic:standalone-1-0
@@ -28,7 +28,10 @@ scope:
   path: website/docs/spec-file.md
 - confidence: inferred
   path: website/docs/use-cases.md
-revision: 12
+revision: 15
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-08T13:07:55Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-10-08T13:07:55Z", actor: "human:timo", revision: 15, decided_on: {"recorded":{"review_outcome":1}}}
 ---
 ## Outcome
 
@@ -193,3 +196,14 @@ From wave 20261005a (`story:spec-standalone-types`, landed `b628e4d`): `website/
 ## Codex is not in 1.0
 
 Decided 2026-10-06 by the coordinating session under the operator's standing wave approval: `story:codex-model-backend` stays open behind `decision-blocker:codex-exec-keeps-shell` (codex exec keeps a shell tool), and no longer holds back 1.0. `story:docs-for-1-0` documents the Codex backend as unavailable until that blocker clears; `story:document-time-as-valid-time` never needed it (it waits on EKR valid time).
+
+## Remaining (2026-10-08)
+
+Checked against `main` at `ca393d0` by the store audit of 2026-10-08. `restore`, `adopt`, quality and schema commands, snapshots and PostgreSQL provisioning are already documented (`commands.md`, `operating.md`, `spec-file.md`). What is left:
+
+- `quickstart.md` step 1 installs from a `git clone` (`quickstart.md:22-24`): install from the GitHub Release tarball and check `SHA256SUMS`; building from source becomes a second section.
+- `use-cases.md` does not exist: write it from the draft above, re-checking every "Ready" line against the code (redaction and structured sources are implemented; the draft's gap table predates them). Drop the stray fragment after use case 1.
+- `limits.md:88` names EKR 0.0.30; the pin is 0.0.32. Re-check each EKR limit against 0.0.32.
+- Codex: the Codex backend is not in 1.0 (section above). No page may document `--codex` as a working model backend; the carried patch's `--codex` row is not applied. `operating.md:65` names `CORTEX_CODEX`; say the backend is unavailable.
+- The carried patch's `cost_usd` sentence and the `Structured` kind in `source add` are checked against `src/main.rs` and applied if still missing.
+- README feature list against the shipped features.
