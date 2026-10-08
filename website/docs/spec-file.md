@@ -68,6 +68,7 @@ different seed files answers `seed-change-refused`.
 | field | meaning |
 |---|---|
 | `model` | the model name passed to `claude --model` |
+| `backend` | optional: `Claude` (the default) runs `claude -p`. `Codex` is accepted by `create` and `update` but extracts nothing in this release: every run fails as `extraction-failed`, naming `story:codex-model-backend` (see [Commands](./commands.md#global-options)) |
 | `budget_usd` | the spending limit of one run, in US dollars, as a decimal string; above 0. A run stops starting new batches once it is spent |
 | `timeout_s` | the time limit of one model call, in seconds; above 0 |
 | `instructions` | optional text file whose content is added to every extraction prompt |
@@ -317,7 +318,10 @@ counts once.
 **Identity.** A record's identity is `<adapter>:<operation>:<id>`, or `files:<paths>:<glob>:<id>`
 for a `from: files` input, its `paths` as written joined by `,` (for example
 `files:registry:*.json:P-1`), so one glob under two roots is two record sets. In a path and the
-glob, `%`, `:` and `,` are written `%25`, `%3A` and `%2C`. When masking or a `redaction`
+glob, `%`, `:` and `,` are written `%25`, `%3A` and `%2C`. An adapter, operation, path or glob
+that masking would read where it stands, with the `:` after it, as an assigned value (one ending
+in a credential's name, `vault.secret`) is written as `%x` and the hex of its bytes instead
+(`dir:%x7661756c742e736563726574:<id>`); a part masking leaves alone keeps its text. When masking or a `redaction`
 rule with a `replacement` would change the id, the identity carries the first 16 hex digits of the
 id's SHA-256 in its place, so the id is never stored and two such ids stay two records. The
 identity is the record's document key, and its evidence reads `Source: record:<identity>`. EKR treats things of one node
@@ -479,13 +483,13 @@ failure does not hold the window, as a failed child call does not.
 id, name, aliases, properties and relation targets, for a child record its parent's identity
 under the `parent` name, and for a change the identity of each tag it is linked to under the
 link's `relation`), then the record's JSON, cut at a character
-boundary to 16,384 bytes (EKR 0.0.30's bound on one evidence payload). The mapped values come
+boundary to 16,384 bytes (EKR 0.0.32's bound on one evidence payload). The mapped values come
 first, so the cut never takes a value a fact cites. A record whose header and mapped values alone
 are over the bound is not applied: the run names it in `skipped` with the reason and records it as
 seen, so it is read again only once it changes. Before that, every string in the record has credential
 shapes masked and the `redaction` policy's rules with a `replacement` applied; no model sees a
 record, so nothing is replaced by a placeholder. `max_chars_per_document` does not cut a record,
-and EKR rejects a text value over 65,536 bytes (EKR 0.0.30's string limit). A record with any part
+and EKR rejects a text value over 65,536 bytes (EKR 0.0.32's string limit). A record with any part
 EKR rejects is counted in `parts_rejected`, named in `rejected` with EKR's refusal, is not counted in `documents_applied` and is not marked
 seen; the run is then not successful, so later runs read the record and try it again until it
 applies. Shorten or unmap the value at the source to clear it. Change detection,
@@ -498,7 +502,7 @@ applies. Shorten or unmap the value at the source to clear it. Change detection,
 | `refresh_after_days` | a document whose text changed is extracted again only when it was last applied at least this many days ago; 0 or more. A record read from a file ([`kind: files`](#kind-files)) and a `structured` source's change whose text changed only in its links ([`kind: structured`](#kind-structured)) wait for nothing |
 | `change` | how a change is detected; `ContentHash` is the only value |
 | `max_documents_per_run` | the most documents one run extracts; above 0 |
-| `max_chars_per_document` | longer text is cut to this many characters; above 0. Text is also cut, at a character boundary, to what a 16,384-byte evidence payload holds after its header (EKR 0.0.30's bound), so about 5,400 characters of a three-byte script such as Chinese fit. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |
+| `max_chars_per_document` | longer text is cut to this many characters; above 0. Text is also cut, at a character boundary, to what a 16,384-byte evidence payload holds after its header (EKR 0.0.32's bound), so about 5,400 characters of a three-byte script such as Chinese fit. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |
 
 ## `redaction`
 
@@ -564,7 +568,9 @@ gate:
 
 Optional. Where the instance's EKR store lives: `{backend: sqlite}` (the default, without
 `store`) is `store.sqlite` in the instance directory; `{backend: postgres, value: {...}}` is EKR's
-PostgreSQL provider.
+PostgreSQL provider. A `sqlite` store cannot be placed elsewhere yet: a spec that names
+`store.value.path` is refused by `cortex create` (`seed-refused`) and `cortex update`
+(`seed-change-refused`), with a reason naming `store.value.path`.
 
 ```yaml
 store:

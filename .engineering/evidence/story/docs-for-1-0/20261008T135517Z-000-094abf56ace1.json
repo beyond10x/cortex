@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-08T13:55:17Z",
+  "actor": "human:timo",
+  "artifact": "story:docs-for-1-0",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task website; task docs-check; cargo test -p cortex-docs",
+    "reference": "4d46b1c"
+  }
+}

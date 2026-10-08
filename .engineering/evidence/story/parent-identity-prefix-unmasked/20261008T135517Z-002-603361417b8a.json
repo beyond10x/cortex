@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-08T13:55:17Z",
+  "actor": "human:timo",
+  "artifact": "story:parent-identity-prefix-unmasked",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test -p cortex-cli --test parent_prefix --test parent_prefix_adv --test parent_prefix_adv2",
+    "reference": "4d46b1c"
+  }
+}

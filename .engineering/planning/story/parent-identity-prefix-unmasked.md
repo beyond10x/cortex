@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:parent-identity-prefix-unmasked
 kind: story
-status: active
+status: implemented
 title: No structured parent identity prefix reads as a credential to masking
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -12,10 +12,11 @@ scope:
   path: src/spec.rs
 - confidence: cited
   path: src/structured.rs
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-08T13:07:55Z", actor: "human:timo", revision: 5}
 - {from: "proposed", to: "active", at: "2026-10-08T13:07:55Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-10-08T13:59:01Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

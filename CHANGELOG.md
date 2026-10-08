@@ -5,6 +5,19 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+### Fixed
+
+- A structured source whose adapter, operation, `files` path or glob ends in a credential name
+  (`vault.secret`) no longer applies its unchanged records again on every run: that part of its
+  identities is written in hex, and values applied under the earlier identities still end. Sources
+  whose prefix masking leaves alone keep their identities.
+- The documentation site waits until GitHub lists the finished build run before it publishes.
+
+### Documentation
+
+- Install from the release tarball checked against `SHA256SUMS`; a Use cases page; the Codex
+  backend is documented as unavailable; EKR limits re-checked against 0.0.32.
+
 ## 0.2.1 — 2026-10-08
 
 ### Fixed

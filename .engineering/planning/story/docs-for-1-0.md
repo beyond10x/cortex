@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:docs-for-1-0
 kind: story
-status: active
+status: implemented
 title: The public documentation describes every 1.0 feature
 relations:
 - decomposes: epic:standalone-1-0
@@ -28,10 +28,11 @@ scope:
   path: website/docs/spec-file.md
 - confidence: inferred
   path: website/docs/use-cases.md
-revision: 15
+revision: 16
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-08T13:07:55Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"review_outcome":1}}}
 - {from: "proposed", to: "active", at: "2026-10-08T13:07:55Z", actor: "human:timo", revision: 15, decided_on: {"recorded":{"review_outcome":1}}}
+- {from: "active", to: "implemented", at: "2026-10-08T13:59:01Z", actor: "human:timo", revision: 16, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Outcome
 
