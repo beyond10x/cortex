@@ -15,7 +15,7 @@ scope:
   path: examples/agent-tooling.yaml
 - confidence: inferred
   path: examples/seed/agent-tooling.yaml
-revision: 13
+revision: 16
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":6}}}
 - {from: "proposed", to: "active", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":6}}}
@@ -89,3 +89,28 @@ Restarted window. The first timer run (2026-10-06 00:30) failed before any searc
 - Day 1: 2026-10-07 (news 00:30, crawl 01:30)
 - Read on day 8: 2026-10-14, against the Acceptance; Tavily credits and model cost go into the `verification-report`
 - At the restart: news `runs: 0`, `consecutive_failures: 1` (a success resets it); crawl `runs: 0`
+
+## Restart (2026-10-08)
+
+The first window could reach at most 6 of the 7 search runs Acceptance 0 needs inside days 1 to 7 (`decision-blocker:first-web-run-continuity`):
+
+| date (CEST) | source | result (journalctl) |
+|---|---|---|
+| 2026-10-07 00:30 | news | exit 0; 7 of 15 new documents applied, then `stopped`: `extraction-value-mismatch … Release.release_date` (EKR 0.0.30 refused the batch; see `story:prompt-names-value-kinds`) |
+| 2026-10-07 01:30 | crawl | exit 0; 4 documents applied |
+| 2026-10-08 00:30 | news | exit 1; `tavily.websearch.search: timeout at admission` (Connectors' 30 s CLI deadline; `story:connectors-admission-timeout-retry`) |
+
+The first instance `agent-tooling` was removed with `cortex remove` on 2026-10-08 13:44 UTC; its directory and store stay under `$CORTEX_HOME/instances/agent-tooling` as the record of that window.
+
+The run starts again as the instance `agent-tooling-2` (spec `~/.config/cortex/agent-tooling-2/agent-tooling.yaml`, the example with the Tavily connection id and the name changed; not committed), created 2026-10-08 13:45 UTC on fixed binaries:
+
+| binary | version | sha256 |
+|---|---|---|
+| `$CORTEX_HOME/bin/cortex` (from the v0.2.1 Release tarball, checksum OK) | cortex 0.2.1 | `a47ce7d8cf4f3051d9ef7f06a0470bdbe6ef53d99554675b251634f0d23c608e` |
+| `ekr` under `~/.cache/cortex/bin/0.0.32/` | 0.0.32 | `49196b5dfd5d8b4f3604e4b6d81b7741d7aa844436bf7e62a6d3c911083fb2cc` |
+| `connectors`, copied to `~/.local/share/cortex-pins/connectors/connectors-0.33.0` and named by the units' `CORTEX_CONNECTORS` | 0.33.0, chosen; v0.34.0 existed (published 13:21 UTC): 0.33.0 carries the page-scan fix and the run needs a fixed binary | `0a175af28d5ab7d0f06b9630ad3232f510a1c9f9c4932a7915db4cc2dee944cd` |
+| `claude`, copied to `~/.local/share/cortex-pins/claude/claude-2.1.294` and named by the units' `CORTEX_CLAUDE` (`cortex update --claude`, 2026-10-08 13:55 UTC) | 2.1.294 | `27122ca7b624f537546fbef35b80c66370d974ff258f3d9b10ac50bb8771f262` |
+
+- Day 1: 2026-10-09 (news 00:30); the first crawl is 2026-10-14 01:30 (day 6)
+- Read on day 8: 2026-10-16, against the Acceptance
+- At the restart: news and crawl `runs: 0`, `consecutive_failures: 0`

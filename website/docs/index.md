@@ -46,6 +46,7 @@ operations through `connectors`; the credential stays in Connectors.
 ## Where to go next
 
 - [Quickstart](./quickstart.md): from nothing to a running instance.
+- [Use cases](./use-cases.md): problems one instance solves, and what each needs.
 - [Spec file](./spec-file.md): every section of a `cortex.instance/1` file.
 - [Commands](./commands.md): what each `cortex` command does and prints.
 - [Operating an instance](./operating.md): where things live, what a run does, failures.

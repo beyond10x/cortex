@@ -318,7 +318,10 @@ counts once.
 **Identity.** A record's identity is `<adapter>:<operation>:<id>`, or `files:<paths>:<glob>:<id>`
 for a `from: files` input, its `paths` as written joined by `,` (for example
 `files:registry:*.json:P-1`), so one glob under two roots is two record sets. In a path and the
-glob, `%`, `:` and `,` are written `%25`, `%3A` and `%2C`. When masking or a `redaction`
+glob, `%`, `:` and `,` are written `%25`, `%3A` and `%2C`. An adapter, operation, path or glob
+that masking would read where it stands, with the `:` after it, as an assigned value (one ending
+in a credential's name, `vault.secret`) is written as `%x` and the hex of its bytes instead
+(`dir:%x7661756c742e736563726574:<id>`); a part masking leaves alone keeps its text. When masking or a `redaction`
 rule with a `replacement` would change the id, the identity carries the first 16 hex digits of the
 id's SHA-256 in its place, so the id is never stored and two such ids stay two records. The
 identity is the record's document key, and its evidence reads `Source: record:<identity>`. EKR treats things of one node
