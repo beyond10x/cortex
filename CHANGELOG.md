@@ -5,6 +5,12 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+### Fixed
+
+- A run retries a Connectors invocation once when Connectors answers `timeout` at `admission`
+  (its own 30 s deadline ran out); a second timeout answers `fetch-failed` as before, and nothing
+  else is retried.
+
 ## 0.2.0 — 2026-10-07
 
 ### Added

@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:connectors-admission-timeout-retry
 kind: story
-status: active
+status: implemented
 title: A run retries a Connectors invocation that timed out at admission once
 relations:
 - decomposes: epic:first-web-instance
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-08T13:07:56Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-08T13:07:56Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-08T13:29:23Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Outcome
 
