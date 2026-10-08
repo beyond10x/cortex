@@ -233,3 +233,80 @@ fn a_source_with_no_such_part_keeps_its_identities_byte_for_byte() {
         ]
     );
 }
+
+/// A child record applied before its source's prefix was written in hex has an identity under
+/// the base prefix (`dir:vault.secret/tags.list:<parent>:<id>`). It is still the source's, so
+/// its values end once it is gone, as a parent record's do.
+#[test]
+fn a_child_value_applied_under_the_base_prefix_still_ends_when_its_record_is_gone() {
+    let yaml = format!(
+        r#"format: cortex.instance/1
+name: c
+description: Test brain.
+ekr: {{version: "0.0.32", bin: "ekr"}}
+seed: {{documents: []}}
+model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
+sources:
+  - name: people
+    schedule: daily
+    settings:
+      kind: structured
+      value:
+        input:
+{input}
+            children:
+              - operation: tags.list
+                input: {{project: "{{id}}"}}
+                records: "$.tags"
+                parent: IN_PROJECT
+                mapping:
+                  node_type: Tag
+                  id: "$.name"
+                  name: "$.name"
+                  aliases: []
+                  properties: [{{property: commit, path: "$.commit"}}]
+                  relations: []
+        records: "$.people"
+        mapping:
+          node_type: Person
+          id: "$.id"
+          name: "$.name"
+          aliases: []
+          properties: []
+          relations: []
+    policy: {{refresh_after_days: 0, change: ContentHash, max_documents_per_run: 10, max_chars_per_document: 5000}}
+serve: {{view_port: 18995}}
+"#,
+        input = "          from: connectors\n          value:\n            adapter: dir\n            \
+                 connection: conn_test\n            operation: vault.secret\n            inputs: [{}]"
+    );
+    let spec = cortex_cli::spec::parse(&yaml).expect("a valid spec");
+    let cortex_model::instance::SourceSettings::Structured(st) = &spec.sources[0].settings else {
+        unreachable!()
+    };
+    let s = cortex_cli::structured::Source::new(st, None);
+    let snapshot = json!({"graph": {"graph": {
+        "assertions": {"a-old": {"id": "a-old", "subject": {"Node": "n1"},
+            "predicate": {"Property": "p-commit"},
+            "object": {"Value": {"value_kind": "String", "value": "c1"}},
+            "evidence": ["e-1"], "lifecycle": "Active",
+            "valid_time": {"from": 1, "to": null}}},
+        "edges": {},
+        "nodes": {},
+        "evidence": {"e-1": {"source": {"HumanStatement": {
+            "identity": "record:dir:vault.secret/tags.list:P-1:v1"}}}},
+    }}});
+    let ontology = json!({"node_types": [{"properties": [{"id": "p-commit", "name": "commit"}]}],
+        "edge_types": []});
+    let ops = s.ended(
+        &snapshot,
+        &ontology,
+        &Default::default(),
+        &Default::default(),
+        &[],
+    );
+    assert!(
+        matches!(&ops[..], [cortex_cli::ekr::Operation::Retract { assertion, .. }] if assertion == "a-old"),
+        "the value of a child record the source no longer lists is never ended: {ops:?}"
+    );
+}

@@ -71,30 +71,70 @@ fn texts_at(record: &Value, path: &str) -> Vec<String> {
 /// are written `%25`, `%3A` and `%2C`, so the prefix holds exactly two `:` and no prefix of one
 /// input followed by `:` starts another's identity.
 ///
-/// The adapter, the operation, a path or the glob that masking would read with what follows it
-/// as an assigned value (one ending in a credential's name, `vault.secret`) is written as [`hex`]
-/// instead
-/// ([`unmasked`]), so no record's identity is one masking changes; every other part keeps its
-/// text, so the identities of other sources are as they were.
+/// The adapter, the operation, a path or the glob that masking reads, where it stands in the
+/// prefix, with what follows it as an assigned value (one ending in a credential's name,
+/// `vault.secret`, followed by `:`) is written as [`hex`] instead, so no record's identity is
+/// one masking changes. Every other part keeps its text (a path ending so but followed by `,`
+/// among them), so the identities of other sources are as they were ([`base_prefix`]).
 pub fn prefix(st: &m::StructuredSource) -> String {
+    let (parts, join) = prefix_parts(st);
+    let mut written: Vec<String> = parts.iter().map(|(w, _)| w.clone()).collect();
+    let mut hexed = vec![false; parts.len()];
+    let masked = |w: &[String]| mask(&format!("{}:{PROBE}", join(w))).1;
+    let mut count = masked(&written);
+    // Each round writes in hex the first part whose hex leaves masking less to read: the part
+    // masking reads as a credential's name or value. A part whose hex changes nothing keeps its
+    // text.
+    while count > 0 {
+        let found = (0..parts.len()).filter(|&n| !hexed[n]).find_map(|n| {
+            let mut tried = written.clone();
+            tried[n] = hex(&parts[n].1);
+            let left = masked(&tried);
+            (left < count).then_some((n, tried, left))
+        });
+        let Some((n, tried, left)) = found else {
+            break;
+        };
+        hexed[n] = true;
+        written = tried;
+        count = left;
+    }
+    join(&written)
+}
+
+/// [`prefix`] with no part in hex: every structured source's prefix before any was written so,
+/// which the identities of evidence applied then still start with.
+fn base_prefix(st: &m::StructuredSource) -> String {
+    let (parts, join) = prefix_parts(st);
+    join(&parts.into_iter().map(|(w, _)| w).collect::<Vec<_>>())
+}
+
+/// The parts of a structured source's prefix, each as written in text and the text it was
+/// written from, and how they are joined: `<adapter>:<operation>`, or
+/// `files:<path>,…,<path>:<glob>`, a path and the glob escaped.
+#[allow(clippy::type_complexity)]
+fn prefix_parts(st: &m::StructuredSource) -> (Vec<(String, String)>, fn(&[String]) -> String) {
     match &st.input {
-        m::StructuredInput::Connectors(c) => {
-            format!(
-                "{}:{}",
-                unmasked(&c.adapter, &c.adapter),
-                unmasked(&c.operation, &c.operation)
-            )
-        }
+        m::StructuredInput::Connectors(c) => (
+            vec![
+                (c.adapter.clone(), c.adapter.clone()),
+                (c.operation.clone(), c.operation.clone()),
+            ],
+            |w| w.join(":"),
+        ),
         m::StructuredInput::Files(f) => {
-            let escape = |t: &str| {
+            let escape = |t: &String| {
                 let escaped = t
                     .replace('%', "%25")
                     .replace(':', "%3A")
                     .replace(',', "%2C");
-                unmasked(&escaped, t)
+                (escaped, t.clone())
             };
-            let paths: Vec<String> = f.paths.iter().map(|p| escape(p)).collect();
-            format!("files:{}:{}", paths.join(","), escape(&f.glob))
+            let parts = f.paths.iter().chain([&f.glob]).map(escape).collect();
+            (parts, |w| match w.split_last() {
+                Some((glob, paths)) => format!("files:{}:{glob}", paths.join(",")),
+                None => "files::".to_string(),
+            })
         }
     }
 }
@@ -102,23 +142,18 @@ pub fn prefix(st: &m::StructuredSource) -> String {
 /// What a part of an identity is tried with after its `:`: as long as an id's digest.
 const PROBE: &str = "0000000000000000";
 
-/// `written`, a part of an identity that `:` and more follow, or `raw`, the text it was written
-/// from, as [`hex`] when masking would change `<written>:` and an id's digest.
-fn unmasked(written: &str, raw: &str) -> String {
-    if mask(&format!("{written}:{PROBE}")).1 > 0 {
-        hex(raw)
-    } else {
-        written.to_string()
-    }
-}
-
 /// `<prefix>/<operation>`: what the identities of a structured source's child records of
 /// `operation` start with, `prefix` being the source's own ([`prefix`]). No identity of a parent
 /// record starts with it, as each holds `<prefix>:`. An operation masking would read with what
 /// follows it as an assigned value (one ending in a credential's name, `…client_secret`) is
 /// written as [`hex`].
 pub fn child_prefix(prefix: &str, operation: &str) -> String {
-    format!("{prefix}/{}", unmasked(operation, operation))
+    let operation = if mask(&format!("{operation}:{PROBE}")).1 > 0 {
+        hex(operation)
+    } else {
+        operation.to_string()
+    };
+    format!("{prefix}/{operation}")
 }
 
 /// The member of a change record's cleaned text that holds its links: a list of
@@ -286,6 +321,10 @@ pub struct Source<'a> {
     pub children: Vec<(String, &'a m::StructuredChild)>,
     /// The source's compare links.
     pub links: Vec<&'a m::CompareLink>,
+    /// What the identities of the source's records and child records started with before a part
+    /// of its prefix was written in hex ([`base_prefix`]), when that differs from today: evidence
+    /// applied then is still the source's, so its values still end ([`Source::ended`]).
+    pub earlier: Vec<String>,
 }
 
 /// What one record of a source is mapped by: the source's own mapping, or a child's.
@@ -377,12 +416,22 @@ impl<'a> Source<'a> {
             ),
             m::StructuredInput::Files(_) => (Vec::new(), Vec::new()),
         };
+        let base = base_prefix(st);
+        let earlier = if base == prefix {
+            Vec::new()
+        } else {
+            let children = children
+                .iter()
+                .map(|(_, child): &(String, _)| child_prefix(&base, &child.operation));
+            std::iter::once(base.clone()).chain(children).collect()
+        };
         Self {
             prefix,
             mapping: &st.mapping,
             redactor,
             children,
             links,
+            earlier,
         }
     }
 
@@ -733,13 +782,18 @@ impl<'a> Source<'a> {
         out
     }
 
-    /// Whether `identity` is one of this source's records: `<prefix>:<id>`, or a child record's
-    /// [`child_key`].
+    /// Whether `identity` is one of this source's records: `<prefix>:<id>`, a child record's
+    /// [`child_key`], or one of these as written before a part of the prefix was in hex
+    /// ([`Source::earlier`]).
     fn owns(&self, identity: &str) -> bool {
-        identity
-            .strip_prefix(self.prefix.as_str())
-            .is_some_and(|rest| rest.starts_with(':'))
+        let under = |prefix: &str| {
+            identity
+                .strip_prefix(prefix)
+                .is_some_and(|rest| rest.starts_with(':'))
+        };
+        under(&self.prefix)
             || self.child_of(identity).is_some()
+            || self.earlier.iter().any(|p| under(p))
     }
 
     /// The record identity an evidence item of the store names, when it is one of this source's
@@ -1219,6 +1273,7 @@ mod tests {
             redactor: None,
             children: Vec::new(),
             links: Vec::new(),
+            earlier: Vec::new(),
         }
     }
 
@@ -1515,6 +1570,7 @@ mod tests {
             mapping,
             redactor: None,
             links: Vec::new(),
+            earlier: Vec::new(),
         }
     }
 
@@ -1713,6 +1769,7 @@ mod tests {
             mapping: &m,
             redactor: None,
             links: vec![&link],
+            earlier: Vec::new(),
         };
         let tag_id = s.child_identity("tags.list", "7", "v1").expect("a child");
         assert_eq!(tag_id, "forge:projects.list/tags.list:7:v1");
