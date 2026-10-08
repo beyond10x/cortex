@@ -1038,7 +1038,7 @@ commands:
       - {name: source_id, type: cortex.instance.SourceId}
     outcomes:
       - name: fetch-failed
-        external: Connectors or the filesystem fails to deliver the source's documents
+        external: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first
         error: cortex.instance.FetchFailed
         payload:
           cortex.instance.FetchFailed:

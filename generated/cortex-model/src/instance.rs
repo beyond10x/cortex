@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 724e4de48519154c6fb2cfa76120dddf9146deb7a9a2a170344f384298bf6ce0
-// contract digest 8e1213ec135a97d97b798315901e861ab9560bb7401301d5943fb3f16838dddd
+// model digest f6421b711c44551770611d3eb57bb3214b80452c3b620a155013f169f53ebb95
+// contract digest 876e451a11e200a7176d3e42a79bd802c898f0ede4a6b03e8146f5cae2e56cc9
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -1860,7 +1860,7 @@ pub struct RunSource {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunSourceOutcome {
-    /// `fetch-failed` — externally decided (Connectors or the filesystem fails to deliver the source's documents).
+    /// `fetch-failed` — externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first).
     ///
     /// Nothing was applied; the scheduler then sends RecordFailure.
     FetchFailed {
@@ -2455,7 +2455,7 @@ pub mod obligations {
     ///
     /// Why it is not generated: kept an obligation by `when_subject_state:` beside `external:` in one command.
     ///
-    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents), error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document), error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), error `cortex.instance.ApplyRefused`; `ran` when the existing subject is in Enabled, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `disabled` otherwise, error `cortex.instance.SourceDisabledError`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
+    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document), error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), error `cortex.instance.ApplyRefused`; `ran` when the existing subject is in Enabled, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `disabled` otherwise, error `cortex.instance.SourceDisabledError`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
     pub trait RunSourceBehavior {
         /// Decides and enacts exactly one declared outcome of `cortex.instance.RunSource`.
         ///
