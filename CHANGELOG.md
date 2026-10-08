@@ -5,6 +5,8 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+## 0.2.2 — 2026-10-08
+
 ### Fixed
 
 - A structured source whose adapter, operation, `files` path or glob ends in a credential name
