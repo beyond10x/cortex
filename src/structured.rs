@@ -70,14 +70,28 @@ fn texts_at(record: &Value, path: &str) -> Vec<String> {
 /// one glob under different roots are two record sets. In a path and the glob, `%`, `:` and `,`
 /// are written `%25`, `%3A` and `%2C`, so the prefix holds exactly two `:` and no prefix of one
 /// input followed by `:` starts another's identity.
+///
+/// The adapter, the operation, a path or the glob that masking would read with what follows it
+/// as an assigned value (one ending in a credential's name, `vault.secret`) is written as [`hex`]
+/// instead
+/// ([`unmasked`]), so no record's identity is one masking changes; every other part keeps its
+/// text, so the identities of other sources are as they were.
 pub fn prefix(st: &m::StructuredSource) -> String {
     match &st.input {
-        m::StructuredInput::Connectors(c) => format!("{}:{}", c.adapter, c.operation),
+        m::StructuredInput::Connectors(c) => {
+            format!(
+                "{}:{}",
+                unmasked(&c.adapter, &c.adapter),
+                unmasked(&c.operation, &c.operation)
+            )
+        }
         m::StructuredInput::Files(f) => {
             let escape = |t: &str| {
-                t.replace('%', "%25")
+                let escaped = t
+                    .replace('%', "%25")
                     .replace(':', "%3A")
-                    .replace(',', "%2C")
+                    .replace(',', "%2C");
+                unmasked(&escaped, t)
             };
             let paths: Vec<String> = f.paths.iter().map(|p| escape(p)).collect();
             format!("files:{}:{}", paths.join(","), escape(&f.glob))
@@ -85,8 +99,18 @@ pub fn prefix(st: &m::StructuredSource) -> String {
     }
 }
 
-/// What a part of a child's identity is tried with after its `:`: as long as an id's digest.
+/// What a part of an identity is tried with after its `:`: as long as an id's digest.
 const PROBE: &str = "0000000000000000";
+
+/// `written`, a part of an identity that `:` and more follow, or `raw`, the text it was written
+/// from, as [`hex`] when masking would change `<written>:` and an id's digest.
+fn unmasked(written: &str, raw: &str) -> String {
+    if mask(&format!("{written}:{PROBE}")).1 > 0 {
+        hex(raw)
+    } else {
+        written.to_string()
+    }
+}
 
 /// `<prefix>/<operation>`: what the identities of a structured source's child records of
 /// `operation` start with, `prefix` being the source's own ([`prefix`]). No identity of a parent
@@ -94,12 +118,7 @@ const PROBE: &str = "0000000000000000";
 /// follows it as an assigned value (one ending in a credential's name, `…client_secret`) is
 /// written as [`hex`].
 pub fn child_prefix(prefix: &str, operation: &str) -> String {
-    let operation = if mask(&format!("{operation}:{PROBE}")).1 > 0 {
-        hex(operation)
-    } else {
-        operation.to_string()
-    };
-    format!("{prefix}/{operation}")
+    format!("{prefix}/{}", unmasked(operation, operation))
 }
 
 /// The member of a change record's cleaned text that holds its links: a list of
