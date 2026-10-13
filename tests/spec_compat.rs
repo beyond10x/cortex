@@ -11,7 +11,8 @@
 //! `CORTEX_SPEC_COMPAT_RECORD=<file>` in a tree whose `src/`, `generated/`, `spec/`, `examples/`,
 //! `Cargo.toml` and `Cargo.lock` were those of `f2ce283`. Values that differ on every run (the
 //! temporary directory, the viewer's free port, the run's start time and duration) are replaced
-//! by placeholders on both sides.
+//! by placeholders on both sides. The example's EKR pin has moved since (0.0.32 then, 0.0.33
+//! now); the fixture's two copies of it moved with it, and nothing else in it changed.
 
 mod common;
 
