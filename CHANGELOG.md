@@ -7,7 +7,7 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### What 1.0 holds
 
-1.0 is the first release whose interface is stable. It adds no feature over 0.2.2; it is 0.2.2's
+1.0 is the first release whose interface is stable. It adds no feature over 0.2.3; it is 0.2.3's
 feature set after a real instance ran for 7 days with nobody at the keyboard.
 
 - **Instances.** One spec file makes an instance: an EKR store on SQLite or PostgreSQL, a viewer,
@@ -34,6 +34,8 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - A run on a PostgreSQL store cannot be undone; `cortex restore` covers SQLite stores.
 - Linux with systemd user units only, and one released target.
+
+## 0.2.3 — 2026-10-13
 
 ### Changed
 
