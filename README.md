@@ -122,7 +122,8 @@ The specification of cortex itself is `spec/` (ESS); `generated/docs/` is its re
 
 ## Contributing
 
-Commands, gates, conventions and the rules this repository holds are in [AGENTS.md](AGENTS.md).
+Commands, gates, conventions and the rules this repository holds are in [AGENTS.md](AGENTS.md);
+where the project stands against its targets is in [STATUS.md](STATUS.md).
 
 ## License
 

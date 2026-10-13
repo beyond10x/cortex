@@ -20,6 +20,7 @@ and every secret belong to Connectors (`connectors` binary); extraction is a too
 | `website/` | the Docusaurus documentation site |
 | `examples/` | a complete spec file and its seed schema |
 | `.engineering/` | the AEP planning store |
+| `STATUS.md` | pass/fail against named targets, each row dated with the command it was read from |
 
 ## Serves
 
@@ -169,8 +170,7 @@ this repository and published by the organisation's reusable workflow.
 
 ## Build and verify
 
-- `task check`: spec validity, generated-code drift, fmt, clippy (`-D warnings`), all tests,
-  documentation drift.
+- `task check` is the gate (see [Commands](#commands)); `STATUS.md` records its last result.
 - Format with `cargo fmt -p cortex-cli -p cortex-docs`. `cargo fmt --all` also rewrites the
   generated crates, which are path dependencies, and `task drift` then fails.
 - `tests/conformance.rs` runs every scenario of `spec/suite.json` (55) in process; `tests/e2e.rs`
