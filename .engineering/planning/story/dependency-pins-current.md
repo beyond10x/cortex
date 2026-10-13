@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:dependency-pins-current
 kind: story
-status: active
+status: implemented
 title: Every pin outside spec/ names the current release
 relations:
 - decomposes: epic:standalone-1-0
@@ -18,10 +18,11 @@ scope:
   path: src/main.rs
 - confidence: inferred
   path: tests
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-13T19:21:16Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-13T19:21:17Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-10-13T19:53:17Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

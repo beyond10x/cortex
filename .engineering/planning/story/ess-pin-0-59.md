@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ess-pin-0-59
 kind: story
-status: active
+status: implemented
 title: cortex is specified and generated with ESS 0.59.0
 relations:
 - decomposes: epic:standalone-1-0
@@ -28,10 +28,11 @@ scope:
   path: website/docs/reference/ess
 - confidence: inferred
   path: website/static/schemas
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-13T19:21:16Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-13T19:21:16Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-10-13T19:53:17Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 
