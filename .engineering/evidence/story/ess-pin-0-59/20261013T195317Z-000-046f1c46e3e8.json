@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-13T19:53:17Z",
+  "actor": "human:timo",
+  "artifact": "story:ess-pin-0-59",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261013a 8f524a0: exit 0, 47 lanes, 555 passed, 0 failed; task build and task website exit 0"
+  }
+}
