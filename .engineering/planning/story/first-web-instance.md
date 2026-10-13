@@ -15,7 +15,7 @@ scope:
   path: examples/agent-tooling.yaml
 - confidence: inferred
   path: examples/seed/agent-tooling.yaml
-revision: 16
+revision: 17
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":6}}}
 - {from: "proposed", to: "active", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":6}}}
@@ -113,4 +113,29 @@ The run starts again as the instance `agent-tooling-2` (spec `~/.config/cortex/a
 
 - Day 1: 2026-10-09 (news 00:30); the first crawl is 2026-10-14 01:30 (day 6)
 - Read on day 8: 2026-10-16, against the Acceptance
+- At the restart: news and crawl `runs: 0`, `consecutive_failures: 0`
+
+## Restart (2026-10-13)
+
+`agent-tooling-2` stopped on day 2. Its news run applied 15 documents on 2026-10-09 00:30 CEST (`cortex.log`), then failed on 2026-10-10 and 2026-10-11 00:30 CEST with `connections list: metadata_unavailable at observation` (outcome `fetch-failed`); the second failure disabled the source and removed its timer (`journalctl --user -u cortex-agent-tooling-2-news.service`). Its crawl never ran. The day-8 read could not pass.
+
+Cause, outside cortex. Reproduced on 2026-10-13 the way the unit runs it (`env -i`, the pinned binary): `connectors-0.33.0 connections list --adapter tavily --output json` answers `metadata_unavailable` at `observation`, exit 1, while `connectors 0.45.0` and `0.47.0` list the connection against the same configuration and state. The shared Connectors state (`~/.local/state/connectors/metadata.sqlite3`) was last rewritten 2026-10-09 07:08–07:09 UTC, between the last success and the first failure, by a session running a newer `connectors`; `connectors-0.33.0 setup check` still reports the metadata `ready`. Which change in that state the older binary refuses is Connectors' to find; that request went to Connectors with the reproduction. cortex's code did what it should: the error is not a lapse or a missing connection, so the run fails and `--record-failure` counts it.
+
+How a stop is seen the same day: every failed run leaves its service `failed`, which `systemctl --user --failed` lists until the next run of that source succeeds (checked: `cortex-agent-tooling-2-news.service` was listed from 2026-10-10). The `failed` states of the removed instances' units were reset on 2026-10-13, so the list holds only live failures.
+
+`agent-tooling-2` was removed with `cortex remove` on 2026-10-13; its directory and store stay under `$CORTEX_HOME/instances/agent-tooling-2`. The run starts again as `agent-tooling-3` (spec `~/.config/cortex/agent-tooling-3/agent-tooling.yaml`: the `agent-tooling-2` spec with the name changed and `ekr.version` set to `0.0.33`; not committed), created 2026-10-13 with `cortex create`:
+
+| binary | version | sha256 |
+|---|---|---|
+| `$CORTEX_HOME/bin/cortex` (from the v0.2.2 Release tarball, `sha256sum --check` OK) | cortex 0.2.2 | `5466b5f4e224be77085c52fe681d6c2bf583e37a4a6a0679f1fbaecf87a39ae8` |
+| `ekr` under `~/.cache/cortex/bin/0.0.33/`, built from the tag (`cargo install --locked --git … --tag 0.0.33 ekr`; the release has no assets) | 0.0.33 | `7e4b7d8f2ce88f1bb1ffdfeb0b6bf65c0ac1d6263b52061f36c84f910b5684f6` |
+| `connectors`, built from the tag `v0.47.0` (the release has no assets) and copied to `~/.local/share/cortex-pins/connectors/connectors-0.47.0` | 0.47.0, the newest release | `dff436afd48295fa0cf331a8607bdf93a65100523b5a5df180a550231f475f92` |
+| `claude` at `~/.local/share/cortex-pins/claude/claude-2.1.294`, unchanged | 2.1.294 | `27122ca7b624f537546fbef35b80c66370d974ff258f3d9b10ac50bb8771f262` |
+
+Before the pin, `connectors 0.47.0` read the live state (`setup check`, `connections list`) and `schema_migrations` stayed at versions 1 and 9; `connectors 0.45.0` still listed the connection afterwards.
+
+- Viewer: `http://127.0.0.1:18900/`, HTTP 200 at creation
+- Day 1: 2026-10-14 (news 00:30 CEST, crawl 01:30 CEST, a Wednesday); days 1 to 7 hold 7 news runs and 1 crawl
+- Read on day 8: 2026-10-21, against the Acceptance
+- Risk: a `connectors` newer than 0.47.0 that rewrites the shared state can stop the pinned binary again; a stop shows in `systemctl --user --failed`
 - At the restart: news and crawl `runs: 0`, `consecutive_failures: 0`
