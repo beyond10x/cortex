@@ -286,12 +286,19 @@ impl Model {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| Refused::free(format!("cannot run claude: {e}")))?;
-        child
+        // A `claude` that exits before reading the prompt closes the pipe; its exit status and
+        // stderr, read below, say why, so a broken pipe is not the error reported.
+        match child
             .stdin
             .take()
             .expect("piped stdin")
             .write_all(prompt.as_bytes())
-            .map_err(|e| Refused::uncosted(format!("cannot send the prompt: {e}")))?;
+        {
+            Err(e) if e.kind() != std::io::ErrorKind::BrokenPipe => {
+                return Err(Refused::uncosted(format!("cannot send the prompt: {e}")));
+            }
+            _ => {}
+        }
         let out = child
             .wait_with_output()
             .map_err(|e| Refused::uncosted(format!("claude did not finish: {e}")))?;
