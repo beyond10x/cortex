@@ -23,7 +23,7 @@ Model Context Protocol specification, and a budget of $0.50 per run.
 format: cortex.instance/1
 name: example
 description: Developments in open-source vector databases and the companies behind them.
-ekr: {version: "0.0.32"}
+ekr: {version: "0.0.33"}
 seed: {schema: seed/schema.yaml, documents: []}
 model: {model: claude-sonnet-5-5, budget_usd: "1", timeout_s: 900}
 sources: []

@@ -18,7 +18,7 @@ env:
   CARGO_TARGET_DIR: ${{ github.workspace }}/target
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
-  EKR_VERSION: "0.0.32"
+  EKR_VERSION: "0.0.33"
 
 jobs:
   check:
@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -37,8 +37,8 @@ jobs:
 
       - name: Install task runner
         env:
-          TASK_VERSION: "3.53.1"
-          TASK_SHA256: a54a408f6861ff921f6e87774180db31bacd8c1e7c944ca696db9fea49a82fc7
+          TASK_VERSION: "3.54.0"
+          TASK_SHA256: 680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb
         run: |
           curl --fail --silent --show-error --location --output "$RUNNER_TEMP/task.tar.gz" \
             "https://github.com/go-task/task/releases/download/v$TASK_VERSION/task_linux_amd64.tar.gz"
@@ -51,8 +51,8 @@ jobs:
         env:
           ESS_VERSION: "0.59.0"
           ESS_SHA256: b0a22eb459fdfb2dec8ea173030416ef6c5ef9950944f3270c4407dda8b0f753
-          AEP_VERSION: "0.68.0"
-          AEP_SHA256: 02bf6a2c4bc9a3ffd717edfb365f665491005004f159774a8847d3cbd18c5e91
+          AEP_VERSION: "0.71.2"
+          AEP_SHA256: 63fd71b2d31748b56b9e55c3958e551fc4441424102c39b84d59214f94671b60
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/tools-bin"
@@ -85,7 +85,7 @@ jobs:
           cargo install --locked --git https://github.com/beyond10x/epistemic-knowledge-runtime \
             --tag "$EKR_VERSION" --bin ekr --root "$HOME/.ekr/$EKR_VERSION" ekr
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: check-rust-1.99.0
 
