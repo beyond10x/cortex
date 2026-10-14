@@ -15,7 +15,7 @@ scope:
   path: examples/agent-tooling.yaml
 - confidence: inferred
   path: examples/seed/agent-tooling.yaml
-revision: 17
+revision: 18
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":6}}}
 - {from: "proposed", to: "active", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":6}}}
@@ -139,3 +139,17 @@ Before the pin, `connectors 0.47.0` read the live state (`setup check`, `connect
 - Read on day 8: 2026-10-21, against the Acceptance
 - Risk: a `connectors` newer than 0.47.0 that rewrites the shared state can stop the pinned binary again; a stop shows in `systemctl --user --failed`
 - At the restart: news and crawl `runs: 0`, `consecutive_failures: 0`
+
+## Restart (2026-10-14)
+
+`agent-tooling-3`'s news run applied 15 documents on 2026-10-14 00:30 CEST (cost 0.3573 USD). Its crawl, started by its timer at 01:30 CEST, ended `extraction-failed` with `claude answered an error (success), cost 0.0000 USD`, and `--record-failure` counted it (`journalctl --user -u cortex-agent-tooling-3-mcp-specification.service`; the unit was listed by `systemctl --user --failed`). cortex 0.2.2 keeps only the answer's subtype and cost, so the run directory holds no reason; a zero-cost error answer is the shape of a sign-in or usage-limit answer from `claude`, inferred, not verified. `story:model-error-text-and-retry` keeps the text and retries once.
+
+The crawl was then started by hand (`systemctl --user start`, 2026-10-14 02:48 CEST): it ran, applied 18 documents, cost 0.2406 USD, and the failure count went back to 0. A manual start breaks Acceptance 1, so the run starts again.
+
+`agent-tooling-3` was removed with `cortex remove` on 2026-10-14 00:50 UTC; its directory, store and `cortex.log` stay under `$CORTEX_HOME/instances/agent-tooling-3`. The run starts again as `agent-tooling-4` (spec `~/.config/cortex/agent-tooling-4/agent-tooling.yaml`: the `agent-tooling-3` spec and seed with the name changed; not committed), created 2026-10-14 00:51 UTC with `cortex create` and no manual start of any unit. Its binaries are the four of the 2026-10-13 restart, by the same sha256 (`sha256sum`, 2026-10-14): cortex 0.2.2, ekr 0.0.33, connectors 0.47.0, claude 2.1.294.
+
+- Viewer: `http://127.0.0.1:18900/`, HTTP 200 at creation
+- First timer: news 2026-10-15 00:30 CEST; crawl 2026-10-21 01:30 CEST (`systemctl --user list-timers 'cortex-agent-tooling-4-*'`)
+- Day 1: 2026-10-15; days 1 to 7 (2026-10-15 to 2026-10-21) hold 7 news runs and 1 crawl
+- Read on day 8: 2026-10-22, after the 00:30 CEST news run, against the Acceptance
+- At the restart: news and crawl `runs: 0`, `consecutive_failures: 0` (`cortex sources`)

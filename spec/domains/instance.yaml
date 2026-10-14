@@ -1037,30 +1037,6 @@ commands:
     input:
       - {name: source_id, type: cortex.instance.SourceId}
     outcomes:
-      - name: fetch-failed
-        external: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first
-        error: cortex.instance.FetchFailed
-        payload:
-          cortex.instance.FetchFailed:
-            reason: {generated: true}
-        summary: Nothing was applied; the scheduler then sends RecordFailure.
-
-      - name: extraction-failed
-        external: The model call fails, times out, exceeds the run budget before any batch, or returns no valid document
-        error: cortex.instance.ExtractionFailed
-        payload:
-          cortex.instance.ExtractionFailed:
-            reason: {generated: true}
-        summary: Nothing was applied; the scheduler then sends RecordFailure.
-
-      - name: apply-refused
-        external: EKR refuses the merged extraction document
-        error: cortex.instance.ApplyRefused
-        payload:
-          cortex.instance.ApplyRefused:
-            reason: {generated: true}
-        summary: Nothing was applied; the scheduler then sends RecordFailure.
-
       # UNMAPPED: `<instance>/seed`, when the instance is active and has no source named `seed`,
       # names the instance's seed documents: it extracts those no seed extraction applied yet (what
       # a `partial` create left) and answers these outcomes with no Source to update. Like a source
@@ -1096,6 +1072,30 @@ commands:
           Every new or changed document within the policy's limits was extracted and applied, in
           batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no
           model was called.
+
+      - name: fetch-failed
+        external: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first
+        error: cortex.instance.FetchFailed
+        payload:
+          cortex.instance.FetchFailed:
+            reason: {generated: true}
+        summary: Nothing was applied; the scheduler then sends RecordFailure.
+
+      - name: extraction-failed
+        external: The model call fails, times out, exceeds the run budget before any batch, or returns no valid document
+        error: cortex.instance.ExtractionFailed
+        payload:
+          cortex.instance.ExtractionFailed:
+            reason: {generated: true}
+        summary: Nothing was applied; the scheduler then sends RecordFailure.
+
+      - name: apply-refused
+        external: EKR refuses the merged extraction document
+        error: cortex.instance.ApplyRefused
+        payload:
+          cortex.instance.ApplyRefused:
+            reason: {generated: true}
+        summary: Nothing was applied; the scheduler then sends RecordFailure.
 
       - name: disabled
         error: cortex.instance.SourceDisabledError

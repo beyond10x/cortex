@@ -7,7 +7,7 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### What 1.0 holds
 
-1.0 is the first release whose interface is stable. It adds no feature over 0.2.2; it is 0.2.2's
+1.0 is the first release whose interface is stable. It adds no feature over 0.2.3; it is 0.2.3's
 feature set after a real instance ran for 7 days with nobody at the keyboard.
 
 - **Instances.** One spec file makes an instance: an EKR store on SQLite or PostgreSQL, a viewer,
@@ -35,10 +35,24 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A run on a PostgreSQL store cannot be undone; `cortex restore` covers SQLite stores.
 - Linux with systemd user units only, and one released target.
 
+## 0.2.3 — 2026-10-13
+
+### Changed
+
+- `cortex setup` installs EKR 0.0.33 by default, and the examples pin it.
+- cortex is specified and generated with ESS 0.59.0; CI checks with ESS 0.59.0 and aep 0.71.2.
+
+### Fixed
+
+- A `claude` that exits before reading the prompt is reported by its exit status and its own
+  error output, not as `cannot send the prompt: Broken pipe`.
+
 ### Documentation
 
 - The install commands in the README and the quickstart name the current release; they named
   0.2.0 after 0.2.1 and 0.2.2 were out.
+- `STATUS.md` states the repository's state against named targets, each row dated and naming the
+  command it was read from.
 
 ## 0.2.2 — 2026-10-08
 

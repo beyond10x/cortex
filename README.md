@@ -49,10 +49,10 @@ every command, operating notes, limits and the generated specification reference
    then the pinned EKR:
 
    ```sh
-   gh release download v0.2.2 --repo beyond10x/cortex
+   gh release download v0.2.3 --repo beyond10x/cortex
    sha256sum --check --strict SHA256SUMS
-   tar -xzf cortex-0.2.2-x86_64-unknown-linux-gnu.tar.gz
-   install -m 755 cortex-0.2.2-x86_64-unknown-linux-gnu/cortex ~/.local/bin/cortex
+   tar -xzf cortex-0.2.3-x86_64-unknown-linux-gnu.tar.gz
+   install -m 755 cortex-0.2.3-x86_64-unknown-linux-gnu/cortex ~/.local/bin/cortex
    cortex setup
    ```
 
@@ -122,7 +122,8 @@ The specification of cortex itself is `spec/` (ESS); `generated/docs/` is its re
 
 ## Contributing
 
-Commands, gates, conventions and the rules this repository holds are in [AGENTS.md](AGENTS.md).
+Commands, gates, conventions and the rules this repository holds are in [AGENTS.md](AGENTS.md);
+where the project stands against its targets is in [STATUS.md](STATUS.md).
 
 ## License
 
