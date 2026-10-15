@@ -324,7 +324,6 @@ fn process(
         policy,
         window,
         structured_source,
-        drops,
         undoable,
         &mut before,
     );
@@ -343,7 +342,6 @@ fn process_in(
     policy: &m::FetchPolicy,
     window: Option<Window>,
     structured_source: Option<&m::StructuredSource>,
-    drops: Option<&str>,
     undoable: bool,
     before: &mut Undo,
 ) -> Result<Report, Failure> {
