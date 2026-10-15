@@ -721,9 +721,10 @@ fn install_sources(
         eprintln!("cortex: {reason}");
     }
     detail["binary"] = placed.json();
+    let token_env = spec.model.gateway.as_ref().map(|g| g.token_env.as_str());
     spec.sources
         .iter()
-        .try_for_each(|s| systemd.install_source(name, &s.name, &s.schedule, &ctx.tools))
+        .try_for_each(|s| systemd.install_source(name, &s.name, &s.schedule, &ctx.tools, token_env))
 }
 
 fn create(

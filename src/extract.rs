@@ -6,11 +6,12 @@
 //! issue, adds the evidence items itself, and records each web page as a `WebPage` node.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsString;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use cortex_model::instance::ModelBackend;
+use cortex_model::instance::{ModelBackend, ModelGateway};
 use serde_json::{json, Value};
 use serde_yaml_ng::value::{Tag, TaggedValue};
 use serde_yaml_ng::{Mapping, Value as Yaml};
@@ -49,6 +50,43 @@ pub struct Model {
     pub codex: PathBuf,
     pub model: String,
     pub timeout_s: i64,
+    /// The gateway the `claude` calls go through (`model.gateway`), when the spec names one.
+    pub gateway: Option<ModelGateway>,
+}
+
+/// The variables a gateway sets on `claude`: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and
+/// `CLAUDE_CODE_MAX_CONTEXT_TOKENS`. Each one the spec does not set is removed, so cortex passes
+/// exactly the spec's set and an instance without a gateway never reaches one by accident.
+pub const GATEWAY_VARIABLES: [&str; 3] = [
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+];
+
+/// Each of [`GATEWAY_VARIABLES`] with the value `gateway` gives it, or `None` to remove it. The
+/// token is the value of `token_env` in this process's environment now; a missing or empty one is
+/// refused with a reason naming the variable, never its value.
+pub fn gateway_environment(
+    gateway: Option<&ModelGateway>,
+) -> Result<[(&'static str, Option<OsString>); 3], String> {
+    let [url, token, context] = GATEWAY_VARIABLES;
+    let Some(g) = gateway else {
+        return Ok([(url, None), (token, None), (context, None)]);
+    };
+    let value = std::env::var_os(&g.token_env)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| {
+            format!(
+                "model.gateway.token_env names {}, which is unset or empty in cortex's \
+                 environment; the gateway's token is read from it when claude is called",
+                g.token_env
+            )
+        })?;
+    Ok([
+        (url, Some(g.base_url.clone().into())),
+        (token, Some(value)),
+        (context, g.max_context_tokens.map(|n| n.to_string().into())),
+    ])
 }
 
 pub struct Answer {
@@ -411,7 +449,9 @@ impl Model {
     }
 
     /// One isolated `claude -p` call, run in `dir`. `ANTHROPIC_API_KEY` is removed so the sign-in
-    /// is used; no user, project or local settings, MCP servers, skills or tools are loaded.
+    /// or the spec's gateway is used, and the gateway's variables are exactly the spec's
+    /// ([`gateway_environment`]); no user, project or local settings, MCP servers, skills or tools
+    /// are loaded. A gateway token that cannot be read fails the call before `claude` starts.
     fn ask_claude(
         &self,
         system_prompt: &str,
@@ -420,9 +460,17 @@ impl Model {
         prompt: &str,
         budget_usd: f64,
     ) -> Result<Answer, Refused> {
+        let gateway = gateway_environment(self.gateway.as_ref()).map_err(Refused::free)?;
         std::fs::create_dir_all(dir)
             .map_err(|e| Refused::free(format!("{}: {e}", dir.display())))?;
-        let mut child = Command::new("timeout")
+        let mut command = Command::new("timeout");
+        for (key, value) in gateway {
+            match value {
+                Some(value) => command.env(key, value),
+                None => command.env_remove(key),
+            };
+        }
+        let mut child = command
             .arg("--kill-after=30")
             .arg(self.timeout_s.to_string())
             .arg(&self.claude)
@@ -884,6 +932,7 @@ mod tests {
             codex: "codex-must-not-run".into(),
             model: "m".into(),
             timeout_s: 1,
+            gateway: None,
         };
         let err = model
             .ask(&dir, &json!({}), "prompt", 1.0)

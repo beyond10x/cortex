@@ -72,6 +72,12 @@ home directory. So the source services carry, from the shell that ran `cortex cr
   Codex model backend is not available in this release: an instance whose spec names
   `model.backend: Codex` fails every run without starting `codex` (see
   [Commands](./commands.md#global-options)).
+- for an instance whose spec names a `model.gateway`, `PassEnvironment=<token_env>`: the name of
+  the variable holding the gateway's token, never its value. systemd passes that variable from
+  the user manager's environment, so set it there, for example with
+  `systemctl --user set-environment GW_TOKEN=…` or a file under `~/.config/environment.d/`, and
+  restart nothing: the next run reads it. A run that finds it unset or empty fails naming it,
+  without starting `claude` (see [Spec file](./spec-file.md#a-model-gateway)).
 
 A relative `--home` or `$CORTEX_HOME` is made absolute, so the units name the same home from any
 directory. Run `cortex create` from a shell where `connectors` and `claude` work; after changing
@@ -432,7 +438,11 @@ seed belongs to the store's earlier life. The spec's sources are added, and the 
 Extraction runs `claude -p` in an empty directory under the run's directory, isolated from the
 user's configuration:
 
-- `ANTHROPIC_API_KEY` is removed from its environment, so the signed-in account is used;
+- `ANTHROPIC_API_KEY` is removed from its environment, so the signed-in account is used, or the
+  gateway the spec names: with a `model.gateway`, exactly `ANTHROPIC_BASE_URL`,
+  `ANTHROPIC_AUTH_TOKEN` (the value of `token_env`, read when the call is made) and, when given,
+  `CLAUDE_CODE_MAX_CONTEXT_TOKENS` are set from the spec; without one, those three are removed
+  too (see [Spec file](./spec-file.md#a-model-gateway));
 - `--tools ""`, `--setting-sources ""`, `--strict-mcp-config`, `--disable-slash-commands` and
   `--no-session-persistence`: no tools, no settings, no MCP servers, no slash commands;
 - `--json-schema` with EKR's extraction schema, and `--max-budget-usd` with what is left of the

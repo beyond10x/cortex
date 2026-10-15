@@ -115,7 +115,8 @@ stand; [Status](./status.mdx) lists what is planned.
 ## The model
 
 - **Extraction uses `claude -p`.** There is no other working model runner. The model needs a
-  signed-in `claude`; an `ANTHROPIC_API_KEY` in the environment is ignored. The spec accepts
+  signed-in `claude`, or a `model.gateway` in the spec, whose token is read from the variable it
+  names; an `ANTHROPIC_API_KEY` in the environment is ignored either way. The spec accepts
   `model.backend: Codex`, but that backend extracts nothing in this release: every run, quality
   measurement and schema round of such an instance fails, naming `story:codex-model-backend`.
 - **The daily ceiling is per instance.** `daily_ceiling_usd` bounds what one instance's model calls

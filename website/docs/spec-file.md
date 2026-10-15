@@ -73,6 +73,7 @@ different seed files answers `seed-change-refused`.
 | `daily_ceiling_usd` | optional: the most the instance's model calls spend in one UTC calendar day, in US dollars, as a decimal string; above 0. Absent means no ceiling. See [The daily ceiling](#the-daily-ceiling) |
 | `timeout_s` | the time limit of one model call, in seconds; above 0 |
 | `instructions` | optional text file whose content is added to every extraction prompt |
+| `gateway` | optional: a model gateway every `claude` call goes through, with no interactive sign-in. See [A model gateway](#a-model-gateway) |
 
 ### The daily ceiling
 
@@ -100,6 +101,36 @@ The spend of the day is `spend.json` in the instance directory (see
 [Operating](./operating.md#where-things-live)); it is kept whether or not the spec names a ceiling,
 and `cortex restore` leaves it as it is. A ceiling changed with `cortex update` holds from the next
 run or command, against what the day has spent so far.
+
+### A model gateway
+
+```yaml
+model:
+  model: my-open-model
+  budget_usd: "1"
+  timeout_s: 900
+  gateway: {base_url: "https://gateway.example", token_env: GW_TOKEN, max_context_tokens: 128000}
+```
+
+| field | meaning |
+|---|---|
+| `base_url` | the gateway's URL, passed to `claude` as `ANTHROPIC_BASE_URL` |
+| `token_env` | the name of the environment variable holding the gateway's token, never the token itself. Its value is read when each call is made and passed as `ANTHROPIC_AUTH_TOKEN`. A variable name (letters, digits and `_`, not starting with a digit), and not one cortex writes into a unit by value: `PATH`, `HOME`, the `XDG_*` directories, a `CONNECTORS_*` or a `CORTEX_*` variable; `create`, `update` and `adopt` refuse another |
+| `max_context_tokens` | optional: passed as `CLAUDE_CODE_MAX_CONTEXT_TOKENS` |
+
+cortex passes exactly that set to `claude`, from a run in your shell, a timer unit and a runner that
+calls `cortex run` directly alike; `model` names the gateway's model (`--model`). An
+`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` or `CLAUDE_CODE_MAX_CONTEXT_TOKENS` in cortex's own
+environment is replaced by the spec's, or removed when the spec does not set it, and
+`ANTHROPIC_API_KEY` is always removed. A missing or empty `token_env` fails the call before
+`claude` starts, with a reason naming the variable: a run answers `extraction-failed`. Without a
+`gateway`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and `CLAUDE_CODE_MAX_CONTEXT_TOKENS` are
+removed as well, so an instance never reaches a gateway by accident.
+
+A source's timer unit names the variable with `PassEnvironment=`, so the token reaches a scheduled
+run from the systemd user manager's environment (see
+[Operating](./operating.md#systemd-units)). The gateway applies to the `Claude` backend; the
+`Codex` backend fails every call before starting anything in this release, so it reaches no gateway.
 
 ## `sources`
 
