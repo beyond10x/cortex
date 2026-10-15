@@ -1037,19 +1037,22 @@ fn a_seen_entry_with_neither_hash_nor_applied_at_is_refused_naming_its_key() {
     assert!(registered(&w).is_empty());
 }
 
-/// Adversary: the story's acceptance, word for word. `seen.json` names record `1.0` as
-/// `archive/2026-09.jsonl#1.0`, the path the spec gives (`paths: [archive]`), and the first run
-/// must send no prompt holding record `1.0` and leave a 64-hex hash under that key.
+/// Adversary: the story's acceptance, with the key cortex gives record `1.0` of
+/// `archive/2026-09.jsonl` (the file's absolute path, `#1.0`; a relative path matches nothing).
+/// `seen.json` names that key alone, and the first run must send no prompt holding record `1.0`
+/// and leave a 64-hex hash under that key.
 #[test]
-fn adv_the_acceptance_seen_file_word_for_word_keeps_record_one_from_the_model() {
+fn adv_the_acceptance_seen_file_by_the_records_absolute_key_keeps_record_one_from_the_model() {
     let w = World::new();
     let legacy = Legacy::new(&w);
     let spec = chat_spec(&w, "brain", "");
     let host = legacy.host();
+    let one = record_key(&w, "1.0");
     let seen = w.root.join("seen.json");
     std::fs::write(
         &seen,
-        r#"{"format":"cortex.seen/1","documents":{"archive/2026-09.jsonl#1.0":{"applied_at":1}}}"#,
+        serde_json::json!({"format": "cortex.seen/1", "documents": {one.clone(): {"applied_at": 1}}})
+            .to_string(),
     )
     .unwrap();
     let seen_arg = format!("chat={}", seen.display());
@@ -1067,10 +1070,9 @@ fn adv_the_acceptance_seen_file_word_for_word_keeps_record_one_from_the_model() 
     let prompts = batch_files(&w, "prompt.txt").join("\n");
     assert!(
         !prompts.contains("adopted the Widget engine early"),
-        "record 1.0 reached the model although seen.json names it as the story's acceptance \
-         does: {ran}"
+        "record 1.0 reached the model although seen.json names it by its key: {ran}"
     );
-    let entry = chat_state(&w, "archive/2026-09.jsonl#1.0");
+    let entry = chat_state(&w, &one);
     let hash = entry["hash"].as_str().unwrap_or_default();
     assert!(
         hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()),
@@ -1130,8 +1132,10 @@ fn adv_a_hashed_record_carries_its_unlinked_hash_as_an_applied_one_does() {
     let first = doc("body [link: a]");
     assert_eq!(adopted.hash_unhashed(std::slice::from_ref(&first)), 1);
 
-    let mut applied = SeenState::default();
-    applied.unlinked = adopted.unlinked.clone();
+    let mut applied = SeenState {
+        unlinked: adopted.unlinked.clone(),
+        ..Default::default()
+    };
     applied.record(&first, now);
     assert_eq!(
         adopted.documents["changes:1"],

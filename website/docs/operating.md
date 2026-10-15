@@ -382,12 +382,18 @@ seed belongs to the store's earlier life. The spec's sources are added, and the 
    "documents": {"/srv/archive/2026-09.jsonl#1.0": {"applied_at": 1}}}
   ```
 
+  The key is absolute even when the spec names the files by a relative path (`paths: [archive]`,
+  read against the directory the spec file was created from): a relative key such as `archive/2026-09.jsonl#1.0` matches
+  no document, so that record is extracted again. A run's `state/<source>.json` shows the keys
+  as cortex gives them.
+
   The source's first run records the hash of each such document it fetches, keeps its
   `applied_at` and does not extract it; the run's report counts them as `hashed`, apart from
   `documents_new`. A later run extracts the document again when its text changes. A key no run
   has fetched yet keeps no hash. The hash is written with the rest of the run's state, so a run
   its gate undoes puts it back with `state/`, and the next run records it again. An entry with
-  no `applied_at` makes `cortex adopt` exit 2 naming its key.
+  no `applied_at` (missing or `null`), or one whose `applied_at` is not an integer or whose
+  `hash` is neither a string nor `null`, makes `cortex adopt` exit 2 naming its key.
 
 `adopted` reports the store's head as `revision`. `backend-mismatch`, `store-unreadable`,
 `store-held` and `seed-types-missing` leave no instance directory and register nothing.

@@ -123,14 +123,24 @@ impl SeenState {
         }
         let text =
             std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+        // Each entry is checked on its own first, so a refusal names its key: one with no
+        // `applied_at` (missing or null), and one serde would refuse for any other field.
         if let Ok(serde_json::Value::Object(document)) = serde_json::from_slice(&text) {
             if let Some(serde_json::Value::Object(entries)) = document.get("documents") {
-                if let Some((key, _)) = entries.iter().find(|(_, e)| e.get("applied_at").is_none())
-                {
-                    return Err(format!(
-                        "{}: document {key:?} has no applied_at: name it, with or without a hash",
-                        path.display()
-                    ));
+                for (key, entry) in entries {
+                    if entry
+                        .get("applied_at")
+                        .is_none_or(serde_json::Value::is_null)
+                    {
+                        return Err(format!(
+                            "{}: document {key:?} has no applied_at: name it, with or without a \
+                             hash",
+                            path.display()
+                        ));
+                    }
+                    if let Err(e) = Seen::deserialize(entry) {
+                        return Err(format!("{}: document {key:?}: {e}", path.display()));
+                    }
                 }
             }
         }
@@ -369,6 +379,44 @@ mod tests {
             assert!(refused.contains("\"a#7\""), "{refused}");
             assert!(refused.contains("applied_at"), "{refused}");
         }
+    }
+
+    /// Every entry a `--seen` document cannot hold is refused naming its key, not by a parse
+    /// error that names none: a null `applied_at`, a field not of its type, an entry that is no
+    /// object. A null `hash` reads as no hash.
+    #[test]
+    fn a_seen_document_entry_of_the_wrong_shape_is_refused_naming_its_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("chat.json");
+        let write = |entry: &str| {
+            std::fs::write(
+                &path,
+                format!(r#"{{"format": "cortex.seen/1", "documents": {{"ok#1": {{"applied_at": 1}}, "a#7": {entry}}}}}"#),
+            )
+            .unwrap();
+        };
+        for entry in [
+            r#"{"applied_at": null}"#,
+            r#"{"hash": null, "applied_at": null}"#,
+            r#"{"hash": "ab", "applied_at": null}"#,
+            r#"{"applied_at": "1"}"#,
+            r#"{"applied_at": 1.5}"#,
+            r#"{"applied_at": true}"#,
+            r#"{"hash": 5, "applied_at": 1}"#,
+            r#"{"hash": ["ab"], "applied_at": 1}"#,
+            r#"{"applied_at": 1, "unlinked_hash": 5}"#,
+            r#"5"#,
+            r#"null"#,
+            r#""ab""#,
+        ] {
+            write(entry);
+            let refused = SeenState::read_document(&path).unwrap_err();
+            assert!(refused.contains("\"a#7\""), "{entry}: {refused}");
+        }
+        write(r#"{"hash": null, "applied_at": 2}"#);
+        let read = SeenState::read_document(&path).unwrap();
+        assert_eq!(read.documents["a#7"].hash, None);
+        assert_eq!(read.documents["a#7"].applied_at, 2);
     }
 
     /// A document seen with no hash is neither wanted nor held; once a run fetched it, it carries

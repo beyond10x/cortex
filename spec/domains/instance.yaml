@@ -839,8 +839,11 @@ commands:
     # As for CreateInstance, the command line reads the spec file; `store` is `--store`. Each
     # source's seen documents start from the `cortex.seen/1` file `--seen` names for it, or empty.
     # An entry of that file names a key and its `applied_at`, with or without a hash; one with no
-    # `applied_at` is refused, naming its key. An entry with no hash is a SeenDocument with no
-    # `content_hash`, which the source's next run records (see RunSource's `ran`).
+    # `applied_at` (missing or null), or whose fields are not of their types (`applied_at` an
+    # integer, `hash` a string or null), is refused, naming its key. An entry with no hash is a
+    # SeenDocument with no `content_hash`, which the source's next run records (see RunSource's
+    # `ran`). A key is the one cortex gives the document: for a files source, the file's absolute
+    # path (a record's followed by `#<id>`); a relative path matches no document.
     input:
       - {name: name, type: cortex.instance.InstanceName}
       - {name: description, type: String}
