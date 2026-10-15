@@ -165,6 +165,196 @@ fn two_failed_runs_in_a_row_disable_a_source_until_it_is_enabled() {
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
 }
 
+/// A search answer of `n` pages, `p1` to `pn`; the page `changed` has other text.
+fn numbered_pages(n: usize, changed: Option<usize>) -> String {
+    let results: Vec<_> = (1..=n)
+        .map(|i| {
+            let content = if changed == Some(i) {
+                format!("Example Labs rewrote page {i}.")
+            } else {
+                format!("Example Labs develops the Widget engine, page {i}.")
+            };
+            serde_json::json!({"url": format!("https://example.org/p{i}"), "title": format!("P{i}"),
+                "description": "Widget news.", "content": content, "content_truncated": false,
+                "published": null, "score": "0.5"})
+        })
+        .collect();
+    serde_json::json!({"results": results, "complete": true, "truncation": [],
+        "provenance": {"instance": "t", "profile": "tavily/2026-10",
+            "received_at": "2026-10-05T00:00:00.000Z"}})
+    .to_string()
+}
+
+/// An instance `name` whose source `news` has applied 17 pages, then lists 20: the first 16
+/// unchanged, `p17` changed and three new. `claude` is replaced by a stand-in that fails, logging
+/// each call to `fetch-only-claude.log`.
+fn seventeen_applied_then_twenty_listed(w: &World, name: &str) {
+    let spec = w.spec(name, "conn_test");
+    let text = std::fs::read_to_string(&spec).unwrap();
+    std::fs::write(
+        &spec,
+        text.replace("max_documents_per_run: 10", "max_documents_per_run: 50"),
+    )
+    .unwrap();
+    let (code, _) = w.cortex(&["create", "--spec", spec.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0);
+    std::fs::write(
+        w.root.join("answer.json"),
+        answer(&numbered_pages(17, None)),
+    )
+    .unwrap();
+    let (code, ran) = w.cortex(&["run", &format!("{name}/news")]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 17, "{ran}");
+    std::fs::write(
+        w.root.join("answer.json"),
+        answer(&numbered_pages(20, Some(17))),
+    )
+    .unwrap();
+    common::executable(
+        &w.bin.join("claude"),
+        &format!(
+            "echo call >> \"{}/fetch-only-claude.log\"\nexit 1\n",
+            w.root.display()
+        ),
+    );
+}
+
+/// The bytes of every file a run writes in instance `name`, and the entries of `runs/` and
+/// `snapshots/`, by path.
+fn written(w: &World, name: &str) -> Vec<(String, Option<Vec<u8>>)> {
+    let dir = w.home.join("instances").join(name);
+    let mut files: Vec<(String, Option<Vec<u8>>)> = [
+        w.home.join("registry.json"),
+        dir.join("state/news.json"),
+        dir.join("status/news.json"),
+        dir.join("store.sqlite"),
+        dir.join("cortex.log"),
+        dir.join("metrics.prom"),
+    ]
+    .into_iter()
+    .map(|p| (p.display().to_string(), std::fs::read(&p).ok()))
+    .collect();
+    for sub in ["runs", "snapshots"] {
+        let mut entries: Vec<_> = std::fs::read_dir(dir.join(sub))
+            .map(|d| {
+                d.map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+                    .collect()
+            })
+            .unwrap_or_default();
+        entries.sort();
+        files.push((sub.to_string(), Some(entries.join("\n").into_bytes())));
+    }
+    files
+}
+
+#[test]
+fn a_fetch_only_run_counts_what_a_run_would_extract_and_writes_nothing() {
+    let w = World::new();
+    seventeen_applied_then_twenty_listed(&w, "t");
+    let before = written(&w, "t");
+    for (path, bytes) in &before[..5] {
+        assert!(bytes.is_some(), "the run before wrote {path}");
+    }
+    let invoked = w.lines("invocations.log").len();
+
+    let (code, out) = w.cortex(&["run", "t/news", "--fetch-only"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("fetched")),
+        "{out}"
+    );
+    let d = &out["detail"];
+    assert_eq!(d["source_id"], "t/news", "{out}");
+    let counts: Vec<_> = ["fetched", "new", "changed", "held", "unchanged"]
+        .iter()
+        .map(|k| d[k].as_i64())
+        .collect();
+    assert_eq!(
+        counts,
+        [Some(20), Some(3), Some(1), Some(0), Some(16)],
+        "fetched, new, changed, held, unchanged: {out}"
+    );
+    assert_eq!(d["unread"], serde_json::json!([]), "{out}");
+    let rfc3339 = regex::Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$").unwrap();
+    for end in ["since", "until"] {
+        let at = d["window"][end].as_str().unwrap_or_default();
+        assert!(rfc3339.is_match(at), "window.{end} {at:?}: {out}");
+    }
+    assert!(
+        d["window"]["since"].as_str() < d["window"]["until"].as_str(),
+        "{out}"
+    );
+
+    assert_eq!(
+        w.lines("invocations.log").len(),
+        invoked + 1,
+        "the source was fetched"
+    );
+    assert!(
+        w.lines("fetch-only-claude.log").is_empty(),
+        "no model was asked"
+    );
+    assert_eq!(
+        written(&w, "t"),
+        before,
+        "the store, the seen state, the status, the registry, cortex.log, runs/ and snapshots/ \
+         are as before"
+    );
+}
+
+#[test]
+fn a_fetch_only_run_whose_fetch_fails_answers_fetch_failed_and_writes_nothing() {
+    let w = World::new();
+    seventeen_applied_then_twenty_listed(&w, "g");
+    let before = written(&w, "g");
+    std::fs::write(w.root.join("fail"), "").unwrap();
+
+    let (code, out) = w.cortex(&["run", "g/news", "--fetch-only"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("fetch-failed")),
+        "{out}"
+    );
+    assert!(
+        out["detail"]["reason"]
+            .as_str()
+            .is_some_and(|r| !r.is_empty()),
+        "{out}"
+    );
+    let state = std::fs::read_to_string(w.home.join("instances/g/state/news.json")).unwrap();
+    assert!(!state.contains("pending_since"), "{state}");
+    assert_eq!(
+        written(&w, "g"),
+        before,
+        "no failure counted, no status, no pending window"
+    );
+
+    // The seed documents are not a source's: counting them is refused, and writes nothing.
+    std::fs::remove_file(w.root.join("fail")).unwrap();
+    let (code, out) = w.cortex(&["run", "g/seed", "--fetch-only"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("fetch-failed")),
+        "{out}"
+    );
+    assert_eq!(written(&w, "g"), before);
+}
+
+#[test]
+fn fetch_only_and_record_failure_are_refused_together() {
+    let w = World::new();
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_cortex"))
+        .args(["run", "t/news", "--fetch-only", "--record-failure"])
+        .env("CORTEX_HOME", &w.home)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(2), "{stderr}");
+    assert!(stderr.contains("cannot be used with"), "{stderr}");
+    assert!(!w.home.join("registry.json").exists());
+}
+
 #[test]
 fn a_revalidation_whose_outcome_is_unknown_is_settled_by_reading_the_status() {
     let w = World::new();

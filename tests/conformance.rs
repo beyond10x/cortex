@@ -11,7 +11,7 @@ use std::rc::Rc;
 use cortex_cli::connectors::Connectors;
 use cortex_cli::home::{self, Home, Registry};
 use cortex_cli::ports::{Ports, Shared, SharedRef};
-use cortex_cli::run::{Failure, Report, Tools};
+use cortex_cli::run::{Counts, Failure, Report, Tools};
 use cortex_cli::status;
 use cortex_model::behaviour::Generated;
 use cortex_model::instance as m;
@@ -202,6 +202,9 @@ fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Val
             "{event} carries {field}, which its shape does not state"
         );
     }
+    let rfc3339 =
+        regex::Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
+            .unwrap();
     for (field, descriptor) in shape {
         let descriptor = descriptor
             .as_object()
@@ -213,22 +216,33 @@ fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Val
             panic!("{event}.{field}: unsupported shape key {key}");
         }
         let holds = descriptor.get("holds").and_then(Value::as_str);
-        assert_eq!(
-            holds,
-            Some("primitive"),
-            "{event}.{field}: unsupported holds"
-        );
         let optional = match descriptor.get("optional") {
             None => false,
             Some(Value::Bool(optional)) => *optional,
             Some(other) => panic!("{event}.{field}: unsupported optional {other}"),
         };
+        // A list states no element shape: it is present unless optional, and an array.
+        if holds == Some("list") {
+            match fields.get(field) {
+                None => assert!(optional, "{event} lacks {field}"),
+                Some(value) => assert!(value.is_array(), "{event}.{field}: {value} is no list"),
+            }
+            continue;
+        }
+        assert_eq!(
+            holds,
+            Some("primitive"),
+            "{event}.{field}: unsupported holds"
+        );
         let kind = descriptor
             .get("kind")
             .and_then(Value::as_str)
             .unwrap_or_else(|| panic!("{event}.{field}: no kind"));
         assert!(
-            matches!(kind, "string" | "integer" | "decimal" | "boolean"),
+            matches!(
+                kind,
+                "string" | "integer" | "decimal" | "boolean" | "timestamp"
+            ),
             "{event}.{field}: unsupported kind {kind}"
         );
         let Some(value) = fields.get(field) else {
@@ -239,6 +253,7 @@ fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Val
             "string" => value.is_string(),
             "integer" => value.is_i64() || value.is_u64(),
             "boolean" => value.is_boolean(),
+            "timestamp" => value.as_str().is_some_and(|v| rfc3339.is_match(v)),
             "decimal" => value
                 .as_str()
                 .is_some_and(|v| decimal_pattern(event, field).is_match(v)),
@@ -258,6 +273,9 @@ impl Scenario {
         // that reaches the pipeline is the `ran` branch.
         let runner =
             Box::new(|_: &m::SourceData| -> Result<Report, Failure> { Ok(Report::default()) });
+        // A fetch-only run that reaches the pipeline is the `fetched` branch: it counts nothing.
+        let counter =
+            Box::new(|_: &m::SourceData| -> Result<Counts, Failure> { Ok(Counts::default()) });
         let app = Cortex::new(Generated::new(Ports {
             home: Home::new(std::env::temp_dir().join("cortex-conformance-unused")),
             tools: Tools {
@@ -269,6 +287,7 @@ impl Scenario {
             },
             shared: shared.clone(),
             runner: Some(runner),
+            counter: Some(counter),
         }));
         Self {
             app,
@@ -441,6 +460,7 @@ impl Scenario {
             "cortex.instance.RunSource" => match app
                 .run_source(m::RunSource {
                     source_id: m::SourceId(s("source_id")),
+                    fetch_only: input.get("fetch_only").and_then(Value::as_bool),
                 })
                 .unwrap()
             {
@@ -457,6 +477,28 @@ impl Scenario {
                     Some(("ApplyRefused", json!({"reason": error.reason}))),
                 ),
                 m::RunSourceOutcome::Ran { .. } => ("ran", None),
+                m::RunSourceOutcome::FetchOnlyFailed { error } => (
+                    "fetch-only-failed",
+                    Some(("FetchFailed", json!({"reason": error.reason}))),
+                ),
+                m::RunSourceOutcome::Fetched { source_fetched: f } => {
+                    // Carried on the outcome and not published, as `RunSkipped` is (below).
+                    unpublished.push((
+                        "cortex.instance.SourceFetched".into(),
+                        json!({
+                            "source_id": f.source_id.0,
+                            "since": f.since.0,
+                            "until": f.until.0,
+                            "fetched": f.fetched,
+                            "new": f.new,
+                            "changed": f.changed,
+                            "held": f.held,
+                            "unchanged": f.unchanged,
+                            "unread": f.unread,
+                        }),
+                    ));
+                    ("fetched", None)
+                }
                 m::RunSourceOutcome::Disabled { run_skipped } => {
                     // ESS 0.59.0 synthesis carries `RunSkipped` on the outcome but declares no
                     // `PublishedEvent` for it and publishes nothing, so the event is read from the
@@ -850,7 +892,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        58,
+        61,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

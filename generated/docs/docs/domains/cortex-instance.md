@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041
-contract digest slice-sha256/2:44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd
+model digest 5f6a5a748dfe89f0c19aff78f5022b7de68a5b769fd6a27eed8ebd11820231ef
+contract digest slice-sha256/2:94c6be4cc1d174afee13c7c6917aa102d2aaa607c2c067391790a960cfeb20f6
 do not edit: regenerate with `ess generate`
 -->
 
@@ -938,10 +938,15 @@ It has five outcomes.
 It takes:
 
 - `source_id` — `cortex.instance.SourceId`
+- `fetch_only` — `Optional<Boolean>`, which may be absent
 
-It has six outcomes.
+It has eight outcomes.
 
-**`disabled`** — The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome. Taken when the existing subject is in Disabled. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.RunSkipped`. It sets `last_outcome` from `"disabled"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test establishes the declared subject state and constructs input selecting this branch in that state.
+**`disabled`** — The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome. Taken when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)` holds of the input. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.RunSkipped`. It sets `last_outcome` from `"disabled"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test establishes the declared subject state and constructs input selecting this branch in that state.
+
+**`fetch-only-failed`** — Nothing was written: not the source's status, its seen documents or its window, and no failure is counted. The command line prints it as `fetch-failed`. Eligible when (defined(fetch_only) and fetch_only == true); externally decided: Connectors or the filesystem fails to deliver the source's documents in a fetch-only run. No entity in this specification changes. It reports `cortex.instance.FetchFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`fetched`** — A fetch-only run: the source was fetched over the window a run would ask about, its documents masked and scrubbed as a run's are and compared with its seen documents by content hash. `new` counts keys no seen document carries; `changed` those a run would extract now; `held` those whose change `refresh_after_days` holds back; `unchanged` the rest. No model was asked, and nothing was written: not the store, the seen documents, the source's status or `cortex.log`; no snapshot or stage was taken and no run counted. Taken when `(defined(fetch_only) and fetch_only == true)` holds of the input. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceFetched`. A test reaches it by constructing an input that satisfies that condition.
 
 **`fetch-failed`** — Nothing was applied; the source's status records the outcome and its reason, and the scheduler then sends RecordFailure. Decided outside the input: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.FetchFailed`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"fetch-failed"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
@@ -1147,6 +1152,26 @@ Emitted by `cortex.instance.EnableSource` on its `enabled` outcome.
 
 Nothing in this system reacts to it.
 
+### `SourceFetched`
+
+`cortex.instance.SourceFetched`.
+
+It carries:
+
+- `source_id` — `cortex.instance.SourceId`
+- `since` — `Timestamp`
+- `until` — `Timestamp`
+- `fetched` — `Integer`
+- `new` — `Integer`
+- `changed` — `Integer`
+- `held` — `Integer`
+- `unchanged` — `Integer`
+- `unread` — `List<String>`
+
+Emitted by `cortex.instance.RunSource` on its `fetched` outcome.
+
+Nothing in this system reacts to it.
+
 ### `SourceRan`
 
 `cortex.instance.SourceRan`.
@@ -1213,7 +1238,7 @@ It carries:
 
 - `reason` — `String`
 
-Reported by `cortex.instance.RunSource` on its `fetch-failed` outcome.
+Reported by `cortex.instance.RunSource` on its `fetch-only-failed` and `fetch-failed` outcomes.
 
 ### `InstanceBusy`
 
@@ -1422,4 +1447,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041` · contract digest `slice-sha256/2:44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `5f6a5a748dfe89f0c19aff78f5022b7de68a5b769fd6a27eed8ebd11820231ef` · contract digest `slice-sha256/2:94c6be4cc1d174afee13c7c6917aa102d2aaa607c2c067391790a960cfeb20f6`. Do not edit this file; change the specification and regenerate it with `ess generate`.

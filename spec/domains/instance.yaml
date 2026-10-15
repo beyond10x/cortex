@@ -1102,6 +1102,7 @@ commands:
       display: Run a source once
     input:
       - {name: source_id, type: cortex.instance.SourceId}
+      - {name: fetch_only, type: Optional<Boolean>}
     outcomes:
       # UNMAPPED: the exit status of each outcome, which an external scheduler reads instead of
       # the printed line: `ran` 0; `fetch-failed`, `extraction-failed`, `apply-refused` and
@@ -1128,10 +1129,20 @@ commands:
       # `fetch-failed`, `extraction-failed` and `apply-refused` the hook is called once, with
       # `disabled` instead when the recorded failure disabled the source. ESS declares no effect
       # outside the model's records; tests/run_status.rs holds it.
+      # UNMAPPED: with `fetch_only` (`cortex run --fetch-only`), `fetched` exits 0 and
+      # `fetch-only-failed` exits 1 and prints `fetch-failed`. Neither writes the source's status
+      # file, `metrics.prom`, `cortex.log`, the seen documents or the window (`pending_since`),
+      # calls the hook, takes the home's snapshot or an EKR stage, or reads the store; the counts
+      # compare each fetched document with the source's SeenDocuments, which ESS cannot state per
+      # element (beyond10x/ess#459). A disabled source is counted too, as `fetched`: a held-state
+      # refusal beside `fetched` has no witness ESS 0.59.0 synthesizes. `<instance>/seed` with
+      # `fetch_only` answers `fetch-only-failed`: its documents are not a source's. tests/e2e.rs
+      # holds it.
       # Not a refusal: a run of a disabled source changes the source's status, which a refusal
       # may not. It answers no error, so the printed line and the exit status say it.
       - name: disabled
         when_subject_state: Disabled
+        when: {any: ["not defined(fetch_only)", fetch_only == false]}
         updates: cortex.instance.Source
         instance: source_id
         sets:
@@ -1146,6 +1157,42 @@ commands:
         summary: >-
           The source is disabled: nothing ran and nothing was counted, and the source's status
           records the outcome.
+
+      - name: fetch-only-failed
+        external: Connectors or the filesystem fails to deliver the source's documents in a fetch-only run
+        when: {all: ["defined(fetch_only)", fetch_only == true]}
+        error: cortex.instance.FetchFailed
+        payload:
+          cortex.instance.FetchFailed:
+            reason: {generated: true}
+        summary: >-
+          Nothing was written: not the source's status, its seen documents or its window, and no
+          failure is counted. The command line prints it as `fetch-failed`.
+
+      - name: fetched
+        when: {all: ["defined(fetch_only)", fetch_only == true]}
+        updates: cortex.instance.Source
+        instance: source_id
+        emits:
+          - cortex.instance.SourceFetched
+        payload:
+          cortex.instance.SourceFetched:
+            source_id: input.source_id
+            since: {generated: true}
+            until: {generated: true}
+            fetched: {generated: true}
+            new: {generated: true}
+            changed: {generated: true}
+            held: {generated: true}
+            unchanged: {generated: true}
+            unread: {generated: true}
+        summary: >-
+          A fetch-only run: the source was fetched over the window a run would ask about, its
+          documents masked and scrubbed as a run's are and compared with its seen documents by
+          content hash. `new` counts keys no seen document carries; `changed` those a run would
+          extract now; `held` those whose change `refresh_after_days` holds back; `unchanged` the
+          rest. No model was asked, and nothing was written: not the store, the seen documents,
+          the source's status or `cortex.log`; no snapshot or stage was taken and no run counted.
 
       - name: fetch-failed
         external: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first
@@ -1581,6 +1628,21 @@ events:
   - name: cortex.instance.RunSkipped
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
+
+  # A fetch-only run of a source: the window it asked about, as RFC 3339, and its documents
+  # counted against the source's seen documents. `fetched` is `new` + `changed` + `held` +
+  # `unchanged`; `unread` says, one line each, why the fetch left records unread.
+  - name: cortex.instance.SourceFetched
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+      - {name: since, type: Timestamp}
+      - {name: until, type: Timestamp}
+      - {name: fetched, type: Integer}
+      - {name: new, type: Integer}
+      - {name: changed, type: Integer}
+      - {name: held, type: Integer}
+      - {name: unchanged, type: Integer}
+      - {name: unread, type: List<String>}
 
   - name: cortex.instance.RunFailed
     fields:
