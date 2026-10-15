@@ -1830,6 +1830,10 @@ fn run_source(
             if report.truncated > 0 {
                 detail["truncated"] = json!(report.truncated);
             }
+            // Present only when a document adopted by key was hashed: other runs report as before.
+            if report.hashed > 0 {
+                detail["hashed"] = json!(report.hashed);
+            }
             // Present only when a parent was skipped: a run that skipped none reports as before.
             if !report.skipped.is_empty() {
                 detail["skipped"] = json!(report.skipped);

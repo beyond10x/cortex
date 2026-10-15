@@ -1247,6 +1247,94 @@ fn a_second_home_does_not_create_an_instance_over_another_homes_postgres_store()
     );
 }
 
+/// `story:adopt-seen-by-key` on PostgreSQL: a store one home grew is adopted by another home,
+/// with its documents named by key alone. The adopted instance's first run records their hashes,
+/// extracts nothing and commits nothing.
+#[test]
+fn a_postgres_store_adopted_with_documents_seen_by_key_is_not_extracted_again() {
+    if !container_runtime("the PostgreSQL adoption by key case") {
+        return;
+    }
+    let first = World::new();
+    let pg = Postgres::start(&first.root);
+    let store = postgres_store(&pg);
+    let spec = write_spec(&first, "pg", &store);
+    let (code, out, err) = cortex(
+        &first,
+        &[
+            "create",
+            "--spec",
+            spec.to_str().unwrap(),
+            "--no-units",
+            "--postgres-schema-config",
+            pg.owner.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(0), "{out}{err}");
+    let (code, out, err) = cortex(&first, &["run", "pg/docs"]);
+    assert_eq!(code, Some(0), "{out}{err}");
+    let head = postgres_head(&first.home.join("instances/pg"), &pg.app);
+
+    // Another home adopts the store; its own source names the same two documents by key.
+    let second = World::new();
+    let spec = write_spec(&second, "pg", &store);
+    let root = std::fs::canonicalize(&second.root).unwrap();
+    let key = |doc: &str| root.join("docs").join(doc).display().to_string();
+    let seen = second.root.join("docs.seen.json");
+    std::fs::write(
+        &seen,
+        serde_json::json!({
+            "format": "cortex.seen/1",
+            "documents": {key("a.md"): {"applied_at": 1}, key("b.md"): {"applied_at": 1}},
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let host = first.home.join("instances/pg/host.json");
+    let (code, out, err) = cortex(
+        &second,
+        &[
+            "adopt",
+            "--spec",
+            spec.to_str().unwrap(),
+            "--store",
+            pg.app.to_str().unwrap(),
+            "--host",
+            host.to_str().unwrap(),
+            "--seen",
+            &format!("docs={}", seen.display()),
+            "--no-units",
+        ],
+    );
+    let adopted = last_json(&out);
+    assert_eq!(
+        (code, adopted["outcome"].as_str()),
+        (Some(0), Some("adopted")),
+        "{out}{err}"
+    );
+    assert_eq!(adopted["detail"]["seen_documents"], 2, "{adopted}");
+
+    let dir = second.home.join("instances/pg");
+    let (code, out, err) = cortex(&second, &["run", "pg/docs"]);
+    let ran = last_json(&out);
+    assert_eq!(
+        (code, ran["outcome"].as_str()),
+        (Some(0), Some("ran")),
+        "{out}{err}"
+    );
+    assert_eq!(ran["detail"]["documents_new"], 0, "{ran}");
+    assert_eq!(ran["detail"]["hashed"], 2, "{ran}");
+    assert!(second.lines("claude-calls.log").is_empty());
+    assert_eq!(postgres_head(&dir, &pg.app), head);
+    let state: Value =
+        serde_json::from_slice(&std::fs::read(dir.join("state/docs.json")).unwrap()).unwrap();
+    for doc in ["a.md", "b.md"] {
+        let entry = &state["documents"][key(doc)];
+        assert_eq!(entry["hash"].as_str().map(str::len), Some(64), "{state}");
+        assert_eq!(entry["applied_at"], 1, "{state}");
+    }
+}
+
 /// F6: a seed the store would refuse is found on a scratch SQLite store first, so nothing reaches
 /// PostgreSQL; the corrected spec then creates the instance under the same name.
 #[test]

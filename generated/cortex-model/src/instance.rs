@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 600f063232e16994b404336c5f6deb4afa1bf82b7bf5a7f0872b87687e43f7a2
-// contract digest 0130728aba5b943a6329934389c01207b197b3f616804d5ce89b2f1ff5424b12
+// model digest 17e09111e8b07b05de318bdb51a95149ecca7a5002497fc00341b27224aad8e8
+// contract digest 0166cbe548974dfabcad41333301694ac564bae5ee942ef2545595cb53e8a6e0
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -1136,8 +1136,8 @@ pub struct SeenDocumentData {
     pub source_id: SourceId,
     /// `key` — `String`.
     pub key: String,
-    /// `content_hash` — `String`.
-    pub content_hash: String,
+    /// `content_hash` — `Optional<String>`.
+    pub content_hash: Option<String>,
     /// `unlinked_hash` — `Optional<String>`.
     pub unlinked_hash: Option<String>,
     /// `applied_at` — `Integer`.
