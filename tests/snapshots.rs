@@ -81,14 +81,15 @@ fn run_applying(w: &World, n: u32) {
     );
 }
 
-/// `cortex run t/news` under `prlimit --fsize=<bytes>`; `ignore_xfsz` makes an oversized write fail
-/// with EFBIG, as on a full disk, instead of killing the process.
+/// `cortex run t/news` under `prlimit --fsize=<bytes> --core=0`, so a SIGXFSZ kill leaves no core
+/// file behind; `ignore_xfsz` makes an oversized write fail with EFBIG, as on a full disk, instead
+/// of killing the process.
 fn run_limited(w: &World, bytes: u64, ignore_xfsz: bool) -> std::process::Output {
     let trap = if ignore_xfsz { "trap '' XFSZ; " } else { "" };
     Command::new("sh")
         .arg("-c")
         .arg(format!(
-            "{trap}exec prlimit --fsize={bytes} -- \"$0\" run t/news"
+            "{trap}exec prlimit --fsize={bytes} --core=0 -- \"$0\" run t/news"
         ))
         .arg(env!("CARGO_BIN_EXE_cortex"))
         .env("CORTEX_HOME", &w.home)
