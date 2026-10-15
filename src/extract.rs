@@ -264,7 +264,8 @@ pub fn prompt(
 impl Model {
     /// One extraction call for one batch, through the spec's backend, run in `dir`: [`ask_with`]
     /// and the extraction prompt [`SYSTEM_PROMPT`]. An error answer that cost zero is asked once
-    /// more after [`RETRY_WAIT_MS`]; a second refusal is the call's.
+    /// more after [`RETRY_WAIT_MS`]; a second refusal is the call's. The first answer cost
+    /// nothing, so a refusal's cost is the whole call's.
     ///
     /// [`ask_with`]: Model::ask_with
     pub fn ask(
@@ -273,7 +274,7 @@ impl Model {
         schema: &Value,
         prompt: &str,
         budget_usd: f64,
-    ) -> Result<Answer, String> {
+    ) -> Result<Answer, Refused> {
         match self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd) {
             Err(e) if e.free_error_answer() => {
                 std::thread::sleep(retry_wait());
@@ -281,7 +282,6 @@ impl Model {
             }
             other => other,
         }
-        .map_err(|e| e.message)
     }
 
     /// One model call with `system_prompt`, through the spec's backend, run in `dir`: the answer
@@ -728,7 +728,8 @@ mod tests {
         let err = model
             .ask(&dir, &json!({}), "prompt", 1.0)
             .err()
-            .expect("an extraction failure");
+            .expect("an extraction failure")
+            .message;
         assert!(err.contains("story:codex-model-backend"), "{err}");
         assert!(!dir.exists(), "nothing was run in {}", dir.display());
     }

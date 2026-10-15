@@ -683,13 +683,7 @@ fn process_in(
             }
         };
         let dir = run_dir.join(format!("batch-{n}"));
-        let asked = model.ask_with(
-            extract::SYSTEM_PROMPT,
-            &dir.join("claude"),
-            &schema,
-            &prompt,
-            remaining,
-        );
+        let asked = model.ask(&dir.join("claude"), &schema, &prompt, remaining);
         // Every costed answer, a failed one included, adds to the spend of the day.
         daily.add(match &asked {
             Ok(answer) => answer.cost_usd,
