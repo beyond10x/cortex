@@ -157,7 +157,7 @@ The records of any operation a Connectors adapter admits.
 | field | meaning |
 |---|---|
 | `adapter`, `connection`, `operation` | what to invoke |
-| `inputs` | a list of JSON inputs; the operation is invoked once per input. `{since}` and `{until}` in a string value are replaced by the run's window |
+| `inputs` | a list of JSON inputs; the operation is invoked once per input. `{since}`, `{until}`, `{since_epoch}` and `{until_epoch}` in a string value are replaced by the run's window |
 | `records` | dotted path to the array of records in the answer, for example `issues` |
 | `id` | dotted path to a record's stable id |
 | `time` | optional dotted path to the record's publication time, which dates its evidence and the facts drawn from it ([how](./operating.md#what-one-run-does)) |
@@ -173,6 +173,18 @@ A record without an id, or whose text is empty, is skipped. A document's key is
 start of the source's last successful run, or, before the first, the start of this run minus the
 policy's `refresh_after_days`. The 5 minutes cover a record a provider shows late; a document read
 again in them is applied again only if its text changed.
+
+`{since_epoch}` and `{until_epoch}` are the same two instants as whole seconds since the Unix
+epoch, a string of digits (`1790000000`), for an operation whose bounds are epoch seconds, such as
+a chat history's `oldest`:
+
+```yaml
+inputs:
+  - {channel: "C1", oldest: "{since_epoch}"}
+```
+
+The value stays a JSON string. Any other text in braces, such as `{since_ms}`, is passed to the
+operation as written.
 
 With `refresh_after_days: 0` the first run's window is empty (`{since}` equals `{until}`), so
 records older than the 5 minutes before that run are never read. Set `refresh_after_days` to 1 or
