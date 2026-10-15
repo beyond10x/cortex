@@ -329,3 +329,55 @@ fn a_reached_daily_ceiling_stops_a_run_of_any_source_before_a_model_call() {
     assert_eq!(spend(&w, "reached")["day"], today());
     assert_eq!(spend(&w, "reached")["spent_usd"], "0.02");
 }
+
+/// Adversary, `story:daily-instance-budget`: answers of 0.7 and 0.1 USD spend a ceiling of 0.8
+/// USD, so the third batch is not asked for and the run names the ceiling. No call is ever given
+/// `--max-budget-usd 0.0000`.
+#[test]
+fn adv_a_ceiling_spent_to_the_cent_makes_no_further_call() {
+    let w = World::new();
+    std::fs::write(w.root.join("answer.json"), three_batch_pages()).unwrap();
+    let path = ceiling_spec(&w, "cent", "5", "0.8");
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    costs_per_call(&w, &["0.7", "0.1", "0.1"]);
+
+    let (code, ran) = w.cortex(&["run", "cent/news"]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    let given = budgets_given(&w);
+    assert!(
+        !given.iter().any(|b| b == "0.0000"),
+        "a call was given --max-budget-usd 0.0000: {given:?}"
+    );
+    assert_eq!(given, ["0.8000", "0.1000"], "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 6, "{ran}");
+    assert!(stopped_by_ceiling(&ran, "0.8"), "{ran}");
+}
+
+/// Adversary, `story:daily-instance-budget`: a failed extraction answer that states a cost adds
+/// it to the spend of the day (`spec/domains/instance.yaml`, `cortex.instance.DailySpend`: "failed
+/// answers included"). No other case reads `spend.json` after a failed answer.
+#[test]
+fn adv_a_failed_extraction_answer_adds_its_cost_to_the_spend_of_the_day() {
+    let w = World::new();
+    std::fs::write(w.root.join("answer.json"), two_batch_pages()).unwrap();
+    let path = ceiling_spec(&w, "failed", "5", "1");
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    executable(
+        &w.bin.join("claude"),
+        &format!(
+            "echo call >> \"{root}/claude-calls.log\"\n\
+             echo '{{\"type\":\"result\",\"subtype\":\"error_max_budget_usd\",\"is_error\":true,\"total_cost_usd\":0.3}}'\n",
+            root = w.root.display()
+        ),
+    );
+    let (code, ran) = w.cortex(&["run", "failed/news"]);
+    assert_ne!(code, 0, "{ran}");
+    assert_eq!(w.lines("claude-calls.log").len(), 1, "{ran}");
+    assert_eq!(
+        spend(&w, "failed"),
+        json!({"format": "cortex.daily-spend/1", "day": today(), "spent_usd": "0.3"}),
+        "{ran}"
+    );
+}

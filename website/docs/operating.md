@@ -27,7 +27,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
 | `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
 | `instances/<name>/cortex.log` | one JSON line per run: counts, cost, seconds, why it stopped |
-| `instances/<name>/spend.json` | the spend of the day (`cortex.daily-spend/1`): the UTC day and what the instance's model answers that day cost, held to `model.daily_ceiling_usd` |
+| `instances/<name>/spend.json` | the spend of the day (`cortex.daily-spend/1`): the UTC day and what the instance's model answers that day cost, held to `model.daily_ceiling_usd`. With a ceiling, a file cortex cannot read (not JSON or not `cortex.daily-spend/1`), or one of today whose `spent_usd` is not a number of 0 or more, stops every model call of the instance until it is deleted; deleting it counts the day as nothing spent |
 
 ## systemd units
 

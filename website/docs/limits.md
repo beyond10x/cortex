@@ -121,3 +121,8 @@ stand; [Status](./status.mdx) lists what is planned.
 - **The daily ceiling is per instance.** `daily_ceiling_usd` bounds what one instance's model calls
   spend in a UTC day; nothing bounds the instances of a home together. An answer that states no
   cost adds nothing to the spend of the day.
+- **Commands running at once can each overshoot the daily ceiling by one call.** A call's
+  allowance is read from `spend.json` without the home's lock, and its cost is added only after
+  the answer. A run, a `cortex quality` and a `cortex schema` of one instance can run at the same
+  time (the last two let the lock go during their model calls), so each may be given what the
+  ceiling left before the others' answers were added.

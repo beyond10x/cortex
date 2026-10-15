@@ -665,3 +665,23 @@ fn the_judge_spends_from_the_daily_ceiling_and_a_reached_one_stops_it_before_a_c
     );
     assert_eq!(w.lines("judge-calls.log").len(), 2, "no third judge call");
 }
+
+/// Adversary, `story:daily-instance-budget`: a failed judge answer that states a cost adds it to
+/// the spend of the day ("failed answers included"); the unit's case reads only the budgets given.
+#[test]
+fn adv_a_failed_judge_answer_adds_its_cost_to_the_spend_of_the_day() {
+    let w = instance("refusing", 3, "");
+    std::fs::write(w.root.join("judge-error"), "").unwrap();
+    let (code, out) = w.cortex(&["quality", "refusing", "--sample", "3"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("judge-failed")),
+        "{out}"
+    );
+    let path = w.home.join("instances/refusing/spend.json");
+    let spend: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    assert_eq!(
+        spend["spent_usd"], "0.03",
+        "the run's 0.01 and the judge's 0.02: {out}"
+    );
+}

@@ -24,12 +24,27 @@ pub fn day(ms: i64) -> String {
     format!("{}-{}-{}", &stamp[0..4], &stamp[4..6], &stamp[6..8])
 }
 
+/// Micro-dollars in one US dollar. The spend of the day is summed in whole micro-dollars, so a sum
+/// of decimal costs reaches a ceiling it equals (0.7 + 0.1 USD is 0.8 USD, not 0.7999…).
+const MICROS: f64 = 1_000_000.0;
+
+/// `usd` in whole micro-dollars, rounded to the nearest.
+fn micros(usd: f64) -> i64 {
+    (usd * MICROS).round() as i64
+}
+
 /// What `spend.json` says was spent on `day`: `0` when there is no file or it counts another day.
 pub fn spent_on(layout: &Layout, day: &str) -> Result<f64, String> {
+    spent_micros(layout, day).map(|m| m as f64 / MICROS)
+}
+
+/// [`spent_on`] in whole micro-dollars. A `spent_usd` of today that is not a finite number of 0
+/// or more is an error, so a ceiling it would lift fails closed.
+fn spent_micros(layout: &Layout, day: &str) -> Result<i64, String> {
     let path = path(layout);
     let text = match std::fs::read_to_string(&path) {
         Ok(text) => text,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0.0),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
         Err(e) => return Err(format!("cannot read {}: {e}", path.display())),
     };
     let value: Value =
@@ -38,19 +53,21 @@ pub fn spent_on(layout: &Layout, day: &str) -> Result<f64, String> {
         return Err(format!("{} is not a {FORMAT} document", path.display()));
     }
     if value["day"].as_str() != Some(day) {
-        return Ok(0.0);
+        return Ok(0);
     }
     value["spent_usd"]
         .as_str()
         .and_then(|s| s.parse::<f64>().ok())
-        .filter(|s| s.is_finite())
-        .ok_or_else(|| format!("{}: spent_usd is not a number", path.display()))
+        .filter(|s| s.is_finite() && *s >= 0.0)
+        .map(micros)
+        .ok_or_else(|| format!("{}: spent_usd is not a number of 0 or more", path.display()))
 }
 
 /// The daily ceiling of one command's model calls, and the record of what they spend.
 pub struct Daily<'a> {
     layout: &'a Layout,
-    ceiling: Option<f64>,
+    /// The ceiling in whole micro-dollars, as the spend of the day is summed.
+    ceiling: Option<i64>,
     /// The home whose lock [`Daily::add`] takes; `None` when the command holds it already.
     home: Option<&'a Home>,
     /// Why an answer's cost could not be recorded: with a ceiling, no further call is allowed.
@@ -66,7 +83,8 @@ impl<'a> Daily<'a> {
             ceiling: model
                 .daily_ceiling_usd
                 .as_ref()
-                .and_then(|c| c.0.parse::<f64>().ok()),
+                .and_then(|c| c.0.parse::<f64>().ok())
+                .map(micros),
             home,
             unrecorded: None,
         }
@@ -76,28 +94,30 @@ impl<'a> Daily<'a> {
     /// own budget, and what the ceiling leaves of today. An error, naming the daily ceiling, when
     /// it leaves nothing or what was spent today cannot be known.
     pub fn allow(&self, left: f64) -> Result<f64, String> {
-        let Some(ceiling) = self.ceiling else {
+        let Some(cap) = self.ceiling else {
             return Ok(left);
         };
+        let ceiling = cap as f64 / MICROS;
         if let Some(e) = &self.unrecorded {
             return Err(format!(
                 "daily ceiling of {ceiling} USD: the spend of the day was not recorded: {e}"
             ));
         }
         let today = day(now_ms());
-        let spent = spent_on(self.layout, &today)
+        let spent = spent_micros(self.layout, &today)
             .map_err(|e| format!("daily ceiling of {ceiling} USD: {e}"))?;
-        let remaining = ceiling - spent;
-        if remaining <= 0.0 {
+        let remaining = cap - spent;
+        if remaining <= 0 {
+            let spent = spent as f64 / MICROS;
             return Err(format!(
                 "daily ceiling of {ceiling} USD reached: {spent:.4} USD spent on {today} (UTC)"
             ));
         }
-        Ok(left.min(remaining))
+        Ok(left.min(remaining as f64 / MICROS))
     }
 
-    /// Adds what one answer cost to the spend of today, under the home's lock; an answer with
-    /// no cost adds nothing. A cost that cannot be recorded is said on stderr and, with a
+    /// Adds what one answer cost to the spend of today, under the home's lock, rounded to the
+    /// micro-dollar; an answer with no cost, or a negative one, adds nothing. A cost that cannot be recorded is said on stderr and, with a
     /// ceiling, allows no further call ([`Daily::allow`]).
     pub fn add(&mut self, cost_usd: Option<f64>) {
         let Some(cost) = cost_usd else {
@@ -118,8 +138,9 @@ impl<'a> Daily<'a> {
             None => None,
         };
         let today = day(now_ms());
-        let spent = spent_on(self.layout, &today)? + cost;
-        let document = json!({"format": FORMAT, "day": today, "spent_usd": spent.to_string()});
+        let spent = spent_micros(self.layout, &today)? + micros(cost.max(0.0));
+        let usd = (spent as f64 / MICROS).to_string();
+        let document = json!({"format": FORMAT, "day": today, "spent_usd": usd});
         write_atomic(
             &path(self.layout),
             serde_json::to_string_pretty(&document)
