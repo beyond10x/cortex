@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "1b4a2ea847b1e07c4ca1c7c7a83547b74ebdb932c7b10d5e74cc84af8766a2e6",
-    "contract_digest": "slice-sha256/2:d94ba0b784366d87dbbbbaaf852b30e107e58fa6ae8f0cfd2ef389365dbe5bac",
+    "source_digest": "02ea50aeeb75f9fbaea135e9e9633d13d60d0a69d2569825e7acd0e701f53ac2",
+    "contract_digest": "slice-sha256/2:06a1bdbc96aae2f6594098b5622315fccdd3674cbe78788f824d3dedc9556118",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -51,7 +51,10 @@
         "change_id",
         "relation"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "paging.stop_older_than_since != true"
+      ]
     },
     "cortex.instance.PageStyle": {
       "title": "PageStyle",
@@ -61,7 +64,8 @@
       "enum": [
         "PageNumber",
         "Token",
-        "Keyset"
+        "Keyset",
+        "NextLink"
       ]
     },
     "cortex.instance.Paging": {
@@ -81,6 +85,9 @@
         },
         "max_pages": {
           "type": "integer"
+        },
+        "stop_older_than_since": {
+          "type": "boolean"
         }
       },
       "required": [

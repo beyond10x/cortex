@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "1b4a2ea847b1e07c4ca1c7c7a83547b74ebdb932c7b10d5e74cc84af8766a2e6",
-    "contract_digest": "slice-sha256/2:ade926fe4d6286262d341ba0befe0d45ffad6bfdbf1ccc3d7a373bc842cda166",
+    "source_digest": "02ea50aeeb75f9fbaea135e9e9633d13d60d0a69d2569825e7acd0e701f53ac2",
+    "contract_digest": "slice-sha256/2:e26c97b00950ef47c523b19ed6d8b9b7e1b48ce309078f535fffa1c70eb76c72",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -17,7 +17,8 @@
       "enum": [
         "PageNumber",
         "Token",
-        "Keyset"
+        "Keyset",
+        "NextLink"
       ]
     }
   }

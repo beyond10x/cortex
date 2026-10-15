@@ -40,8 +40,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "1b4a2ea847b1e07c4ca1c7c7a83547b74ebdb932c7b10d5e74cc84af8766a2e6",
-    "contract_digest": "slice-sha256/2:dd3c6283db8aaeb0040a12ea04bbcb32a96c212f6ca488d1d59f419fd29dd6a7",
+    "source_digest": "02ea50aeeb75f9fbaea135e9e9633d13d60d0a69d2569825e7acd0e701f53ac2",
+    "contract_digest": "slice-sha256/2:2e2d4e101b701ea3d5c5b0ad0a455591dd3fb718eec125a8a047bc05e8804271",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -76,7 +76,10 @@
         "input",
         "records"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "paging.stop_older_than_since != true"
+      ]
     },
     "cortex.instance.CompareLink": {
       "title": "CompareLink",
@@ -120,7 +123,10 @@
         "change_id",
         "relation"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "paging.stop_older_than_since != true"
+      ]
     },
     "cortex.instance.ConnectionRef": {
       "title": "ConnectionRef",
@@ -191,7 +197,10 @@
         "id",
         "text"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(paging.stop_older_than_since != true or defined(time))"
+      ]
     },
     "cortex.instance.CrawlPolicy": {
       "title": "CrawlPolicy",
@@ -529,7 +538,8 @@
       "enum": [
         "PageNumber",
         "Token",
-        "Keyset"
+        "Keyset",
+        "NextLink"
       ]
     },
     "cortex.instance.Paging": {
@@ -549,6 +559,9 @@
         },
         "max_pages": {
           "type": "integer"
+        },
+        "stop_older_than_since": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -1164,7 +1177,10 @@
         "mapping",
         "parent"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "paging.stop_older_than_since != true"
+      ]
     },
     "cortex.instance.StructuredConnectors": {
       "title": "StructuredConnectors",
@@ -1207,7 +1223,10 @@
         "operation",
         "inputs"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "paging.stop_older_than_since != true"
+      ]
     },
     "cortex.instance.StructuredFiles": {
       "title": "StructuredFiles",

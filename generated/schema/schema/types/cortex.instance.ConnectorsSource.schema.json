@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "1b4a2ea847b1e07c4ca1c7c7a83547b74ebdb932c7b10d5e74cc84af8766a2e6",
-    "contract_digest": "slice-sha256/2:bcc8e405848a409d803426db1943e97a9627e76979a32d9794f24ba7a557d49c",
+    "source_digest": "02ea50aeeb75f9fbaea135e9e9633d13d60d0a69d2569825e7acd0e701f53ac2",
+    "contract_digest": "slice-sha256/2:31778f61bf604854864c27bb1c0037f2de9f67bd3db4156cc8d42660907a937b",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -31,7 +31,10 @@
         "input",
         "records"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "paging.stop_older_than_since != true"
+      ]
     },
     "cortex.instance.ConnectorsSource": {
       "title": "ConnectorsSource",
@@ -83,7 +86,10 @@
         "id",
         "text"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(paging.stop_older_than_since != true or defined(time))"
+      ]
     },
     "cortex.instance.PageStyle": {
       "title": "PageStyle",
@@ -93,7 +99,8 @@
       "enum": [
         "PageNumber",
         "Token",
-        "Keyset"
+        "Keyset",
+        "NextLink"
       ]
     },
     "cortex.instance.Paging": {
@@ -113,6 +120,9 @@
         },
         "max_pages": {
           "type": "integer"
+        },
+        "stop_older_than_since": {
+          "type": "boolean"
         }
       },
       "required": [

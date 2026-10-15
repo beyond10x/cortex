@@ -1,12 +1,12 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "1b4a2ea847b1e07c4ca1c7c7a83547b74ebdb932c7b10d5e74cc84af8766a2e6",
+  "source_digest": "02ea50aeeb75f9fbaea135e9e9633d13d60d0a69d2569825e7acd0e701f53ac2",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:6695a97d3d556dcab78fa7c4f04a07136d3cba0096bbc8a3a8410a709056ecc8",
-    "projection_digest": "2bf8eb833b3084463a349f1df7ff1bbcffd82c3dfc93cde4433795e9a301cdfb"
+    "contract_digest": "slice-sha256/2:5f077fc41f14f445f4178acc2c2eb1dc76829494976a737dab28c69ce676d5cf",
+    "projection_digest": "bae8179e79a421461cd377c380d7dc8eacf7d5a89d41201661a6007988cb49ad"
   },
   "generator_version": "0.60.0",
   "target": "rust",
@@ -918,14 +918,29 @@
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
     },
     {
+      "pointer": "/$defs/cortex.instance.ChildCall/x-ess-invariants",
+      "rule": "model_invariants",
+      "detail": "enforce the retained model invariant statements; structural codecs do not evaluate predicates"
+    },
+    {
       "pointer": "/$defs/cortex.instance.CompareLink/properties/input",
       "rule": "rust_exact_numbers",
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
     },
     {
+      "pointer": "/$defs/cortex.instance.CompareLink/x-ess-invariants",
+      "rule": "model_invariants",
+      "detail": "enforce the retained model invariant statements; structural codecs do not evaluate predicates"
+    },
+    {
       "pointer": "/$defs/cortex.instance.ConnectorsSource/properties/inputs/items",
       "rule": "rust_exact_numbers",
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ConnectorsSource/x-ess-invariants",
+      "rule": "model_invariants",
+      "detail": "enforce the retained model invariant statements; structural codecs do not evaluate predicates"
     },
     {
       "pointer": "/$defs/cortex.instance.CrawlPolicy/properties/limit",
@@ -1108,9 +1123,19 @@
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
     },
     {
+      "pointer": "/$defs/cortex.instance.StructuredChild/x-ess-invariants",
+      "rule": "model_invariants",
+      "detail": "enforce the retained model invariant statements; structural codecs do not evaluate predicates"
+    },
+    {
       "pointer": "/$defs/cortex.instance.StructuredConnectors/properties/inputs/items",
       "rule": "rust_exact_numbers",
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.StructuredConnectors/x-ess-invariants",
+      "rule": "model_invariants",
+      "detail": "enforce the retained model invariant statements; structural codecs do not evaluate predicates"
     },
     {
       "pointer": "/$defs/cortex.instance.StructuredInput",

@@ -102,10 +102,20 @@ types:
       - {name: connection, type: String}
       - {name: input, type: cortex.instance.WebInput}
 
+  # How a paged operation names its next page. `NextLink` reads a URL, relative or absolute, at the
+  # paging's `next` path; the percent-decoded value of its query parameter named by the last
+  # segment of `param` is the next `param`. A missing, null or empty link ends the walk; a link
+  # without that parameter ends it and leaves the operation's pages unread.
   - name: cortex.instance.PageStyle
     kind: enum
-    variants: [PageNumber, Token, Keyset]
+    variants: [PageNumber, Token, Keyset, NextLink]
 
+  # `stop_older_than_since: true` ends the walk at the first record whose `time` is older than the
+  # run's `{since}`: that record and the ones after it are not taken, and nothing is left unread.
+  # A record with no readable time does not stop it; `max_pages` reached first leaves pages
+  # unread as without the rule. Only a `connectors` source's own paging with a `time` takes it
+  # (the invariants of `ConnectorsSource`, `ChildCall`, `StructuredConnectors`, `StructuredChild`
+  # and `CompareLink`); `src/model_map.rs` refuses a spec that breaks one at load.
   - name: cortex.instance.Paging
     kind: struct
     fields:
@@ -113,6 +123,7 @@ types:
       - {name: param, type: String}
       - {name: next, type: Optional<String>}
       - {name: max_pages, type: Integer}
+      - {name: stop_older_than_since, type: Optional<Boolean>}
 
   - name: cortex.instance.ChildCall
     kind: struct
@@ -121,6 +132,8 @@ types:
       - {name: input, type: Json}
       - {name: records, type: String}
       - {name: paging, type: Optional<cortex.instance.Paging>}
+    invariants:
+      - paging.stop_older_than_since != true
 
   - name: cortex.instance.ConnectorsSource
     kind: struct
@@ -141,6 +154,8 @@ types:
       - {name: text, type: List<String>}
       - {name: paging, type: Optional<cortex.instance.Paging>}
       - {name: child, type: Optional<cortex.instance.ChildCall>}
+    invariants:
+      - any: ["paging.stop_older_than_since != true", "defined(time)"]
 
   - name: cortex.instance.RecordFormat
     kind: enum
@@ -206,6 +221,8 @@ types:
       - {name: mapping, type: cortex.instance.RecordMapping}
       - {name: time, type: Optional<String>}
       - {name: parent, type: String}
+    invariants:
+      - paging.stop_older_than_since != true
 
   - name: cortex.instance.CompareLink
     kind: struct
@@ -219,6 +236,8 @@ types:
       - {name: order, type: String}
       - {name: change_id, type: String}
       - {name: relation, type: String}
+    invariants:
+      - paging.stop_older_than_since != true
 
   - name: cortex.instance.StructuredConnectors
     kind: struct
@@ -233,6 +252,8 @@ types:
       - {name: paging, type: Optional<cortex.instance.Paging>}
       - {name: children, type: Optional<List<cortex.instance.StructuredChild>>}
       - {name: links, type: Optional<List<cortex.instance.CompareLink>>}
+    invariants:
+      - paging.stop_older_than_since != true
 
   - name: cortex.instance.StructuredFiles
     kind: struct

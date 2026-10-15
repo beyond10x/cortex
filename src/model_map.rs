@@ -184,17 +184,33 @@ fn redaction(r: &s::CortexInstanceRedactionPolicy) -> Result<m::RedactionPolicy,
     })
 }
 
+/// Why a paging other than a `connectors` source's own may not take `stop_older_than_since`.
+const STOP_ONLY_ON_SOURCE: &str = "only a connectors source's own paging takes it";
+
+/// A paging as the model holds it. `no_stop` is why it may not take `stop_older_than_since: true`,
+/// when it may not: only a `connectors` source's own paging with a `time` does (the invariants on
+/// `cortex.instance.Paging`'s holders).
 fn paging(
     p: &EssPresence<Box<s::CortexInstancePaging>>,
     at: &str,
+    no_stop: Option<&str>,
 ) -> Result<Option<m::Paging>, MapError> {
     Ok(match p {
         EssPresence::Absent => None,
         EssPresence::Present(p) => Some(m::Paging {
+            stop_older_than_since: match (opt(&p.stop_older_than_since), no_stop) {
+                (Some(true), Some(why)) => {
+                    return Err(MapError(format!(
+                        "{at}.paging.stop_older_than_since: {why}"
+                    )))
+                }
+                (stop, _) => stop,
+            },
             style: match *p.style {
                 s::CortexInstancePageStyle::V0 => m::PageStyle::Keyset,
-                s::CortexInstancePageStyle::V1 => m::PageStyle::PageNumber,
-                s::CortexInstancePageStyle::V2 => m::PageStyle::Token,
+                s::CortexInstancePageStyle::V1 => m::PageStyle::NextLink,
+                s::CortexInstancePageStyle::V2 => m::PageStyle::PageNumber,
+                s::CortexInstancePageStyle::V3 => m::PageStyle::Token,
             },
             param: p.param.clone(),
             next: opt(&p.next),
@@ -263,7 +279,7 @@ fn structured_child(
         operation: child.operation.clone(),
         input: json(&child.input),
         records: child.records.clone(),
-        paging: paging(&child.paging, at)?,
+        paging: paging(&child.paging, at, Some(STOP_ONLY_ON_SOURCE))?,
         mapping: record_mapping(&child.mapping),
         time: opt(&child.time),
         parent: child.parent.clone(),
@@ -275,7 +291,7 @@ fn compare_link(link: &s::CortexInstanceCompareLink, at: &str) -> Result<m::Comp
         operation: link.operation.clone(),
         input: json(&link.input),
         records: link.records.clone(),
-        paging: paging(&link.paging, at)?,
+        paging: paging(&link.paging, at, Some(STOP_ONLY_ON_SOURCE))?,
         tags: link.tags.clone(),
         changes: link.changes.clone(),
         order: link.order.clone(),
@@ -296,7 +312,7 @@ fn structured(
                     connection: c.value.connection.clone(),
                     operation: c.value.operation.clone(),
                     inputs: c.value.inputs.iter().map(json).collect(),
-                    paging: paging(&c.value.paging, at)?,
+                    paging: paging(&c.value.paging, at, Some(STOP_ONLY_ON_SOURCE))?,
                     children: match &c.value.children {
                         EssPresence::Absent => None,
                         EssPresence::Present(children) => Some(
@@ -369,14 +385,23 @@ fn settings(
                 id: c.value.id.clone(),
                 time: opt(&c.value.time),
                 text: c.value.text.clone(),
-                paging: paging(&c.value.paging, at)?,
+                paging: paging(
+                    &c.value.paging,
+                    at,
+                    matches!(c.value.time, EssPresence::Absent)
+                        .then_some("it reads each record's time, and the source names no time"),
+                )?,
                 child: match &c.value.child {
                     EssPresence::Absent => None,
                     EssPresence::Present(child) => Some(m::ChildCall {
                         operation: child.operation.clone(),
                         input: json(&child.input),
                         records: child.records.clone(),
-                        paging: paging(&child.paging, &format!("{at}.child"))?,
+                        paging: paging(
+                            &child.paging,
+                            &format!("{at}.child"),
+                            Some(STOP_ONLY_ON_SOURCE),
+                        )?,
                     }),
                 },
             })
