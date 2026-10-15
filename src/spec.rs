@@ -233,6 +233,12 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
             }
         }
     }
+    // Refused before any unit is written: the viewer's unit copies the same variables by value.
+    if let Some(gateway) = &spec.model.gateway {
+        if let Some(refusal) = crate::schedule::token_env_refusal(&gateway.token_env) {
+            return Err(refusal);
+        }
+    }
     if let Some(hook) = spec.monitoring.as_ref().and_then(|o| o.hook.as_ref()) {
         if hook.command.first().is_none_or(|c| c.is_empty()) {
             return Err("monitoring.hook.command must name a program".into());

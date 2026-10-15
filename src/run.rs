@@ -762,6 +762,7 @@ fn process_in(
         codex: tools.codex.clone(),
         model: spec.model.model.clone(),
         timeout_s: spec.model.timeout_s,
+        gateway: spec.model.gateway.clone(),
     };
     let instructions = match &spec.model.instructions {
         Some(rel) => Some(

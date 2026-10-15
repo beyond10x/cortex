@@ -449,6 +449,7 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn, home: &Home) -> Result<
         codex: tools.codex.clone(),
         model: spec.model.model.clone(),
         timeout_s: spec.model.timeout_s,
+        gateway: spec.model.gateway.clone(),
     };
     let budget: f64 = spec.model.budget_usd.0.parse().unwrap_or(0.0);
     let schema = answer_schema();
