@@ -18,5 +18,6 @@ pub mod schema;
 pub mod snapshot;
 pub mod sources;
 pub mod spec;
+pub mod spend;
 pub mod state;
 pub mod structured;

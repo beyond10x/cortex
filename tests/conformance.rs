@@ -55,6 +55,7 @@ fn placeholder_spec() -> m::InstanceSpec {
             model: "m".into(),
             backend: None,
             budget_usd: cortex_model::primitives::Decimal("1".into()),
+            daily_ceiling_usd: None,
             timeout_s: 1,
             instructions: None,
         },
@@ -148,6 +149,7 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "documents_new": e.documents_new,
                 "documents_applied": e.documents_applied,
                 "cost_usd": e.cost_usd.map(|c| c.0),
+                "daily_ceiling_reached": e.daily_ceiling_reached,
             }),
         ),
     };
@@ -224,7 +226,7 @@ fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Val
             .and_then(Value::as_str)
             .unwrap_or_else(|| panic!("{event}.{field}: no kind"));
         assert!(
-            matches!(kind, "string" | "integer" | "decimal"),
+            matches!(kind, "string" | "integer" | "decimal" | "boolean"),
             "{event}.{field}: unsupported kind {kind}"
         );
         let Some(value) = fields.get(field) else {
@@ -234,6 +236,7 @@ fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Val
         let of_kind = match kind {
             "string" => value.is_string(),
             "integer" => value.is_i64() || value.is_u64(),
+            "boolean" => value.is_boolean(),
             "decimal" => value
                 .as_str()
                 .is_some_and(|v| decimal_pattern(event, field).is_match(v)),

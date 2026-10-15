@@ -1504,7 +1504,7 @@ fn quality(app: &mut App, ctx: &Ctx, name: &str, sample: i64) -> ExitCode {
         // `quality/<stamp>/` need no lock, so scheduled runs do not wait behind the judge.
         let drawn = quality::draw(&layout, sample);
         drop(ctx.lock.borrow_mut().take());
-        let result = drawn.and_then(|d| quality::judge(&layout, &ctx.tools, d));
+        let result = drawn.and_then(|d| quality::judge(&layout, &ctx.tools, d, ctx.home));
         let mut shared = ctx.shared.borrow_mut();
         match result {
             Ok(q) => {
@@ -1593,7 +1593,7 @@ fn propose_schema(app: &mut App, ctx: &Ctx, name: &str, sample: i64, dry_run: bo
         // against the ontology at the head then.
         let drawn = schema::draw(&layout, sample);
         drop(ctx.lock.borrow_mut().take());
-        let asked = drawn.and_then(|d| schema::ask(&layout, &ctx.tools, d));
+        let asked = drawn.and_then(|d| schema::ask(&layout, &ctx.tools, d, ctx.home));
         let result = match asked {
             Err(e) => Err(e),
             Ok(asked) if dry_run => schema::record(asked, None),
@@ -1751,6 +1751,11 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
             if report.superseded + report.retracted > 0 {
                 detail["superseded"] = json!(report.superseded);
                 detail["retracted"] = json!(report.retracted);
+            }
+            // Present only when the instance's daily ceiling stopped the run: a run it did not
+            // stop reports as before.
+            if source_ran.daily_ceiling_reached {
+                detail["daily_ceiling_reached"] = json!(true);
             }
             (
                 Done {

@@ -21,10 +21,12 @@ use serde_json::{json, Value};
 
 use crate::ekr::{Operation, PropertyDecl, Store};
 use crate::extract::{cost_text, Model};
+use crate::home::Home;
 use crate::instance::Layout;
 use crate::quality::{self, Batch};
 use crate::redact::{self, Redactor};
 use crate::run::{add_cost, Tools};
+use crate::spend;
 
 /// The `format` of each line of `proposals.jsonl`.
 pub const FORMAT: &str = "cortex.schema-proposal/1";
@@ -422,8 +424,9 @@ fn so_far(proposed: usize, batches: usize, of: usize, cost_usd: Option<f64>) -> 
 }
 
 /// Has the instance's model propose changes for each batch of `drawn`, in a new directory
-/// `schema/<UTC stamp>`. Needs no lock: it reads no store.
-pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn) -> Result<Asked, Failure> {
+/// `schema/<UTC stamp>`. Needs no lock: it reads no store; each cost it adds to the spend of the
+/// day takes `home`'s lock for that write.
+pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn, home: &Home) -> Result<Asked, Failure> {
     let Drawn { drawn, ontology } = drawn;
     let spec = &drawn.spec;
     let batches = quality::batches(&drawn.items);
@@ -451,6 +454,7 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn) -> Result<Asked, Failur
     let schema = answer_schema();
     let shown_ontology = ontology_text(&ontology);
     let mut spent = 0.0;
+    let mut daily = spend::Daily::new(layout, &spec.model, Some(home));
     let mut cost_usd = Some(0.0);
     let mut proposals: Vec<Cited> = Vec::new();
     let mut dropped = 0;
@@ -462,6 +466,12 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn) -> Result<Asked, Failur
                 so_far(proposals.len(), n, batches.len(), cost_usd)
             )));
         }
+        let remaining = daily.allow(remaining).map_err(|why| {
+            Failure::Propose(format!(
+                "{why}; {}",
+                so_far(proposals.len(), n, batches.len(), cost_usd)
+            ))
+        })?;
         // The model is shown the batch with personal data replaced by placeholders; the mapping
         // stays in `pseudonyms`, in memory, until the answer is restored.
         let mut pseudonyms = redactor.as_ref().map(Redactor::batch);
@@ -481,6 +491,7 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn) -> Result<Asked, Failur
         ) {
             Ok(answer) => answer,
             Err(refused) => {
+                daily.add(refused.cost_usd);
                 let total = add_cost(cost_usd, refused.cost_usd);
                 return Err(Failure::Propose(format!(
                     "{}; {}",
@@ -489,6 +500,7 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn) -> Result<Asked, Failur
                 )));
             }
         };
+        daily.add(answer.cost_usd);
         spent += answer.cost_usd.unwrap_or(0.0);
         cost_usd = add_cost(cost_usd, answer.cost_usd);
         let Some(entries) = answer.document["proposals"].as_array() else {

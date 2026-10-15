@@ -309,6 +309,11 @@
       "detail": "retained in source.schema.json; no decoder behavior inferred"
     },
     {
+      "pointer": "/$defs/cortex.instance.ModelSpec/properties/daily_ceiling_usd/format",
+      "rule": "format",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
       "pointer": "/$defs/cortex.instance.ModelSpec/title",
       "rule": "title",
       "detail": "retained in source.schema.json; no decoder behavior inferred"
@@ -962,6 +967,11 @@
     },
     {
       "pointer": "/$defs/cortex.instance.ModelSpec/properties/budget_usd/pattern",
+      "rule": "pattern",
+      "detail": "validate this constraint against the source schema at runtime"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ModelSpec/properties/daily_ceiling_usd/pattern",
       "rule": "pattern",
       "detail": "validate this constraint against the source schema at runtime"
     },

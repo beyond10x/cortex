@@ -18,11 +18,13 @@ use serde_json::{json, Value};
 
 use crate::ekr::Store;
 use crate::extract::{cost_text, Model};
+use crate::home::Home;
 use crate::instance::{now_ms, Layout};
 use crate::mask::{mask, mask_key};
 use crate::redact::{self, Redactor};
 use crate::run::{add_cost, Tools};
 use crate::sources::split_context;
+use crate::spend;
 
 /// Facts per model call.
 pub const BATCH: usize = 20;
@@ -554,8 +556,13 @@ fn so_far(judged: usize, of: usize, cost_usd: Option<f64>) -> String {
 
 /// Has the instance's model judge `drawn` and writes `quality/<UTC stamp>/verdicts.jsonl` and
 /// `quality/<UTC stamp>/fact-quality.json`. Needs no lock: it reads no store and writes only its
-/// own new directory.
-pub fn judge(layout: &Layout, tools: &Tools, drawn: Drawn) -> Result<Measurement, Failure> {
+/// own new directory; each cost it adds to the spend of the day takes `home`'s lock for that write.
+pub fn judge(
+    layout: &Layout,
+    tools: &Tools,
+    drawn: Drawn,
+    home: &Home,
+) -> Result<Measurement, Failure> {
     let Drawn {
         spec,
         ekr,
@@ -588,6 +595,7 @@ pub fn judge(layout: &Layout, tools: &Tools, drawn: Drawn) -> Result<Measurement
     let budget: f64 = spec.model.budget_usd.0.parse().unwrap_or(0.0);
     let schema = answer_schema();
     let mut spent = 0.0;
+    let mut daily = spend::Daily::new(layout, &spec.model, Some(home));
     let mut cost_usd = Some(0.0);
     let mut all: Vec<m::QualityVerdict> = Vec::new();
     for (n, batch) in batches.iter().enumerate() {
@@ -598,6 +606,12 @@ pub fn judge(layout: &Layout, tools: &Tools, drawn: Drawn) -> Result<Measurement
                 so_far(all.len(), items.len(), cost_usd)
             )));
         }
+        let remaining = daily.allow(remaining).map_err(|why| {
+            Failure::Judge(format!(
+                "{why}; {}",
+                so_far(all.len(), items.len(), cost_usd)
+            ))
+        })?;
         // The judge is shown the batch with personal data replaced by placeholders; the mapping
         // stays in `pseudonyms`, in memory, until the reasons are restored.
         let mut pseudonyms = redactor.as_ref().map(Redactor::batch);
@@ -617,6 +631,7 @@ pub fn judge(layout: &Layout, tools: &Tools, drawn: Drawn) -> Result<Measurement
         ) {
             Ok(answer) => answer,
             Err(refused) => {
+                daily.add(refused.cost_usd);
                 // The failed call is counted too: "in all" is everything the judge spent.
                 let total = add_cost(cost_usd, refused.cost_usd);
                 return Err(Failure::Judge(format!(
@@ -626,6 +641,7 @@ pub fn judge(layout: &Layout, tools: &Tools, drawn: Drawn) -> Result<Measurement
                 )));
             }
         };
+        daily.add(answer.cost_usd);
         spent += answer.cost_usd.unwrap_or(0.0);
         cost_usd = add_cost(cost_usd, answer.cost_usd);
         let mut restored = answer.document;

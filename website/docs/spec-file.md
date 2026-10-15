@@ -37,7 +37,7 @@ serve: {}
 | `description` | what the instance is about; every extraction prompt carries it |
 | `ekr` | the EKR version the instance runs on, and optionally the binary |
 | `seed` | what the store starts from |
-| `model` | the model that extracts, its per-run budget and its timeout |
+| `model` | the model that extracts, its per-run budget, its optional daily ceiling and its timeout |
 | `sources` | the data sources and their schedules |
 | `serve` | the viewer's port |
 
@@ -70,8 +70,36 @@ different seed files answers `seed-change-refused`.
 | `model` | the model name passed to `claude --model` |
 | `backend` | optional: `Claude` (the default) runs `claude -p`. `Codex` is accepted by `create` and `update` but extracts nothing in this release: every run fails as `extraction-failed`, naming `story:codex-model-backend` (see [Commands](./commands.md#global-options)) |
 | `budget_usd` | the spending limit of one run, in US dollars, as a decimal string; above 0. A run stops starting new batches once it is spent |
+| `daily_ceiling_usd` | optional: the most the instance's model calls spend in one UTC calendar day, in US dollars, as a decimal string; above 0. Absent means no ceiling. See [The daily ceiling](#the-daily-ceiling) |
 | `timeout_s` | the time limit of one model call, in seconds; above 0 |
 | `instructions` | optional text file whose content is added to every extraction prompt |
+
+### The daily ceiling
+
+```yaml
+model: {model: claude-sonnet-5-5, budget_usd: "1", daily_ceiling_usd: "5", timeout_s: 900}
+```
+
+`daily_ceiling_usd` covers every model call of the instance in one UTC calendar day: the runs of
+all its sources, the seed extraction, `cortex quality` and `cortex schema`. Each call is given
+(`--max-budget-usd`) the lesser of what is left of its own `budget_usd` and what is left of the
+ceiling today. Every answer that states a cost adds it to the spend of the day, a failed answer
+included; an answer with no cost adds nothing. The day starts at 00:00 UTC.
+
+Once the spend of the day reaches the ceiling, no call is made until the next UTC day:
+
+- a run stops before its next batch and answers `ran`, with the batches before it applied,
+  `stopped` naming the ceiling (`daily ceiling of 5 USD reached: 5.0000 USD spent on 2026-10-14
+  (UTC)`) and `daily_ceiling_reached: true`. A run stopped before its first batch applies nothing
+  and makes no model call. Either way it counts no failure, and the documents it did not extract
+  are extracted by a run on a later day;
+- `cortex quality` answers `judge-failed` and `cortex schema` answers `propose-failed`, the reason
+  naming the ceiling.
+
+The spend of the day is `spend.json` in the instance directory (see
+[Operating](./operating.md#where-things-live)); it is kept whether or not the spec names a ceiling,
+and `cortex restore` leaves it as it is. A ceiling changed with `cortex update` holds from the next
+run or command, against what the day has spent so far.
 
 ## `sources`
 

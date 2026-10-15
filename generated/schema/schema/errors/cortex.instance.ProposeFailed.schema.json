@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ProposeFailed payload",
-  "description": "A model call for schema proposals failed, timed out, answered no valid proposals or found the budget spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.",
+  "description": "A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.",
   "x-ess-name": "cortex.instance.ProposeFailed",
   "x-ess-kind": "error-payload",
   "type": "object",

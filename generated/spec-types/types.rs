@@ -343,6 +343,9 @@ pub struct CortexInstanceModelSpec {
     #[serde(rename = "budget_usd")]
     #[serde(deserialize_with = "ess_required")]
     pub budget_usd: ::std::string::String,
+    #[serde(rename = "daily_ceiling_usd")]
+    #[serde(default, skip_serializing_if = "EssPresence::is_absent")]
+    pub daily_ceiling_usd: EssPresence<::std::string::String>,
     #[serde(rename = "instructions")]
     #[serde(default, skip_serializing_if = "EssPresence::is_absent")]
     pub instructions: EssPresence<::std::string::String>,

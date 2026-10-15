@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "JudgeFailed payload",
-  "description": "A judge's model call failed, timed out, answered no valid verdicts or found the budget spent, or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was written.",
+  "description": "A judge's model call failed, timed out, answered no valid verdicts or found the budget or the instance's daily ceiling spent, or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was written.",
   "x-ess-name": "cortex.instance.JudgeFailed",
   "x-ess-kind": "error-payload",
   "type": "object",

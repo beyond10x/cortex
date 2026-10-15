@@ -271,6 +271,7 @@ impl Ports {
                     documents_new: report.documents_new,
                     documents_applied: report.documents_applied,
                     cost_usd: cost_decimal(report.cost_usd),
+                    daily_ceiling_reached: report.daily_ceiling_reached,
                 };
                 self.shared.borrow_mut().last_run = Some(report);
                 m::RunSourceOutcome::Ran { source_ran: ran }
@@ -355,6 +356,7 @@ impl RunSourceBehavior for Ports {
             documents_new: report.documents_new,
             documents_applied: report.documents_applied,
             cost_usd: cost_decimal(report.cost_usd),
+            daily_ceiling_reached: report.daily_ceiling_reached,
         };
         self.shared.borrow_mut().last_run = Some(report);
         Ok(m::RunSourceOutcome::Ran { source_ran: ran })

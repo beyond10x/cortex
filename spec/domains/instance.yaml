@@ -278,14 +278,34 @@ types:
     kind: enum
     variants: [Claude, Codex]
 
+  # `daily_ceiling_usd`, when given, bounds what the instance's model calls spend in one UTC
+  # calendar day, across every source run, seed extraction, quality measurement and schema
+  # proposal of the instance: each call is allowed the lesser of what is left of its own
+  # `budget_usd` and what is left of the ceiling (`cortex.instance.DailySpend`). A number of US
+  # dollars, above 0; absent means no ceiling.
   - name: cortex.instance.ModelSpec
     kind: struct
     fields:
       - {name: model, type: String}
       - {name: backend, type: Optional<cortex.instance.ModelBackend>}
       - {name: budget_usd, type: Decimal}
+      - {name: daily_ceiling_usd, type: Optional<Decimal>}
       - {name: timeout_s, type: Integer}
       - {name: instructions, type: Optional<String>}
+
+  # The spend of the day of one instance: `spend.json` in the instance directory, `format`
+  # `cortex.daily-spend/1`. `day` is the UTC calendar day it counts, `YYYY-MM-DD`; `spent_usd` the
+  # sum of the costs of the model answers of that day that stated one. A day starts at 00:00 UTC:
+  # a file whose `day` is not today's counts as nothing spent, and the next costed answer starts it
+  # again. Every costed answer is added under the home's lock as soon as it is read, failed answers
+  # included; an answer with no cost adds nothing. The file is kept whether or not the spec names a
+  # ceiling, and a snapshot restore leaves it as it is.
+  - name: cortex.instance.DailySpend
+    kind: struct
+    fields:
+      - {name: format, type: String}
+      - {name: day, type: String}
+      - {name: spent_usd, type: Decimal}
 
   - name: cortex.instance.SqliteStore
     kind: struct
@@ -749,17 +769,18 @@ errors:
 
   - name: cortex.instance.JudgeFailed
     summary: >-
-      A judge's model call failed, timed out, answered no valid verdicts or found the budget spent,
-      or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the
-      verdicts of the batches judged before; no `fact-quality.json` was written.
+      A judge's model call failed, timed out, answered no valid verdicts or found the budget or the
+      instance's daily ceiling spent, or the redaction policy refused what the judge would be shown.
+      `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was
+      written.
     fields:
       - {name: reason, type: String}
 
   - name: cortex.instance.ProposeFailed
     summary: >-
       A model call for schema proposals failed, timed out, answered no valid proposals or found the
-      budget spent, the redaction policy refused what the model would be shown, or EKR could not
-      read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+      budget or the instance's daily ceiling spent, the redaction policy refused what the model
+      would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
     fields:
       - {name: reason, type: String}
 
@@ -1068,10 +1089,13 @@ commands:
             documents_new: {generated: true}
             documents_applied: {generated: true}
             cost_usd: {generated: true}
+            daily_ceiling_reached: {generated: true}
         summary: >-
           Every new or changed document within the policy's limits was extracted and applied, in
           batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no
-          model was called.
+          model was called. `daily_ceiling_reached` is true when the run stopped before a batch
+          because the instance's spend of the UTC day reached `model.daily_ceiling_usd`: the
+          batches before it are applied, the rest are extracted by a run on a later day.
 
       - name: fetch-failed
         external: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first
@@ -1274,7 +1298,8 @@ commands:
     # `ekr fact-quality` turns the verdicts into a pass rate with its Wilson interval at 95 %. The
     # measurement writes `quality/<UTC stamp>/verdicts.jsonl` and `quality/<UTC stamp>/
     # fact-quality.json` (the `ekr.fact-quality/1` document, as EKR printed it) under the instance
-    # directory, and spends at most the spec's `model.budget_usd`. It reads the store and writes
+    # directory, and spends at most the spec's `model.budget_usd` and what is left of its
+    # `model.daily_ceiling_usd` for the UTC day. It reads the store and writes
     # nothing to it, so a removed instance's store, which stays, is measured too.
     input:
       - {name: name, type: cortex.instance.InstanceName}
@@ -1289,7 +1314,7 @@ commands:
         summary: No model was asked and nothing was written.
 
       - name: judge-failed
-        external: A judge's model call fails, times out, answers no valid verdicts or finds the budget spent, or the redaction policy refuses what the judge would be shown
+        external: A judge's model call fails, times out, answers no valid verdicts or finds the budget or the daily ceiling spent, or the redaction policy refuses what the judge would be shown
         error: cortex.instance.JudgeFailed
         payload:
           cortex.instance.JudgeFailed:
@@ -1346,7 +1371,8 @@ commands:
     # `dry_run`, cortex takes the lock again and asks EKR to apply each proposal it can write as
     # one schema transaction of its own, in order, against the ontology at the head. Every proposal
     # not dropped is a `cortex.instance.SchemaProposal` line of `schema/<UTC stamp>/proposals.jsonl`
-    # under the instance directory. Spends at most the spec's `model.budget_usd`.
+    # under the instance directory. Spends at most the spec's `model.budget_usd` and what is left
+    # of its `model.daily_ceiling_usd` for the UTC day.
     input:
       - {name: name, type: cortex.instance.InstanceName}
       - {name: sample, type: Integer}
@@ -1361,7 +1387,7 @@ commands:
         summary: No model was asked and nothing was written.
 
       - name: propose-failed
-        external: A model call fails, times out, answers no valid proposals or finds the budget spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology
+        external: A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology
         error: cortex.instance.ProposeFailed
         payload:
           cortex.instance.ProposeFailed:
@@ -1449,12 +1475,14 @@ events:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: instance_name, type: cortex.instance.InstanceName}
 
+  # `daily_ceiling_reached` says the run stopped before a batch at the instance's daily ceiling.
   - name: cortex.instance.SourceRan
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: documents_new, type: Integer}
       - {name: documents_applied, type: Integer}
       - {name: cost_usd, type: Optional<Decimal>}
+      - {name: daily_ceiling_reached, type: Boolean}
 
   - name: cortex.instance.RunFailed
     fields:

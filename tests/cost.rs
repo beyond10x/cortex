@@ -227,3 +227,105 @@ fn each_call_is_given_the_budget_that_remains() {
     assert_eq!(ran["detail"]["cost_usd"], Value::Null, "{ran}");
     assert_eq!(ran["detail"]["stopped"], Value::Null, "{ran}");
 }
+
+/// A spec like [`spec`] with a second source, `more`, reading the same pages, and the instance's
+/// daily ceiling `ceiling` (`story:daily-instance-budget`).
+fn ceiling_spec(w: &World, name: &str, budget: &str, ceiling: &str) -> PathBuf {
+    let path = spec(w, name, budget, "");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let text = text.replace(
+        "timeout_s: 60}",
+        &format!("timeout_s: 60, daily_ceiling_usd: \"{ceiling}\"}}"),
+    );
+    let (head, rest) = text.split_once("sources:\n").unwrap();
+    let (news, tail) = rest.split_once("serve:").unwrap();
+    let more = news.replace("name: news", "name: more");
+    std::fs::write(&path, format!("{head}sources:\n{news}{more}serve:{tail}")).unwrap();
+    path
+}
+
+/// The instance's `spend.json`, the spend of the day.
+fn spend(w: &World, name: &str) -> Value {
+    let path = w.home.join("instances").join(name).join("spend.json");
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
+fn today() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+    cortex_cli::spend::day(now)
+}
+
+fn stopped_by_ceiling(ran: &Value, ceiling: &str) -> bool {
+    ran["detail"]["daily_ceiling_reached"] == true
+        && ran["detail"]["stopped"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with(&format!("daily ceiling of {ceiling} USD reached"))
+}
+
+#[test]
+fn a_run_that_reaches_the_daily_ceiling_between_batches_stops_before_the_next_batch() {
+    // Ceiling 0.25 of a budget of 5: the first call is given the 0.25 the ceiling leaves and
+    // spends it, so the second batch is not asked for; the first stays applied.
+    let w = World::new();
+    std::fs::write(w.root.join("answer.json"), two_batch_pages()).unwrap();
+    let path = ceiling_spec(&w, "between", "5", "0.25");
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    costs_per_call(&w, &["0.25", "0.25"]);
+
+    let (code, ran) = w.cortex(&["run", "between/news"]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(w.lines("claude-calls.log").len(), 1, "{ran}");
+    assert_eq!(
+        budgets_given(&w),
+        ["0.2500"],
+        "the lesser of budget and ceiling"
+    );
+    assert_eq!(ran["detail"]["documents_new"], 4, "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 3, "{ran}");
+    assert_eq!(ran["detail"]["cost_usd"], "0.2500", "{ran}");
+    assert!(stopped_by_ceiling(&ran, "0.25"), "{ran}");
+    assert_eq!(
+        spend(&w, "between"),
+        json!({"format": "cortex.daily-spend/1", "day": today(), "spent_usd": "0.25"})
+    );
+}
+
+#[test]
+fn a_reached_daily_ceiling_stops_a_run_of_any_source_before_a_model_call() {
+    let w = World::new();
+    std::fs::write(w.root.join("answer.json"), two_batch_pages()).unwrap();
+    let path = ceiling_spec(&w, "reached", "5", "1");
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    let spent = w.home.join("instances/reached/spend.json");
+    let day = |day: &str, usd: &str| {
+        json!({"format": "cortex.daily-spend/1", "day": day, "spent_usd": usd}).to_string()
+    };
+    std::fs::write(&spent, day(&today(), "1")).unwrap();
+
+    for source in ["news", "more"] {
+        let (code, ran) = w.cortex(&["run", &format!("reached/{source}")]);
+        assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+        assert_eq!(ran["detail"]["documents_new"], 4, "{ran}");
+        assert_eq!(ran["detail"]["documents_applied"], 0, "{ran}");
+        assert!(stopped_by_ceiling(&ran, "1"), "{ran}");
+    }
+    assert_eq!(w.lines("claude-calls.log").len(), 0, "no model call");
+
+    // The day is the UTC calendar day: what another day spent counts as nothing, and the next
+    // costed answers start today's spend again.
+    std::fs::write(&spent, day("2000-01-01", "100")).unwrap();
+    let (code, ran) = w.cortex(&["run", "reached/news"]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(w.lines("claude-calls.log").len(), 2, "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 4, "{ran}");
+    assert_eq!(ran["detail"]["stopped"], Value::Null, "{ran}");
+    assert_eq!(ran["detail"].get("daily_ceiling_reached"), None, "{ran}");
+    assert_eq!(spend(&w, "reached")["day"], today());
+    assert_eq!(spend(&w, "reached")["spent_usd"], "0.02");
+}

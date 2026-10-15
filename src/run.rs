@@ -17,6 +17,7 @@ use crate::redact::{self, Redactor};
 use crate::schedule::Systemd;
 use crate::snapshot::{self, BeforeApply, RestoreError};
 use crate::sources::{self, FetchError, Window};
+use crate::spend;
 use crate::state::{text_hash, SeenState};
 use crate::structured;
 
@@ -65,6 +66,8 @@ pub struct Report {
     /// changed value, and retracted as no longer listed.
     pub superseded: usize,
     pub retracted: usize,
+    /// Whether the run stopped before a batch at the instance's daily ceiling (said in `stopped`).
+    pub daily_ceiling_reached: bool,
 }
 
 /// An applied document a part EKR rejected belongs to: its key and EKR's refusals, joined.
@@ -111,6 +114,7 @@ impl Default for Report {
             rejected: Vec::new(),
             superseded: 0,
             retracted: 0,
+            daily_ceiling_reached: false,
         }
     }
 }
@@ -614,6 +618,8 @@ fn process_in(
     // Dollars the costed answers spent. An answer with no cost spends none; such a run is bounded
     // by `policy.max_documents_per_run` and `model.timeout_s`.
     let mut spent = 0.0;
+    // The instance's daily ceiling, across its sources and commands; a run holds the home's lock.
+    let mut daily = spend::Daily::new(layout, &spec.model, None);
     let mut entities = load_entities(layout);
 
     let issued: Vec<_> = selected
@@ -638,6 +644,14 @@ fn process_in(
             report.stopped = Some(format!("budget of {budget} USD spent"));
             break;
         }
+        let remaining = match daily.allow(remaining) {
+            Ok(usd) => usd,
+            Err(why) => {
+                report.stopped = Some(why);
+                report.daily_ceiling_reached = true;
+                break;
+            }
+        };
         let ontology = store.ontology().map_err(Failure::Apply)?;
         // The model is shown the batch with personal data replaced by placeholders; the mapping
         // stays in `pseudonyms`, in memory, until this batch's answer is restored.
@@ -671,7 +685,19 @@ fn process_in(
             }
         };
         let dir = run_dir.join(format!("batch-{n}"));
-        let answer = match model.ask(&dir.join("claude"), &schema, &prompt, remaining) {
+        let asked = model.ask_with(
+            extract::SYSTEM_PROMPT,
+            &dir.join("claude"),
+            &schema,
+            &prompt,
+            remaining,
+        );
+        // Every costed answer, a failed one included, adds to the spend of the day.
+        daily.add(match &asked {
+            Ok(answer) => answer.cost_usd,
+            Err(refused) => refused.cost_usd,
+        });
+        let answer = match asked.map_err(|refused| refused.message) {
             Ok(answer) => answer,
             Err(e) if report.documents_applied == 0 => return Err(Failure::Extract(e)),
             Err(e) => {

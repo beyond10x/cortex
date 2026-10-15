@@ -205,6 +205,15 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
     if budget.is_nan() || budget <= 0.0 {
         return Err("model.budget_usd must be above 0".into());
     }
+    if let Some(ceiling) = &spec.model.daily_ceiling_usd {
+        let usd: f64 = ceiling
+            .0
+            .parse()
+            .map_err(|_| format!("model.daily_ceiling_usd {:?} is not a number", ceiling.0))?;
+        if usd.is_nan() || usd <= 0.0 {
+            return Err("model.daily_ceiling_usd must be above 0".into());
+        }
+    }
     if spec.model.timeout_s <= 0 {
         return Err("model.timeout_s must be above 0".into());
     }

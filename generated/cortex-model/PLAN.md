@@ -20,6 +20,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.ConnectionRef` |
 | domain type | `cortex.instance.ConnectorsSource` |
 | domain type | `cortex.instance.CrawlPolicy` |
+| domain type | `cortex.instance.DailySpend` |
 | domain type | `cortex.instance.DocumentId` |
 | domain type | `cortex.instance.DropPolicy` |
 | domain type | `cortex.instance.EkrPin` |

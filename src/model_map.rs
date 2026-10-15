@@ -78,6 +78,7 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
                 s::CortexInstanceModelBackend::V1 => m::ModelBackend::Codex,
             }),
             budget_usd: Decimal(spec.model.budget_usd.clone()),
+            daily_ceiling_usd: opt(&spec.model.daily_ceiling_usd).map(Decimal),
             timeout_s: int(&spec.model.timeout_s, "model.timeout_s")?,
             instructions: opt(&spec.model.instructions),
         },

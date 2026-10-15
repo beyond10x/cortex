@@ -73,6 +73,14 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `instructions` — `Optional<String>`, which may be absent
 - `allow_external` — `Boolean`
 
+### `DailySpend`
+
+`cortex.instance.DailySpend` is a record of three fields:
+
+- `format` — `String`
+- `day` — `String`
+- `spent_usd` — `Decimal`
+
 ### `DocumentId`
 
 `cortex.instance.DocumentId` wraps `String` and is not interchangeable with one: the whole value of naming it separately is the crossings the model then refuses.
@@ -154,11 +162,12 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 
 ### `ModelSpec`
 
-`cortex.instance.ModelSpec` is a record of five fields:
+`cortex.instance.ModelSpec` is a record of six fields:
 
 - `model` — `String`
 - `backend` — `Optional<cortex.instance.ModelBackend>`, which may be absent
 - `budget_usd` — `Decimal`
+- `daily_ceiling_usd` — `Optional<Decimal>`, which may be absent
 - `timeout_s` — `Integer`
 - `instructions` — `Optional<String>`, which may be absent
 
@@ -535,7 +544,7 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `connection` — `String`
 - `input` — `cortex.instance.WebInput`
 
-Three of the types above are reached by nothing else in this system: `cortex.instance.QualityVerdict`, `cortex.instance.SchemaProposal` and `cortex.instance.SchemaProposals`. No entity, view, command, event, error or crossing names them, so it is either vocabulary something outside this specification uses or a leftover — and only a person can tell which.
+Four of the types above are reached by nothing else in this system: `cortex.instance.DailySpend`, `cortex.instance.QualityVerdict`, `cortex.instance.SchemaProposal` and `cortex.instance.SchemaProposals`. No entity, view, command, event, error or crossing names them, so it is either vocabulary something outside this specification uses or a leftover — and only a person can tell which.
 
 ## Entities
 
@@ -808,7 +817,7 @@ It has four outcomes.
 
 **`sample-failed`** — No model was asked and nothing was written. Decided outside the input: EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SampleFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`judge-failed`** — No pass rate was written; the verdicts of the batches judged before stay. Decided outside the input: A judge's model call fails, times out, answers no valid verdicts or finds the budget spent, or the redaction policy refuses what the judge would be shown. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.JudgeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`judge-failed`** — No pass rate was written; the verdicts of the batches judged before stay. Decided outside the input: A judge's model call fails, times out, answers no valid verdicts or finds the budget or the daily ceiling spent, or the redaction policy refuses what the judge would be shown. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.JudgeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`measured`** — Every sampled fact was judged. `judged` counts them, `passed` those judged `yes` and `unclear` those the judge could not tell, which count as failed. `rate` is the pass rate, absent when the store holds no fact to draw; `lower` and `upper` are its Wilson interval at 95 %, 0 and 1 then. `cost_usd` is what the judge's model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. `revision` and `seed` draw the same sample again. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.QualityMeasured`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -828,7 +837,7 @@ It has five outcomes.
 
 **`sample-failed`** — No model was asked and nothing was written. Decided outside the input: EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SampleFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`propose-failed`** — Nothing was applied and no `proposals.jsonl` was written. Decided outside the input: A model call fails, times out, answers no valid proposals or finds the budget spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ProposeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`propose-failed`** — Nothing was applied and no `proposals.jsonl` was written. Decided outside the input: A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ProposeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`proposed`** — A dry run: every proposal not dropped is recorded and none is applied; `applied` and `refused` are 0, and a change EKR would be asked to apply is `dry-run`. `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. Taken when `dry_run` holds of the input. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaChangesProposed`. A test reaches it by constructing an input that satisfies that condition.
 
@@ -1205,7 +1214,7 @@ Reported by `cortex.instance.UpdateInstance` on its `no-such-instance` outcome.
 
 ### `JudgeFailed`
 
-A judge's model call failed, timed out, answered no valid verdicts or found the budget spent, or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was written.
+A judge's model call failed, timed out, answered no valid verdicts or found the budget or the instance's daily ceiling spent, or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was written.
 
 It carries:
 
@@ -1227,7 +1236,7 @@ Reported by `cortex.instance.CreateInstance` on its `name-taken` outcome.
 
 ### `ProposeFailed`
 
-A model call for schema proposals failed, timed out, answered no valid proposals or found the budget spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
 
 It carries:
 

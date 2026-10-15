@@ -51,6 +51,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -400,6 +401,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -873,6 +875,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -1284,6 +1287,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1048595.0,
+                  "daily_ceiling_usd": 1048595.0,
                   "instructions": "spec.model.instructions-1048594",
                   "model": "spec.model.model-1048594",
                   "timeout_s": 1048595.0
@@ -1440,6 +1444,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -1692,6 +1697,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -2110,6 +2116,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -2528,6 +2535,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -2946,6 +2954,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -3353,6 +3362,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -3818,6 +3828,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1048595.0,
+                  "daily_ceiling_usd": 1048595.0,
                   "instructions": "spec.model.instructions-1048594",
                   "model": "spec.model.model-1048594",
                   "timeout_s": 1048595.0
@@ -3970,6 +3981,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -4122,6 +4134,7 @@
                 "model": {
                   "backend": "Codex",
                   "budget_usd": 1048596.0,
+                  "daily_ceiling_usd": 1048596.0,
                   "instructions": "spec.model.instructions-1048595",
                   "model": "spec.model.model-1048595",
                   "timeout_s": 1048596.0
@@ -4274,6 +4287,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -4529,6 +4543,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -4994,6 +5009,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -5401,6 +5417,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -6038,6 +6055,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -6393,6 +6411,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -6860,6 +6879,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -7528,6 +7548,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -8203,6 +8224,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -8719,6 +8741,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -9156,6 +9179,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -9956,6 +9980,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -10902,6 +10927,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -11222,6 +11248,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -11683,6 +11710,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -12225,6 +12253,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -12686,6 +12715,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -13298,6 +13328,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -13473,6 +13504,10 @@
               "holds": "primitive",
               "kind": "decimal",
               "optional": true
+            },
+            "daily_ceiling_reached": {
+              "holds": "primitive",
+              "kind": "boolean"
             },
             "documents_applied": {
               "holds": "primitive",
@@ -13725,6 +13760,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -13940,6 +13976,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -14305,6 +14342,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -14588,6 +14626,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -14928,6 +14967,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -15221,6 +15261,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -15746,6 +15787,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -16184,6 +16226,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -16594,6 +16637,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -17088,6 +17132,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -17570,6 +17615,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -17788,6 +17834,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -17935,6 +17982,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -18074,6 +18122,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -18532,6 +18581,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -18679,6 +18729,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
@@ -18800,6 +18851,7 @@
                 "model": {
                   "backend": "Codex",
                   "budget_usd": 2.0,
+                  "daily_ceiling_usd": 2.0,
                   "instructions": "spec.model.instructions-1",
                   "model": "spec.model.model-1",
                   "timeout_s": 2.0
@@ -19247,6 +19299,7 @@
                 "model": {
                   "backend": "Codex",
                   "budget_usd": 2.0,
+                  "daily_ceiling_usd": 2.0,
                   "instructions": "spec.model.instructions-1",
                   "model": "spec.model.model-1",
                   "timeout_s": 2.0
@@ -19368,6 +19421,7 @@
                 "model": {
                   "backend": "Claude",
                   "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0

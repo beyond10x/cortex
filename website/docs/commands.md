@@ -57,7 +57,8 @@ prompt, called as a run's extraction is, and shown as the spec's `redaction` pol
 documents. The model answers `yes`, `no` or `unclear`, with a reason, for each fact. `ekr
 fact-quality` turns the verdicts into a pass rate with its Wilson interval at 95 %; `yes` counts as
 passed, and `no` and `unclear` as failed. The measurement spends at most the spec's
-`model.budget_usd`.
+`model.budget_usd`, and no more than its `model.daily_ceiling_usd` leaves of the UTC day (see
+[the spec file](./spec-file.md#the-daily-ceiling)).
 
 It writes two files under `quality/<UTC stamp>/` in the instance directory (the stamp is
 `YYYYMMDDTHHMMSSZ`):
@@ -71,7 +72,7 @@ A `measured` line's detail carries `stamp`, `revision` and `seed` (which draw th
 again), `judged`, `passed`, `unclear`, `rate` (null when the store holds no fact), `lower`,
 `upper`, `cost_usd` (as a run reports it: null when an answer carried no cost) and `dir`.
 `sample-failed` (EKR refused the size or could not read the store) asks no model and writes
-nothing. `judge-failed` (a model call failed or found the budget spent, or `refuse_if_left`
+nothing. `judge-failed` (a model call failed or found the budget or the daily ceiling spent, or `refuse_if_left`
 refused what the judge would be shown) writes no `fact-quality.json`; `verdicts.jsonl` keeps the
 verdicts of the batches judged before, and a failed model call's reason states the cost so far.
 
@@ -84,7 +85,8 @@ shown as `cortex quality` shows it to the judge (the spec's `redaction` policy a
 ontology's type and property names. The model answers a list of proposals, each one change with a
 reason, the ids of the facts it rests on and the labels (`E1`, `E2`, …) of the evidence it rests
 on. A proposal citing a fact or a label its batch does not hold, citing no fact, or not in that form, is dropped.
-The round spends at most the spec's `model.budget_usd`.
+The round spends at most the spec's `model.budget_usd`, and no more than its `model.daily_ceiling_usd`
+leaves of the UTC day.
 
 The changes the model may propose are a closed list:
 
@@ -121,7 +123,7 @@ wrote stays beside it as `schema-<nnnn>.yaml`, numbered by the proposal's line f
 An `applied` or `proposed` line's detail carries `stamp`, `revision` (the head the sample was drawn
 at), `proposed`, `applied`, `refused`, `recorded_only`, `invalid`, `dropped`, `cost_usd` (as a run
 reports it) and `dir`. `sample-failed` asks no model and writes nothing. `propose-failed` (a model
-call failed or found the budget spent, `refuse_if_left` refused what the model would be shown, or
+call failed or found the budget or the daily ceiling spent, `refuse_if_left` refused what the model would be shown, or
 EKR could not read the ontology) applies nothing and writes no `proposals.jsonl`; its reason states
 the cost so far.
 
@@ -144,7 +146,9 @@ A `ran` line's detail carries `documents_new`, `documents_applied`, `cost_usd`, 
 and `null` when any answer carried none; a missing cost is never written as `0`. When the spec
 has a `redaction` policy it also carries `redacted` (values replaced by placeholders in the
 prompts sent, per class or rule) and `unrestored` (placeholders in the model's answers that had no
-value to put back).
+value to put back). A run the instance's daily ceiling stopped also carries
+`daily_ceiling_reached: true`, and its `stopped` names the ceiling (see
+[the spec file](./spec-file.md#the-daily-ceiling)).
 
 ## Setup
 

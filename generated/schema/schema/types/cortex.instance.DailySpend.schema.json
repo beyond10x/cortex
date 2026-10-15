@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.DailySpend",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "ce608b91fd82c6faea015907a3ef8cabdb99a346d27bfd3c1d1bce858b055347",
+    "contract_digest": "slice-sha256/2:9646bec9174662133491b82ce0dcea7c6883d30518fa1bd69c864911e2de984e",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.DailySpend": {
+      "title": "DailySpend",
+      "x-ess-name": "cortex.instance.DailySpend",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "day": {
+          "type": "string"
+        },
+        "spent_usd": {
+          "type": "string",
+          "format": "decimal",
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        }
+      },
+      "required": [
+        "format",
+        "day",
+        "spent_usd"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

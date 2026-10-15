@@ -27,6 +27,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
 | `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
 | `instances/<name>/cortex.log` | one JSON line per run: counts, cost, seconds, why it stopped |
+| `instances/<name>/spend.json` | the spend of the day (`cortex.daily-spend/1`): the UTC day and what the instance's model answers that day cost, held to `model.daily_ceiling_usd` |
 
 ## systemd units
 
@@ -139,7 +140,9 @@ document by the source's `mapping` and applied without a model call, at a cost o
 [the spec file](./spec-file.md#kind-structured)). It masks every string in a record rather than
 the text as a whole, and never cuts a record.
 
-The run stops starting batches when its `budget_usd` is spent. When a batch fails after an earlier
+The run stops starting batches when its `budget_usd` is spent, or when the instance's spend of
+the UTC day reaches `model.daily_ceiling_usd` (see
+[the spec file](./spec-file.md#the-daily-ceiling)). When a batch fails after an earlier
 one was applied, the run ends as `ran` with `stopped` set; when the first batch fails, nothing was
 applied and the run fails.
 
@@ -319,7 +322,7 @@ user's configuration:
 - `--tools ""`, `--setting-sources ""`, `--strict-mcp-config`, `--disable-slash-commands` and
   `--no-session-persistence`: no tools, no settings, no MCP servers, no slash commands;
 - `--json-schema` with EKR's extraction schema, and `--max-budget-usd` with what is left of the
-  run's budget;
+  run's budget, or of the instance's daily ceiling when less is left of it;
 - the call is stopped after `timeout_s` seconds.
 
 The model sees fetched text and nothing else. Fetched text is untrusted: it is masked for

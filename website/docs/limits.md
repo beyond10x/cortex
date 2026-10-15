@@ -118,4 +118,6 @@ stand; [Status](./status.mdx) lists what is planned.
   signed-in `claude`; an `ANTHROPIC_API_KEY` in the environment is ignored. The spec accepts
   `model.backend: Codex`, but that backend extracts nothing in this release: every run, quality
   measurement and schema round of such an instance fails, naming `story:codex-model-backend`.
-- **The budget is per run.** `budget_usd` limits one run of one source, not a day or an instance.
+- **The daily ceiling is per instance.** `daily_ceiling_usd` bounds what one instance's model calls
+  spend in a UTC day; nothing bounds the instances of a home together. An answer that states no
+  cost adds nothing to the spend of the day.

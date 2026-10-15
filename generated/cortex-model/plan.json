@@ -54,6 +54,13 @@
     },
     {
       "kind": "domain_type",
+      "source": "cortex.instance.DailySpend",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
       "source": "cortex.instance.DocumentId",
       "disposition": {
         "disposition": "generated"

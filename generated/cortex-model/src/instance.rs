@@ -105,6 +105,17 @@ pub struct CrawlPolicy {
     pub allow_external: bool,
 }
 
+/// DailySpend — `cortex.instance.DailySpend`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DailySpend {
+    /// `format` — `String`.
+    pub format: String,
+    /// `day` — `String`.
+    pub day: String,
+    /// `spent_usd` — `Decimal`.
+    pub spent_usd: crate::primitives::Decimal,
+}
+
 /// DocumentId — `cortex.instance.DocumentId`: a distinct wrapper around `String`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocumentId(pub String);
@@ -248,6 +259,8 @@ pub struct ModelSpec {
     pub backend: Option<ModelBackend>,
     /// `budget_usd` — `Decimal`.
     pub budget_usd: crate::primitives::Decimal,
+    /// `daily_ceiling_usd` — `Optional<Decimal>`.
+    pub daily_ceiling_usd: Option<crate::primitives::Decimal>,
     /// `timeout_s` — `Integer`.
     pub timeout_s: i64,
     /// `instructions` — `Optional<String>`.
@@ -1622,7 +1635,7 @@ pub enum MeasureQualityOutcome {
         /// Why it was refused: `cortex.instance.SampleFailed`.
         error: SampleFailed,
     },
-    /// `judge-failed` — externally decided (A judge's model call fails, times out, answers no valid verdicts or finds the budget spent, or the redaction policy refuses what the judge would be shown).
+    /// `judge-failed` — externally decided (A judge's model call fails, times out, answers no valid verdicts or finds the budget or the daily ceiling spent, or the redaction policy refuses what the judge would be shown).
     ///
     /// No pass rate was written; the verdicts of the batches judged before stay.
     JudgeFailed {
@@ -1672,7 +1685,7 @@ pub enum ProposeSchemaChangesOutcome {
         /// Why it was refused: `cortex.instance.SampleFailed`.
         error: SampleFailed,
     },
-    /// `propose-failed` — externally decided (A model call fails, times out, answers no valid proposals or finds the budget spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology).
+    /// `propose-failed` — externally decided (A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology).
     ///
     /// Nothing was applied and no `proposals.jsonl` was written.
     ProposeFailed {
@@ -2174,7 +2187,7 @@ pub struct InstanceNotFound {
 
 /// The declared error `cortex.instance.JudgeFailed`.
 ///
-/// A judge's model call failed, timed out, answered no valid verdicts or found the budget spent, or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was written.
+/// A judge's model call failed, timed out, answered no valid verdicts or found the budget or the instance's daily ceiling spent, or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JudgeFailed {
     /// `reason` — `String`.
@@ -2192,7 +2205,7 @@ pub struct NameTaken {
 
 /// The declared error `cortex.instance.ProposeFailed`.
 ///
-/// A model call for schema proposals failed, timed out, answered no valid proposals or found the budget spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+/// A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProposeFailed {
     /// `reason` — `String`.
