@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 55e415691487d2c675c5ecd72f81699560230b7355147e8df34b86eee64e1ff7
-// contract digest a22ec4c6788a24ce31bc536ccedeb291be32f912d3bc272713ff3f4470761db9
+// model digest 03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041
+// contract digest 44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -189,6 +189,9 @@ where
             schedule: input.schedule.clone(),
             runs: 0,
             consecutive_failures: 0,
+            last_outcome: None,
+            last_run_at: None,
+            last_reason: None,
         };
         if let Some(broken) = data.broken_invariant() {
             let capability = "entity invariant";
@@ -522,6 +525,9 @@ where
                 runs: held.data.runs,
                 consecutive_failures: held.data.consecutive_failures,
                 state: held.state,
+                last_outcome: held.data.last_outcome,
+                last_run_at: held.data.last_run_at,
+                last_reason: held.data.last_reason,
             })
             .collect())
     }

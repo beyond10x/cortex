@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.RunHook",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
+    "contract_digest": "slice-sha256/2:9faf3f22de3e124063ffac3ea2493895995f717585b7e9c5b3379f8547afe72c",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.RunHook": {
+      "title": "RunHook",
+      "x-ess-name": "cortex.instance.RunHook",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeout_s": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

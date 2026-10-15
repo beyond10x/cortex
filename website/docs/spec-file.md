@@ -587,6 +587,24 @@ gate:
 | `measure` | a number of the run report `cortex run` prints: `documents_new`, `documents_applied`, `facts_refused`, `parts_rejected`, `masked`, `truncated`, `unrestored` or `cost_usd`. Any other name is the dotted path of a number in what `ekr quality` prints for the store after the run, such as `assertions.active` or `sharing_nodes` |
 | `min`, `max` | decimals, written as strings; the check fails when the measure is below `min` or above `max`. Both are compared at 4 decimal places, the precision `cortex run` prints a cost at, so a cost printed as `0.3000` is within `max: "0.3"`. A measure that cannot be read (a misspelt name, a `cost_usd` no answer carried, an `ekr quality` that fails) fails its check |
 
+## `monitoring`
+
+Optional. What a run of a source reports besides its printed line, `cortex.log` and the source's
+status in `cortex sources`; see [Operating](./operating.md#failures).
+
+```yaml
+monitoring:
+  metrics: true
+  hook: {command: [/usr/local/bin/notify-oncall, --channel, brains], timeout_s: 10}
+```
+
+| field | meaning |
+|---|---|
+| `metrics` | `true` rewrites `metrics.prom` in the instance directory after every run of a source, in the Prometheus text format, for a textfile collector or a sidecar to read. Without it, no metric file is written |
+| `hook` | optional: a command called once for each run that fails, with the source id and the outcome appended as its last two arguments |
+| `hook.command` | the program and its first arguments, run without a shell in the instance directory. It must name a program. It holds no secret: a hook that needs one reads it itself |
+| `hook.timeout_s` | how long the hook may run before it is killed, in seconds, above 0. Without it, 10 |
+
 ## `serve`
 
 | field | meaning |

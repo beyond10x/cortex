@@ -407,7 +407,7 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
                 }
             }
             SourceCommand::RecordFailure { source_id, reason } => {
-                record_failure(app, ctx, &source_id, &reason)
+                record_failure(app, ctx, &source_id, &reason).0
             }
             SourceCommand::Enable { source_id } => enable(app, ctx, &source_id),
         },
@@ -448,6 +448,9 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
                             "schedule": row.schedule,
                             "runs": row.runs,
                             "consecutive_failures": row.consecutive_failures,
+                            "last_outcome": row.last_outcome.map(cortex_cli::status::outcome_name),
+                            "last_run_at": row.last_run_at.map(|t| t.0),
+                            "last_reason": row.last_reason,
                         })
                     );
                 }
@@ -1704,6 +1707,22 @@ fn split(source_id: &str) -> (&str, &str) {
     source_id.split_once('/').unwrap_or((source_id, ""))
 }
 
+/// The exit status of a `run` whose source is disabled: distinct from a failed run's 1, so a
+/// scheduler tells "switched off" from "broken".
+const EXIT_DISABLED: u8 = 3;
+
+/// The exit status of each `run` outcome, which an external scheduler reads instead of the line.
+fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
+    match outcome {
+        m::RunSourceOutcome::Ran { .. } => 0,
+        m::RunSourceOutcome::Disabled { .. } => EXIT_DISABLED,
+        m::RunSourceOutcome::FetchFailed { .. }
+        | m::RunSourceOutcome::ExtractionFailed { .. }
+        | m::RunSourceOutcome::ApplyRefused { .. }
+        | m::RunSourceOutcome::NoSuchSource { .. } => 1,
+    }
+}
+
 fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCode {
     let outcome = match app.run_source(m::RunSource {
         source_id: m::SourceId(source_id.to_string()),
@@ -1711,6 +1730,7 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
         Ok(o) => o,
         Err(e) => return fail(e),
     };
+    let status = run_status(&outcome);
     let (done, failure) = match outcome {
         m::RunSourceOutcome::Ran { source_ran } => {
             let report = ctx.shared.borrow_mut().last_run.take().unwrap_or_default();
@@ -1790,11 +1810,11 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
             },
             Some(error.reason),
         ),
-        m::RunSourceOutcome::Disabled { error } => (
+        m::RunSourceOutcome::Disabled { run_skipped } => (
             Done {
                 outcome: "disabled",
                 ok: false,
-                detail: json!({"source_id": error.source_id.0}),
+                detail: json!({"source_id": run_skipped.source_id.0}),
             },
             None,
         ),
@@ -1807,19 +1827,59 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
             None,
         ),
     };
-    let code = print("run", &done);
-    if let (true, Some(reason)) = (record, failure) {
-        record_failure(app, ctx, source_id, &reason);
-    }
-    code
+    print("run", &done);
+    let disabled = match (record, &failure) {
+        (true, Some(reason)) => record_failure(app, ctx, source_id, reason).1,
+        _ => false,
+    };
+    report_run(ctx, source_id, disabled);
+    ExitCode::from(status)
 }
 
-fn record_failure(app: &mut App, ctx: &Ctx, source_id: &str, reason: &str) -> ExitCode {
+/// Writes the source's status from the outcome the run recorded on it, then the metric file and
+/// the hook call its instance's `monitoring` asks for. A run that named no source (the seed, an
+/// unknown id) recorded nothing and reports nothing.
+fn report_run(ctx: &Ctx, source_id: &str, disabled: bool) {
+    let (row, sources, at_ms) = {
+        let shared = ctx.shared.borrow();
+        let Some(row) = shared.registry.sources.get(source_id).cloned() else {
+            return;
+        };
+        let sources: Vec<String> = shared
+            .registry
+            .sources
+            .values()
+            .filter(|s| s.data.instance_name == row.data.instance_name)
+            .map(|s| s.data.source_id.0.clone())
+            .collect();
+        (row, sources, shared.run_at_ms)
+    };
+    let (Some(outcome), Some(at_ms)) = (row.data.last_outcome, at_ms) else {
+        return;
+    };
+    let layout = Layout::new(ctx.home.instance_dir(&row.data.instance_name.0));
+    let monitoring = layout.load_spec().ok().and_then(|s| s.monitoring);
+    cortex_cli::status::report(
+        &layout,
+        monitoring.as_ref(),
+        &sources,
+        &cortex_cli::status::Run {
+            source_id,
+            outcome,
+            at_ms,
+            reason: row.data.last_reason.as_deref(),
+            disabled,
+        },
+    );
+}
+
+/// Records a failed run; the second value says the failure disabled the source.
+fn record_failure(app: &mut App, ctx: &Ctx, source_id: &str, reason: &str) -> (ExitCode, bool) {
     let done = match app.record_failure(m::RecordFailure {
         source_id: m::SourceId(source_id.to_string()),
         reason: reason.to_string(),
     }) {
-        Err(e) => return fail(e),
+        Err(e) => return (fail(e), false),
         Ok(m::RecordFailureOutcome::Counted { run_failed }) => Done {
             outcome: "counted",
             ok: true,
@@ -1850,7 +1910,10 @@ fn record_failure(app: &mut App, ctx: &Ctx, source_id: &str, reason: &str) -> Ex
             detail: json!({"source_id": error.source_id.0}),
         },
     };
-    print("source record-failure", &done)
+    (
+        print("source record-failure", &done),
+        done.outcome == "disabled",
+    )
 }
 
 fn enable(app: &mut App, ctx: &Ctx, source_id: &str) -> ExitCode {

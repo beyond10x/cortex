@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "55e415691487d2c675c5ecd72f81699560230b7355147e8df34b86eee64e1ff7",
-    "contract_digest": "a22ec4c6788a24ce31bc536ccedeb291be32f912d3bc272713ff3f4470761db9"
+    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
+    "contract_digest": "44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -110,6 +110,13 @@
     },
     {
       "kind": "domain_type",
+      "source": "cortex.instance.HookResult",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
       "source": "cortex.instance.Instance.State",
       "disposition": {
         "disposition": "generated"
@@ -139,6 +146,13 @@
     {
       "kind": "domain_type",
       "source": "cortex.instance.ModelSpec",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.MonitoringSpec",
       "disposition": {
         "disposition": "generated"
       }
@@ -272,6 +286,20 @@
     {
       "kind": "domain_type",
       "source": "cortex.instance.RunGate",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.RunHook",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.RunOutcome",
       "disposition": {
         "disposition": "generated"
       }
@@ -680,9 +708,9 @@
         "disposition": "obligation",
         "reason": {
           "class": "undetermined",
-          "construct": "`when_subject_state:` beside `external:` in one command"
+          "construct": "a refusal that compensates (`compensates: true`), on `fetch-failed`"
         },
-        "contract": "given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `ran` when the existing subject is in Enabled, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document), error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), error `cortex.instance.ApplyRefused`; `disabled` otherwise, error `cortex.instance.SourceDisabledError`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`"
+        "contract": "given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`"
       }
     },
     {
@@ -737,6 +765,13 @@
     {
       "kind": "event_type",
       "source": "cortex.instance.RunFailed",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "event_type",
+      "source": "cortex.instance.RunSkipped",
       "disposition": {
         "disposition": "generated"
       }

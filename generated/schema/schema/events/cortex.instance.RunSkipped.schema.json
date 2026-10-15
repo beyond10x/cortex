@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunSkipped payload",
+  "x-ess-name": "cortex.instance.RunSkipped",
+  "x-ess-kind": "event-payload",
+  "type": "object",
+  "properties": {
+    "source_id": {
+      "$ref": "#/$defs/cortex.instance.SourceId"
+    }
+  },
+  "required": [
+    "source_id"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
+    "contract_digest": "slice-sha256/2:4260db3efe3ea455cef049eb05914c547cec7422d9908074f6193fe5ea0079ea",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.SourceId": {
+      "title": "SourceId",
+      "x-ess-name": "cortex.instance.SourceId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

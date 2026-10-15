@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "55e415691487d2c675c5ecd72f81699560230b7355147e8df34b86eee64e1ff7",
-    "contract_digest": "a22ec4c6788a24ce31bc536ccedeb291be32f912d3bc272713ff3f4470761db9",
+    "spec_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
+    "contract_digest": "44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
@@ -55,6 +55,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -196,6 +203,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -326,6 +337,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -405,6 +420,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -495,6 +517,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -626,6 +652,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.PageStyle"
         },
         {
@@ -671,6 +701,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
         },
         {
           "kind": "type",
@@ -793,6 +827,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -880,6 +918,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -956,6 +1001,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -1049,6 +1098,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.PageStyle"
         },
         {
@@ -1094,6 +1147,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
         },
         {
           "kind": "type",
@@ -1212,6 +1269,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -1291,6 +1352,13 @@
                   "instructions": "spec.model.instructions-1048594",
                   "model": "spec.model.model-1048594",
                   "timeout_s": 1048595.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1048595.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name-1048594",
                 "redaction": {
@@ -1449,6 +1517,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -1531,6 +1606,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -1608,6 +1687,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -1702,6 +1785,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -1778,6 +1868,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -1871,6 +1965,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.PageStyle"
         },
         {
@@ -1916,6 +2014,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
         },
         {
           "kind": "type",
@@ -2031,6 +2133,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -2121,6 +2227,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -2197,6 +2310,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -2290,6 +2407,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.PageStyle"
         },
         {
@@ -2335,6 +2456,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
         },
         {
           "kind": "type",
@@ -2450,6 +2575,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -2540,6 +2669,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -2616,6 +2752,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -2709,6 +2849,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.PageStyle"
         },
         {
@@ -2754,6 +2898,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
         },
         {
           "kind": "type",
@@ -2872,6 +3020,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -2959,6 +3111,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -3031,6 +3190,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -3124,6 +3287,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.PageStyle"
         },
         {
@@ -3169,6 +3336,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
         },
         {
           "kind": "type",
@@ -3287,6 +3458,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -3366,6 +3541,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -3448,6 +3630,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -3579,6 +3765,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.PageStyle"
         },
         {
@@ -3624,6 +3814,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
         },
         {
           "kind": "type",
@@ -3746,6 +3940,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -3832,6 +4030,13 @@
                   "instructions": "spec.model.instructions-1048594",
                   "model": "spec.model.model-1048594",
                   "timeout_s": 1048595.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1048595.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name-1048594",
                 "redaction": {
@@ -3986,6 +4191,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -4064,6 +4276,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -4138,6 +4354,13 @@
                   "instructions": "spec.model.instructions-1048595",
                   "model": "spec.model.model-1048595",
                   "timeout_s": 1048596.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1048596.0
+                  },
+                  "metrics": false
                 },
                 "name": "spec.name-1048595",
                 "redaction": {
@@ -4292,6 +4515,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -4367,6 +4597,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -4454,6 +4688,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -4548,6 +4786,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -4629,6 +4874,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -4760,6 +5009,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.PageStyle"
         },
         {
@@ -4805,6 +5058,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
         },
         {
           "kind": "type",
@@ -4927,6 +5184,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -5014,6 +5275,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -5086,6 +5354,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -5179,6 +5451,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.PageStyle"
         },
         {
@@ -5224,6 +5500,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
         },
         {
           "kind": "type",
@@ -5342,6 +5622,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -5421,6 +5705,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -5679,6 +5970,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -5829,6 +6124,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -5915,6 +6214,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -5977,6 +6280,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -6059,6 +6366,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -6238,6 +6552,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -6332,6 +6650,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -6415,6 +6737,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -6525,6 +6854,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -6645,6 +6978,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -6739,6 +7076,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -6801,6 +7142,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -6883,6 +7228,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -7042,6 +7394,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -7159,6 +7515,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -7249,6 +7609,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -7311,6 +7675,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -7408,6 +7776,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -7470,6 +7842,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -7552,6 +7928,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -7714,6 +8097,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -7827,6 +8214,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -7921,6 +8312,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -7983,6 +8378,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -8084,6 +8483,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -8146,6 +8549,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -8228,6 +8635,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -8390,6 +8804,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -8503,6 +8921,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -8601,6 +9023,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -8663,6 +9089,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -8745,6 +9175,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -8939,6 +9376,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -9100,6 +9541,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -9183,6 +9628,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -9431,6 +9883,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -9595,6 +10051,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -9689,6 +10149,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -9751,6 +10215,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -9840,6 +10308,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -9902,6 +10374,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -9984,6 +10460,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -10094,6 +10577,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -10214,6 +10701,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -10311,6 +10802,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -10373,6 +10868,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -10470,6 +10969,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -10532,6 +11035,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -10625,6 +11132,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -10687,6 +11198,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -10787,6 +11302,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -10849,6 +11368,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -10931,6 +11454,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -11060,6 +11590,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -11173,6 +11707,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -11253,6 +11791,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -11351,127 +11896,6 @@
           "field": "source_id"
         },
         {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_view",
-          "view": "cortex.instance.Sources",
-          "expectation": {
-            "expect": "contains",
-            "fields": {
-              "consecutive_failures": {
-                "kind": "literal",
-                "value": 0.0
-              },
-              "source_id": {
-                "kind": "instance",
-                "instance": "source"
-              },
-              "state": {
-                "kind": "literal",
-                "value": "Enabled"
-              }
-            }
-          }
-        },
-        {
-          "step": "execute_command",
-          "command": "cortex.instance.RecordFailure",
-          "actor": "cortex.instance.Scheduler",
-          "input": {
-            "reason": {
-              "kind": "literal",
-              "value": "reason"
-            },
-            "source_id": {
-              "kind": "instance",
-              "instance": "source"
-            }
-          }
-        },
-        {
-          "step": "expect_outcome",
-          "outcome": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "counted"
-          }
-        },
-        {
-          "step": "expect_no_error"
-        },
-        {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_view",
-          "view": "cortex.instance.Sources",
-          "expectation": {
-            "expect": "contains",
-            "fields": {
-              "consecutive_failures": {
-                "kind": "literal",
-                "value": 1.0
-              },
-              "source_id": {
-                "kind": "instance",
-                "instance": "source"
-              },
-              "state": {
-                "kind": "literal",
-                "value": "Enabled"
-              }
-            }
-          }
-        },
-        {
-          "step": "execute_command",
-          "command": "cortex.instance.RecordFailure",
-          "actor": "cortex.instance.Scheduler",
-          "input": {
-            "reason": {
-              "kind": "literal",
-              "value": "reason"
-            },
-            "source_id": {
-              "kind": "instance",
-              "instance": "source"
-            }
-          }
-        },
-        {
-          "step": "expect_outcome",
-          "outcome": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "disabled"
-          }
-        },
-        {
-          "step": "expect_no_error"
-        },
-        {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_view",
-          "view": "cortex.instance.Sources",
-          "expectation": {
-            "expect": "contains",
-            "fields": {
-              "source_id": {
-                "kind": "instance",
-                "instance": "source"
-              },
-              "state": {
-                "kind": "literal",
-                "value": "Disabled"
-              }
-            }
-          }
-        },
-        {
           "step": "configure_external_outcome",
           "force": {
             "command": "cortex.instance.RunSource",
@@ -11494,6 +11918,27 @@
           "outcome": {
             "command": "cortex.instance.RunSource",
             "outcome": "apply-refused"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
           }
         },
         {
@@ -11526,6 +11971,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -11547,6 +11996,55 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "consecutive_failures": {
+                "kind": "literal",
+                "value": 0.0
+              },
+              "instance_name": {
+                "kind": "instance",
+                "instance": "instance"
+              },
+              "kind": {
+                "kind": "literal",
+                "value": "Web"
+              },
+              "last_outcome": {
+                "kind": "literal",
+                "value": "apply-refused"
+              },
+              "name": {
+                "kind": "literal",
+                "value": "name"
+              },
+              "runs": {
+                "kind": "literal",
+                "value": 0.0
+              },
+              "schedule": {
+                "kind": "literal",
+                "value": "schedule"
+              },
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
         }
       ],
       "source": [
@@ -11555,16 +12053,16 @@
           "name": "cortex.instance.SourceId"
         },
         {
+          "kind": "entity",
+          "name": "cortex.instance.Source"
+        },
+        {
           "kind": "command",
           "name": "cortex.instance.AddSource"
         },
         {
           "kind": "command",
           "name": "cortex.instance.AdoptInstance"
-        },
-        {
-          "kind": "command",
-          "name": "cortex.instance.RecordFailure"
         },
         {
           "kind": "command",
@@ -11582,20 +12080,6 @@
           "name": {
             "command": "cortex.instance.AdoptInstance",
             "outcome": "adopted"
-          }
-        },
-        {
-          "kind": "outcome",
-          "name": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "counted"
-          }
-        },
-        {
-          "kind": "outcome",
-          "name": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "disabled"
           }
         },
         {
@@ -11631,6 +12115,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -11663,12 +12151,16 @@
         },
         {
           "kind": "actor",
+          "name": "cortex.instance.Operator"
+        },
+        {
+          "kind": "actor",
           "name": "cortex.instance.Scheduler"
         }
       ]
     },
     "cortex.instance.RunSource/outcome/disabled": {
-      "purpose": "`cortex.instance.RunSource` answers `disabled` for an input no other branch's guard claims",
+      "purpose": "`cortex.instance.RunSource` answers `disabled` for an input selecting the branch in its established subject state",
       "steps": [
         {
           "step": "execute_command",
@@ -11715,6 +12207,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -11934,83 +12433,6 @@
           }
         },
         {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "snapshot_complete_subject",
-          "view": "cortex.instance.Sources",
-          "subject": {
-            "source_id": {
-              "kind": "instance",
-              "instance": "source"
-            }
-          },
-          "shape": {
-            "identity_field": "source_id",
-            "fields": [
-              {
-                "name": "source_id",
-                "type": "cortex.instance.SourceId"
-              },
-              {
-                "name": "instance_name",
-                "type": "cortex.instance.InstanceName"
-              },
-              {
-                "name": "name",
-                "type": "String"
-              },
-              {
-                "name": "kind",
-                "type": "cortex.instance.SourceKind"
-              },
-              {
-                "name": "schedule",
-                "type": "String"
-              },
-              {
-                "name": "runs",
-                "type": "Integer"
-              },
-              {
-                "name": "consecutive_failures",
-                "type": "Integer"
-              },
-              {
-                "name": "state",
-                "type": "cortex.instance.Source.State"
-              }
-            ],
-            "declarations": {
-              "cortex.instance.InstanceName": {
-                "kind": "newtype",
-                "of": "String"
-              },
-              "cortex.instance.Source.State": {
-                "kind": "enum",
-                "variants": [
-                  "Disabled",
-                  "Enabled"
-                ]
-              },
-              "cortex.instance.SourceId": {
-                "kind": "newtype",
-                "of": "String"
-              },
-              "cortex.instance.SourceKind": {
-                "kind": "enum",
-                "variants": [
-                  "Web",
-                  "Connectors",
-                  "Files",
-                  "Structured"
-                ]
-              }
-            }
-          }
-        },
-        {
           "step": "execute_command",
           "command": "cortex.instance.RunSource",
           "actor": "cortex.instance.Scheduler",
@@ -12029,19 +12451,41 @@
           }
         },
         {
-          "step": "expect_no_events"
-        },
-        {
           "step": "query_view",
           "view": "cortex.instance.Sources"
         },
         {
-          "step": "expect_complete_subject_unchanged",
-          "view": "cortex.instance.Sources"
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Disabled"
+              }
+            }
+          }
         },
         {
-          "step": "expect_error",
-          "error": "cortex.instance.SourceDisabledError"
+          "step": "expect_event_values",
+          "event": "cortex.instance.RunSkipped",
+          "payload": {
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          },
+          "shape": {
+            "source_id": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          }
         },
         {
           "step": "expect_no_event",
@@ -12090,12 +12534,69 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "consecutive_failures": {
+                "kind": "literal",
+                "value": 2.0
+              },
+              "instance_name": {
+                "kind": "instance",
+                "instance": "instance"
+              },
+              "kind": {
+                "kind": "literal",
+                "value": "Web"
+              },
+              "last_outcome": {
+                "kind": "literal",
+                "value": "disabled"
+              },
+              "last_reason": {
+                "kind": "literal",
+                "value": null
+              },
+              "name": {
+                "kind": "literal",
+                "value": "name"
+              },
+              "runs": {
+                "kind": "literal",
+                "value": 0.0
+              },
+              "schedule": {
+                "kind": "literal",
+                "value": "schedule"
+              },
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Disabled"
+              }
+            }
+          }
         }
       ],
       "source": [
         {
           "kind": "type",
           "name": "cortex.instance.SourceId"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Source"
         },
         {
           "kind": "command",
@@ -12174,6 +12675,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -12195,10 +12700,6 @@
         {
           "kind": "event",
           "name": "cortex.instance.SourceRan"
-        },
-        {
-          "kind": "error",
-          "name": "cortex.instance.SourceDisabledError"
         },
         {
           "kind": "view",
@@ -12258,6 +12759,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -12356,127 +12864,6 @@
           "field": "source_id"
         },
         {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_view",
-          "view": "cortex.instance.Sources",
-          "expectation": {
-            "expect": "contains",
-            "fields": {
-              "consecutive_failures": {
-                "kind": "literal",
-                "value": 0.0
-              },
-              "source_id": {
-                "kind": "instance",
-                "instance": "source"
-              },
-              "state": {
-                "kind": "literal",
-                "value": "Enabled"
-              }
-            }
-          }
-        },
-        {
-          "step": "execute_command",
-          "command": "cortex.instance.RecordFailure",
-          "actor": "cortex.instance.Scheduler",
-          "input": {
-            "reason": {
-              "kind": "literal",
-              "value": "reason"
-            },
-            "source_id": {
-              "kind": "instance",
-              "instance": "source"
-            }
-          }
-        },
-        {
-          "step": "expect_outcome",
-          "outcome": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "counted"
-          }
-        },
-        {
-          "step": "expect_no_error"
-        },
-        {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_view",
-          "view": "cortex.instance.Sources",
-          "expectation": {
-            "expect": "contains",
-            "fields": {
-              "consecutive_failures": {
-                "kind": "literal",
-                "value": 1.0
-              },
-              "source_id": {
-                "kind": "instance",
-                "instance": "source"
-              },
-              "state": {
-                "kind": "literal",
-                "value": "Enabled"
-              }
-            }
-          }
-        },
-        {
-          "step": "execute_command",
-          "command": "cortex.instance.RecordFailure",
-          "actor": "cortex.instance.Scheduler",
-          "input": {
-            "reason": {
-              "kind": "literal",
-              "value": "reason"
-            },
-            "source_id": {
-              "kind": "instance",
-              "instance": "source"
-            }
-          }
-        },
-        {
-          "step": "expect_outcome",
-          "outcome": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "disabled"
-          }
-        },
-        {
-          "step": "expect_no_error"
-        },
-        {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_view",
-          "view": "cortex.instance.Sources",
-          "expectation": {
-            "expect": "contains",
-            "fields": {
-              "source_id": {
-                "kind": "instance",
-                "instance": "source"
-              },
-              "state": {
-                "kind": "literal",
-                "value": "Disabled"
-              }
-            }
-          }
-        },
-        {
           "step": "configure_external_outcome",
           "force": {
             "command": "cortex.instance.RunSource",
@@ -12499,6 +12886,27 @@
           "outcome": {
             "command": "cortex.instance.RunSource",
             "outcome": "extraction-failed"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
           }
         },
         {
@@ -12531,6 +12939,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -12552,6 +12964,55 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "consecutive_failures": {
+                "kind": "literal",
+                "value": 0.0
+              },
+              "instance_name": {
+                "kind": "instance",
+                "instance": "instance"
+              },
+              "kind": {
+                "kind": "literal",
+                "value": "Web"
+              },
+              "last_outcome": {
+                "kind": "literal",
+                "value": "extraction-failed"
+              },
+              "name": {
+                "kind": "literal",
+                "value": "name"
+              },
+              "runs": {
+                "kind": "literal",
+                "value": 0.0
+              },
+              "schedule": {
+                "kind": "literal",
+                "value": "schedule"
+              },
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
         }
       ],
       "source": [
@@ -12560,16 +13021,16 @@
           "name": "cortex.instance.SourceId"
         },
         {
+          "kind": "entity",
+          "name": "cortex.instance.Source"
+        },
+        {
           "kind": "command",
           "name": "cortex.instance.AddSource"
         },
         {
           "kind": "command",
           "name": "cortex.instance.AdoptInstance"
-        },
-        {
-          "kind": "command",
-          "name": "cortex.instance.RecordFailure"
         },
         {
           "kind": "command",
@@ -12587,20 +13048,6 @@
           "name": {
             "command": "cortex.instance.AdoptInstance",
             "outcome": "adopted"
-          }
-        },
-        {
-          "kind": "outcome",
-          "name": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "counted"
-          }
-        },
-        {
-          "kind": "outcome",
-          "name": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "disabled"
           }
         },
         {
@@ -12636,6 +13083,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -12665,6 +13116,10 @@
         {
           "kind": "view",
           "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
         },
         {
           "kind": "actor",
@@ -12720,6 +13175,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -12818,127 +13280,6 @@
           "field": "source_id"
         },
         {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_view",
-          "view": "cortex.instance.Sources",
-          "expectation": {
-            "expect": "contains",
-            "fields": {
-              "consecutive_failures": {
-                "kind": "literal",
-                "value": 0.0
-              },
-              "source_id": {
-                "kind": "instance",
-                "instance": "source"
-              },
-              "state": {
-                "kind": "literal",
-                "value": "Enabled"
-              }
-            }
-          }
-        },
-        {
-          "step": "execute_command",
-          "command": "cortex.instance.RecordFailure",
-          "actor": "cortex.instance.Scheduler",
-          "input": {
-            "reason": {
-              "kind": "literal",
-              "value": "reason"
-            },
-            "source_id": {
-              "kind": "instance",
-              "instance": "source"
-            }
-          }
-        },
-        {
-          "step": "expect_outcome",
-          "outcome": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "counted"
-          }
-        },
-        {
-          "step": "expect_no_error"
-        },
-        {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_view",
-          "view": "cortex.instance.Sources",
-          "expectation": {
-            "expect": "contains",
-            "fields": {
-              "consecutive_failures": {
-                "kind": "literal",
-                "value": 1.0
-              },
-              "source_id": {
-                "kind": "instance",
-                "instance": "source"
-              },
-              "state": {
-                "kind": "literal",
-                "value": "Enabled"
-              }
-            }
-          }
-        },
-        {
-          "step": "execute_command",
-          "command": "cortex.instance.RecordFailure",
-          "actor": "cortex.instance.Scheduler",
-          "input": {
-            "reason": {
-              "kind": "literal",
-              "value": "reason"
-            },
-            "source_id": {
-              "kind": "instance",
-              "instance": "source"
-            }
-          }
-        },
-        {
-          "step": "expect_outcome",
-          "outcome": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "disabled"
-          }
-        },
-        {
-          "step": "expect_no_error"
-        },
-        {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_view",
-          "view": "cortex.instance.Sources",
-          "expectation": {
-            "expect": "contains",
-            "fields": {
-              "source_id": {
-                "kind": "instance",
-                "instance": "source"
-              },
-              "state": {
-                "kind": "literal",
-                "value": "Disabled"
-              }
-            }
-          }
-        },
-        {
           "step": "configure_external_outcome",
           "force": {
             "command": "cortex.instance.RunSource",
@@ -12961,6 +13302,27 @@
           "outcome": {
             "command": "cortex.instance.RunSource",
             "outcome": "fetch-failed"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
           }
         },
         {
@@ -12993,6 +13355,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -13014,6 +13380,55 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "consecutive_failures": {
+                "kind": "literal",
+                "value": 0.0
+              },
+              "instance_name": {
+                "kind": "instance",
+                "instance": "instance"
+              },
+              "kind": {
+                "kind": "literal",
+                "value": "Web"
+              },
+              "last_outcome": {
+                "kind": "literal",
+                "value": "fetch-failed"
+              },
+              "name": {
+                "kind": "literal",
+                "value": "name"
+              },
+              "runs": {
+                "kind": "literal",
+                "value": 0.0
+              },
+              "schedule": {
+                "kind": "literal",
+                "value": "schedule"
+              },
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
         }
       ],
       "source": [
@@ -13022,16 +13437,16 @@
           "name": "cortex.instance.SourceId"
         },
         {
+          "kind": "entity",
+          "name": "cortex.instance.Source"
+        },
+        {
           "kind": "command",
           "name": "cortex.instance.AddSource"
         },
         {
           "kind": "command",
           "name": "cortex.instance.AdoptInstance"
-        },
-        {
-          "kind": "command",
-          "name": "cortex.instance.RecordFailure"
         },
         {
           "kind": "command",
@@ -13049,20 +13464,6 @@
           "name": {
             "command": "cortex.instance.AdoptInstance",
             "outcome": "adopted"
-          }
-        },
-        {
-          "kind": "outcome",
-          "name": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "counted"
-          }
-        },
-        {
-          "kind": "outcome",
-          "name": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "disabled"
           }
         },
         {
@@ -13098,6 +13499,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -13127,6 +13532,10 @@
         {
           "kind": "view",
           "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
         },
         {
           "kind": "actor",
@@ -13185,6 +13594,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -13253,6 +13666,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -13286,7 +13703,7 @@
       ]
     },
     "cortex.instance.RunSource/outcome/ran": {
-      "purpose": "`cortex.instance.RunSource` answers `ran` for an input selecting the branch in its established subject state",
+      "purpose": "`cortex.instance.RunSource` answers `ran` for an input no other branch's guard claims",
       "steps": [
         {
           "step": "execute_command",
@@ -13332,6 +13749,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -13549,6 +13973,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -13588,6 +14016,14 @@
               "kind": {
                 "kind": "literal",
                 "value": "Web"
+              },
+              "last_outcome": {
+                "kind": "literal",
+                "value": "ran"
+              },
+              "last_reason": {
+                "kind": "literal",
+                "value": null
               },
               "name": {
                 "kind": "literal",
@@ -13681,6 +14117,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -13764,6 +14204,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -13980,6 +14427,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -14347,6 +14801,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -14630,6 +15091,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -14924,6 +15392,1282 @@
         }
       ]
     },
+    "cortex.instance.Source/invariant/after/cortex.instance.RunSource/apply-refused": {
+      "purpose": "a `cortex.instance.Source` still satisfies what it declares after `cortex.instance.RunSource` on `apply-refused`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AddSource",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "instance_name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "Web"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "schedule": {
+              "kind": "literal",
+              "value": "schedule"
+            },
+            "source_id": {
+              "kind": "literal",
+              "value": "source_id"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "source",
+          "entity": "cortex.instance.Source",
+          "event": "cortex.instance.SourceAdded",
+          "field": "source_id"
+        },
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "apply-refused"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RunSource",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "apply-refused"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "runs >= 0"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "consecutive_failures >= 0"
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceId"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Source"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AddSource"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RunSource"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "apply-refused"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Scheduler"
+        }
+      ]
+    },
+    "cortex.instance.Source/invariant/after/cortex.instance.RunSource/disabled": {
+      "purpose": "a `cortex.instance.Source` still satisfies what it declares after `cortex.instance.RunSource` on `disabled`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AddSource",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "instance_name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "Web"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "schedule": {
+              "kind": "literal",
+              "value": "schedule"
+            },
+            "source_id": {
+              "kind": "literal",
+              "value": "source_id"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "source",
+          "entity": "cortex.instance.Source",
+          "event": "cortex.instance.SourceAdded",
+          "field": "source_id"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "consecutive_failures": {
+                "kind": "literal",
+                "value": 0.0
+              },
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RecordFailure",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "counted"
+          }
+        },
+        {
+          "step": "expect_no_error"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "consecutive_failures": {
+                "kind": "literal",
+                "value": 1.0
+              },
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RecordFailure",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "disabled"
+          }
+        },
+        {
+          "step": "expect_no_error"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Disabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RunSource",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "disabled"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Disabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "runs >= 0"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "consecutive_failures >= 0"
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceId"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Source"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AddSource"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RecordFailure"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RunSource"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "counted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RecordFailure",
+            "outcome": "disabled"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "disabled"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Scheduler"
+        }
+      ]
+    },
+    "cortex.instance.Source/invariant/after/cortex.instance.RunSource/extraction-failed": {
+      "purpose": "a `cortex.instance.Source` still satisfies what it declares after `cortex.instance.RunSource` on `extraction-failed`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AddSource",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "instance_name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "Web"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "schedule": {
+              "kind": "literal",
+              "value": "schedule"
+            },
+            "source_id": {
+              "kind": "literal",
+              "value": "source_id"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "source",
+          "entity": "cortex.instance.Source",
+          "event": "cortex.instance.SourceAdded",
+          "field": "source_id"
+        },
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "extraction-failed"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RunSource",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "extraction-failed"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "runs >= 0"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "consecutive_failures >= 0"
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceId"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Source"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AddSource"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RunSource"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "extraction-failed"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Scheduler"
+        }
+      ]
+    },
+    "cortex.instance.Source/invariant/after/cortex.instance.RunSource/fetch-failed": {
+      "purpose": "a `cortex.instance.Source` still satisfies what it declares after `cortex.instance.RunSource` on `fetch-failed`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "budget_usd": 1.0,
+                  "daily_ceiling_usd": 1.0,
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AddSource",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "instance_name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "Web"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "schedule": {
+              "kind": "literal",
+              "value": "schedule"
+            },
+            "source_id": {
+              "kind": "literal",
+              "value": "source_id"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "source",
+          "entity": "cortex.instance.Source",
+          "event": "cortex.instance.SourceAdded",
+          "field": "source_id"
+        },
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "fetch-failed"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RunSource",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "fetch-failed"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "runs >= 0"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "consecutive_failures >= 0"
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceId"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Source"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AddSource"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RunSource"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "fetch-failed"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Scheduler"
+        }
+      ]
+    },
     "cortex.instance.Source/invariant/after/cortex.instance.RunSource/ran": {
       "purpose": "a `cortex.instance.Source` still satisfies what it declares after `cortex.instance.RunSource` on `ran`",
       "steps": [
@@ -14971,6 +16715,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -15266,6 +17017,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -15510,12 +17268,34 @@
               {
                 "name": "state",
                 "type": "cortex.instance.Source.State"
+              },
+              {
+                "name": "last_outcome",
+                "type": "Optional<cortex.instance.RunOutcome>"
+              },
+              {
+                "name": "last_run_at",
+                "type": "Optional<Timestamp>"
+              },
+              {
+                "name": "last_reason",
+                "type": "Optional<String>"
               }
             ],
             "declarations": {
               "cortex.instance.InstanceName": {
                 "kind": "newtype",
                 "of": "String"
+              },
+              "cortex.instance.RunOutcome": {
+                "kind": "enum",
+                "variants": [
+                  "ran",
+                  "fetch-failed",
+                  "extraction-failed",
+                  "apply-refused",
+                  "disabled"
+                ]
               },
               "cortex.instance.Source.State": {
                 "kind": "enum",
@@ -15589,6 +17369,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -15704,6 +17488,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -15741,445 +17529,6 @@
         {
           "kind": "actor",
           "name": "cortex.instance.Scheduler"
-        }
-      ]
-    },
-    "cortex.instance.Source/state/Disabled/refuses/cortex.instance.RunSource": {
-      "purpose": "`cortex.instance.RunSource` refuses in held state `Disabled` without effects",
-      "steps": [
-        {
-          "step": "execute_command",
-          "command": "cortex.instance.AdoptInstance",
-          "actor": "cortex.instance.Operator",
-          "input": {
-            "description": {
-              "kind": "literal",
-              "value": "description"
-            },
-            "ekr_version": {
-              "kind": "literal",
-              "value": "ekr_version"
-            },
-            "model": {
-              "kind": "literal",
-              "value": "model"
-            },
-            "name": {
-              "kind": "literal",
-              "value": "name"
-            },
-            "seed_digest": {
-              "kind": "literal",
-              "value": "seed_digest"
-            },
-            "spec": {
-              "kind": "literal",
-              "value": {
-                "description": "spec.description",
-                "ekr": {
-                  "bin": "spec.ekr.bin",
-                  "version": "spec.ekr.version"
-                },
-                "format": "spec.format",
-                "gate": {
-                  "checks": []
-                },
-                "model": {
-                  "backend": "Claude",
-                  "budget_usd": 1.0,
-                  "daily_ceiling_usd": 1.0,
-                  "instructions": "spec.model.instructions",
-                  "model": "spec.model.model",
-                  "timeout_s": 1.0
-                },
-                "name": "spec.name",
-                "redaction": {
-                  "classes": [],
-                  "known_names": [],
-                  "rare_limit": 1.0,
-                  "refuse_if_left": [],
-                  "rules": []
-                },
-                "seed": {
-                  "documents": [],
-                  "ekr_seed": "spec.seed.ekr_seed",
-                  "schema": "spec.seed.schema"
-                },
-                "serve": {
-                  "view_port": 1.0
-                },
-                "snapshots": {
-                  "keep": 1.0
-                },
-                "sources": [],
-                "store": {
-                  "backend": "postgres",
-                  "value": {
-                    "config": "spec.store.config",
-                    "connection": {
-                      "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
-                    },
-                    "schema_connection": {
-                      "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
-                    }
-                  }
-                }
-              }
-            },
-            "store": {
-              "kind": "literal",
-              "value": "store"
-            }
-          }
-        },
-        {
-          "step": "expect_outcome",
-          "outcome": {
-            "command": "cortex.instance.AdoptInstance",
-            "outcome": "adopted"
-          }
-        },
-        {
-          "step": "capture_instance",
-          "instance": "instance",
-          "entity": "cortex.instance.Instance",
-          "event": "cortex.instance.InstanceAdopted",
-          "field": "name"
-        },
-        {
-          "step": "execute_command",
-          "command": "cortex.instance.AddSource",
-          "actor": "cortex.instance.Operator",
-          "input": {
-            "instance_name": {
-              "kind": "instance",
-              "instance": "instance"
-            },
-            "kind": {
-              "kind": "literal",
-              "value": "Web"
-            },
-            "name": {
-              "kind": "literal",
-              "value": "name"
-            },
-            "schedule": {
-              "kind": "literal",
-              "value": "schedule"
-            },
-            "source_id": {
-              "kind": "literal",
-              "value": "source_id"
-            }
-          }
-        },
-        {
-          "step": "expect_outcome",
-          "outcome": {
-            "command": "cortex.instance.AddSource",
-            "outcome": "added"
-          }
-        },
-        {
-          "step": "capture_instance",
-          "instance": "source",
-          "entity": "cortex.instance.Source",
-          "event": "cortex.instance.SourceAdded",
-          "field": "source_id"
-        },
-        {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_view",
-          "view": "cortex.instance.Sources",
-          "expectation": {
-            "expect": "contains",
-            "fields": {
-              "consecutive_failures": {
-                "kind": "literal",
-                "value": 0.0
-              },
-              "source_id": {
-                "kind": "instance",
-                "instance": "source"
-              },
-              "state": {
-                "kind": "literal",
-                "value": "Enabled"
-              }
-            }
-          }
-        },
-        {
-          "step": "execute_command",
-          "command": "cortex.instance.RecordFailure",
-          "actor": "cortex.instance.Scheduler",
-          "input": {
-            "reason": {
-              "kind": "literal",
-              "value": "reason"
-            },
-            "source_id": {
-              "kind": "instance",
-              "instance": "source"
-            }
-          }
-        },
-        {
-          "step": "expect_outcome",
-          "outcome": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "counted"
-          }
-        },
-        {
-          "step": "expect_no_error"
-        },
-        {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_view",
-          "view": "cortex.instance.Sources",
-          "expectation": {
-            "expect": "contains",
-            "fields": {
-              "consecutive_failures": {
-                "kind": "literal",
-                "value": 1.0
-              },
-              "source_id": {
-                "kind": "instance",
-                "instance": "source"
-              },
-              "state": {
-                "kind": "literal",
-                "value": "Enabled"
-              }
-            }
-          }
-        },
-        {
-          "step": "execute_command",
-          "command": "cortex.instance.RecordFailure",
-          "actor": "cortex.instance.Scheduler",
-          "input": {
-            "reason": {
-              "kind": "literal",
-              "value": "reason"
-            },
-            "source_id": {
-              "kind": "instance",
-              "instance": "source"
-            }
-          }
-        },
-        {
-          "step": "expect_outcome",
-          "outcome": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "disabled"
-          }
-        },
-        {
-          "step": "expect_no_error"
-        },
-        {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_view",
-          "view": "cortex.instance.Sources",
-          "expectation": {
-            "expect": "contains",
-            "fields": {
-              "source_id": {
-                "kind": "instance",
-                "instance": "source"
-              },
-              "state": {
-                "kind": "literal",
-                "value": "Disabled"
-              }
-            }
-          }
-        },
-        {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "snapshot_complete_subject",
-          "view": "cortex.instance.Sources",
-          "subject": {
-            "source_id": {
-              "kind": "instance",
-              "instance": "source"
-            }
-          },
-          "shape": {
-            "identity_field": "source_id",
-            "fields": [
-              {
-                "name": "source_id",
-                "type": "cortex.instance.SourceId"
-              },
-              {
-                "name": "instance_name",
-                "type": "cortex.instance.InstanceName"
-              },
-              {
-                "name": "name",
-                "type": "String"
-              },
-              {
-                "name": "kind",
-                "type": "cortex.instance.SourceKind"
-              },
-              {
-                "name": "schedule",
-                "type": "String"
-              },
-              {
-                "name": "runs",
-                "type": "Integer"
-              },
-              {
-                "name": "consecutive_failures",
-                "type": "Integer"
-              },
-              {
-                "name": "state",
-                "type": "cortex.instance.Source.State"
-              }
-            ],
-            "declarations": {
-              "cortex.instance.InstanceName": {
-                "kind": "newtype",
-                "of": "String"
-              },
-              "cortex.instance.Source.State": {
-                "kind": "enum",
-                "variants": [
-                  "Disabled",
-                  "Enabled"
-                ]
-              },
-              "cortex.instance.SourceId": {
-                "kind": "newtype",
-                "of": "String"
-              },
-              "cortex.instance.SourceKind": {
-                "kind": "enum",
-                "variants": [
-                  "Web",
-                  "Connectors",
-                  "Files",
-                  "Structured"
-                ]
-              }
-            }
-          }
-        },
-        {
-          "step": "execute_command",
-          "command": "cortex.instance.RunSource",
-          "actor": "cortex.instance.Scheduler",
-          "input": {
-            "source_id": {
-              "kind": "instance",
-              "instance": "source"
-            }
-          }
-        },
-        {
-          "step": "expect_outcome",
-          "outcome": {
-            "command": "cortex.instance.RunSource",
-            "outcome": "disabled"
-          }
-        },
-        {
-          "step": "expect_no_events"
-        },
-        {
-          "step": "query_view",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_complete_subject_unchanged",
-          "view": "cortex.instance.Sources"
-        },
-        {
-          "step": "expect_error",
-          "error": "cortex.instance.SourceDisabledError"
-        }
-      ],
-      "source": [
-        {
-          "kind": "command",
-          "name": "cortex.instance.AddSource"
-        },
-        {
-          "kind": "command",
-          "name": "cortex.instance.AdoptInstance"
-        },
-        {
-          "kind": "command",
-          "name": "cortex.instance.RecordFailure"
-        },
-        {
-          "kind": "outcome",
-          "name": {
-            "command": "cortex.instance.AddSource",
-            "outcome": "added"
-          }
-        },
-        {
-          "kind": "outcome",
-          "name": {
-            "command": "cortex.instance.AdoptInstance",
-            "outcome": "adopted"
-          }
-        },
-        {
-          "kind": "outcome",
-          "name": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "counted"
-          }
-        },
-        {
-          "kind": "outcome",
-          "name": {
-            "command": "cortex.instance.RecordFailure",
-            "outcome": "disabled"
-          }
-        },
-        {
-          "kind": "outcome",
-          "name": {
-            "command": "cortex.instance.RunSource",
-            "outcome": "disabled"
-          }
-        },
-        {
-          "kind": "event",
-          "name": "cortex.instance.InstanceAdopted"
-        },
-        {
-          "kind": "event",
-          "name": "cortex.instance.SourceAdded"
-        },
-        {
-          "kind": "view",
-          "name": "cortex.instance.Sources"
         }
       ]
     },
@@ -16231,6 +17580,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -16375,12 +17731,34 @@
               {
                 "name": "state",
                 "type": "cortex.instance.Source.State"
+              },
+              {
+                "name": "last_outcome",
+                "type": "Optional<cortex.instance.RunOutcome>"
+              },
+              {
+                "name": "last_run_at",
+                "type": "Optional<Timestamp>"
+              },
+              {
+                "name": "last_reason",
+                "type": "Optional<String>"
               }
             ],
             "declarations": {
               "cortex.instance.InstanceName": {
                 "kind": "newtype",
                 "of": "String"
+              },
+              "cortex.instance.RunOutcome": {
+                "kind": "enum",
+                "variants": [
+                  "ran",
+                  "fetch-failed",
+                  "extraction-failed",
+                  "apply-refused",
+                  "disabled"
+                ]
               },
               "cortex.instance.Source.State": {
                 "kind": "enum",
@@ -16450,6 +17828,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -16558,6 +17940,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -16641,6 +18027,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -16889,6 +18282,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -17053,6 +18450,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -17136,6 +18537,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -17394,6 +18802,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -17544,6 +18956,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -17619,6 +19035,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -17698,6 +19121,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -17760,6 +19187,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",
@@ -17839,6 +19270,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -17900,6 +19338,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -17986,6 +19428,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -18127,6 +19576,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -18199,6 +19655,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -18321,6 +19781,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.PageStyle"
         },
         {
@@ -18366,6 +19830,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
         },
         {
           "kind": "type",
@@ -18506,6 +19974,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -18586,6 +20058,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -18647,6 +20126,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -18733,6 +20216,13 @@
                   "instructions": "spec.model.instructions",
                   "model": "spec.model.model",
                   "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
                 },
                 "name": "spec.name",
                 "redaction": {
@@ -18856,6 +20346,13 @@
                   "model": "spec.model.model-1",
                   "timeout_s": 2.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 2.0
+                  },
+                  "metrics": false
+                },
                 "name": "spec.name-1",
                 "redaction": {
                   "classes": [],
@@ -18928,6 +20425,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -19046,6 +20547,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.PageStyle"
         },
         {
@@ -19091,6 +20596,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
         },
         {
           "kind": "type",
@@ -19220,6 +20729,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
         },
         {
@@ -19303,6 +20816,13 @@
                   "instructions": "spec.model.instructions-1",
                   "model": "spec.model.model-1",
                   "timeout_s": 2.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 2.0
+                  },
+                  "metrics": false
                 },
                 "name": "spec.name-1",
                 "redaction": {
@@ -19426,6 +20946,13 @@
                   "model": "spec.model.model",
                   "timeout_s": 1.0
                 },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
                 "name": "spec.name",
                 "redaction": {
                   "classes": [],
@@ -19509,6 +21036,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
         },
         {
           "step": "expect_no_event",
@@ -19664,6 +21195,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.PageStyle"
         },
         {
@@ -19709,6 +21244,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
         },
         {
           "kind": "type",
@@ -19839,6 +21378,10 @@
         {
           "kind": "event",
           "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
         },
         {
           "kind": "event",

@@ -18,19 +18,23 @@
       "type": "string",
       "format": "decimal",
       "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
+    "daily_ceiling_reached": {
+      "type": "boolean"
     }
   },
   "required": [
     "source_id",
     "documents_new",
-    "documents_applied"
+    "documents_applied",
+    "daily_ceiling_reached"
   ],
   "additionalProperties": false,
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "55e415691487d2c675c5ecd72f81699560230b7355147e8df34b86eee64e1ff7",
-    "contract_digest": "slice-sha256/2:b8875b726487c7aca93a16e0b6eda5ffbc375b68787d8e962759bafdd7caf942",
+    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
+    "contract_digest": "slice-sha256/2:09d14fbef1375709400d69bf586fee39dc1b4665e1ff8d8342e0f3efb17f085d",
     "regenerate": "ess generate"
   },
   "$defs": {

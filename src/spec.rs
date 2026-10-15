@@ -229,6 +229,14 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
             }
         }
     }
+    if let Some(hook) = spec.monitoring.as_ref().and_then(|o| o.hook.as_ref()) {
+        if hook.command.first().is_none_or(|c| c.is_empty()) {
+            return Err("monitoring.hook.command must name a program".into());
+        }
+        if hook.timeout_s.is_some_and(|t| t <= 0) {
+            return Err("monitoring.hook.timeout_s must be above 0".into());
+        }
+    }
     Ok(())
 }
 

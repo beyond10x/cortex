@@ -124,6 +124,22 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
                 })
                 .collect(),
         }),
+        monitoring: match &spec.monitoring {
+            EssPresence::Absent => None,
+            EssPresence::Present(o) => Some(m::MonitoringSpec {
+                metrics: opt(&o.metrics),
+                hook: match &o.hook {
+                    EssPresence::Absent => None,
+                    EssPresence::Present(h) => Some(m::RunHook {
+                        command: h.command.clone(),
+                        timeout_s: match &h.timeout_s {
+                            EssPresence::Absent => None,
+                            EssPresence::Present(t) => Some(int(t, "monitoring.hook.timeout_s")?),
+                        },
+                    }),
+                },
+            }),
+        },
     })
 }
 

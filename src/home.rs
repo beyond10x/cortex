@@ -74,7 +74,15 @@ impl Home {
         };
         let value: Value = serde_json::from_str(&text)
             .map_err(|e| format!("{} is not JSON: {e}", path.display()))?;
-        Registry::from_json(&value).map_err(|e| format!("{}: {e}", path.display()))
+        let mut registry =
+            Registry::from_json(&value).map_err(|e| format!("{}: {e}", path.display()))?;
+        // A source's last run is its status file, which `registry.json` does not hold.
+        for source in registry.sources.values_mut() {
+            let layout =
+                crate::instance::Layout::new(self.instance_dir(&source.data.instance_name.0));
+            crate::status::overlay(&layout, &mut source.data);
+        }
+        Ok(registry)
     }
 
     /// The seed an instance holds: the digest of its frozen copy. An error names the frozen spec
@@ -302,6 +310,9 @@ impl Registry {
                     schedule: text(s, "schedule")?,
                     runs: integer(s, "runs")?,
                     consecutive_failures: integer(s, "consecutive_failures")?,
+                    last_outcome: None,
+                    last_run_at: None,
+                    last_reason: None,
                 },
             };
             registry

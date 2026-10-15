@@ -28,6 +28,8 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
 | `instances/<name>/cortex.log` | one JSON line per run: counts, cost, seconds, why it stopped |
 | `instances/<name>/spend.json` | the spend of the day (`cortex.daily-spend/1`): the UTC day and what the instance's model answers that day cost, held to `model.daily_ceiling_usd`. With a ceiling, a file cortex cannot read (not JSON or not `cortex.daily-spend/1`), or one of today whose `spent_usd` is not a number of 0 or more, stops every model call of the instance until it is deleted; deleting it counts the day as nothing spent |
+| `instances/<name>/status/<source>.json` | the source's last run (outcome, time, reason) and its runs by outcome |
+| `instances/<name>/metrics.prom` | with `monitoring.metrics`, the runs of each source by outcome, in the Prometheus text format |
 
 ## systemd units
 
@@ -89,6 +91,22 @@ one; it writes the new instance's units all the same. Pass `--replace-binary` to
 anyway. The command's `binary` detail says what happened: `replaced`, the `old` version recorded
 and the `new` one, and the `reason` when the copy was kept. `cortex list` shows the recorded
 version as `binary_version`. `--no-units`, and a spec with no source, leave the copy alone.
+
+## Exit statuses of `cortex run`
+
+A scheduler or a script reads which outcome a run had from its exit status alone:
+
+| exit status | outcome | means |
+|---|---|---|
+| 0 | `ran` | the source ran; `documents_new` 0 means nothing had changed |
+| 1 | `fetch-failed`, `extraction-failed`, `apply-refused` | the run failed and applied nothing; with `--record-failure` the failure is counted |
+| 1 | `no-such-source` | the home holds no such source |
+| 2 | none | an error before any outcome, on stderr as `cortex: <message>` (an unreadable registry, a home that cannot be locked) |
+| 3 | `disabled` | the source is disabled after two failed runs in a row; nothing ran. `cortex source enable` switches it back on |
+
+The JSON line on stdout says the same, with its `detail`. With `--record-failure`, a failed run
+prints a second line, the recorded failure's (`counted` or `disabled`); the exit status is the
+run's.
 
 ## What one run does
 
@@ -168,6 +186,43 @@ abandoned, so nothing of the run reaches the store, and `state/` is put back (se
 [Undoing a run](#undoing-a-run)); `gate.restored` is `null`, and the `reason` names the stage. A
 run on a `sqlite` store with no snapshot (`snapshots.keep: 0`) cannot be undone: it still fails,
 and its `reason` says it was not undone.
+
+### Seeing a failure
+
+Every run of a source records its outcome on the source, whatever it is, including `disabled`:
+`cortex sources` shows `last_outcome`, `last_run_at` (when the run started, UTC to the second)
+and `last_reason` (the run's `reason`; `null` for `ran` and `disabled`). The status is
+`instances/<name>/status/<source>.json`. A run of `<instance>/seed` is not a source's and records
+no status.
+
+With [`monitoring.metrics`](./spec-file.md#monitoring), every run of a source then rewrites
+`instances/<name>/metrics.prom` whole, through a temporary file and a rename, in the Prometheus
+text format. Point a node exporter's textfile collector, or a sidecar, at it; cortex serves no
+port. It holds two series per source of the instance:
+
+```text
+# TYPE cortex_source_runs_total counter
+cortex_source_runs_total{source="example/news",outcome="fetch-failed"} 1
+# TYPE cortex_source_last_run_timestamp_seconds gauge
+cortex_source_last_run_timestamp_seconds{source="example/news"} 1791962441.269
+```
+
+`cortex_source_runs_total` counts the source's runs under each outcome (`ran`,
+`fetch-failed`, `extraction-failed`, `apply-refused`, `disabled`), every outcome written, 0 for
+one that never happened. The counts are kept in the status file and start from the first run
+cortex recorded one for.
+
+With [`monitoring.hook`](./spec-file.md#monitoring), each run that fails calls the hook once,
+after its line is printed and its failure recorded: `<command…> <instance>/<source> <outcome>`, with
+the outcome `fetch-failed`, `extraction-failed` or `apply-refused`, or `disabled` when that run's
+recorded failure disabled the source. A run that ran or found the source disabled calls no
+hook. The hook runs in the instance directory with cortex's environment, so a
+secret it needs (a webhook URL, a token) stays in its own configuration, never in the spec. It may
+run `timeout_s` seconds (default 10), during which a run holding the home's lock keeps it; then it
+is killed. `cortex.log` records each call as a line with `source`, `outcome` and `hook.result`:
+`called` (exit status 0), `failed` (with `hook.status`, or `hook.reason` when it could not start)
+or `timed-out`. Neither a failed hook nor a metric file that cannot be written changes the run's
+outcome or its exit status; the latter is recorded in `cortex.log` as `metrics.failed`.
 
 If Connectors refuses a read because a connection's validation lapsed, cortex revalidates the
 connection once and retries.

@@ -12,6 +12,7 @@ use cortex_cli::connectors::Connectors;
 use cortex_cli::home::{self, Home, Registry};
 use cortex_cli::ports::{Ports, Shared, SharedRef};
 use cortex_cli::run::{Failure, Report, Tools};
+use cortex_cli::status;
 use cortex_model::behaviour::Generated;
 use cortex_model::instance as m;
 use cortex_model::ports::cortex::{Cortex, PublishedEvent};
@@ -65,6 +66,7 @@ fn placeholder_spec() -> m::InstanceSpec {
         redaction: None,
         snapshots: None,
         gate: None,
+        monitoring: None,
     }
 }
 
@@ -310,6 +312,8 @@ impl Scenario {
             .unwrap_or_default();
         let s = |k: &str| text(input.get(k).unwrap_or(&Value::Null));
         let app = &mut self.app;
+        // Events an outcome carries that the generated port does not publish (below).
+        let mut unpublished: Vec<(String, Value)> = Vec::new();
         let (outcome, error): (&str, Option<(&str, Value)>) = match command {
             "cortex.instance.CreateInstance" => match app
                 .create_instance(m::CreateInstance {
@@ -453,13 +457,16 @@ impl Scenario {
                     Some(("ApplyRefused", json!({"reason": error.reason}))),
                 ),
                 m::RunSourceOutcome::Ran { .. } => ("ran", None),
-                m::RunSourceOutcome::Disabled { error } => (
-                    "disabled",
-                    Some((
-                        "SourceDisabledError",
-                        json!({"source_id": error.source_id.0}),
-                    )),
-                ),
+                m::RunSourceOutcome::Disabled { run_skipped } => {
+                    // ESS 0.59.0 synthesis carries `RunSkipped` on the outcome but declares no
+                    // `PublishedEvent` for it and publishes nothing, so the event is read from the
+                    // outcome the behaviour answered.
+                    unpublished.push((
+                        "cortex.instance.RunSkipped".into(),
+                        json!({"source_id": run_skipped.source_id.0}),
+                    ));
+                    ("disabled", None)
+                }
                 m::RunSourceOutcome::NoSuchSource { error } => (
                     "no-such-source",
                     Some(("SourceNotFound", json!({"source_id": error.source_id.0}))),
@@ -579,7 +586,8 @@ impl Scenario {
             },
             other => panic!("unknown command {other}"),
         };
-        let events: Vec<_> = self.app.drain_outbox().into_iter().map(event).collect();
+        let mut events: Vec<_> = self.app.drain_outbox().into_iter().map(event).collect();
+        events.extend(unpublished);
         self.observed.extend(events.iter().cloned());
         // A forced branch holds for the one command that follows it.
         self.shared.borrow_mut().external.clear();
@@ -623,6 +631,9 @@ impl Scenario {
                         "runs": s.data.runs,
                         "consecutive_failures": s.data.consecutive_failures,
                         "state": home::source_state_name(s.state),
+                        "last_outcome": s.data.last_outcome.map(status::outcome_name),
+                        "last_run_at": s.data.last_run_at.as_ref().map(|t| t.0.clone()),
+                        "last_reason": s.data.last_reason,
                     })
                 })
                 .collect(),
@@ -839,7 +850,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        55,
+        58,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

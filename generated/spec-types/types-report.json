@@ -1,12 +1,12 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "55e415691487d2c675c5ecd72f81699560230b7355147e8df34b86eee64e1ff7",
+  "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:8cdad122e547e3a1a95f6315daa732679d4cccda6539794046b6a191692ccb2a",
-    "projection_digest": "8afd8df2d6b1a781e3ce2b7e6a9d7728b81559f09193abaf66fd4ebd46f48772"
+    "contract_digest": "slice-sha256/2:6695a97d3d556dcab78fa7c4f04a07136d3cba0096bbc8a3a8410a709056ecc8",
+    "projection_digest": "cf396ccd2f9f512d39892710dfcd6679b7a3d8b86f4f2f8154f3d84628ea4e69"
   },
   "generator_version": "0.59.0",
   "target": "rust",
@@ -34,6 +34,7 @@
     "cortex.instance.InstanceSpec": "CortexInstanceInstanceSpec",
     "cortex.instance.ModelBackend": "CortexInstanceModelBackend",
     "cortex.instance.ModelSpec": "CortexInstanceModelSpec",
+    "cortex.instance.MonitoringSpec": "CortexInstanceMonitoringSpec",
     "cortex.instance.PageStyle": "CortexInstancePageStyle",
     "cortex.instance.Paging": "CortexInstancePaging",
     "cortex.instance.PostgresStore": "CortexInstancePostgresStore",
@@ -46,6 +47,7 @@
     "cortex.instance.RedactionRule": "CortexInstanceRedactionRule",
     "cortex.instance.RelationMapping": "CortexInstanceRelationMapping",
     "cortex.instance.RunGate": "CortexInstanceRunGate",
+    "cortex.instance.RunHook": "CortexInstanceRunHook",
     "cortex.instance.SearchInput": "CortexInstanceSearchInput",
     "cortex.instance.SearchPolicy": "CortexInstanceSearchPolicy",
     "cortex.instance.SearchTopic": "CortexInstanceSearchTopic",
@@ -329,6 +331,21 @@
       "detail": "model identity and wire mapping retained in source.schema.json"
     },
     {
+      "pointer": "/$defs/cortex.instance.MonitoringSpec/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.MonitoringSpec/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.MonitoringSpec/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
       "pointer": "/$defs/cortex.instance.PageStyle/title",
       "rule": "title",
       "detail": "retained in source.schema.json; no decoder behavior inferred"
@@ -505,6 +522,21 @@
     },
     {
       "pointer": "/$defs/cortex.instance.RunGate/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunHook/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunHook/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunHook/x-ess-name",
       "rule": "x-ess-name",
       "detail": "model identity and wire mapping retained in source.schema.json"
     },
@@ -1002,6 +1034,16 @@
     },
     {
       "pointer": "/$defs/cortex.instance.RedactionPolicy/properties/rare_limit",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunHook/properties/timeout_s",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunHook/properties/timeout_s",
       "rule": "rust_exact_numbers",
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
     },
