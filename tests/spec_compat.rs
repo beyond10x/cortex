@@ -11,7 +11,7 @@
 //! `CORTEX_SPEC_COMPAT_RECORD=<file>` in a tree whose `src/`, `generated/`, `spec/`, `examples/`,
 //! `Cargo.toml` and `Cargo.lock` were those of `f2ce283`. Values that differ on every run (the
 //! temporary directory, the viewer's free port, the run's start time and duration) are replaced
-//! by placeholders on both sides. The example's EKR pin has moved since (0.0.32 then, 0.0.33
+//! by placeholders on both sides. The example's EKR pin has moved since (0.0.32 then, 0.0.34
 //! now); the fixture's two copies of it moved with it, and nothing else in it changed.
 
 mod common;
@@ -111,7 +111,7 @@ fn observe(spec_text: &str) -> Value {
     std::fs::write(w.root.join("connection"), CONNECTION).unwrap();
     // The example names no `ekr.bin`, so cortex takes the pinned binary under `$HOME`.
     let user = w.root.join("user");
-    let pinned = user.join(".cache/cortex/bin/0.0.33/bin");
+    let pinned = user.join(".cache/cortex/bin/0.0.34/bin");
     std::fs::create_dir_all(&pinned).unwrap();
     std::os::unix::fs::symlink(ekr(), pinned.join("ekr")).unwrap();
     let dir = w.root.join("spec");

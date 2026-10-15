@@ -162,7 +162,7 @@ enum Command {
     McpLine { name: String },
     /// Install the pinned `ekr` when it is missing.
     Setup {
-        #[arg(long, default_value = "0.0.33")]
+        #[arg(long, default_value = "0.0.34")]
         ekr_version: String,
     },
     /// Without an instance, print the JSON Schema of the spec file (`cortex.instance.InstanceSpec`).

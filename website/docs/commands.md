@@ -155,5 +155,5 @@ value to put back). A run the instance's daily ceiling stopped also carries
 
 | command | does |
 |---|---|
-| `cortex setup [--ekr-version <v>]` | install `ekr` at the version (default 0.0.33) with `cargo install` when it is missing |
+| `cortex setup [--ekr-version <v>]` | install `ekr` at the version (default 0.0.34) with `cargo install` when it is missing |
 | `cortex schema` | print the spec file's JSON Schema (with an instance name it proposes schema changes instead, see [Proposing schema changes](#proposing-schema-changes)) |
