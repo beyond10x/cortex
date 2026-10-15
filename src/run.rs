@@ -777,6 +777,10 @@ fn process_in(
     let mut spent = 0.0;
     // The instance's daily ceiling, across its sources and commands; a run holds the home's lock.
     let mut daily = spend::Daily::new(layout, &spec.model, None);
+    // The run's budget in tokens, and the tokens its answers reported: `None` from the first
+    // answer that reported no `usage`, which under the budget stops the run before its next batch.
+    let budget_tokens = spec.model.budget_tokens;
+    let mut used_tokens: Option<i64> = Some(0);
     let mut entities = load_entities(layout);
 
     let issued: Vec<_> = selected
@@ -800,6 +804,24 @@ fn process_in(
         if remaining <= 0.0 {
             report.stopped = Some(format!("budget of {budget} USD spent"));
             break;
+        }
+        if let Some(cap) = budget_tokens {
+            match used_tokens {
+                None => {
+                    report.stopped = Some(format!(
+                        "token budget of {cap} tokens: the tokens of an answer could not be \
+                         counted: it reported no usage"
+                    ));
+                    break;
+                }
+                Some(used) if used >= cap => {
+                    report.stopped = Some(format!(
+                        "token budget of {cap} tokens spent: {used} tokens used"
+                    ));
+                    break;
+                }
+                Some(_) => {}
+            }
         }
         let remaining = match daily.allow(remaining) {
             Ok(usd) => usd,
@@ -851,17 +873,22 @@ fn process_in(
         };
         let dir = run_dir.join(format!("batch-{n}"));
         let asked = model.ask(&dir.join("claude"), &schema, &prompt, remaining);
-        // Every costed answer, a failed one included, adds to the spend of the day.
-        daily.add(match &asked {
-            Ok(answer) => answer.cost_usd,
-            Err(refused) => refused.cost_usd,
-        });
-        // Every model call counts, a failed one included. The fixed part is the system prompt,
-        // the answer's schema (both sent as flags) and the prompt up to the documents.
         let (calls, usage) = match &asked {
             Ok(answer) => (answer.calls, answer.usage),
             Err(refused) => (refused.calls, refused.usage),
         };
+        // Every costed answer and every answer's tokens, a failed one included, add to the spend
+        // of the day and the tokens to the run's.
+        daily.add_answer(
+            match &asked {
+                Ok(answer) => answer.cost_usd,
+                Err(refused) => refused.cost_usd,
+            },
+            &usage,
+        );
+        used_tokens = used_tokens.and_then(|used| Some(used + spend::tokens(&usage)?));
+        // Every model call counts, a failed one included. The fixed part is the system prompt,
+        // the answer's schema (both sent as flags) and the prompt up to the documents.
         let fixed_bytes = extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed;
         report.add_calls(calls, usage, fixed_bytes, prompt.len() - fixed);
         let answer = match asked.map_err(|refused| refused.message) {

@@ -492,7 +492,7 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn, home: &Home) -> Result<
         ) {
             Ok(answer) => answer,
             Err(refused) => {
-                daily.add(refused.cost_usd);
+                daily.add_answer(refused.cost_usd, &refused.usage);
                 let total = add_cost(cost_usd, refused.cost_usd);
                 return Err(Failure::Propose(format!(
                     "{}; {}",
@@ -501,7 +501,7 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn, home: &Home) -> Result<
                 )));
             }
         };
-        daily.add(answer.cost_usd);
+        daily.add_answer(answer.cost_usd, &answer.usage);
         spent += answer.cost_usd.unwrap_or(0.0);
         cost_usd = add_cost(cost_usd, answer.cost_usd);
         let Some(entries) = answer.document["proposals"].as_array() else {

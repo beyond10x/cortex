@@ -27,7 +27,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
 | `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
 | `instances/<name>/cortex.log` | one JSON line per run: counts, cost, seconds, why it stopped |
-| `instances/<name>/spend.json` | the spend of the day (`cortex.daily-spend/1`): the UTC day and what the instance's model answers that day cost, held to `model.daily_ceiling_usd`. With a ceiling, a file cortex cannot read (not JSON or not `cortex.daily-spend/1`), or one of today whose `spent_usd` is not a number of 0 or more, stops every model call of the instance until it is deleted; deleting it counts the day as nothing spent |
+| `instances/<name>/spend.json` | the spend of the day (`cortex.daily-spend/1`): the UTC day, what the instance's model answers that day cost (`spent_usd`), held to `model.daily_ceiling_usd`, and the tokens they reported (`spent_tokens`, absent until an answer reported any), held to `model.daily_ceiling_tokens`. With a ceiling, a file cortex cannot read (not JSON or not `cortex.daily-spend/1`), or one of today whose `spent_usd` is not a number of 0 or more or whose `spent_tokens` is not a whole number of 0 or more, stops every model call of the instance until it is deleted; deleting it counts the day as nothing spent |
 | `instances/<name>/status/<source>.json` | the source's last run (outcome, time, reason) and its runs by outcome |
 | `instances/<name>/metrics.prom` | with `monitoring.metrics`, the runs of each source by outcome, in the Prometheus text format |
 
@@ -169,7 +169,11 @@ the text as a whole, and never cuts a record.
 
 The run stops starting batches when its `budget_usd` is spent, or when the instance's spend of
 the UTC day reaches `model.daily_ceiling_usd` (see
-[the spec file](./spec-file.md#the-daily-ceiling)). When a batch fails after an earlier
+[the spec file](./spec-file.md#the-daily-ceiling)). With a limit in tokens, it also stops when its
+calls have used `model.budget_tokens`, when the instance's tokens of the UTC day reach
+`model.daily_ceiling_tokens`, or when an answer reported no `usage`, so its tokens could not be
+counted (see [the spec file](./spec-file.md#limits-in-tokens)). Each stop is checked before a
+batch, keeps the batches before it applied, and names the limit in `stopped`. When a batch fails after an earlier
 one was applied, the run ends as `ran` with `stopped` set; when the first batch fails, nothing was
 applied and the run fails.
 
