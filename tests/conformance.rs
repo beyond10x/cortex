@@ -332,7 +332,10 @@ impl Scenario {
                 ),
                 m::CreateInstanceOutcome::ConnectionMissing { error } => (
                     "connection-missing",
-                    Some(("ConnectionMissing", json!({"connection": error.connection}))),
+                    Some((
+                        "ConnectionMissing",
+                        json!({"connection": error.connection, "reason": error.reason}),
+                    )),
                 ),
                 m::CreateInstanceOutcome::SeedRefused { error } => (
                     "seed-refused",

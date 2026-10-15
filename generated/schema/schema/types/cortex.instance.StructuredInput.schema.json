@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
-    "contract_digest": "slice-sha256/2:e10fdf12bb2c3a57e2a52268f976c8bb3fbe62fb51ae53ddda724d5804fd0908",
+    "source_digest": "784c649088a404fed7f2ba1f60cc6f4b68a8752722934c4f32664466cdcbc7ea",
+    "contract_digest": "slice-sha256/2:adeec8dc0028bf776a94ed502d5cc7cd01440730ff663bcb2bd7928f395e7e3a",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -223,6 +223,9 @@
         "connection": {
           "type": "string"
         },
+        "profile": {
+          "type": "string"
+        },
         "operation": {
           "type": "string"
         },
@@ -248,11 +251,13 @@
       },
       "required": [
         "adapter",
-        "connection",
         "operation",
         "inputs"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ]
     },
     "cortex.instance.StructuredFiles": {
       "title": "StructuredFiles",

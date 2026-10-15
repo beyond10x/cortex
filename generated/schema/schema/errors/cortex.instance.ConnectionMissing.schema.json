@@ -1,24 +1,28 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ConnectionMissing payload",
-  "description": "Connectors lists no live connection with the id a source or the postgres store names. Run `connectors connections connect` for it, then try again.",
+  "description": "Connectors lists no live connection with the id a source or the postgres store names, or not exactly one live connection with the profile it names. Run `connectors connections connect` for it, or revoke the extra ones, then try again.",
   "x-ess-name": "cortex.instance.ConnectionMissing",
   "x-ess-kind": "error-payload",
   "type": "object",
   "properties": {
     "connection": {
       "type": "string"
+    },
+    "reason": {
+      "type": "string"
     }
   },
   "required": [
-    "connection"
+    "connection",
+    "reason"
   ],
   "additionalProperties": false,
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
-    "contract_digest": "slice-sha256/2:ee7855a4fb87b8c90e0503858ebb842ded2e369a7cc578176b08fecb57a78f82",
+    "source_digest": "784c649088a404fed7f2ba1f60cc6f4b68a8752722934c4f32664466cdcbc7ea",
+    "contract_digest": "slice-sha256/2:b4c89481aa1c6409a7275a4d0792f07aa6add056f67d3b03501a003e237bda57",
     "regenerate": "ess generate"
   }
 }

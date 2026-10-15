@@ -538,11 +538,13 @@ impl Systemd {
             ),
             Some(launch) => {
                 let connectors = on_path(&launch.connectors);
+                // A profile is written as the id it resolves to now.
+                let connection = launch.resolve(&launch.connection)?;
                 single_line(
                     [
                         ("the connectors binary", connectors.display().to_string()),
                         ("the adapter", launch.connection.adapter.clone()),
-                        ("the connection", launch.connection.connection.clone()),
+                        ("the connection", connection.clone()),
                     ]
                     .into_iter()
                     .map(|(what, value)| (what.to_string(), value))
@@ -562,7 +564,7 @@ impl Systemd {
                         "{} connections launch --adapter {} --connection {} --consumer {} --args {}",
                         exec_quote(&connectors.display().to_string()),
                         exec_quote(&launch.connection.adapter),
-                        exec_quote(&launch.connection.connection),
+                        exec_quote(&connection),
                         crate::ekr::CONSUMER,
                         exec_quote(&args)
                     ),

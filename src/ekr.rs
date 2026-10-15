@@ -163,11 +163,12 @@ impl Backend {
 /// `ekr` binary a launch runs, with `pass_env = ["EKR_"]`.
 pub const CONSUMER: &str = "ekr";
 
-/// A saved Connectors connection: its adapter alias and id.
+/// A saved Connectors connection: its adapter alias, and its id or a profile of the adapter, which
+/// [`Launch::resolve`] turns into the id.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Connection {
     pub adapter: String,
-    pub connection: String,
+    pub connection: crate::connectors::Reference,
 }
 
 /// How a PostgreSQL store's `ekr` gets the database password: `connectors connections launch`
@@ -206,6 +207,7 @@ impl Launch {
     /// the pinned `ekr` with `args`, as one JSON array of strings, after the consumer's pinned
     /// argument prefix. Built and not run.
     fn command(&self, connection: &Connection, args: &[&OsStr]) -> Result<Command, String> {
+        let id = self.resolve(connection)?;
         let args = args
             .iter()
             .map(|a| {
@@ -222,7 +224,7 @@ impl Launch {
             "--adapter",
             &connection.adapter,
             "--connection",
-            &connection.connection,
+            &id,
             "--consumer",
             CONSUMER,
             "--args",
@@ -234,11 +236,23 @@ impl Launch {
     /// Renews `connection`'s validation evidence when it lapsed: a launch with lapsed evidence is
     /// refused (`unavailable` at `readiness`).
     fn ready(&self, connection: &Connection) -> Result<(), String> {
+        let id = self.resolve(connection)?;
         crate::connectors::Connectors {
             bin: self.connectors.clone(),
         }
-        .ensure_ready(&connection.adapter, &connection.connection)
-        .map_err(|e| format!("{}:{}: {e}", connection.adapter, connection.connection))
+        .ensure_ready(&connection.adapter, &id)
+        .map_err(|e| format!("{}:{id}: {e}", connection.adapter))
+    }
+
+    /// The id `connection` names: an id as given, a profile resolved through `connections list`
+    /// once per process ([`crate::connectors::Connectors::resolve`]). A refusal names the adapter,
+    /// the profile, the count and every matching id.
+    pub fn resolve(&self, connection: &Connection) -> Result<String, String> {
+        crate::connectors::Connectors {
+            bin: self.connectors.clone(),
+        }
+        .resolve(&connection.adapter, &connection.connection)
+        .map_err(|e| e.to_string())
     }
 }
 

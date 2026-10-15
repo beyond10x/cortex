@@ -464,9 +464,14 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
     }
 }
 
-/// Every connection the spec names, its sources' and its `postgres` store's, that Connectors does
-/// not list, or lists as revoked.
-fn missing_connection(ctx: &Ctx, spec: &m::InstanceSpec) -> Result<Option<String>, String> {
+/// The first connection the spec names, its sources' and its `postgres` store's, that Connectors
+/// does not list, or lists as revoked, or a profile that resolves to no live connection or to more
+/// than one: the reference as named, and why.
+fn missing_connection(
+    ctx: &Ctx,
+    spec: &m::InstanceSpec,
+) -> Result<Option<(String, String)>, String> {
+    use cortex_cli::connectors::{InvokeError, Reference};
     let tools = &ctx.tools;
     let mut named = spec::connections(spec);
     if let Some(m::StoreSpec::Postgres(p)) = &spec.store {
@@ -474,13 +479,29 @@ fn missing_connection(ctx: &Ctx, spec: &m::InstanceSpec) -> Result<Option<String
             [&p.connection, &p.schema_connection]
                 .into_iter()
                 .flatten()
-                .map(|c| (c.adapter.clone(), c.connection.clone())),
+                .map(|c| {
+                    let reference = Reference::of(c.connection.as_ref(), c.profile.as_ref());
+                    (c.adapter.clone(), reference)
+                }),
         );
     }
-    for (adapter, connection) in named {
-        match tools.connectors.connection_state(&adapter, &connection) {
+    for (adapter, reference) in named {
+        let missing = |why: String| Ok(Some((reference.named(&adapter), why)));
+        let connection = match &reference {
+            // A profile resolves to a connection that is listed and not revoked, or is refused.
+            Reference::Profile(_) => match tools.connectors.resolve(&adapter, &reference) {
+                Ok(_) => continue,
+                Err(InvokeError::Missing(why)) => return missing(why),
+                Err(e) => return Err(e.to_string()),
+            },
+            Reference::Id(id) => id,
+        };
+        match tools.connectors.connection_state(&adapter, connection) {
             Ok(Some(state)) if state != "revoked" => {}
-            Ok(_) => return Ok(Some(format!("{adapter}:{connection}"))),
+            Ok(Some(_)) => {
+                return missing(format!("{adapter}: connection {connection} is revoked"))
+            }
+            Ok(None) => return missing(format!("{adapter}: no connection {connection}")),
             Err(e) => return Err(e.to_string()),
         }
     }
@@ -736,12 +757,14 @@ fn create(
     let mut seeded: Option<Result<run::Report, run::Failure>> = None;
     if !taken {
         match missing_connection(ctx, &spec) {
-            Ok(Some(missing)) => {
+            Ok(Some((connection, reason))) => {
                 ctx.shared
                     .borrow_mut()
                     .external
                     .insert((CMD, "connection-missing"), true);
-                ctx.shared.borrow_mut().strings.push_back(missing);
+                let strings = &mut ctx.shared.borrow_mut().strings;
+                strings.push_back(connection);
+                strings.push_back(reason);
             }
             Ok(None) => {
                 // A `postgres` store's tenant is the instance's name; another instance (one
@@ -823,6 +846,7 @@ fn create(
             ok: false,
             detail: json!({
                 "connection": error.connection,
+                "reason": error.reason,
                 "next": "connectors connections connect --adapter <adapter> --profile <profile> --credential-prompt",
             }),
         },
@@ -1961,7 +1985,12 @@ fn mcp_line(home: &Home, name: &str) -> ExitCode {
         format!("EKR_BACKEND={}", store.backend.name()),
         format!("EKR_STORE={}", store.store.display()),
     ];
-    // A launched store's `ekr` gets its password from Connectors, as every other `ekr` of it does.
+    // A launched store's `ekr` gets its password from Connectors, as every other `ekr` of it does,
+    // through the connection its reference resolves to now.
+    let connection = match store.launch.as_ref().map(|l| l.resolve(&l.connection)) {
+        Some(Err(e)) => return fail(e),
+        resolved => resolved.and_then(Result::ok).unwrap_or_default(),
+    };
     match &store.launch {
         Some(launch) => words.extend([
             launch.connectors.display().to_string(),
@@ -1970,7 +1999,7 @@ fn mcp_line(home: &Home, name: &str) -> ExitCode {
             "--adapter".into(),
             launch.connection.adapter.clone(),
             "--connection".into(),
-            launch.connection.connection.clone(),
+            connection,
             "--consumer".into(),
             ekr::CONSUMER.into(),
             "--args".into(),

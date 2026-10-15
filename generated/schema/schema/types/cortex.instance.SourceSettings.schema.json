@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
-    "contract_digest": "slice-sha256/2:0ba32fce74fa8bd323f49112c6acf1cccc7bfd223f048c747b3c095e887d3fd1",
+    "source_digest": "784c649088a404fed7f2ba1f60cc6f4b68a8752722934c4f32664466cdcbc7ea",
+    "contract_digest": "slice-sha256/2:b4de1535cb0595485a1d60cd35debf97e69ab51c0241a6763f1c4de8d22bce25",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -89,6 +89,9 @@
         "connection": {
           "type": "string"
         },
+        "profile": {
+          "type": "string"
+        },
         "operation": {
           "type": "string"
         },
@@ -120,14 +123,16 @@
       },
       "required": [
         "adapter",
-        "connection",
         "operation",
         "inputs",
         "records",
         "id",
         "text"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ]
     },
     "cortex.instance.CrawlPolicy": {
       "title": "CrawlPolicy",
@@ -645,6 +650,9 @@
         "connection": {
           "type": "string"
         },
+        "profile": {
+          "type": "string"
+        },
         "operation": {
           "type": "string"
         },
@@ -670,11 +678,13 @@
       },
       "required": [
         "adapter",
-        "connection",
         "operation",
         "inputs"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ]
     },
     "cortex.instance.StructuredFiles": {
       "title": "StructuredFiles",
@@ -846,15 +856,20 @@
         "connection": {
           "type": "string"
         },
+        "profile": {
+          "type": "string"
+        },
         "input": {
           "$ref": "#/$defs/cortex.instance.WebInput"
         }
       },
       "required": [
-        "connection",
         "input"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ]
     }
   }
 }

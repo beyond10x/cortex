@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
-    "contract_digest": "slice-sha256/2:bcc8e405848a409d803426db1943e97a9627e76979a32d9794f24ba7a557d49c",
+    "source_digest": "784c649088a404fed7f2ba1f60cc6f4b68a8752722934c4f32664466cdcbc7ea",
+    "contract_digest": "slice-sha256/2:7990d4203e44e274403c356f8a03e75b07afac7bf1d8a08bbf584e841c542b3e",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -45,6 +45,9 @@
         "connection": {
           "type": "string"
         },
+        "profile": {
+          "type": "string"
+        },
         "operation": {
           "type": "string"
         },
@@ -76,14 +79,16 @@
       },
       "required": [
         "adapter",
-        "connection",
         "operation",
         "inputs",
         "records",
         "id",
         "text"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ]
     },
     "cortex.instance.PageStyle": {
       "title": "PageStyle",

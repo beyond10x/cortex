@@ -85,14 +85,19 @@
         },
         "connection": {
           "type": "string"
+        },
+        "profile": {
+          "type": "string"
         }
       },
       "required": [
-        "adapter",
-        "connection"
+        "adapter"
       ],
       "title": "ConnectionRef",
       "type": "object",
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ],
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.ConnectionRef"
     },
@@ -121,6 +126,9 @@
         "paging": {
           "$ref": "#/$defs/cortex.instance.Paging"
         },
+        "profile": {
+          "type": "string"
+        },
         "records": {
           "type": "string"
         },
@@ -136,7 +144,6 @@
       },
       "required": [
         "adapter",
-        "connection",
         "operation",
         "inputs",
         "records",
@@ -145,6 +152,9 @@
       ],
       "title": "ConnectorsSource",
       "type": "object",
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ],
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.ConnectorsSource"
     },
@@ -1151,16 +1161,21 @@
         },
         "paging": {
           "$ref": "#/$defs/cortex.instance.Paging"
+        },
+        "profile": {
+          "type": "string"
         }
       },
       "required": [
         "adapter",
-        "connection",
         "operation",
         "inputs"
       ],
       "title": "StructuredConnectors",
       "type": "object",
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ],
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.StructuredConnectors"
     },
@@ -1333,22 +1348,27 @@
         },
         "input": {
           "$ref": "#/$defs/cortex.instance.WebInput"
+        },
+        "profile": {
+          "type": "string"
         }
       },
       "required": [
-        "connection",
         "input"
       ],
       "title": "WebSource",
       "type": "object",
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ],
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.WebSource"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:6695a97d3d556dcab78fa7c4f04a07136d3cba0096bbc8a3a8410a709056ecc8",
-    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
+    "contract_digest": "slice-sha256/2:819a256364831168cf292fabbe42869dc5c1bfeadeaf87581aad28e9b6706e15",
+    "source_digest": "784c649088a404fed7f2ba1f60cc6f4b68a8752722934c4f32664466cdcbc7ea",
     "specification_version": "v1",
     "system": "cortex"
   }

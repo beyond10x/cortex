@@ -40,8 +40,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
-    "contract_digest": "slice-sha256/2:dd3c6283db8aaeb0040a12ea04bbcb32a96c212f6ca488d1d59f419fd29dd6a7",
+    "source_digest": "784c649088a404fed7f2ba1f60cc6f4b68a8752722934c4f32664466cdcbc7ea",
+    "contract_digest": "slice-sha256/2:cb533eb09d13a1e1809ab988e0f6a4519582284ef838913b06654db662d7fa4d",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -133,13 +133,18 @@
         },
         "connection": {
           "type": "string"
+        },
+        "profile": {
+          "type": "string"
         }
       },
       "required": [
-        "adapter",
-        "connection"
+        "adapter"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ]
     },
     "cortex.instance.ConnectorsSource": {
       "title": "ConnectorsSource",
@@ -151,6 +156,9 @@
           "type": "string"
         },
         "connection": {
+          "type": "string"
+        },
+        "profile": {
           "type": "string"
         },
         "operation": {
@@ -184,14 +192,16 @@
       },
       "required": [
         "adapter",
-        "connection",
         "operation",
         "inputs",
         "records",
         "id",
         "text"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ]
     },
     "cortex.instance.CrawlPolicy": {
       "title": "CrawlPolicy",
@@ -1178,6 +1188,9 @@
         "connection": {
           "type": "string"
         },
+        "profile": {
+          "type": "string"
+        },
         "operation": {
           "type": "string"
         },
@@ -1203,11 +1216,13 @@
       },
       "required": [
         "adapter",
-        "connection",
         "operation",
         "inputs"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ]
     },
     "cortex.instance.StructuredFiles": {
       "title": "StructuredFiles",
@@ -1379,15 +1394,20 @@
         "connection": {
           "type": "string"
         },
+        "profile": {
+          "type": "string"
+        },
         "input": {
           "$ref": "#/$defs/cortex.instance.WebInput"
         }
       },
       "required": [
-        "connection",
         "input"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ]
     }
   }
 }

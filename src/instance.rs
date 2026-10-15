@@ -201,7 +201,7 @@ pub enum AdoptRefusal {
 fn launch(p: &m::PostgresStore) -> Option<ekr::Launch> {
     let connection = |c: &m::ConnectionRef| ekr::Connection {
         adapter: c.adapter.clone(),
-        connection: c.connection.clone(),
+        connection: crate::connectors::Reference::of(c.connection.as_ref(), c.profile.as_ref()),
     };
     p.connection.as_ref().map(|c| ekr::Launch {
         connectors: crate::connectors::bin(),

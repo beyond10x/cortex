@@ -41,17 +41,21 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 
 ### `ConnectionRef`
 
-`cortex.instance.ConnectionRef` is a record of two fields:
+`cortex.instance.ConnectionRef` is a record of three fields:
 
 - `adapter` — `String`
-- `connection` — `String`
+- `connection` — `Optional<String>`, which may be absent
+- `profile` — `Optional<String>`, which may be absent
+
+Every value satisfies `(defined(connection) or defined(profile))`.
 
 ### `ConnectorsSource`
 
-`cortex.instance.ConnectorsSource` is a record of 10 fields:
+`cortex.instance.ConnectorsSource` is a record of 11 fields:
 
 - `adapter` — `String`
-- `connection` — `String`
+- `connection` — `Optional<String>`, which may be absent
+- `profile` — `Optional<String>`, which may be absent
 - `operation` — `String`
 - `inputs` — `List<Json>`
 - `records` — `String`
@@ -60,6 +64,8 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `text` — `List<String>`
 - `paging` — `Optional<cortex.instance.Paging>`, which may be absent
 - `child` — `Optional<cortex.instance.ChildCall>`, which may be absent
+
+Every value satisfies `(defined(connection) or defined(profile))`.
 
 ### `CrawlPolicy`
 
@@ -491,15 +497,18 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 
 ### `StructuredConnectors`
 
-`cortex.instance.StructuredConnectors` is a record of seven fields:
+`cortex.instance.StructuredConnectors` is a record of eight fields:
 
 - `adapter` — `String`
-- `connection` — `String`
+- `connection` — `Optional<String>`, which may be absent
+- `profile` — `Optional<String>`, which may be absent
 - `operation` — `String`
 - `inputs` — `List<Json>`
 - `paging` — `Optional<cortex.instance.Paging>`, which may be absent
 - `children` — `Optional<List<cortex.instance.StructuredChild>>`, which may be absent
 - `links` — `Optional<List<cortex.instance.CompareLink>>`, which may be absent
+
+Every value satisfies `(defined(connection) or defined(profile))`.
 
 ### `StructuredFiles`
 
@@ -561,11 +570,14 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 
 ### `WebSource`
 
-`cortex.instance.WebSource` is a record of three fields:
+`cortex.instance.WebSource` is a record of four fields:
 
 - `adapter` — `Optional<String>`, which may be absent
-- `connection` — `String`
+- `connection` — `Optional<String>`, which may be absent
+- `profile` — `Optional<String>`, which may be absent
 - `input` — `cortex.instance.WebInput`
+
+Every value satisfies `(defined(connection) or defined(profile))`.
 
 Five of the types above are reached by nothing else in this system: `cortex.instance.DailySpend`, `cortex.instance.HookResult`, `cortex.instance.QualityVerdict`, `cortex.instance.SchemaProposal` and `cortex.instance.SchemaProposals`. No entity, view, command, event, error or crossing names them, so it is either vocabulary something outside this specification uses or a leftover — and only a person can tell which.
 
@@ -809,7 +821,7 @@ It has five outcomes.
 
 **`name-taken`** — Nothing was created. Taken when a record already carries the identity the command's creating branch would create, and no input-guarded refusal applies. No entity in this specification changes. It reports `cortex.instance.NameTaken`, carrying `name`. It emits nothing. A test reaches it by sending the command twice with one identity: the first call creates the record, the second is answered by this branch.
 
-**`connection-missing`** — Nothing was created. Decided outside the input: Connectors lists no live connection for a connection id a source or the postgres store of the spec names. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ConnectionMissing`, carrying `connection`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`connection-missing`** — Nothing was created. Decided outside the input: Connectors lists no live connection for a connection id a source or the postgres store of the spec names, or not exactly one live connection for a profile one names. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ConnectionMissing`, carrying `connection` and `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`seed-refused`** — Nothing was created. Decided outside the input: EKR refuses the minimal seed, the ekr-seed/2 file or the seed schema document. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SeedRefused`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
@@ -1186,11 +1198,12 @@ Reported by `cortex.instance.AdoptInstance` on its `backend-mismatch` outcome.
 
 ### `ConnectionMissing`
 
-Connectors lists no live connection with the id a source or the postgres store names. Run `connectors connections connect` for it, then try again.
+Connectors lists no live connection with the id a source or the postgres store names, or not exactly one live connection with the profile it names. Run `connectors connections connect` for it, or revoke the extra ones, then try again.
 
 It carries:
 
 - `connection` — `String`
+- `reason` — `String`
 
 Reported by `cortex.instance.CreateInstance` on its `connection-missing` outcome.
 
@@ -1421,4 +1434,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041` · contract digest `slice-sha256/2:44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `784c649088a404fed7f2ba1f60cc6f4b68a8752722934c4f32664466cdcbc7ea` · contract digest `slice-sha256/2:67629ba8e6dd39e9445033c07baabfc76f0de5f90d8df19a6339018d437981b3`. Do not edit this file; change the specification and regenerate it with `task generate`.

@@ -390,6 +390,23 @@ The model sees fetched text and nothing else. Fetched text is untrusted: it is m
 credential shapes, stored as evidence and sent to a model that cannot act on it, with the
 personal data a `redaction` policy names replaced by placeholders (see [Limits](./limits.md)).
 
+## Connections by profile
+
+cortex holds no credential; every source that reads through Connectors, and a `postgres` store's
+`ekr`, names a Connectors connection. Where that connection's id changes from one start to the
+next, as in a container whose Connectors state is created anew each time (`connectors setup
+init`, then `connectors connections connect`), name it by profile instead of by id
+(`profile: tavily.api-key`; [Spec file](./spec-file.md#naming-a-connection)). Each cortex
+command resolves the profile once, the first time it needs the connection, to the one connection
+`connectors connections list --adapter <adapter>` lists with that profile and a state other than
+`revoked`, and uses that id for the rest of the command. Connect exactly one connection per
+adapter and profile: with none, or two (an old one not revoked), `cortex create` answers
+`connection-missing` and a run `fetch-failed`, naming the adapter, the profile, the count and
+the matching ids, and no credential is used. Two things outlive a command and carry the id the
+profile resolved to when they were written, not the profile: a `postgres` store's viewer unit and
+the line `cortex mcp-line` prints. After the connection is connected anew they name the old id
+until they are written again, so print the MCP line again after each connect.
+
 ## A PostgreSQL store's password
 
 A `postgres` store whose spec names `store.value.connection` gets its password from Connectors:
