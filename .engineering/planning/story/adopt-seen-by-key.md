@@ -7,7 +7,7 @@ title: An adopted source's seen documents can be named by key, and the first run
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-15T03:31:23Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-15T03:31:23Z", actor: "human:timo", revision: 3}
@@ -83,15 +83,17 @@ No new noun. `cortex.instance.Source` owns many `cortex.instance.SeenDocument` t
   `task generate`.
 - An instance with one files source `chat` over `archive/*.jsonl` (records `id: ts`), adopted with
   `--seen chat=seen.json` where `seen.json` is
-  `{"format":"cortex.seen/1","documents":{"archive/2026-09.jsonl#1.0":{"applied_at":1}}}`:
+  `{"format":"cortex.seen/1","documents":{"<abs>/archive/2026-09.jsonl#1.0":{"applied_at":1}}}`,
+  where `<abs>` is the spec directory's absolute path (a files source keys a record by its file's
+  absolute path, `#`, and its id; a relative path matches no document):
   `cortex adopt` exits 0 and reports `seen_documents: 1`.
 - The first `cortex run x/chat` after that sends no prompt holding record `1.0` to the stand-in
-  `claude`, applies nothing for `archive/2026-09.jsonl#1.0`, extracts the other records of the file,
+  `claude`, applies nothing for that key, extracts the other records of the file,
   and leaves `state/chat.json` with a 64-hex `hash` and `applied_at: 1` for that key.
 - A second run over the same file extracts nothing; after the text of record `1.0` changes, the next
   run extracts it.
-- A `--seen` entry with neither `hash` nor `applied_at` is refused by `cortex adopt`, naming the
-  key.
+- A `--seen` entry with neither `hash` nor `applied_at`, a `null` counting as absent, is refused by
+  `cortex adopt`, naming the key.
 
 ## Not in this story
 
