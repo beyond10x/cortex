@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041
-// contract digest 44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd
+// model digest 1b4a2ea847b1e07c4ca1c7c7a83547b74ebdb932c7b10d5e74cc84af8766a2e6
+// contract digest 3ffd3de5c2667f41a9cc8059704bddef6c65451d75bea992b9d94bfd3aae03cb
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -2172,6 +2172,20 @@ pub struct SourceRan {
     pub cost_usd: Option<crate::primitives::Decimal>,
     /// `daily_ceiling_reached` — `Boolean`.
     pub daily_ceiling_reached: bool,
+    /// `model_calls` — `Integer`.
+    pub model_calls: i64,
+    /// `input_tokens` — `Optional<Integer>`.
+    pub input_tokens: Option<i64>,
+    /// `cache_read_input_tokens` — `Optional<Integer>`.
+    pub cache_read_input_tokens: Option<i64>,
+    /// `cache_creation_input_tokens` — `Optional<Integer>`.
+    pub cache_creation_input_tokens: Option<i64>,
+    /// `output_tokens` — `Optional<Integer>`.
+    pub output_tokens: Option<i64>,
+    /// `fixed_input_tokens` — `Optional<Integer>`.
+    pub fixed_input_tokens: Option<i64>,
+    /// `documents_input_tokens` — `Optional<Integer>`.
+    pub documents_input_tokens: Option<i64>,
 }
 
 /// The declared error `cortex.instance.ApplyRefused`.

@@ -152,6 +152,13 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "documents_applied": e.documents_applied,
                 "cost_usd": e.cost_usd.map(|c| c.0),
                 "daily_ceiling_reached": e.daily_ceiling_reached,
+                "model_calls": e.model_calls,
+                "input_tokens": e.input_tokens,
+                "cache_read_input_tokens": e.cache_read_input_tokens,
+                "cache_creation_input_tokens": e.cache_creation_input_tokens,
+                "output_tokens": e.output_tokens,
+                "fixed_input_tokens": e.fixed_input_tokens,
+                "documents_input_tokens": e.documents_input_tokens,
             }),
         ),
     };

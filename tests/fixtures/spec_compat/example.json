@@ -18,11 +18,18 @@
   },
   "log": [
     {
+      "cache_creation_input_tokens": null,
+      "cache_read_input_tokens": null,
       "cost_usd": 0.01,
       "documents_applied": 2,
+      "documents_input_tokens": null,
       "documents_new": 2,
       "facts_refused": 1,
+      "fixed_input_tokens": null,
+      "input_tokens": null,
       "masked": 0,
+      "model_calls": 1,
+      "output_tokens": null,
       "parts_rejected": 0,
       "source": "news",
       "stopped": null
@@ -65,11 +72,18 @@
   "run": {
     "command": "run",
     "detail": {
+      "cache_creation_input_tokens": null,
+      "cache_read_input_tokens": null,
       "cost_usd": "0.0100",
       "documents_applied": 2,
+      "documents_input_tokens": null,
       "documents_new": 2,
       "facts_refused": 1,
+      "fixed_input_tokens": null,
+      "input_tokens": null,
       "masked": 0,
+      "model_calls": 1,
+      "output_tokens": null,
       "parts_rejected": 0,
       "source_id": "example/news",
       "stopped": null

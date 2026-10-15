@@ -390,6 +390,24 @@ The model sees fetched text and nothing else. Fetched text is untrusted: it is m
 credential shapes, stored as evidence and sent to a model that cannot act on it, with the
 personal data a `redaction` policy names replaced by placeholders (see [Limits](./limits.md)).
 
+### What a run spends
+
+Besides `cost_usd`, a run's result and its `cortex.log` line say how many model calls it made
+(`model_calls`) and the tokens those calls reported in `claude`'s `usage`: `input_tokens`,
+`cache_read_input_tokens`, `cache_creation_input_tokens` and `output_tokens`, each summed over the
+calls. A call asked again after an error answer that cost zero counts as two calls, and a failed
+call counts. A count is `0` for a run with no model call and `null` as soon as one answer did not
+report it; it is never written as `0` for a count nobody reported.
+
+Each request has a fixed part, sent again with every batch: the system prompt, EKR's extraction
+schema, the instance's description and instructions, the store's ontology and the known entity
+names. The rest is the batch's documents. `claude` reports input tokens per call, not per part,
+so `fixed_input_tokens` and `documents_input_tokens` are an estimate: each call's input tokens,
+cache reads and writes included, apportioned by the bytes of the two parts. They add up to
+`input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`. A source that runs
+often with one to three documents per run can read from them whether the fixed part dominates
+what it spends.
+
 ## A PostgreSQL store's password
 
 A `postgres` store whose spec names `store.value.connection` gets its password from Connectors:

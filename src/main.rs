@@ -1744,6 +1744,24 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
                 "masked": report.masked,
                 "stopped": report.stopped,
             });
+            // The run's model calls and the tokens they reported, as its `SourceRan` carries them.
+            for (key, value) in [
+                ("model_calls", Some(source_ran.model_calls)),
+                ("input_tokens", source_ran.input_tokens),
+                (
+                    "cache_read_input_tokens",
+                    source_ran.cache_read_input_tokens,
+                ),
+                (
+                    "cache_creation_input_tokens",
+                    source_ran.cache_creation_input_tokens,
+                ),
+                ("output_tokens", source_ran.output_tokens),
+                ("fixed_input_tokens", source_ran.fixed_input_tokens),
+                ("documents_input_tokens", source_ran.documents_input_tokens),
+            ] {
+                detail[key] = json!(value);
+            }
             // Present only when a document was cut: a run that cut nothing reports as before.
             if report.truncated > 0 {
                 detail["truncated"] = json!(report.truncated);

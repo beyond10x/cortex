@@ -68,6 +68,15 @@ pub struct Report {
     pub retracted: usize,
     /// Whether the run stopped before a batch at the instance's daily ceiling (said in `stopped`).
     pub daily_ceiling_reached: bool,
+    /// Every model call the run made, a call asked again and a failed one included.
+    pub model_calls: i64,
+    /// The tokens those calls reported, summed with the rule of [`add_cost`]: `0` when no model
+    /// was asked, `None` as soon as one answer did not carry the count.
+    pub usage: extract::Usage,
+    /// The input tokens (cache reads and writes included) apportioned by bytes to the fixed part
+    /// of each request and to its documents ([`extract::split_tokens`]); `None` as the input is.
+    pub fixed_input_tokens: Option<i64>,
+    pub documents_input_tokens: Option<i64>,
 }
 
 /// An applied document a part EKR rejected belongs to: its key and EKR's refusals, joined.
@@ -115,7 +124,39 @@ impl Default for Report {
             superseded: 0,
             retracted: 0,
             daily_ceiling_reached: false,
+            model_calls: 0,
+            usage: extract::Usage::ZERO,
+            fixed_input_tokens: Some(0),
+            documents_input_tokens: Some(0),
         }
+    }
+}
+
+impl Report {
+    /// Counts the model calls of one batch and their tokens, its request's fixed part `fixed`
+    /// bytes long and its documents `documents` bytes.
+    pub fn add_calls(&mut self, calls: i64, usage: extract::Usage, fixed: usize, documents: usize) {
+        self.model_calls += calls;
+        self.usage = self.usage.plus(usage);
+        let split = usage
+            .all_input()
+            .map(|tokens| extract::split_tokens(tokens, fixed, documents));
+        let add = |total: Option<i64>, part: Option<i64>| Some(total? + part?);
+        self.fixed_input_tokens = add(self.fixed_input_tokens, split.map(|s| s.0));
+        self.documents_input_tokens = add(self.documents_input_tokens, split.map(|s| s.1));
+    }
+
+    /// The model calls and tokens as a run's result and its `cortex.log` line state them.
+    pub fn calls_json(&self) -> serde_json::Value {
+        json!({
+            "model_calls": self.model_calls,
+            "input_tokens": self.usage.input_tokens,
+            "cache_read_input_tokens": self.usage.cache_read_input_tokens,
+            "cache_creation_input_tokens": self.usage.cache_creation_input_tokens,
+            "output_tokens": self.usage.output_tokens,
+            "fixed_input_tokens": self.fixed_input_tokens,
+            "documents_input_tokens": self.documents_input_tokens,
+        })
     }
 }
 
@@ -653,11 +694,15 @@ fn process_in(
         let ontology = store.ontology().map_err(Failure::Apply)?;
         // The model is shown the batch with personal data replaced by placeholders; the mapping
         // stays in `pseudonyms`, in memory, until this batch's answer is restored.
-        let (prompt, pseudonyms) = match &redactor {
+        let ((prompt, fixed), pseudonyms) = match &redactor {
             None => {
                 let known = Known::from_ontology(&ontology, entities.clone());
-                let prompt =
-                    extract::prompt(&spec.description, instructions.as_deref(), &known, &batch);
+                let prompt = extract::prompt_split(
+                    &spec.description,
+                    instructions.as_deref(),
+                    &known,
+                    &batch,
+                );
                 (prompt, None)
             }
             Some(r) => {
@@ -672,8 +717,12 @@ fn process_in(
                     break;
                 }
                 let known = Known::from_ontology(&ontology, known);
-                let prompt =
-                    extract::prompt(&spec.description, instructions.as_deref(), &known, &shown);
+                let prompt = extract::prompt_split(
+                    &spec.description,
+                    instructions.as_deref(),
+                    &known,
+                    &shown,
+                );
                 if let Some(counts) = report.redacted.as_mut() {
                     for (name, n) in p.counts() {
                         *counts.entry(name.clone()).or_default() += n;
@@ -689,6 +738,14 @@ fn process_in(
             Ok(answer) => answer.cost_usd,
             Err(refused) => refused.cost_usd,
         });
+        // Every model call counts, a failed one included. The fixed part is the system prompt,
+        // the answer's schema (both sent as flags) and the prompt up to the documents.
+        let (calls, usage) = match &asked {
+            Ok(answer) => (answer.calls, answer.usage),
+            Err(refused) => (refused.calls, refused.usage),
+        };
+        let fixed_bytes = extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed;
+        report.add_calls(calls, usage, fixed_bytes, prompt.len() - fixed);
         let answer = match asked.map_err(|refused| refused.message) {
             Ok(answer) => answer,
             Err(e) if report.documents_applied == 0 => return Err(Failure::Extract(e)),
@@ -1453,6 +1510,11 @@ fn log_line(label: &str, report: &Report, started: i64) -> serde_json::Value {
         "seconds": (now_ms() - started) as f64 / 1000.0,
         "stopped": report.stopped,
     });
+    if let (Some(line), serde_json::Value::Object(calls)) =
+        (line.as_object_mut(), report.calls_json())
+    {
+        line.extend(calls);
+    }
     // Present only when a document was cut: a run that cut nothing logs what it did before.
     if report.truncated > 0 {
         line["truncated"] = json!(report.truncated);
