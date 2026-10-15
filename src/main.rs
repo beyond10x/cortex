@@ -1259,6 +1259,31 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
     print("adopt", &done)
 }
 
+/// Whether the viewer unit of `name`, which launches through the id its store's profile resolved
+/// to when the unit was written, now names another id than the profile resolves to. An id
+/// reference, no unit (or another home's), or a profile that resolves to no one id is not: the
+/// update's connection check answers the last.
+fn viewer_resolves_anew(ctx: &Ctx, name: &str, store: &ekr::Store, units: Units) -> bool {
+    let Units::Install { .. } = units else {
+        return false;
+    };
+    let Some(launch) = &store.launch else {
+        return false;
+    };
+    if !matches!(
+        launch.connection.connection,
+        cortex_cli::connectors::Reference::Profile(_)
+    ) {
+        return false;
+    }
+    let Some(written) = Systemd::from_env(&ctx.home.root).view_connection(name) else {
+        return false;
+    };
+    launch
+        .resolve(&launch.connection)
+        .is_ok_and(|id| id != written)
+}
+
 fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> ExitCode {
     let loaded = match spec::load_given(path) {
         Ok(l) => l,
@@ -1271,12 +1296,14 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
     let layout = Layout::new(ctx.home.instance_dir(name));
     // The viewer unit is written only when the store's `ekr` now launches through another
     // connection, or newly or no longer through one: an update that adds, drops or changes
-    // `store.value.connection`. Otherwise the update leaves the viewer alone, and a viewer the
-    // operator stopped stays stopped. A frozen spec that cannot be read writes it.
+    // `store.value.connection`, or one whose profile now resolves to another id than the one the
+    // viewer unit holds (the connection was connected anew). Otherwise the update leaves the
+    // viewer alone, and a viewer the operator stopped stays stopped. A frozen spec that cannot be
+    // read writes it.
     let relaunch = layout.load_spec().map_or(true, |old| {
         layout.store_handle(&old).launched_through()
             != layout.store_handle(&spec).launched_through()
-    });
+    }) || viewer_resolves_anew(ctx, name, &layout.store_handle(&spec), units);
     if let Some(reason) = foreign_units(ctx, name, &spec, units, relaunch) {
         return fail(reason);
     }

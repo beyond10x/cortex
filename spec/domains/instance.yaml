@@ -347,7 +347,11 @@ types:
   # time cortex needs the connection, never stored: to the one connection that
   # `connectors connections list --adapter <adapter>` (its first page) lists with that `profile`
   # and a `state` other than `revoked`. None, or more than one, is refused with a reason naming
-  # the adapter, the profile, the count and every matching id.
+  # the adapter, the profile, the count and every matching id. The one place a resolved id is
+  # written down is the viewer's systemd unit, which launches through the id the profile resolved
+  # to at the last `create`, `adopt` or `update`: `update` resolves the profile again and rewrites
+  # the unit when that id changed, so an update after a reconnect points the viewer at the live
+  # connection.
   - name: cortex.instance.ConnectionRef
     kind: struct
     fields:
@@ -1073,7 +1077,11 @@ commands:
         payload:
           cortex.instance.InstanceUpdated:
             name: input.name
-        summary: The frozen spec is replaced; sources, model and serve settings take effect on the next run.
+        summary: >-
+          The frozen spec is replaced; sources, model and serve settings take effect on the next run.
+          The viewer unit holds the connection id resolved at the last create, adopt or update: it is
+          rewritten when the store's connection changed, or when its profile now resolves to
+          another id.
 
       - name: no-such-instance
         unknown_instance: true

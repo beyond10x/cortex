@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 784c649088a404fed7f2ba1f60cc6f4b68a8752722934c4f32664466cdcbc7ea
-// contract digest 67629ba8e6dd39e9445033c07baabfc76f0de5f90d8df19a6339018d437981b3
+// model digest bd2e6fe596b8cbf1dce21506ff295808ecc509f7b27fee08bab9ec16d4458999
+// contract digest 064955f7c5350114320a5eed3553029bce7fdcf849151abac819806439161716
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -2025,7 +2025,7 @@ pub enum UpdateInstanceOutcome {
     },
     /// `updated` — otherwise.
     ///
-    /// The frozen spec is replaced; sources, model and serve settings take effect on the next run.
+    /// The frozen spec is replaced; sources, model and serve settings take effect on the next run. The viewer unit holds the connection id resolved at the last create, adopt or update: it is rewritten when the store's connection changed, or when its profile now resolves to another id.
     Updated {
         /// The `cortex.instance.InstanceUpdated` this outcome publishes.
         instance_updated: InstanceUpdated,
