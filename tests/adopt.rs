@@ -1036,3 +1036,173 @@ fn a_seen_entry_with_neither_hash_nor_applied_at_is_refused_naming_its_key() {
     assert!(!w.home.join("instances/brain").exists());
     assert!(registered(&w).is_empty());
 }
+
+/// Adversary: the story's acceptance, word for word. `seen.json` names record `1.0` as
+/// `archive/2026-09.jsonl#1.0`, the path the spec gives (`paths: [archive]`), and the first run
+/// must send no prompt holding record `1.0` and leave a 64-hex hash under that key.
+#[test]
+fn adv_the_acceptance_seen_file_word_for_word_keeps_record_one_from_the_model() {
+    let w = World::new();
+    let legacy = Legacy::new(&w);
+    let spec = chat_spec(&w, "brain", "");
+    let host = legacy.host();
+    let seen = w.root.join("seen.json");
+    std::fs::write(
+        &seen,
+        r#"{"format":"cortex.seen/1","documents":{"archive/2026-09.jsonl#1.0":{"applied_at":1}}}"#,
+    )
+    .unwrap();
+    let seen_arg = format!("chat={}", seen.display());
+    let (code, adopted) = adopt(
+        &w,
+        &spec,
+        &legacy.store(),
+        &["--host", host.to_str().unwrap(), "--seen", &seen_arg],
+    );
+    assert_eq!(code, 0, "{adopted}");
+    assert_eq!(adopted["detail"]["seen_documents"], 1, "{adopted}");
+
+    let (code, ran) = w.cortex(&["run", "brain/chat"]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    let prompts = batch_files(&w, "prompt.txt").join("\n");
+    assert!(
+        !prompts.contains("adopted the Widget engine early"),
+        "record 1.0 reached the model although seen.json names it as the story's acceptance \
+         does: {ran}"
+    );
+    let entry = chat_state(&w, "archive/2026-09.jsonl#1.0");
+    let hash = entry["hash"].as_str().unwrap_or_default();
+    assert!(
+        hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()),
+        "no hash recorded for the acceptance key: {entry}"
+    );
+}
+
+/// Adversary: an entry whose `applied_at` (and `hash`) is JSON `null` names neither; it is
+/// refused, and the refusal names its key as the one with no `applied_at` does.
+#[test]
+fn adv_a_seen_entry_with_null_applied_at_is_refused_naming_its_key() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("chat.json");
+    for entry in [
+        r#"{"applied_at": null}"#,
+        r#"{"hash": null, "applied_at": null}"#,
+    ] {
+        std::fs::write(
+            &path,
+            format!(r#"{{"format": "cortex.seen/1", "documents": {{"a#7": {entry}}}}}"#),
+        )
+        .unwrap();
+        let refused = cortex_cli::state::SeenState::read_document(&path).unwrap_err();
+        assert!(refused.contains("a#7"), "{entry}: {refused}");
+    }
+}
+
+/// Adversary: a structured change record adopted by key, applied recently, whose text holds
+/// links. The first run records exactly what applying it would have recorded (`record`), its hash
+/// without links included, so a later change of its links alone is extracted at once.
+#[test]
+fn adv_a_hashed_record_carries_its_unlinked_hash_as_an_applied_one_does() {
+    use cortex_cli::sources::{Document, Origin};
+    use cortex_cli::state::{text_hash, Seen, SeenState};
+    const DAY: i64 = 24 * 60 * 60 * 1000;
+    let now = 100 * DAY;
+    let doc = |text: &str| Document {
+        key: "changes:1".into(),
+        origin: Origin::Record,
+        title: None,
+        description: None,
+        published: None,
+        text: text.into(),
+        hash: Some(text_hash(text)),
+    };
+    let unlinked = text_hash("body");
+    let mut adopted = SeenState::default();
+    adopted.documents.insert(
+        "changes:1".into(),
+        Seen {
+            hash: None,
+            applied_at: now,
+            unlinked_hash: None,
+        },
+    );
+    adopted.unlinked = [("changes:1".to_string(), unlinked.clone())].into();
+    let first = doc("body [link: a]");
+    assert_eq!(adopted.hash_unhashed(std::slice::from_ref(&first)), 1);
+
+    let mut applied = SeenState::default();
+    applied.unlinked = adopted.unlinked.clone();
+    applied.record(&first, now);
+    assert_eq!(
+        adopted.documents["changes:1"],
+        applied.documents["changes:1"]
+    );
+
+    // The next day only its links change: extracted at once, as for an applied record.
+    let relinked = doc("body [link: b]");
+    assert!(adopted.wants(&relinked, now + DAY, 7));
+    assert!(!adopted.holds(&relinked, now + DAY, 7));
+    // Its text changes beyond its links: held back by the refresh window like any applied one.
+    adopted.unlinked = [("changes:1".to_string(), text_hash("other body"))].into();
+    let rewritten = doc("other body [link: a]");
+    assert!(!adopted.wants(&rewritten, now + DAY, 7));
+    assert!(adopted.holds(&rewritten, now + DAY, 7));
+}
+
+/// Adversary: on SQLite (the PostgreSQL case is skipped without a container runtime), a seen file
+/// naming every record by key alone: the first run asks no model, applies nothing, records the
+/// three hashes and keeps each `applied_at`; the second run hashes nothing.
+#[test]
+fn adv_every_record_seen_by_key_alone_asks_no_model_and_hashes_all_three() {
+    let w = World::new();
+    let legacy = Legacy::new(&w);
+    let spec = chat_spec(&w, "brain", "");
+    let host = legacy.host();
+    let seen = w.root.join("all.seen.json");
+    let ids = ["1.0", "2.0", "3.0"];
+    let documents: serde_json::Map<String, Value> = ids
+        .iter()
+        .enumerate()
+        .map(|(n, id)| (record_key(&w, id), serde_json::json!({"applied_at": n + 1})))
+        .collect();
+    std::fs::write(
+        &seen,
+        serde_json::json!({"format": "cortex.seen/1", "documents": documents}).to_string(),
+    )
+    .unwrap();
+    let seen_arg = format!("chat={}", seen.display());
+    let (code, adopted) = adopt(
+        &w,
+        &spec,
+        &legacy.store(),
+        &["--host", host.to_str().unwrap(), "--seen", &seen_arg],
+    );
+    assert_eq!(code, 0, "{adopted}");
+    let head = instance_head(&w, "brain");
+
+    let (code, ran) = w.cortex(&["run", "brain/chat"]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_new"], 0, "{ran}");
+    assert_eq!(ran["detail"]["hashed"], 3, "{ran}");
+    assert!(w.lines("claude-calls.log").is_empty());
+    assert_eq!(instance_head(&w, "brain"), head);
+    for (n, id) in ids.iter().enumerate() {
+        let entry = chat_state(&w, &record_key(&w, id));
+        assert_eq!(
+            entry["hash"].as_str().map(str::len),
+            Some(64),
+            "{id}: {entry}"
+        );
+        assert_eq!(entry["applied_at"], n + 1, "{id}: {entry}");
+    }
+
+    let (code, again) = w.cortex(&["run", "brain/chat"]);
+    assert_eq!(
+        (code, again["outcome"].as_str()),
+        (0, Some("ran")),
+        "{again}"
+    );
+    assert_eq!(again["detail"]["documents_new"], 0, "{again}");
+    assert!(again["detail"].get("hashed").is_none(), "{again}");
+    assert!(w.lines("claude-calls.log").is_empty());
+}
