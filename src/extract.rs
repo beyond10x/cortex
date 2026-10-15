@@ -55,6 +55,10 @@ pub struct Answer {
     pub document: Value,
     /// What the answer cost, when the backend reported it. A missing cost is never `0`.
     pub cost_usd: Option<f64>,
+    /// The model calls this answer took: `2` when the first was asked again.
+    pub calls: i64,
+    /// The tokens those calls reported.
+    pub usage: Usage,
 }
 
 /// A model call that gave no answer, and what it cost.
@@ -66,6 +70,84 @@ pub struct Refused {
     pub cost_usd: Option<f64>,
     /// The backend answered, and its answer was an error (`is_error`).
     pub error_answer: bool,
+    /// The model calls made: `0` when no model was asked.
+    pub calls: i64,
+    /// The tokens those calls reported.
+    pub usage: Usage,
+}
+
+/// The token counts of one or more model calls, as `claude` reports each in its answer's `usage`
+/// (`input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`).
+/// A count an answer did not carry is `None`, and a sum with it too: a missing count is never `0`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Usage {
+    pub input_tokens: Option<i64>,
+    pub cache_creation_input_tokens: Option<i64>,
+    pub cache_read_input_tokens: Option<i64>,
+    pub output_tokens: Option<i64>,
+}
+
+impl Usage {
+    /// No model was asked: no tokens.
+    pub const ZERO: Usage = Usage {
+        input_tokens: Some(0),
+        cache_creation_input_tokens: Some(0),
+        cache_read_input_tokens: Some(0),
+        output_tokens: Some(0),
+    };
+
+    /// A model was asked and its tokens are not known.
+    pub const UNKNOWN: Usage = Usage {
+        input_tokens: None,
+        cache_creation_input_tokens: None,
+        cache_read_input_tokens: None,
+        output_tokens: None,
+    };
+
+    /// The `usage` of a JSON answer; a field it lacks is `None`.
+    fn read(answer: &Value) -> Self {
+        let usage = &answer["usage"];
+        Self {
+            input_tokens: usage["input_tokens"].as_i64(),
+            cache_creation_input_tokens: usage["cache_creation_input_tokens"].as_i64(),
+            cache_read_input_tokens: usage["cache_read_input_tokens"].as_i64(),
+            output_tokens: usage["output_tokens"].as_i64(),
+        }
+    }
+
+    /// Both calls' tokens, field by field: the sum while both carry it, `None` otherwise.
+    pub fn plus(self, other: Usage) -> Usage {
+        let sum = |a: Option<i64>, b: Option<i64>| Some(a? + b?);
+        Usage {
+            input_tokens: sum(self.input_tokens, other.input_tokens),
+            cache_creation_input_tokens: sum(
+                self.cache_creation_input_tokens,
+                other.cache_creation_input_tokens,
+            ),
+            cache_read_input_tokens: sum(
+                self.cache_read_input_tokens,
+                other.cache_read_input_tokens,
+            ),
+            output_tokens: sum(self.output_tokens, other.output_tokens),
+        }
+    }
+
+    /// Every input token: the uncached input, cache reads and cache writes.
+    pub fn all_input(&self) -> Option<i64> {
+        Some(self.input_tokens? + self.cache_read_input_tokens? + self.cache_creation_input_tokens?)
+    }
+}
+
+/// `tokens` apportioned by bytes between a fixed part of `fixed` bytes and a documents part of
+/// `documents` bytes, rounded to the nearest token: `(fixed tokens, documents tokens)`, which add
+/// up to `tokens`. An estimate: the model reports input tokens per call, not per part.
+pub fn split_tokens(tokens: i64, fixed: usize, documents: usize) -> (i64, i64) {
+    let all = (fixed + documents) as i128;
+    if all == 0 {
+        return (tokens, 0);
+    }
+    let fixed_tokens = ((tokens as i128 * fixed as i128 + all / 2) / all) as i64;
+    (fixed_tokens, tokens - fixed_tokens)
 }
 
 impl Refused {
@@ -75,6 +157,8 @@ impl Refused {
             message,
             cost_usd: Some(0.0),
             error_answer: false,
+            calls: 0,
+            usage: Usage::ZERO,
         }
     }
 
@@ -84,6 +168,8 @@ impl Refused {
             message,
             cost_usd: None,
             error_answer: false,
+            calls: 1,
+            usage: Usage::UNKNOWN,
         }
     }
 
@@ -215,6 +301,17 @@ pub fn prompt(
     known: &Known,
     batch: &[Issued],
 ) -> String {
+    prompt_split(description, instructions, known, batch).0
+}
+
+/// [`prompt`], and the byte length of its fixed part: everything before the documents (the
+/// description, instructions, ontology and known entity names, and the line asking for them).
+pub fn prompt_split(
+    description: &str,
+    instructions: Option<&str>,
+    known: &Known,
+    batch: &[Issued],
+) -> (String, usize) {
     let mut p = String::new();
     p.push_str(&format!("This knowledge graph is about: {description}\n\n"));
     if let Some(i) = instructions {
@@ -242,6 +339,7 @@ pub fn prompt(
         }
     }
     p.push_str("\nExtract the knowledge in these documents.\n");
+    let fixed = p.len();
     for issued in batch {
         p.push_str(&format!(
             "\n=== Document — evidence id {} ===\nSource: {}\n",
@@ -258,14 +356,14 @@ pub fn prompt(
         p.push_str(&issued.doc.text);
         p.push('\n');
     }
-    p
+    (p, fixed)
 }
 
 impl Model {
     /// One extraction call for one batch, through the spec's backend, run in `dir`: [`ask_with`]
     /// and the extraction prompt [`SYSTEM_PROMPT`]. An error answer that cost zero is asked once
     /// more after [`RETRY_WAIT_MS`]; a second refusal is the call's. The first answer cost
-    /// nothing, so a refusal's cost is the whole call's.
+    /// nothing, so a refusal's cost is the whole call's; its model call and tokens count too.
     ///
     /// [`ask_with`]: Model::ask_with
     pub fn ask(
@@ -276,9 +374,20 @@ impl Model {
         budget_usd: f64,
     ) -> Result<Answer, Refused> {
         match self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd) {
-            Err(e) if e.free_error_answer() => {
+            Err(first) if first.free_error_answer() => {
                 std::thread::sleep(retry_wait());
-                self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd)
+                match self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd) {
+                    Ok(mut answer) => {
+                        answer.calls += first.calls;
+                        answer.usage = first.usage.plus(answer.usage);
+                        Ok(answer)
+                    }
+                    Err(mut refused) => {
+                        refused.calls += first.calls;
+                        refused.usage = first.usage.plus(refused.usage);
+                        Err(refused)
+                    }
+                }
             }
             other => other,
         }
@@ -359,6 +468,7 @@ impl Model {
             ))
         })?;
         let cost_usd = answer["total_cost_usd"].as_f64();
+        let usage = Usage::read(&answer);
         if answer["is_error"] == Value::Bool(true) {
             // Claude's own text says why (a sign-in, a usage limit); kept masked and bounded in
             // the reason and in `error.txt`, where nothing else of the failed call is written.
@@ -377,12 +487,16 @@ impl Model {
                 message,
                 cost_usd,
                 error_answer: true,
+                calls: 1,
+                usage,
             });
         }
         match answer.get("structured_output") {
             Some(document) if document.is_object() => Ok(Answer {
                 document: document.clone(),
                 cost_usd,
+                calls: 1,
+                usage,
             }),
             _ => Err(Refused {
                 message: format!(
@@ -391,6 +505,8 @@ impl Model {
                 ),
                 cost_usd,
                 error_answer: false,
+                calls: 1,
+                usage,
             }),
         }
     }
@@ -661,6 +777,50 @@ mod tests {
             "{text}"
         );
         assert!(!text.contains("max"), "only the kind is named: {text}");
+    }
+
+    #[test]
+    fn usage_is_read_by_claudes_field_names_and_a_missing_count_is_none_never_zero() {
+        let read = Usage::read(&json!({"usage": {"input_tokens": 10,
+            "cache_creation_input_tokens": 2, "cache_read_input_tokens": 3, "output_tokens": 4}}));
+        assert_eq!(
+            read,
+            Usage {
+                input_tokens: Some(10),
+                cache_creation_input_tokens: Some(2),
+                cache_read_input_tokens: Some(3),
+                output_tokens: Some(4),
+            }
+        );
+        assert_eq!(read.all_input(), Some(15));
+        assert_eq!(
+            Usage::read(&json!({"total_cost_usd": 0.01})),
+            Usage::UNKNOWN
+        );
+        assert_eq!(Usage::ZERO.plus(read), read);
+        let partial = Usage::read(&json!({"usage": {"input_tokens": 10, "output_tokens": 4}}));
+        assert_eq!(partial.all_input(), None);
+        let sum = read.plus(partial);
+        assert_eq!(sum.input_tokens, Some(20));
+        assert_eq!(sum.cache_read_input_tokens, None);
+    }
+
+    #[test]
+    fn tokens_split_by_bytes_add_up_to_the_whole() {
+        assert_eq!(split_tokens(1200, 1, 2), (400, 800));
+        assert_eq!(split_tokens(1000, 1, 2), (333, 667));
+        assert_eq!(split_tokens(7, 0, 5), (0, 7));
+        assert_eq!(split_tokens(7, 5, 0), (7, 0));
+        assert_eq!(split_tokens(7, 0, 0), (7, 0));
+    }
+
+    #[test]
+    fn the_fixed_part_of_a_prompt_ends_where_its_documents_begin() {
+        let known = Known::from_ontology(&json!({}), BTreeMap::new());
+        let (text, fixed) = prompt_split("d", Some("guide"), &known, &[]);
+        assert_eq!(fixed, text.len(), "no documents: all of it is fixed");
+        assert!(text.ends_with("Extract the knowledge in these documents.\n"));
+        assert_eq!(prompt("d", Some("guide"), &known, &[]), text);
     }
 
     #[test]

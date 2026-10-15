@@ -162,6 +162,24 @@ pub fn cost_decimal(cost_usd: Option<f64>) -> Option<Decimal> {
     cost_usd.map(|c| Decimal(format!("{c:.4}")))
 }
 
+/// The `SourceRan` event of a run of `source_id` that ran.
+fn source_ran(source_id: m::SourceId, report: &Report) -> m::SourceRan {
+    m::SourceRan {
+        source_id,
+        documents_new: report.documents_new,
+        documents_applied: report.documents_applied,
+        cost_usd: cost_decimal(report.cost_usd),
+        daily_ceiling_reached: report.daily_ceiling_reached,
+        model_calls: report.model_calls,
+        input_tokens: report.usage.input_tokens,
+        cache_read_input_tokens: report.usage.cache_read_input_tokens,
+        cache_creation_input_tokens: report.usage.cache_creation_input_tokens,
+        output_tokens: report.usage.output_tokens,
+        fixed_input_tokens: report.fixed_input_tokens,
+        documents_input_tokens: report.documents_input_tokens,
+    }
+}
+
 fn store(ports: &mut Ports, data: m::SourceData, state: m::SourceState) {
     let source = m::Source::new(data);
     let snapshot = match state {
@@ -268,13 +286,7 @@ impl Ports {
                 error: m::ApplyRefused { reason },
             },
             Ok(report) => {
-                let ran = m::SourceRan {
-                    source_id,
-                    documents_new: report.documents_new,
-                    documents_applied: report.documents_applied,
-                    cost_usd: cost_decimal(report.cost_usd),
-                    daily_ceiling_reached: report.daily_ceiling_reached,
-                };
+                let ran = source_ran(source_id, &report);
                 self.shared.borrow_mut().last_run = Some(report);
                 m::RunSourceOutcome::Ran { source_ran: ran }
             }
@@ -382,13 +394,7 @@ impl RunSourceBehavior for Ports {
         data.runs += 1;
         data.consecutive_failures = 0;
         store(self, data, m::SourceState::Enabled);
-        let ran = m::SourceRan {
-            source_id: input.source_id,
-            documents_new: report.documents_new,
-            documents_applied: report.documents_applied,
-            cost_usd: cost_decimal(report.cost_usd),
-            daily_ceiling_reached: report.daily_ceiling_reached,
-        };
+        let ran = source_ran(input.source_id, &report);
         self.shared.borrow_mut().last_run = Some(report);
         Ok(m::RunSourceOutcome::Ran { source_ran: ran })
     }

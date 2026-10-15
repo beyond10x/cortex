@@ -151,6 +151,15 @@ value to put back). A run the instance's daily ceiling stopped also carries
 `daily_ceiling_reached: true`, and its `stopped` names the ceiling (see
 [the spec file](./spec-file.md#the-daily-ceiling)).
 
+The detail also carries `model_calls`, the model calls the run made (a call asked again after an
+error answer that cost zero counts twice, and a failed call counts), and the tokens they reported:
+`input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, `output_tokens`, and
+`fixed_input_tokens` and `documents_input_tokens`, an estimate of how the input splits between the
+fixed part of each request and its documents (see
+[Operating](./operating.md#what-a-run-spends)). A run with no model call reports `model_calls: 0`
+and every token count `0`; a count is `null` when any answer did not report it, never `0`. The
+run's `cortex.log` line carries the same fields.
+
 ## Setup
 
 | command | does |

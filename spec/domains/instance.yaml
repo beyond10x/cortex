@@ -1228,6 +1228,13 @@ commands:
             documents_applied: {generated: true}
             cost_usd: {generated: true}
             daily_ceiling_reached: {generated: true}
+            model_calls: {generated: true}
+            input_tokens: {generated: true}
+            cache_read_input_tokens: {generated: true}
+            cache_creation_input_tokens: {generated: true}
+            output_tokens: {generated: true}
+            fixed_input_tokens: {generated: true}
+            documents_input_tokens: {generated: true}
         summary: >-
           Every new or changed document within the policy's limits was extracted and applied, in
           batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no
@@ -1578,6 +1585,17 @@ events:
       - {name: instance_name, type: cortex.instance.InstanceName}
 
   # `daily_ceiling_reached` says the run stopped before a batch at the instance's daily ceiling.
+  # `model_calls` counts every model call the run made: a call asked again after an error answer
+  # that cost zero counts twice, and a call that failed counts too. The token fields add up, over
+  # those calls, what the model reported in its answer's `usage`: `input_tokens`,
+  # `cache_read_input_tokens`, `cache_creation_input_tokens` and `output_tokens`. Each is `0` for
+  # a run with no model call, the sum while every answer reported it, and absent as soon as one
+  # answer did not; a missing count is never `0`. The model reports input per call only, so
+  # `fixed_input_tokens` and `documents_input_tokens` are an estimate: each call's input, cache
+  # reads and cache writes together, apportioned by bytes between the fixed part of the request
+  # (the system prompt, the answer's schema, and the prompt up to the documents: the instance's
+  # description and instructions, the ontology and the known entity names) and the documents.
+  # The two add up to `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`.
   - name: cortex.instance.SourceRan
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
@@ -1585,6 +1603,13 @@ events:
       - {name: documents_applied, type: Integer}
       - {name: cost_usd, type: Optional<Decimal>}
       - {name: daily_ceiling_reached, type: Boolean}
+      - {name: model_calls, type: Integer}
+      - {name: input_tokens, type: Optional<Integer>}
+      - {name: cache_read_input_tokens, type: Optional<Integer>}
+      - {name: cache_creation_input_tokens, type: Optional<Integer>}
+      - {name: output_tokens, type: Optional<Integer>}
+      - {name: fixed_input_tokens, type: Optional<Integer>}
+      - {name: documents_input_tokens, type: Optional<Integer>}
 
   # A run of a disabled source, which ran nothing.
   - name: cortex.instance.RunSkipped

@@ -381,3 +381,152 @@ fn adv_a_failed_extraction_answer_adds_its_cost_to_the_spend_of_the_day() {
         "{ran}"
     );
 }
+
+/// The `usage` object every answer of [`usage_per_call`] carries, in the field names of the
+/// pinned `claude` 2.1.294 (its result message's `usage`).
+const USAGE: &str = r#""usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":200,"output_tokens":50},"#;
+
+/// Wraps the world's `claude` so that each answer also carries [`USAGE`]. While the file
+/// `errors` holds a number above zero, a call counts it down and answers instead an error that
+/// cost zero with a zero `usage`, as claude answers a sign-in or a usage limit.
+fn usage_per_call(w: &World) {
+    std::fs::rename(w.bin.join("claude"), w.bin.join("claude-real")).unwrap();
+    std::fs::write(
+        w.root.join("error.json"),
+        r#"{"type":"result","subtype":"success","is_error":true,"result":"You've hit your usage limit.","total_cost_usd":0,"usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}"#,
+    )
+    .unwrap();
+    executable(
+        &w.bin.join("claude"),
+        &format!(
+            r#"R="{root}"
+n=$(cat "$R/errors" 2>/dev/null || echo 0)
+if [ "$n" -gt 0 ]; then
+  echo $((n - 1)) > "$R/errors"
+  echo error >> "$R/claude-errors.log"
+  cat > /dev/null
+  cat "$R/error.json"
+  exit 1
+fi
+"$R/bin/claude-real" "$@" | sed 's/"total_cost_usd":0.01,/"total_cost_usd":0.01,{usage}/'
+"#,
+            root = w.root.display(),
+            usage = USAGE
+        ),
+    );
+}
+
+/// Creates instance `name` over four pages (two batches) and runs its source once, its `claude`
+/// answering [`USAGE`] after `errors` zero-cost error answers.
+fn run_with_usage(name: &str, errors: u32) -> (World, Value) {
+    let w = World::new();
+    std::fs::write(w.root.join("answer.json"), two_batch_pages()).unwrap();
+    let path = spec(&w, name, "5", "");
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    usage_per_call(&w);
+    std::fs::write(w.root.join("errors"), errors.to_string()).unwrap();
+    let (code, ran) = w.cortex_env(
+        &["run", &format!("{name}/news")],
+        &[("CORTEX_MODEL_RETRY_MS", std::path::Path::new("10"))],
+    );
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    (w, ran)
+}
+
+/// The token fields of a run, as its result or its `cortex.log` line states them.
+const TOKENS: [&str; 6] = [
+    "input_tokens",
+    "cache_read_input_tokens",
+    "cache_creation_input_tokens",
+    "output_tokens",
+    "fixed_input_tokens",
+    "documents_input_tokens",
+];
+
+/// `model_calls` and the token counts of `fields`, numbers in the result as in the log line.
+fn calls_and_tokens(fields: &Value) -> Vec<Value> {
+    std::iter::once("model_calls")
+        .chain(TOKENS)
+        .map(|f| fields[f].clone())
+        .collect()
+}
+
+#[test]
+fn a_two_batch_run_reports_its_model_calls_and_the_tokens_of_both_answers() {
+    let (w, ran) = run_with_usage("usage", 0);
+    assert_eq!(w.lines("claude-calls.log").len(), 2, "two model calls");
+    let detail = &ran["detail"];
+    let line = last_log_line(&w, "usage");
+    for fields in [detail, &line] {
+        assert_eq!(fields["model_calls"], 2, "{fields}");
+        assert_eq!(fields["input_tokens"], 2000, "{fields}");
+        assert_eq!(fields["cache_read_input_tokens"], 400, "{fields}");
+        assert_eq!(fields["cache_creation_input_tokens"], 0, "{fields}");
+        assert_eq!(fields["output_tokens"], 100, "{fields}");
+        // The split covers every input token the calls reported, cache reads and writes too.
+        let fixed = fields["fixed_input_tokens"].as_i64().expect("fixed tokens");
+        let documents = fields["documents_input_tokens"]
+            .as_i64()
+            .expect("documents");
+        assert_eq!(fixed + documents, 2000 + 400, "{fields}");
+        assert!(fixed > 0 && documents > 0, "{fields}");
+        // Four pages of about 16 300 characters each outweigh the fixed part.
+        assert!(documents > fixed, "{fields}");
+    }
+    assert_eq!(calls_and_tokens(detail), calls_and_tokens(&line));
+    assert_eq!(detail["cost_usd"], "0.0200", "{ran}");
+}
+
+#[test]
+fn a_call_asked_again_after_a_zero_cost_error_counts_as_a_model_call() {
+    let (w, ran) = run_with_usage("retried", 1);
+    assert_eq!(w.lines("claude-errors.log").len(), 1, "one error answer");
+    assert_eq!(w.lines("claude-calls.log").len(), 2, "two answered calls");
+    for fields in [&ran["detail"], &last_log_line(&w, "retried")] {
+        assert_eq!(fields["model_calls"], 3, "{fields}");
+        assert_eq!(fields["input_tokens"], 2000, "{fields}");
+        assert_eq!(fields["cache_read_input_tokens"], 400, "{fields}");
+        assert_eq!(fields["output_tokens"], 100, "{fields}");
+    }
+}
+
+#[test]
+fn answers_without_usage_report_their_model_calls_and_null_tokens_never_zero() {
+    // The world's own stand-in answers no `usage`.
+    let (w, ran) = run_with_costs("nousage", "5", &["0.25", "0.5"]);
+    assert_eq!(w.lines("claude-calls.log").len(), 2, "two model calls");
+    let line = last_log_line(&w, "nousage");
+    for fields in [&ran["detail"], &line] {
+        assert_eq!(fields["model_calls"], 2, "{fields}");
+        for token in TOKENS {
+            assert!(
+                fields.get(token).is_some_and(Value::is_null),
+                "{token} is null: {fields}"
+            );
+        }
+    }
+    assert_eq!(ran["detail"]["cost_usd"], "0.7500", "{ran}");
+    assert_eq!(line["cost_usd"], 0.75);
+}
+
+#[test]
+fn a_run_with_nothing_new_reports_no_model_call_and_no_tokens() {
+    let (w, first) = run_with_usage("nothing", 0);
+    assert_eq!(first["detail"]["model_calls"], 2, "{first}");
+    let (code, ran) = w.cortex(&["run", "nothing/news"]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_new"], 0, "{ran}");
+    assert_eq!(
+        w.lines("claude-calls.log").len(),
+        2,
+        "no further model call"
+    );
+    let line = last_log_line(&w, "nothing");
+    for fields in [&ran["detail"], &line] {
+        assert_eq!(fields["model_calls"], 0, "{fields}");
+        for token in TOKENS {
+            assert_eq!(fields[token], 0, "{token}: {fields}");
+        }
+    }
+}
