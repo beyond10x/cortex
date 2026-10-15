@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:epoch-window-placeholders
 kind: story
-status: draft
+status: active
 title: A source's inputs can carry the run's window as epoch seconds
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - serves: vision:self-updating-instances
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-15T03:31:24Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-15T03:31:24Z", actor: "human:timo", revision: 3}
 ---
 ## Outcome
 

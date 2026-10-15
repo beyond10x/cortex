@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:adopt-seen-by-key
 kind: story
-status: draft
+status: active
 title: An adopted source's seen documents can be named by key, and the first run records their hash
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - serves: vision:self-updating-instances
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-15T03:31:23Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-15T03:31:23Z", actor: "human:timo", revision: 3}
 ---
 ## Outcome
 

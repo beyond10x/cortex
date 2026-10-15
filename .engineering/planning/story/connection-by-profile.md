@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:connection-by-profile
 kind: story
-status: draft
+status: active
 title: A spec names a Connectors connection by adapter and profile, resolved at run time
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - serves: vision:self-updating-instances
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-15T03:31:24Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-15T03:31:24Z", actor: "human:timo", revision: 3}
 ---
 ## Outcome
 

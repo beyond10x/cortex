@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:next-link-paging
 kind: story
-status: draft
+status: active
 title: A paged source follows a next link and stops at the run's since
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - serves: vision:self-updating-instances
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-15T03:31:21Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-15T03:31:21Z", actor: "human:timo", revision: 3}
 ---
 ## Outcome
 
