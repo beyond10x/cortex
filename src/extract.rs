@@ -64,6 +64,8 @@ pub struct Refused {
     /// What the call cost: `0` when no model was asked, `None` when a model was asked and its
     /// cost is not known. A missing cost is never `0`.
     pub cost_usd: Option<f64>,
+    /// The backend answered, and its answer was an error (`is_error`).
+    pub error_answer: bool,
 }
 
 impl Refused {
@@ -72,6 +74,7 @@ impl Refused {
         Self {
             message,
             cost_usd: Some(0.0),
+            error_answer: false,
         }
     }
 
@@ -80,8 +83,47 @@ impl Refused {
         Self {
             message,
             cost_usd: None,
+            error_answer: false,
         }
     }
+
+    /// An error answer that cost zero: the shape of an answer given before any model was asked
+    /// (a sign-in or a usage limit), worth asking once more. A missing cost is not zero.
+    fn free_error_answer(&self) -> bool {
+        self.error_answer && self.cost_usd == Some(0.0)
+    }
+}
+
+/// How long an extraction waits before asking again after an error answer that cost zero.
+const RETRY_WAIT_MS: u64 = 60_000;
+
+/// [`RETRY_WAIT_MS`], or the milliseconds in the hidden variable `CORTEX_MODEL_RETRY_MS`, which
+/// the tests set so they do not wait a minute (as `CORTEX_STATUS_POLL_MS` does for Connectors).
+fn retry_wait() -> std::time::Duration {
+    let ms = std::env::var("CORTEX_MODEL_RETRY_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(RETRY_WAIT_MS);
+    std::time::Duration::from_millis(ms)
+}
+
+/// The most bytes of claude's error text a reason and `error.txt` keep.
+pub const ERROR_TEXT_MAX_BYTES: usize = 1000;
+
+/// Claude's error text masked for credential shapes, as fetched text is, then cut at a character
+/// boundary to [`ERROR_TEXT_MAX_BYTES`], with `…` marking a cut. Masking comes first, so a cut
+/// never leaves the prefix of a credential that no longer matches its shape. Redaction
+/// placeholders are left as written: a failure message is not restored.
+pub fn error_text(text: &str) -> String {
+    let masked = crate::mask::mask(text.trim()).0;
+    if masked.len() <= ERROR_TEXT_MAX_BYTES {
+        return masked;
+    }
+    let mut end = ERROR_TEXT_MAX_BYTES;
+    while !masked.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &masked[..end])
 }
 
 /// Why a `Codex` backend does not extract yet.
@@ -221,7 +263,8 @@ pub fn prompt(
 
 impl Model {
     /// One extraction call for one batch, through the spec's backend, run in `dir`: [`ask_with`]
-    /// and the extraction prompt [`SYSTEM_PROMPT`].
+    /// and the extraction prompt [`SYSTEM_PROMPT`]. An error answer that cost zero is asked once
+    /// more after [`RETRY_WAIT_MS`]; a second refusal is the call's.
     ///
     /// [`ask_with`]: Model::ask_with
     pub fn ask(
@@ -231,8 +274,14 @@ impl Model {
         prompt: &str,
         budget_usd: f64,
     ) -> Result<Answer, String> {
-        self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd)
-            .map_err(|e| e.message)
+        match self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd) {
+            Err(e) if e.free_error_answer() => {
+                std::thread::sleep(retry_wait());
+                self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd)
+            }
+            other => other,
+        }
+        .map_err(|e| e.message)
     }
 
     /// One model call with `system_prompt`, through the spec's backend, run in `dir`: the answer
@@ -311,13 +360,23 @@ impl Model {
         })?;
         let cost_usd = answer["total_cost_usd"].as_f64();
         if answer["is_error"] == Value::Bool(true) {
+            // Claude's own text says why (a sign-in, a usage limit); kept masked and bounded in
+            // the reason and in `error.txt`, where nothing else of the failed call is written.
+            let said = error_text(answer["result"].as_str().unwrap_or_default());
+            let _ = std::fs::write(dir.join("error.txt"), &said);
+            let mut message = format!(
+                "claude answered an error ({}), {}",
+                answer["subtype"].as_str().unwrap_or("unknown"),
+                cost_text(cost_usd)
+            );
+            if !said.is_empty() {
+                message.push_str(": ");
+                message.push_str(&said);
+            }
             return Err(Refused {
-                message: format!(
-                    "claude answered an error ({}), {}",
-                    answer["subtype"].as_str().unwrap_or("unknown"),
-                    cost_text(cost_usd)
-                ),
+                message,
                 cost_usd,
+                error_answer: true,
             });
         }
         match answer.get("structured_output") {
@@ -331,6 +390,7 @@ impl Model {
                     cost_text(cost_usd)
                 ),
                 cost_usd,
+                error_answer: false,
             }),
         }
     }
@@ -671,6 +731,20 @@ mod tests {
             .expect("an extraction failure");
         assert!(err.contains("story:codex-model-backend"), "{err}");
         assert!(!dir.exists(), "nothing was run in {}", dir.display());
+    }
+
+    #[test]
+    fn error_text_is_masked_before_it_is_cut_so_no_credential_prefix_survives() {
+        // Assembled at runtime so no credential-shaped literal sits in the source.
+        let token = format!("sk-{}", "Ab9".repeat(20));
+        // The token straddles the bound: cut first, its 19-byte prefix would match no shape and
+        // be kept; masked first, the text fits the bound and holds only the mask.
+        let text = format!("{} {token}", "x".repeat(ERROR_TEXT_MAX_BYTES - 20));
+        let kept = error_text(&text);
+        assert!(!kept.contains("sk-Ab9"), "{kept}");
+        assert!(kept.ends_with("[masked:api-key]"), "{kept}");
+        let cut = error_text(&"é".repeat(ERROR_TEXT_MAX_BYTES));
+        assert!(cut.ends_with('…') && cut.len() <= ERROR_TEXT_MAX_BYTES + '…'.len_utf8());
     }
 
     #[test]

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LockHeld payload",
+  "description": "Another cortex command holds the home's lock and the run was asked not to wait for it. Nothing ran and nothing was counted.",
+  "x-ess-name": "cortex.instance.LockHeld",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "fcbcdf07a6d27fad39edbfb6b1dca5421f92c3db6245167cdc8dea105b58cbc3",
+    "contract_digest": "slice-sha256/2:e73275ce9b214550ed9ba9f45d2dfd39cb4cb079ad835d9f28840dce5dffefa5",
+    "regenerate": "ess generate"
+  }
+}

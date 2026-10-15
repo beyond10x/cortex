@@ -22,7 +22,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `instances/<name>/meta.json` | the viewer's port and the directory the spec was created from |
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
 | `instances/<name>/state/entities.json` | entity names from earlier runs, offered to the model so it reuses them |
-| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report |
+| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report, or claude's error text (`claude/error.txt`) |
 | `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
 | `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
@@ -168,6 +168,15 @@ and its `reason` says it was not undone.
 
 If Connectors refuses a read because a connection's validation lapsed, cortex revalidates the
 connection once and retries.
+
+When `claude` answers an error, the `extraction-failed` reason keeps the error text it gave
+(`claude answered an error (success), cost 0.0000 USD: Not logged in …`), and the batch's
+`claude/error.txt` under the run directory holds the same text. The text is masked for credential
+shapes as fetched text is, and cut at a character boundary to 1,000 bytes (`…` marks a cut). An
+error answer that cost zero, the shape of an answer given before any model was asked such as a
+sign-in or usage-limit message, is asked once more after 60 seconds; if that answer is valid the
+run goes on and no failure is counted, and a second error fails the run as above. An error answer
+with a cost above zero, or with no cost reported, is not asked again.
 
 ## Undoing a run
 

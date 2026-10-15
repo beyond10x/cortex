@@ -1874,9 +1874,9 @@ pub enum RunSourceOutcome {
         /// Why it was refused: `cortex.instance.FetchFailed`.
         error: FetchFailed,
     },
-    /// `extraction-failed` — externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document).
+    /// `extraction-failed` — externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait).
     ///
-    /// Nothing was applied; the scheduler then sends RecordFailure.
+    /// Nothing was applied; the scheduler then sends RecordFailure. When the model answered an error, `reason` holds the error text it gave, masked for credential shapes as fetched text is and cut at a character boundary to a bound, and the batch's `claude/error.txt` holds the same text. An error answer with a cost above zero, or with no cost reported, is not asked again.
     ExtractionFailed {
         /// Why it was refused: `cortex.instance.ExtractionFailed`.
         error: ExtractionFailed,
