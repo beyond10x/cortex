@@ -218,6 +218,14 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
             return Err("model.daily_ceiling_usd must be above 0".into());
         }
     }
+    for (field, limit) in [
+        ("budget_tokens", spec.model.budget_tokens),
+        ("daily_ceiling_tokens", spec.model.daily_ceiling_tokens),
+    ] {
+        if limit.is_some_and(|n| n <= 0) {
+            return Err(format!("model.{field} must be above 0"));
+        }
+    }
     if spec.model.timeout_s <= 0 {
         return Err("model.timeout_s must be above 0".into());
     }

@@ -631,7 +631,7 @@ pub fn judge(
         ) {
             Ok(answer) => answer,
             Err(refused) => {
-                daily.add(refused.cost_usd);
+                daily.add_answer(refused.cost_usd, &refused.usage);
                 // The failed call is counted too: "in all" is everything the judge spent.
                 let total = add_cost(cost_usd, refused.cost_usd);
                 return Err(Failure::Judge(format!(
@@ -641,7 +641,7 @@ pub fn judge(
                 )));
             }
         };
-        daily.add(answer.cost_usd);
+        daily.add_answer(answer.cost_usd, &answer.usage);
         spent += answer.cost_usd.unwrap_or(0.0);
         cost_usd = add_cost(cost_usd, answer.cost_usd);
         let mut restored = answer.document;
