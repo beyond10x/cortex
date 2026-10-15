@@ -130,8 +130,11 @@ enum Command {
         /// `<instance>/<source>`.
         source_id: String,
         /// On a failed run, record the failure (`cortex.instance.RecordFailure`), as the timers do.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "fetch_only")]
         record_failure: bool,
+        /// Fetch the source and count what a run would extract, with no model call and no write.
+        #[arg(long)]
+        fetch_only: bool,
     },
     /// Put an instance's store back to a snapshot a run took before it applied anything
     /// (`cortex.instance.RestoreSnapshot`).
@@ -287,6 +290,7 @@ fn main() -> ExitCode {
                 tools: tools(),
                 shared: shared.clone(),
                 runner: None,
+                counter: None,
             }));
             let ctx = Ctx {
                 home: &home,
@@ -372,7 +376,8 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
         Command::Run {
             source_id,
             record_failure,
-        } => run_source(app, ctx, &source_id, record_failure),
+            fetch_only,
+        } => run_source(app, ctx, &source_id, record_failure, fetch_only),
         Command::Source { command } => match command {
             SourceCommand::Add {
                 instance_name,
@@ -464,9 +469,14 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
     }
 }
 
-/// Every connection the spec names, its sources' and its `postgres` store's, that Connectors does
-/// not list, or lists as revoked.
-fn missing_connection(ctx: &Ctx, spec: &m::InstanceSpec) -> Result<Option<String>, String> {
+/// The first connection the spec names, its sources' and its `postgres` store's, that Connectors
+/// does not list, or lists as revoked, or a profile that resolves to no live connection or to more
+/// than one: the reference as named, and why.
+fn missing_connection(
+    ctx: &Ctx,
+    spec: &m::InstanceSpec,
+) -> Result<Option<(String, String)>, String> {
+    use cortex_cli::connectors::{InvokeError, Reference};
     let tools = &ctx.tools;
     let mut named = spec::connections(spec);
     if let Some(m::StoreSpec::Postgres(p)) = &spec.store {
@@ -474,13 +484,29 @@ fn missing_connection(ctx: &Ctx, spec: &m::InstanceSpec) -> Result<Option<String
             [&p.connection, &p.schema_connection]
                 .into_iter()
                 .flatten()
-                .map(|c| (c.adapter.clone(), c.connection.clone())),
+                .map(|c| {
+                    let reference = Reference::of(c.connection.as_ref(), c.profile.as_ref());
+                    (c.adapter.clone(), reference)
+                }),
         );
     }
-    for (adapter, connection) in named {
-        match tools.connectors.connection_state(&adapter, &connection) {
+    for (adapter, reference) in named {
+        let missing = |why: String| Ok(Some((reference.named(&adapter), why)));
+        let connection = match &reference {
+            // A profile resolves to a connection that is listed and not revoked, or is refused.
+            Reference::Profile(_) => match tools.connectors.resolve(&adapter, &reference) {
+                Ok(_) => continue,
+                Err(InvokeError::Missing(why)) => return missing(why),
+                Err(e) => return Err(e.to_string()),
+            },
+            Reference::Id(id) => id,
+        };
+        match tools.connectors.connection_state(&adapter, connection) {
             Ok(Some(state)) if state != "revoked" => {}
-            Ok(_) => return Ok(Some(format!("{adapter}:{connection}"))),
+            Ok(Some(_)) => {
+                return missing(format!("{adapter}: connection {connection} is revoked"))
+            }
+            Ok(None) => return missing(format!("{adapter}: no connection {connection}")),
             Err(e) => return Err(e.to_string()),
         }
     }
@@ -736,12 +762,14 @@ fn create(
     let mut seeded: Option<Result<run::Report, run::Failure>> = None;
     if !taken {
         match missing_connection(ctx, &spec) {
-            Ok(Some(missing)) => {
+            Ok(Some((connection, reason))) => {
                 ctx.shared
                     .borrow_mut()
                     .external
                     .insert((CMD, "connection-missing"), true);
-                ctx.shared.borrow_mut().strings.push_back(missing);
+                let strings = &mut ctx.shared.borrow_mut().strings;
+                strings.push_back(connection);
+                strings.push_back(reason);
             }
             Ok(None) => {
                 // A `postgres` store's tenant is the instance's name; another instance (one
@@ -823,6 +851,7 @@ fn create(
             ok: false,
             detail: json!({
                 "connection": error.connection,
+                "reason": error.reason,
                 "next": "connectors connections connect --adapter <adapter> --profile <profile> --credential-prompt",
             }),
         },
@@ -1235,6 +1264,31 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
     print("adopt", &done)
 }
 
+/// Whether the viewer unit of `name`, which launches through the id its store's profile resolved
+/// to when the unit was written, now names another id than the profile resolves to. An id
+/// reference, no unit (or another home's), or a profile that resolves to no one id is not: the
+/// update's connection check answers the last.
+fn viewer_resolves_anew(ctx: &Ctx, name: &str, store: &ekr::Store, units: Units) -> bool {
+    let Units::Install { .. } = units else {
+        return false;
+    };
+    let Some(launch) = &store.launch else {
+        return false;
+    };
+    if !matches!(
+        launch.connection.connection,
+        cortex_cli::connectors::Reference::Profile(_)
+    ) {
+        return false;
+    }
+    let Some(written) = Systemd::from_env(&ctx.home.root).view_connection(name) else {
+        return false;
+    };
+    launch
+        .resolve(&launch.connection)
+        .is_ok_and(|id| id != written)
+}
+
 fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> ExitCode {
     let loaded = match spec::load_given(path) {
         Ok(l) => l,
@@ -1247,12 +1301,14 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
     let layout = Layout::new(ctx.home.instance_dir(name));
     // The viewer unit is written only when the store's `ekr` now launches through another
     // connection, or newly or no longer through one: an update that adds, drops or changes
-    // `store.value.connection`. Otherwise the update leaves the viewer alone, and a viewer the
-    // operator stopped stays stopped. A frozen spec that cannot be read writes it.
+    // `store.value.connection`, or one whose profile now resolves to another id than the one the
+    // viewer unit holds (the connection was connected anew). Otherwise the update leaves the
+    // viewer alone, and a viewer the operator stopped stays stopped. A frozen spec that cannot be
+    // read writes it.
     let relaunch = layout.load_spec().map_or(true, |old| {
         layout.store_handle(&old).launched_through()
             != layout.store_handle(&spec).launched_through()
-    });
+    }) || viewer_resolves_anew(ctx, name, &layout.store_handle(&spec), units);
     if let Some(reason) = foreign_units(ctx, name, &spec, units, relaunch) {
         return fail(reason);
     }
@@ -1714,18 +1770,26 @@ const EXIT_DISABLED: u8 = 3;
 /// The exit status of each `run` outcome, which an external scheduler reads instead of the line.
 fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
     match outcome {
-        m::RunSourceOutcome::Ran { .. } => 0,
+        m::RunSourceOutcome::Ran { .. } | m::RunSourceOutcome::Fetched { .. } => 0,
         m::RunSourceOutcome::Disabled { .. } => EXIT_DISABLED,
-        m::RunSourceOutcome::FetchFailed { .. }
+        m::RunSourceOutcome::FetchOnlyFailed { .. }
+        | m::RunSourceOutcome::FetchFailed { .. }
         | m::RunSourceOutcome::ExtractionFailed { .. }
         | m::RunSourceOutcome::ApplyRefused { .. }
         | m::RunSourceOutcome::NoSuchSource { .. } => 1,
     }
 }
 
-fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCode {
+fn run_source(
+    app: &mut App,
+    ctx: &Ctx,
+    source_id: &str,
+    record: bool,
+    fetch_only: bool,
+) -> ExitCode {
     let outcome = match app.run_source(m::RunSource {
         source_id: m::SourceId(source_id.to_string()),
+        fetch_only: fetch_only.then_some(true),
     }) {
         Ok(o) => o,
         Err(e) => return fail(e),
@@ -1744,9 +1808,31 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
                 "masked": report.masked,
                 "stopped": report.stopped,
             });
+            // The run's model calls and the tokens they reported, as its `SourceRan` carries them.
+            for (key, value) in [
+                ("model_calls", Some(source_ran.model_calls)),
+                ("input_tokens", source_ran.input_tokens),
+                (
+                    "cache_read_input_tokens",
+                    source_ran.cache_read_input_tokens,
+                ),
+                (
+                    "cache_creation_input_tokens",
+                    source_ran.cache_creation_input_tokens,
+                ),
+                ("output_tokens", source_ran.output_tokens),
+                ("fixed_input_tokens", source_ran.fixed_input_tokens),
+                ("documents_input_tokens", source_ran.documents_input_tokens),
+            ] {
+                detail[key] = json!(value);
+            }
             // Present only when a document was cut: a run that cut nothing reports as before.
             if report.truncated > 0 {
                 detail["truncated"] = json!(report.truncated);
+            }
+            // Present only when a document adopted by key was hashed: other runs report as before.
+            if report.hashed > 0 {
+                detail["hashed"] = json!(report.hashed);
             }
             // Present only when a parent was skipped: a run that skipped none reports as before.
             if !report.skipped.is_empty() {
@@ -1786,6 +1872,32 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
                 None,
             )
         }
+        m::RunSourceOutcome::Fetched { source_fetched: f } => (
+            Done {
+                outcome: "fetched",
+                ok: true,
+                detail: json!({
+                    "source_id": f.source_id.0,
+                    "window": {"since": f.since.0, "until": f.until.0},
+                    "fetched": f.fetched,
+                    "new": f.new,
+                    "changed": f.changed,
+                    "held": f.held,
+                    "unchanged": f.unchanged,
+                    "unread": f.unread,
+                }),
+            },
+            None,
+        ),
+        // Printed as the failed fetch it is; it records and counts nothing.
+        m::RunSourceOutcome::FetchOnlyFailed { error } => (
+            Done {
+                outcome: "fetch-failed",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            None,
+        ),
         m::RunSourceOutcome::FetchFailed { error } => (
             Done {
                 outcome: "fetch-failed",
@@ -1832,7 +1944,10 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
         (true, Some(reason)) => record_failure(app, ctx, source_id, reason).1,
         _ => false,
     };
-    report_run(ctx, source_id, disabled);
+    // A fetch-only run reports nothing: no status file, no metric, no hook.
+    if !fetch_only {
+        report_run(ctx, source_id, disabled);
+    }
     ExitCode::from(status)
 }
 
@@ -1961,7 +2076,12 @@ fn mcp_line(home: &Home, name: &str) -> ExitCode {
         format!("EKR_BACKEND={}", store.backend.name()),
         format!("EKR_STORE={}", store.store.display()),
     ];
-    // A launched store's `ekr` gets its password from Connectors, as every other `ekr` of it does.
+    // A launched store's `ekr` gets its password from Connectors, as every other `ekr` of it does,
+    // through the connection its reference resolves to now.
+    let connection = match store.launch.as_ref().map(|l| l.resolve(&l.connection)) {
+        Some(Err(e)) => return fail(e),
+        resolved => resolved.and_then(Result::ok).unwrap_or_default(),
+    };
     match &store.launch {
         Some(launch) => words.extend([
             launch.connectors.display().to_string(),
@@ -1970,7 +2090,7 @@ fn mcp_line(home: &Home, name: &str) -> ExitCode {
             "--adapter".into(),
             launch.connection.adapter.clone(),
             "--connection".into(),
-            launch.connection.connection.clone(),
+            connection,
             "--consumer".into(),
             ekr::CONSUMER.into(),
             "--args".into(),

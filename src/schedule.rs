@@ -538,11 +538,13 @@ impl Systemd {
             ),
             Some(launch) => {
                 let connectors = on_path(&launch.connectors);
+                // A profile is written as the id it resolves to now.
+                let connection = launch.resolve(&launch.connection)?;
                 single_line(
                     [
                         ("the connectors binary", connectors.display().to_string()),
                         ("the adapter", launch.connection.adapter.clone()),
-                        ("the connection", launch.connection.connection.clone()),
+                        ("the connection", connection.clone()),
                     ]
                     .into_iter()
                     .map(|(what, value)| (what.to_string(), value))
@@ -562,7 +564,7 @@ impl Systemd {
                         "{} connections launch --adapter {} --connection {} --consumer {} --args {}",
                         exec_quote(&connectors.display().to_string()),
                         exec_quote(&launch.connection.adapter),
-                        exec_quote(&launch.connection.connection),
+                        exec_quote(&connection),
                         crate::ekr::CONSUMER,
                         exec_quote(&args)
                     ),
@@ -580,6 +582,30 @@ impl Systemd {
         )?;
         self.systemctl(&["daemon-reload"])?;
         self.systemctl(&["enable", "--now", &format!("{unit}.service")])
+    }
+
+    /// The connection id this home's viewer unit of `instance` launches through, as
+    /// [`Systemd::install_view`] wrote it: the id a profile resolved to then. `None` when there is
+    /// no such unit, another home wrote it, or it launches through no connection.
+    pub fn view_connection(&self, instance: &str) -> Option<String> {
+        let name = format!("{}.service", view_unit(instance));
+        let text = std::fs::read_to_string(self.unit_dir.join(&name)).ok()?;
+        if home_of(&text).is_some_and(|home| !same_home(&home, &self.home_root)) {
+            return None;
+        }
+        let exec = text.lines().find_map(|l| l.strip_prefix("ExecStart="))?;
+        let (_, after) = exec.split_once(" --connection \"")?;
+        // The value as `exec_quote` wrote it: up to the first quote no backslash escapes.
+        let mut id = String::new();
+        let mut chars = after.chars();
+        while let Some(c) = chars.next() {
+            match c {
+                '\\' => id.push(chars.next()?),
+                '"' => return Some(id.replace("%%", "%").replace("$$", "$")),
+                c => id.push(c),
+            }
+        }
+        None
     }
 
     /// Stops the viewer of `instance` when it is running, runs `stopped`, and starts the viewer
@@ -700,6 +726,36 @@ mod tests {
             tmp.path().display()
         );
         assert!(unit.contains(&connectors), "{connectors} in\n{unit}");
+    }
+
+    /// The viewer unit's connection is read back as `exec_quote` wrote it, and only from this
+    /// home's unit.
+    #[test]
+    fn the_viewer_connection_is_read_back_from_this_homes_unit_only() {
+        let tmp = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+        let units = tmp.path().join("units");
+        std::fs::create_dir_all(&units).unwrap();
+        let systemd = Systemd {
+            systemctl: std::path::PathBuf::from("true"),
+            unit_dir: units.clone(),
+            home_root: tmp.path().join("home"),
+            taken_over: Default::default(),
+        };
+        assert_eq!(systemd.view_connection("q"), None);
+        let id = r#"c"o\n%n$1"#;
+        let unit = |home: &std::path::Path| {
+            format!(
+                "[Unit]\nX-CortexHome={}\n\n[Service]\nExecStart=\"/c\" connections launch \
+                 --adapter \"pg\" --connection {} --consumer ekr --args \"[]\"\n",
+                home.display(),
+                exec_quote(id)
+            )
+        };
+        let path = units.join("cortex-q-view.service");
+        std::fs::write(&path, unit(&tmp.path().join("home"))).unwrap();
+        assert_eq!(systemd.view_connection("q").as_deref(), Some(id));
+        std::fs::write(&path, unit(&tmp.path().join("other"))).unwrap();
+        assert_eq!(systemd.view_connection("q"), None);
     }
 
     #[test]

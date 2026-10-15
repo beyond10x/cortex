@@ -38,6 +38,9 @@ pub enum Failure {
 #[derive(Debug)]
 pub struct Report {
     pub documents_new: i64,
+    /// Fetched documents whose key was seen with no hash (adopted by key alone): their hash was
+    /// recorded and they were not extracted ([`SeenState::hash_unhashed`]).
+    pub hashed: usize,
     pub documents_applied: i64,
     /// `0` when no model was asked, the sum when every answer carried a cost, `None` as soon as
     /// one answer carried none: a missing cost is never written as `0`.
@@ -68,6 +71,15 @@ pub struct Report {
     pub retracted: usize,
     /// Whether the run stopped before a batch at the instance's daily ceiling (said in `stopped`).
     pub daily_ceiling_reached: bool,
+    /// Every model call the run made, a call asked again and a failed one included.
+    pub model_calls: i64,
+    /// The tokens those calls reported, summed with the rule of [`add_cost`]: `0` when no model
+    /// was asked, `None` as soon as one answer did not carry the count.
+    pub usage: extract::Usage,
+    /// The input tokens (cache reads and writes included) apportioned by bytes to the fixed part
+    /// of each request and to its documents ([`extract::split_tokens`]); `None` as the input is.
+    pub fixed_input_tokens: Option<i64>,
+    pub documents_input_tokens: Option<i64>,
 }
 
 /// An applied document a part EKR rejected belongs to: its key and EKR's refusals, joined.
@@ -101,6 +113,7 @@ impl Default for Report {
     fn default() -> Self {
         Self {
             documents_new: 0,
+            hashed: 0,
             documents_applied: 0,
             cost_usd: Some(0.0),
             facts_refused: 0,
@@ -115,7 +128,39 @@ impl Default for Report {
             superseded: 0,
             retracted: 0,
             daily_ceiling_reached: false,
+            model_calls: 0,
+            usage: extract::Usage::ZERO,
+            fixed_input_tokens: Some(0),
+            documents_input_tokens: Some(0),
         }
+    }
+}
+
+impl Report {
+    /// Counts the model calls of one batch and their tokens, its request's fixed part `fixed`
+    /// bytes long and its documents `documents` bytes.
+    pub fn add_calls(&mut self, calls: i64, usage: extract::Usage, fixed: usize, documents: usize) {
+        self.model_calls += calls;
+        self.usage = self.usage.plus(usage);
+        let split = usage
+            .all_input()
+            .map(|tokens| extract::split_tokens(tokens, fixed, documents));
+        let add = |total: Option<i64>, part: Option<i64>| Some(total? + part?);
+        self.fixed_input_tokens = add(self.fixed_input_tokens, split.map(|s| s.0));
+        self.documents_input_tokens = add(self.documents_input_tokens, split.map(|s| s.1));
+    }
+
+    /// The model calls and tokens as a run's result and its `cortex.log` line state them.
+    pub fn calls_json(&self) -> serde_json::Value {
+        json!({
+            "model_calls": self.model_calls,
+            "input_tokens": self.usage.input_tokens,
+            "cache_read_input_tokens": self.usage.cache_read_input_tokens,
+            "cache_creation_input_tokens": self.usage.cache_creation_input_tokens,
+            "output_tokens": self.usage.output_tokens,
+            "fixed_input_tokens": self.fixed_input_tokens,
+            "documents_input_tokens": self.documents_input_tokens,
+        })
     }
 }
 
@@ -153,62 +198,144 @@ fn load_entities(layout: &Layout) -> BTreeMap<String, Vec<String>> {
         .unwrap_or_default()
 }
 
-pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Report, Failure> {
-    let spec = layout.load_spec().map_err(Failure::Fetch)?;
-    let meta = layout.load_meta().map_err(Failure::Fetch)?;
-    let source_spec = spec
-        .sources
-        .iter()
-        .find(|s| s.name == source.name)
-        .ok_or_else(|| Failure::Fetch(format!("the spec has no source {:?}", source.name)))?;
-    // The window a `connectors` source asks about: from just before the start of its last
-    // successful run, its held-back changes or a run that did not succeed, to the start of this
-    // one.
-    let start = now_ms();
-    let seen_path = layout.seen(&source.name);
-    let state = SeenState::load(&seen_path).map_err(Failure::Fetch)?;
-    let window = Window::of_run(
-        start,
-        state.last_success_started_at,
-        state.held_since,
-        state.pending_since,
-        source_spec.policy.refresh_after_days,
-    );
-    // A structured source's links order and match records by the identities the run gives them,
-    // which the redaction policy takes part in.
-    let ran = redact::compile(spec.redaction.as_ref())
-        .map_err(Failure::Extract)
-        .and_then(|redactor| {
-            sources::fetch(
-                &source_spec.settings,
-                &tools.connectors,
-                &meta.spec_dir,
-                &window,
-                &state.child_failures,
-                source_spec.policy.max_chars_per_document.max(0) as usize,
-                redactor.as_ref(),
-            )
-            .map_err(|e| match e {
-                FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
-            })
+/// What a fetch-only run counted (`cortex.instance.SourceFetched`): the window its fetch asked
+/// about, and the documents it fetched, masked and scrubbed as a run's are, against the source's
+/// seen state.
+#[derive(Debug, Default)]
+pub struct Counts {
+    pub since_ms: i64,
+    pub until_ms: i64,
+    /// `new` + `changed` + `held` + `unchanged`.
+    pub fetched: usize,
+    /// Keys the seen state does not carry.
+    pub new: usize,
+    /// Seen keys whose text a run would extract now ([`SeenState::wants`]).
+    pub changed: usize,
+    /// Seen keys whose change `refresh_after_days` holds back ([`SeenState::holds`]).
+    pub held: usize,
+    pub unchanged: usize,
+    /// Why the fetch left records unread, one line each, masked as a run's `stopped` is.
+    pub unread: Vec<String>,
+}
+
+/// What a source's run reads before it fetches: the instance's spec, the source's place in it,
+/// its seen state and the window it asks about.
+struct Planned {
+    spec: m::InstanceSpec,
+    spec_dir: PathBuf,
+    source: usize,
+    state: SeenState,
+    seen_path: PathBuf,
+    window: Window,
+}
+
+impl Planned {
+    fn of(layout: &Layout, source: &m::SourceData) -> Result<Self, Failure> {
+        let spec = layout.load_spec().map_err(Failure::Fetch)?;
+        let meta = layout.load_meta().map_err(Failure::Fetch)?;
+        let index = spec
+            .sources
+            .iter()
+            .position(|s| s.name == source.name)
+            .ok_or_else(|| Failure::Fetch(format!("the spec has no source {:?}", source.name)))?;
+        // The window a `connectors` source asks about: from just before the start of its last
+        // successful run, its held-back changes or a run that did not succeed, to the start of
+        // this one.
+        let start = now_ms();
+        let seen_path = layout.seen(&source.name);
+        let state = SeenState::load(&seen_path).map_err(Failure::Fetch)?;
+        let window = Window::of_run(
+            start,
+            state.last_success_started_at,
+            state.held_since,
+            state.pending_since,
+            spec.sources[index].policy.refresh_after_days,
+        );
+        Ok(Self {
+            spec,
+            spec_dir: meta.spec_dir,
+            source: index,
+            state,
+            seen_path,
+            window,
         })
-        .and_then(|fetched| {
-            let structured_source = match &source_spec.settings {
-                m::SourceSettings::Structured(st) => Some(st),
-                _ => None,
-            };
-            process(
-                layout,
-                tools,
-                &spec,
-                &source.name,
-                fetched,
-                &source_spec.policy,
-                Some(window),
-                structured_source,
-                true,
-            )
-        });
+    }
+
+    fn source(&self) -> &m::SourceSpec {
+        &self.spec.sources[self.source]
+    }
+
+    fn structured(&self) -> Option<&m::StructuredSource> {
+        match &self.source().settings {
+            m::SourceSettings::Structured(st) => Some(st),
+            _ => None,
+        }
+    }
+
+    /// Fetches the source over the window. A structured source's links order and match records
+    /// by the identities the run gives them, which the redaction policy takes part in.
+    fn fetch(&self, tools: &Tools) -> Result<sources::Fetched, Failure> {
+        let source = self.source();
+        let redactor = redact::compile(self.spec.redaction.as_ref()).map_err(Failure::Extract)?;
+        sources::fetch(
+            &source.settings,
+            &tools.connectors,
+            &self.spec_dir,
+            &self.window,
+            &self.state.child_failures,
+            source.policy.max_chars_per_document.max(0) as usize,
+            redactor.as_ref(),
+        )
+        .map_err(|e| match e {
+            FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
+        })
+    }
+}
+
+/// `cortex run --fetch-only`: fetches the source as [`run`] does, masks and scrubs what it
+/// fetched and counts it against the seen state, then stops. It asks no model and writes nothing:
+/// not the store, the seen state (a failed fetch records no `pending_since`), `runs/`, a
+/// snapshot, an EKR stage or `cortex.log`.
+pub fn count(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Counts, Failure> {
+    let planned = Planned::of(layout, source)?;
+    let fetched = planned.fetch(tools)?;
+    let mut counts = Counts {
+        since_ms: planned.window.since_ms,
+        until_ms: planned.window.until_ms,
+        ..Counts::default()
+    };
+    process_in(
+        layout,
+        tools,
+        &planned.spec,
+        &source.name,
+        fetched,
+        &planned.source().policy,
+        Some(planned.window),
+        planned.structured(),
+        false,
+        &mut Undo::new(BeforeApply::none()),
+        Some(&mut counts),
+    )?;
+    Ok(counts)
+}
+
+pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Report, Failure> {
+    let planned = Planned::of(layout, source)?;
+    let (window, seen_path) = (planned.window, planned.seen_path.clone());
+    let ran = planned.fetch(tools).and_then(|fetched| {
+        process(
+            layout,
+            tools,
+            &planned.spec,
+            &source.name,
+            fetched,
+            &planned.source().policy,
+            Some(window),
+            planned.structured(),
+            true,
+        )
+    });
     if ran.is_err() {
         // A failed run reads nothing it can be trusted to have read: the next run's `{since}` is
         // no later than this one's. The failure is the run's answer; a state that cannot be
@@ -326,12 +453,16 @@ fn process(
         structured_source,
         undoable,
         &mut before,
+        None,
     );
     settle(ran, before)
 }
 
 /// [`process`], with the run's snapshot and stage in `before`, which [`settle`] settles once the
 /// run ended, whichever way it did.
+///
+/// With `counts`, a fetch-only run ([`count`]): it fills `counts` once the documents are masked,
+/// scrubbed and compared with the seen state, and returns before anything is selected or written.
 #[allow(clippy::too_many_arguments)]
 fn process_in(
     layout: &Layout,
@@ -344,6 +475,7 @@ fn process_in(
     structured_source: Option<&m::StructuredSource>,
     undoable: bool,
     before: &mut Undo,
+    counts: Option<&mut Counts>,
 ) -> Result<Report, Failure> {
     let started = now_ms();
     let applied_at = window.map_or(started, |w| w.until_ms);
@@ -511,6 +643,9 @@ fn process_in(
     let seen_path = layout.seen(label);
     let mut seen = SeenState::load(&seen_path).map_err(Failure::Fetch)?;
     seen.unlinked = unlinked;
+    // A document adopted by its key alone is seen with the text fetched now, and not extracted;
+    // its hash is written with the rest of the run's state, so a run that is undone puts it back.
+    report.hashed = seen.hash_unhashed(&docs);
     let wanted = docs
         .iter()
         .filter(|d| seen.wants(d, started, policy.refresh_after_days))
@@ -523,6 +658,29 @@ fn process_in(
         .filter_map(|d| seen.documents.get(&d.key))
         .map(|s| s.applied_at - sources::OVERLAP_MS)
         .min();
+    // A fetch-only run stops here, with what this run would select counted.
+    if let Some(counts) = counts {
+        let refresh = policy.refresh_after_days;
+        for d in &docs {
+            let count = if !seen.documents.contains_key(&d.key) {
+                &mut counts.new
+            } else if seen.wants(d, started, refresh) {
+                &mut counts.changed
+            } else if seen.holds(d, started, refresh) {
+                &mut counts.held
+            } else {
+                &mut counts.unchanged
+            };
+            *count += 1;
+        }
+        counts.fetched = docs.len();
+        counts.unread = fetched
+            .unread
+            .iter()
+            .map(|u| masked_key(redactor.as_ref(), u))
+            .collect();
+        return Ok(report);
+    }
     let selected = seen.select(
         docs,
         started,
@@ -653,11 +811,15 @@ fn process_in(
         let ontology = store.ontology().map_err(Failure::Apply)?;
         // The model is shown the batch with personal data replaced by placeholders; the mapping
         // stays in `pseudonyms`, in memory, until this batch's answer is restored.
-        let (prompt, pseudonyms) = match &redactor {
+        let ((prompt, fixed), pseudonyms) = match &redactor {
             None => {
                 let known = Known::from_ontology(&ontology, entities.clone());
-                let prompt =
-                    extract::prompt(&spec.description, instructions.as_deref(), &known, &batch);
+                let prompt = extract::prompt_split(
+                    &spec.description,
+                    instructions.as_deref(),
+                    &known,
+                    &batch,
+                );
                 (prompt, None)
             }
             Some(r) => {
@@ -672,8 +834,12 @@ fn process_in(
                     break;
                 }
                 let known = Known::from_ontology(&ontology, known);
-                let prompt =
-                    extract::prompt(&spec.description, instructions.as_deref(), &known, &shown);
+                let prompt = extract::prompt_split(
+                    &spec.description,
+                    instructions.as_deref(),
+                    &known,
+                    &shown,
+                );
                 if let Some(counts) = report.redacted.as_mut() {
                     for (name, n) in p.counts() {
                         *counts.entry(name.clone()).or_default() += n;
@@ -689,6 +855,14 @@ fn process_in(
             Ok(answer) => answer.cost_usd,
             Err(refused) => refused.cost_usd,
         });
+        // Every model call counts, a failed one included. The fixed part is the system prompt,
+        // the answer's schema (both sent as flags) and the prompt up to the documents.
+        let (calls, usage) = match &asked {
+            Ok(answer) => (answer.calls, answer.usage),
+            Err(refused) => (refused.calls, refused.usage),
+        };
+        let fixed_bytes = extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed;
+        report.add_calls(calls, usage, fixed_bytes, prompt.len() - fixed);
         let answer = match asked.map_err(|refused| refused.message) {
             Ok(answer) => answer,
             Err(e) if report.documents_applied == 0 => return Err(Failure::Extract(e)),
@@ -1301,7 +1475,7 @@ fn end_dropped(
         .filter(|d| {
             seen.documents
                 .get(&d.key)
-                .is_none_or(|s| s.hash != crate::state::doc_hash(d))
+                .is_none_or(|s| s.hash.as_deref() != Some(&crate::state::doc_hash(d)))
                 || evidence::lead_bytes(d, &r.source.lead(d)) > evidence::PAYLOAD_MAX_BYTES
         })
         .map(|d| d.key.clone())
@@ -1453,9 +1627,18 @@ fn log_line(label: &str, report: &Report, started: i64) -> serde_json::Value {
         "seconds": (now_ms() - started) as f64 / 1000.0,
         "stopped": report.stopped,
     });
+    if let (Some(line), serde_json::Value::Object(calls)) =
+        (line.as_object_mut(), report.calls_json())
+    {
+        line.extend(calls);
+    }
     // Present only when a document was cut: a run that cut nothing logs what it did before.
     if report.truncated > 0 {
         line["truncated"] = json!(report.truncated);
+    }
+    // Present only when a document adopted by key was hashed: other runs log what they did before.
+    if report.hashed > 0 {
+        line["hashed"] = json!(report.hashed);
     }
     // Present only when a parent was skipped: a run that skipped none logs what it did before.
     if !report.skipped.is_empty() {

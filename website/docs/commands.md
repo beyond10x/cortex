@@ -135,6 +135,7 @@ A source id is `<instance>/<source>`.
 | command | does | outcomes |
 |---|---|---|
 | `cortex run <instance>/<source> [--record-failure]` | run one source once. With `--record-failure`, which the timers pass, a failed run is also counted. Its exit status tells a scheduler which outcome it was (see [Exit statuses of `cortex run`](./operating.md#exit-statuses-of-cortex-run)): 0 `ran`, 1 a failed run or `no-such-source`, 3 `disabled`. `<instance>/seed`, for an instance with no source of that name, extracts the seed documents no seed extraction applied yet, such as those a `partial` create left. Like a source run it keeps a snapshot named `<time>-seed` before it applies and is held to the spec's `gate`; on an adopted instance it answers `fetch-failed`, because the seed belongs to the store's earlier life | `ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `disabled`, `no-such-source` |
+| `cortex run <instance>/<source> --fetch-only` | fetch the source as a run would, mask and scrub what it fetched, and count it against the source's seen state, without a model call or a write (see [Counting what a run would extract](./operating.md#counting-what-a-run-would-extract)). Exits 0 for `fetched`, 1 otherwise; refused beside `--record-failure` | `fetched`, `fetch-failed`, `no-such-source` |
 | `cortex source enable <instance>/<source>` | enable a source that two failed runs in a row disabled, and its timer | `enabled`, `wrong-state`, `no-such-source` |
 | `cortex source record-failure <instance>/<source> --reason <text>` | count one failed run; the second in a row disables the source and its timer | `counted`, `disabled`, `already-disabled`, `no-such-source` |
 | `cortex source add --instance-name <name> --source-id <id> --name <name> --kind <Web\|Connectors\|Files> --schedule <calendar>` | register a source in the registry; `create` and `update` do this for the spec's sources | `added` |
@@ -150,6 +151,18 @@ prompts sent, per class or rule) and `unrestored` (placeholders in the model's a
 value to put back). A run the instance's daily ceiling stopped also carries
 `daily_ceiling_reached: true`, and its `stopped` names the ceiling (see
 [the spec file](./spec-file.md#the-daily-ceiling)).
+
+The detail also carries `model_calls`, the model calls the run made (a call asked again after an
+error answer that cost zero counts twice, and a failed call counts), and the tokens they reported:
+`input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, `output_tokens`, and
+`fixed_input_tokens` and `documents_input_tokens`, an estimate of how the input splits between the
+fixed part of each request and its documents (see
+[Operating](./operating.md#what-a-run-spends)). A run with no model call reports `model_calls: 0`
+and every token count `0`; a count is `null` when any answer did not report it, never `0`. The
+run's `cortex.log` line carries the same fields.
+
+A `fetched` line's detail carries `source_id`, `window` (`since` and `until`, RFC 3339), and the
+counts `fetched`, `new`, `changed`, `held` and `unchanged`, and `unread`.
 
 ## Setup
 

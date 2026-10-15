@@ -104,6 +104,9 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 2 | none | an error before any outcome, on stderr as `cortex: <message>` (an unreadable registry, a home that cannot be locked) |
 | 3 | `disabled` | the source is disabled after two failed runs in a row; nothing ran. `cortex source enable` switches it back on |
 
+With `--fetch-only` (see [Counting what a run would extract](#counting-what-a-run-would-extract)),
+`fetched` exits 0 and a fetch that failed exits 1 as `fetch-failed`.
+
 The JSON line on stdout says the same, with its `detail`. With `--record-failure`, a failed run
 prints a second line, the recorded failure's (`counted` or `disabled`); the exit status is the
 run's.
@@ -163,6 +166,32 @@ the UTC day reaches `model.daily_ceiling_usd` (see
 [the spec file](./spec-file.md#the-daily-ceiling)). When a batch fails after an earlier
 one was applied, the run ends as `ran` with `stopped` set; when the first batch fails, nothing was
 applied and the run fails.
+
+### Counting what a run would extract
+
+`cortex run <instance>/<source> --fetch-only` runs steps 1 and 2 and the comparison of step 3,
+and stops there. It fetches over the window a run would ask about, masks and scrubs each document
+as a run does, and compares its content hash with the source's seen state:
+
+```json
+{"command":"run","outcome":"fetched","detail":{"source_id":"news/feed",
+ "window":{"since":"2026-10-15T09:50:00Z","until":"2026-10-15T10:00:00Z"},
+ "fetched":20,"new":3,"changed":1,"held":0,"unchanged":16,"unread":[]}}
+```
+
+`new` counts documents whose key was never applied, `changed` those a run would extract now,
+`held` those whose change waits for `refresh_after_days`, and `unchanged` the rest; `fetched` is
+their sum. `max_documents_per_run` does not cut the counts. `unread` lists, masked as a run's
+`stopped` is, why the fetch left records unread. Use it to check a new source, connection or
+schedule, and to count the documents a run at your cadence would send to the model, before
+paying for extraction.
+
+Nothing else happens: no model call, no snapshot and no PostgreSQL stage, nothing written to the
+store, `state/<source>.json`, the source's status, `metrics.prom` or `cortex.log`, no hook
+call, and no run or failure counted. A fetch that fails answers `fetch-failed` and leaves the
+window where it was. A disabled source is counted too; `<instance>/seed` is not a source and
+answers `fetch-failed`. `--fetch-only` cannot be combined with `--record-failure`. It holds the
+home's lock while it fetches, as a run does.
 
 ## Failures
 
@@ -370,6 +399,30 @@ seed belongs to the store's earlier life. The spec's sources are added, and the 
   cortex gives a document (its URL, `file:<key>` or `record:<key>`). A non-zero
   `seen_without_evidence` means the seen file is from another store, or the store lost those
   documents' evidence: to have them extracted, remove their keys from `state/<source>.json`.
+- **Seen by key alone.** The hash cortex remembers is of a document's text as cortex renders,
+  scrubs and masks it, which only cortex can compute. An adopter that knows only which documents
+  its store holds names each by its key and `applied_at` (milliseconds since the Unix epoch), with
+  no `hash`. The key is the one cortex gives the document, masked: a page's URL, a file's absolute
+  path, and for a record read from a file, the file's absolute path, `#` and the record's id. For
+  a files source with `records: {format: JsonLines, id: ts}` over `/srv/archive/*.jsonl`:
+
+  ```json
+  {"format": "cortex.seen/1",
+   "documents": {"/srv/archive/2026-09.jsonl#1.0": {"applied_at": 1}}}
+  ```
+
+  The key is absolute even when the spec names the files by a relative path (`paths: [archive]`,
+  read against the directory the spec file was created from): a relative key such as `archive/2026-09.jsonl#1.0` matches
+  no document, so that record is extracted again. A run's `state/<source>.json` shows the keys
+  as cortex gives them.
+
+  The source's first run records the hash of each such document it fetches, keeps its
+  `applied_at` and does not extract it; the run's report counts them as `hashed`, apart from
+  `documents_new`. A later run extracts the document again when its text changes. A key no run
+  has fetched yet keeps no hash. The hash is written with the rest of the run's state, so a run
+  its gate undoes puts it back with `state/`, and the next run records it again. An entry with
+  no `applied_at` (missing or `null`), or one whose `applied_at` is not an integer or whose
+  `hash` is neither a string nor `null`, makes `cortex adopt` exit 2 naming its key.
 
 `adopted` reports the store's head as `revision`. `backend-mismatch`, `store-unreadable`,
 `store-held` and `seed-types-missing` leave no instance directory and register nothing.
@@ -389,6 +442,42 @@ user's configuration:
 The model sees fetched text and nothing else. Fetched text is untrusted: it is masked for
 credential shapes, stored as evidence and sent to a model that cannot act on it, with the
 personal data a `redaction` policy names replaced by placeholders (see [Limits](./limits.md)).
+
+### What a run spends
+
+Besides `cost_usd`, a run's result and its `cortex.log` line say how many model calls it made
+(`model_calls`) and the tokens those calls reported in `claude`'s `usage`: `input_tokens`,
+`cache_read_input_tokens`, `cache_creation_input_tokens` and `output_tokens`, each summed over the
+calls. A call asked again after an error answer that cost zero counts as two calls, and a failed
+call counts. A count is `0` for a run with no model call and `null` as soon as one answer did not
+report it; it is never written as `0` for a count nobody reported.
+
+Each request has a fixed part, sent again with every batch: the system prompt, EKR's extraction
+schema, the instance's description and instructions, the store's ontology and the known entity
+names. The rest is the batch's documents. `claude` reports input tokens per call, not per part,
+so `fixed_input_tokens` and `documents_input_tokens` are an estimate: each call's input tokens,
+cache reads and writes included, apportioned by the bytes of the two parts. They add up to
+`input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`. A source that runs
+often with one to three documents per run can read from them whether the fixed part dominates
+what it spends.
+
+## Connections by profile
+
+cortex holds no credential; every source that reads through Connectors, and a `postgres` store's
+`ekr`, names a Connectors connection. Where that connection's id changes from one start to the
+next, as in a container whose Connectors state is created anew each time (`connectors setup
+init`, then `connectors connections connect`), name it by profile instead of by id
+(`profile: tavily.api-key`; [Spec file](./spec-file.md#naming-a-connection)). Each cortex
+command resolves the profile once, the first time it needs the connection, to the one connection
+`connectors connections list --adapter <adapter>` lists with that profile and a state other than
+`revoked`, and uses that id for the rest of the command. Connect exactly one connection per
+adapter and profile: with none, or two (an old one not revoked), `cortex create` answers
+`connection-missing` and a run `fetch-failed`, naming the adapter, the profile, the count and
+the matching ids, and no credential is used. Two things outlive a command and carry the id the
+profile resolved to when they were written, not the profile: a `postgres` store's viewer unit and
+the line `cortex mcp-line` prints. After the connection is connected anew they name the old id
+until they are written again: `cortex update` resolves the profile anew and rewrites the viewer
+unit when the id changed, and the MCP line is printed again after each connect.
 
 ## A PostgreSQL store's password
 

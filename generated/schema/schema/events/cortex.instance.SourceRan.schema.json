@@ -21,20 +21,42 @@
     },
     "daily_ceiling_reached": {
       "type": "boolean"
+    },
+    "model_calls": {
+      "type": "integer"
+    },
+    "input_tokens": {
+      "type": "integer"
+    },
+    "cache_read_input_tokens": {
+      "type": "integer"
+    },
+    "cache_creation_input_tokens": {
+      "type": "integer"
+    },
+    "output_tokens": {
+      "type": "integer"
+    },
+    "fixed_input_tokens": {
+      "type": "integer"
+    },
+    "documents_input_tokens": {
+      "type": "integer"
     }
   },
   "required": [
     "source_id",
     "documents_new",
     "documents_applied",
-    "daily_ceiling_reached"
+    "daily_ceiling_reached",
+    "model_calls"
   ],
   "additionalProperties": false,
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
-    "contract_digest": "slice-sha256/2:09d14fbef1375709400d69bf586fee39dc1b4665e1ff8d8342e0f3efb17f085d",
+    "source_digest": "17e09111e8b07b05de318bdb51a95149ecca7a5002497fc00341b27224aad8e8",
+    "contract_digest": "slice-sha256/2:125e90a5401626d9cc782e0d9a453f93e05815528b0f498342672cc06995a559",
     "regenerate": "ess generate"
   },
   "$defs": {

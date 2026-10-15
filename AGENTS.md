@@ -48,7 +48,7 @@ A change here that moves none of these is a question for the operator, not a tas
 
 ## The specification comes first
 
-`spec/` is an ESS specification (`ess/20`, pinned to ESS 0.59.0 in `spec/ess-inputs.yaml`). It is
+`spec/` is an ESS specification (`ess/20`, pinned to ESS 0.60.0 in `spec/ess-inputs.yaml`). It is
 the source of truth for every noun, command, outcome, error and event.
 
 - Change `spec/`, then run `task generate`. Never edit anything under `generated/` or
@@ -173,7 +173,7 @@ this repository and published by the organisation's reusable workflow.
 - `task check` is the gate (see [Commands](#commands)); `STATUS.md` records its last result.
 - Format with `cargo fmt -p cortex-cli -p cortex-docs`. `cargo fmt --all` also rewrites the
   generated crates, which are path dependencies, and `task drift` then fails.
-- `tests/conformance.rs` runs every scenario of `spec/suite.json` (58) in process; `tests/e2e.rs`
+- `tests/conformance.rs` runs every scenario of `spec/suite.json` (61) in process; `tests/e2e.rs`
   drives the binary end to end; the clap ⇔ spec test in `src/main.rs` holds the command line to
   the commands, inputs and views `spec/` puts on it.
 - Build into this tree's own `target/` (leave `CARGO_TARGET_DIR` unset), and end each tree with

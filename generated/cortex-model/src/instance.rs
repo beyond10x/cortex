@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041
-// contract digest 44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd
+// model digest 17e09111e8b07b05de318bdb51a95149ecca7a5002497fc00341b27224aad8e8
+// contract digest 0166cbe548974dfabcad41333301694ac564bae5ee942ef2545595cb53e8a6e0
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -17,6 +17,8 @@ pub enum ChangeDetection {
 }
 
 /// ChildCall — `cortex.instance.ChildCall`.
+///
+/// Every value satisfies `paging.stop_older_than_since != true` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChildCall {
     /// `operation` — `String`.
@@ -30,6 +32,8 @@ pub struct ChildCall {
 }
 
 /// CompareLink — `cortex.instance.CompareLink`.
+///
+/// Every value satisfies `paging.stop_older_than_since != true` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompareLink {
     /// `operation` — `String`.
@@ -53,21 +57,30 @@ pub struct CompareLink {
 }
 
 /// ConnectionRef — `cortex.instance.ConnectionRef`.
+///
+/// Every value satisfies `(defined(connection) or defined(profile))` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConnectionRef {
     /// `adapter` — `String`.
     pub adapter: String,
-    /// `connection` — `String`.
-    pub connection: String,
+    /// `connection` — `Optional<String>`.
+    pub connection: Option<String>,
+    /// `profile` — `Optional<String>`.
+    pub profile: Option<String>,
 }
 
 /// ConnectorsSource — `cortex.instance.ConnectorsSource`.
+///
+/// Every value satisfies `(paging.stop_older_than_since != true or defined(time))` — declared here, enforced by whatever behaviour constructs one.
+/// Every value satisfies `(defined(connection) or defined(profile))` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConnectorsSource {
     /// `adapter` — `String`.
     pub adapter: String,
-    /// `connection` — `String`.
-    pub connection: String,
+    /// `connection` — `Optional<String>`.
+    pub connection: Option<String>,
+    /// `profile` — `Optional<String>`.
+    pub profile: Option<String>,
     /// `operation` — `String`.
     pub operation: String,
     /// `inputs` — `List<Json>`.
@@ -318,6 +331,8 @@ pub enum PageStyle {
     Token,
     /// `Keyset`.
     Keyset,
+    /// `NextLink`.
+    NextLink,
 }
 
 /// Paging — `cortex.instance.Paging`.
@@ -331,6 +346,8 @@ pub struct Paging {
     pub next: Option<String>,
     /// `max_pages` — `Integer`.
     pub max_pages: i64,
+    /// `stop_older_than_since` — `Optional<Boolean>`.
+    pub stop_older_than_since: Option<bool>,
 }
 
 /// PostgresStore — `cortex.instance.PostgresStore`.
@@ -794,6 +811,8 @@ pub enum StoreSpec {
 }
 
 /// StructuredChild — `cortex.instance.StructuredChild`.
+///
+/// Every value satisfies `paging.stop_older_than_since != true` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructuredChild {
     /// `operation` — `String`.
@@ -813,12 +832,17 @@ pub struct StructuredChild {
 }
 
 /// StructuredConnectors — `cortex.instance.StructuredConnectors`.
+///
+/// Every value satisfies `paging.stop_older_than_since != true` — declared here, enforced by whatever behaviour constructs one.
+/// Every value satisfies `(defined(connection) or defined(profile))` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructuredConnectors {
     /// `adapter` — `String`.
     pub adapter: String,
-    /// `connection` — `String`.
-    pub connection: String,
+    /// `connection` — `Optional<String>`.
+    pub connection: Option<String>,
+    /// `profile` — `Optional<String>`.
+    pub profile: Option<String>,
     /// `operation` — `String`.
     pub operation: String,
     /// `inputs` — `List<Json>`.
@@ -919,12 +943,16 @@ pub enum WebMode {
 }
 
 /// WebSource — `cortex.instance.WebSource`.
+///
+/// Every value satisfies `(defined(connection) or defined(profile))` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WebSource {
     /// `adapter` — `Optional<String>`.
     pub adapter: Option<String>,
-    /// `connection` — `String`.
-    pub connection: String,
+    /// `connection` — `Optional<String>`.
+    pub connection: Option<String>,
+    /// `profile` — `Optional<String>`.
+    pub profile: Option<String>,
     /// `input` — `cortex.instance.WebInput`.
     pub input: WebInput,
 }
@@ -1108,8 +1136,8 @@ pub struct SeenDocumentData {
     pub source_id: SourceId,
     /// `key` — `String`.
     pub key: String,
-    /// `content_hash` — `String`.
-    pub content_hash: String,
+    /// `content_hash` — `Optional<String>`.
+    pub content_hash: Option<String>,
     /// `unlinked_hash` — `Optional<String>`.
     pub unlinked_hash: Option<String>,
     /// `applied_at` — `Integer`.
@@ -1593,7 +1621,7 @@ pub enum CreateInstanceOutcome {
         /// Why it was refused: `cortex.instance.NameTaken`.
         error: NameTaken,
     },
-    /// `connection-missing` — externally decided (Connectors lists no live connection for a connection id a source or the postgres store of the spec names).
+    /// `connection-missing` — externally decided (Connectors lists no live connection for a connection id a source or the postgres store of the spec names, or not exactly one live connection for a profile one names).
     ///
     /// Nothing was created.
     ConnectionMissing {
@@ -1916,6 +1944,8 @@ pub enum RestoreSnapshotOutcome {
 pub struct RunSource {
     /// `source_id` — `cortex.instance.SourceId`.
     pub source_id: SourceId,
+    /// `fetch_only` — `Optional<Boolean>`.
+    pub fetch_only: Option<bool>,
 }
 
 /// Everything `cortex.instance.RunSource` can result in — one variant per declared outcome.
@@ -1925,12 +1955,26 @@ pub struct RunSource {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunSourceOutcome {
-    /// `disabled` — when the existing subject is in Disabled.
+    /// `disabled` — when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)`.
     ///
     /// The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome.
     Disabled {
         /// The `cortex.instance.RunSkipped` this outcome publishes.
         run_skipped: RunSkipped,
+    },
+    /// `fetch-only-failed` — externally decided (Connectors or the filesystem fails to deliver the source's documents in a fetch-only run) when eligible ((defined(fetch_only) and fetch_only == true)).
+    ///
+    /// Nothing was written: not the source's status, its seen documents or its window, and no failure is counted. The command line prints it as `fetch-failed`.
+    FetchOnlyFailed {
+        /// Why it was refused: `cortex.instance.FetchFailed`.
+        error: FetchFailed,
+    },
+    /// `fetched` — when `(defined(fetch_only) and fetch_only == true)`.
+    ///
+    /// A fetch-only run: the source was fetched over the window a run would ask about, its documents masked and scrubbed as a run's are and compared with its seen documents by content hash. `new` counts keys no seen document carries; `changed` those a run would extract now; `held` those whose change `refresh_after_days` holds back; `unchanged` the rest. No model was asked, and nothing was written: not the store, the seen documents, the source's status or `cortex.log`; no snapshot or stage was taken and no run counted.
+    Fetched {
+        /// The `cortex.instance.SourceFetched` this outcome publishes.
+        source_fetched: SourceFetched,
     },
     /// `fetch-failed` — externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first).
     ///
@@ -2009,7 +2053,7 @@ pub enum UpdateInstanceOutcome {
     },
     /// `updated` — otherwise.
     ///
-    /// The frozen spec is replaced; sources, model and serve settings take effect on the next run.
+    /// The frozen spec is replaced; sources, model and serve settings take effect on the next run. The viewer unit holds the connection id resolved at the last create, adopt or update: it is rewritten when the store's connection changed, or when its profile now resolves to another id.
     Updated {
         /// The `cortex.instance.InstanceUpdated` this outcome publishes.
         instance_updated: InstanceUpdated,
@@ -2159,6 +2203,29 @@ pub struct SourceEnabled {
     pub source_id: SourceId,
 }
 
+/// SourceFetched — the event `cortex.instance.SourceFetched`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceFetched {
+    /// `source_id` — `cortex.instance.SourceId`.
+    pub source_id: SourceId,
+    /// `since` — `Timestamp`.
+    pub since: crate::primitives::Timestamp,
+    /// `until` — `Timestamp`.
+    pub until: crate::primitives::Timestamp,
+    /// `fetched` — `Integer`.
+    pub fetched: i64,
+    /// `new` — `Integer`.
+    pub new: i64,
+    /// `changed` — `Integer`.
+    pub changed: i64,
+    /// `held` — `Integer`.
+    pub held: i64,
+    /// `unchanged` — `Integer`.
+    pub unchanged: i64,
+    /// `unread` — `List<String>`.
+    pub unread: Vec<String>,
+}
+
 /// SourceRan — the event `cortex.instance.SourceRan`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceRan {
@@ -2172,6 +2239,20 @@ pub struct SourceRan {
     pub cost_usd: Option<crate::primitives::Decimal>,
     /// `daily_ceiling_reached` — `Boolean`.
     pub daily_ceiling_reached: bool,
+    /// `model_calls` — `Integer`.
+    pub model_calls: i64,
+    /// `input_tokens` — `Optional<Integer>`.
+    pub input_tokens: Option<i64>,
+    /// `cache_read_input_tokens` — `Optional<Integer>`.
+    pub cache_read_input_tokens: Option<i64>,
+    /// `cache_creation_input_tokens` — `Optional<Integer>`.
+    pub cache_creation_input_tokens: Option<i64>,
+    /// `output_tokens` — `Optional<Integer>`.
+    pub output_tokens: Option<i64>,
+    /// `fixed_input_tokens` — `Optional<Integer>`.
+    pub fixed_input_tokens: Option<i64>,
+    /// `documents_input_tokens` — `Optional<Integer>`.
+    pub documents_input_tokens: Option<i64>,
 }
 
 /// The declared error `cortex.instance.ApplyRefused`.
@@ -2194,11 +2275,13 @@ pub struct BackendMismatch {
 
 /// The declared error `cortex.instance.ConnectionMissing`.
 ///
-/// Connectors lists no live connection with the id a source or the postgres store names. Run `connectors connections connect` for it, then try again.
+/// Connectors lists no live connection with the id a source or the postgres store names, or not exactly one live connection with the profile it names. Run `connectors connections connect` for it, or revoke the extra ones, then try again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConnectionMissing {
     /// `connection` — `String`.
     pub connection: String,
+    /// `reason` — `String`.
+    pub reason: String,
 }
 
 /// The declared error `cortex.instance.ExtractionFailed`.
@@ -2535,7 +2618,7 @@ pub mod obligations {
     ///
     /// Why it is not generated: kept an obligation by a refusal that compensates (`compensates: true`), on `fetch-failed`.
     ///
-    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
+    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)`, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-only-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents in a fetch-only run) when eligible ((defined(fetch_only) and fetch_only == true)), error `cortex.instance.FetchFailed`; `fetched` when `(defined(fetch_only) and fetch_only == true)`, updates `cortex.instance.Source`, emits `cortex.instance.SourceFetched`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
     pub trait RunSourceBehavior {
         /// Decides and enacts exactly one declared outcome of `cortex.instance.RunSource`.
         ///

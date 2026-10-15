@@ -25,6 +25,8 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `records` — `String`
 - `paging` — `Optional<cortex.instance.Paging>`, which may be absent
 
+Every value satisfies `paging.stop_older_than_since != true`.
+
 ### `CompareLink`
 
 `cortex.instance.CompareLink` is a record of nine fields:
@@ -39,19 +41,25 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `change_id` — `String`
 - `relation` — `String`
 
+Every value satisfies `paging.stop_older_than_since != true`.
+
 ### `ConnectionRef`
 
-`cortex.instance.ConnectionRef` is a record of two fields:
+`cortex.instance.ConnectionRef` is a record of three fields:
 
 - `adapter` — `String`
-- `connection` — `String`
+- `connection` — `Optional<String>`, which may be absent
+- `profile` — `Optional<String>`, which may be absent
+
+Every value satisfies `(defined(connection) or defined(profile))`.
 
 ### `ConnectorsSource`
 
-`cortex.instance.ConnectorsSource` is a record of 10 fields:
+`cortex.instance.ConnectorsSource` is a record of 11 fields:
 
 - `adapter` — `String`
-- `connection` — `String`
+- `connection` — `Optional<String>`, which may be absent
+- `profile` — `Optional<String>`, which may be absent
 - `operation` — `String`
 - `inputs` — `List<Json>`
 - `records` — `String`
@@ -60,6 +68,8 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `text` — `List<String>`
 - `paging` — `Optional<cortex.instance.Paging>`, which may be absent
 - `child` — `Optional<cortex.instance.ChildCall>`, which may be absent
+
+Every value satisfies `(paging.stop_older_than_since != true or defined(time))` and `(defined(connection) or defined(profile))`.
 
 ### `CrawlPolicy`
 
@@ -200,16 +210,17 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 
 ### `PageStyle`
 
-`cortex.instance.PageStyle` is one of `PageNumber`, `Token` and `Keyset`.
+`cortex.instance.PageStyle` is one of `PageNumber`, `Token`, `Keyset` and `NextLink`.
 
 ### `Paging`
 
-`cortex.instance.Paging` is a record of four fields:
+`cortex.instance.Paging` is a record of five fields:
 
 - `style` — `cortex.instance.PageStyle`
 - `param` — `String`
 - `next` — `Optional<String>`, which may be absent
 - `max_pages` — `Integer`
+- `stop_older_than_since` — `Optional<Boolean>`, which may be absent
 
 ### `PostgresStore`
 
@@ -489,17 +500,22 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `time` — `Optional<String>`, which may be absent
 - `parent` — `String`
 
+Every value satisfies `paging.stop_older_than_since != true`.
+
 ### `StructuredConnectors`
 
-`cortex.instance.StructuredConnectors` is a record of seven fields:
+`cortex.instance.StructuredConnectors` is a record of eight fields:
 
 - `adapter` — `String`
-- `connection` — `String`
+- `connection` — `Optional<String>`, which may be absent
+- `profile` — `Optional<String>`, which may be absent
 - `operation` — `String`
 - `inputs` — `List<Json>`
 - `paging` — `Optional<cortex.instance.Paging>`, which may be absent
 - `children` — `Optional<List<cortex.instance.StructuredChild>>`, which may be absent
 - `links` — `Optional<List<cortex.instance.CompareLink>>`, which may be absent
+
+Every value satisfies `paging.stop_older_than_since != true` and `(defined(connection) or defined(profile))`.
 
 ### `StructuredFiles`
 
@@ -561,11 +577,14 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 
 ### `WebSource`
 
-`cortex.instance.WebSource` is a record of three fields:
+`cortex.instance.WebSource` is a record of four fields:
 
 - `adapter` — `Optional<String>`, which may be absent
-- `connection` — `String`
+- `connection` — `Optional<String>`, which may be absent
+- `profile` — `Optional<String>`, which may be absent
 - `input` — `cortex.instance.WebInput`
+
+Every value satisfies `(defined(connection) or defined(profile))`.
 
 Five of the types above are reached by nothing else in this system: `cortex.instance.DailySpend`, `cortex.instance.HookResult`, `cortex.instance.QualityVerdict`, `cortex.instance.SchemaProposal` and `cortex.instance.SchemaProposals`. No entity, view, command, event, error or crossing names them, so it is either vocabulary something outside this specification uses or a leftover — and only a person can tell which.
 
@@ -623,7 +642,7 @@ It holds:
 
 - `source_id` — `cortex.instance.SourceId`
 - `key` — `String`
-- `content_hash` — `String`
+- `content_hash` — `Optional<String>`, which may be absent
 - `unlinked_hash` — `Optional<String>`, which may be absent
 - `applied_at` — `Integer`
 
@@ -809,7 +828,7 @@ It has five outcomes.
 
 **`name-taken`** — Nothing was created. Taken when a record already carries the identity the command's creating branch would create, and no input-guarded refusal applies. No entity in this specification changes. It reports `cortex.instance.NameTaken`, carrying `name`. It emits nothing. A test reaches it by sending the command twice with one identity: the first call creates the record, the second is answered by this branch.
 
-**`connection-missing`** — Nothing was created. Decided outside the input: Connectors lists no live connection for a connection id a source or the postgres store of the spec names. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ConnectionMissing`, carrying `connection`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`connection-missing`** — Nothing was created. Decided outside the input: Connectors lists no live connection for a connection id a source or the postgres store of the spec names, or not exactly one live connection for a profile one names. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ConnectionMissing`, carrying `connection` and `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`seed-refused`** — Nothing was created. Decided outside the input: EKR refuses the minimal seed, the ekr-seed/2 file or the seed schema document. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SeedRefused`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
@@ -937,10 +956,15 @@ It has five outcomes.
 It takes:
 
 - `source_id` — `cortex.instance.SourceId`
+- `fetch_only` — `Optional<Boolean>`, which may be absent
 
-It has six outcomes.
+It has eight outcomes.
 
-**`disabled`** — The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome. Taken when the existing subject is in Disabled. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.RunSkipped`. It sets `last_outcome` from `"disabled"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test establishes the declared subject state and constructs input selecting this branch in that state.
+**`disabled`** — The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome. Taken when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)` holds of the input. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.RunSkipped`. It sets `last_outcome` from `"disabled"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test establishes the declared subject state and constructs input selecting this branch in that state.
+
+**`fetch-only-failed`** — Nothing was written: not the source's status, its seen documents or its window, and no failure is counted. The command line prints it as `fetch-failed`. Eligible when (defined(fetch_only) and fetch_only == true); externally decided: Connectors or the filesystem fails to deliver the source's documents in a fetch-only run. No entity in this specification changes. It reports `cortex.instance.FetchFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`fetched`** — A fetch-only run: the source was fetched over the window a run would ask about, its documents masked and scrubbed as a run's are and compared with its seen documents by content hash. `new` counts keys no seen document carries; `changed` those a run would extract now; `held` those whose change `refresh_after_days` holds back; `unchanged` the rest. No model was asked, and nothing was written: not the store, the seen documents, the source's status or `cortex.log`; no snapshot or stage was taken and no run counted. Taken when `(defined(fetch_only) and fetch_only == true)` holds of the input. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceFetched`. A test reaches it by constructing an input that satisfies that condition.
 
 **`fetch-failed`** — Nothing was applied; the source's status records the outcome and its reason, and the scheduler then sends RecordFailure. Decided outside the input: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.FetchFailed`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"fetch-failed"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
@@ -970,7 +994,7 @@ It has four outcomes.
 
 **`not-active`** — The instance is removed; nothing changed. Taken when the existing subject's stored fields satisfy `state == Removed`. No entity in this specification changes. It reports `cortex.instance.InstanceNotActive`, carrying `state`. It emits nothing. A test establishes and independently observes the subject enum fact before selecting this branch.
 
-**`updated`** — The frozen spec is replaced; sources, model and serve settings take effect on the next run. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.InstanceUpdated`. It sets `description` from `input.description` and `model` from `input.model`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+**`updated`** — The frozen spec is replaced; sources, model and serve settings take effect on the next run. The viewer unit holds the connection id resolved at the last create, adopt or update: it is rewritten when the store's connection changed, or when its profile now resolves to another id. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.InstanceUpdated`. It sets `description` from `input.description` and `model` from `input.model`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
 **`no-such-instance`** — Nothing changed. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
@@ -1146,6 +1170,26 @@ Emitted by `cortex.instance.EnableSource` on its `enabled` outcome.
 
 Nothing in this system reacts to it.
 
+### `SourceFetched`
+
+`cortex.instance.SourceFetched`.
+
+It carries:
+
+- `source_id` — `cortex.instance.SourceId`
+- `since` — `Timestamp`
+- `until` — `Timestamp`
+- `fetched` — `Integer`
+- `new` — `Integer`
+- `changed` — `Integer`
+- `held` — `Integer`
+- `unchanged` — `Integer`
+- `unread` — `List<String>`
+
+Emitted by `cortex.instance.RunSource` on its `fetched` outcome.
+
+Nothing in this system reacts to it.
+
 ### `SourceRan`
 
 `cortex.instance.SourceRan`.
@@ -1157,6 +1201,13 @@ It carries:
 - `documents_applied` — `Integer`
 - `cost_usd` — `Optional<Decimal>`, which may be absent
 - `daily_ceiling_reached` — `Boolean`
+- `model_calls` — `Integer`
+- `input_tokens` — `Optional<Integer>`, which may be absent
+- `cache_read_input_tokens` — `Optional<Integer>`, which may be absent
+- `cache_creation_input_tokens` — `Optional<Integer>`, which may be absent
+- `output_tokens` — `Optional<Integer>`, which may be absent
+- `fixed_input_tokens` — `Optional<Integer>`, which may be absent
+- `documents_input_tokens` — `Optional<Integer>`, which may be absent
 
 Emitted by `cortex.instance.RunSource` on its `ran` outcome.
 
@@ -1186,11 +1237,12 @@ Reported by `cortex.instance.AdoptInstance` on its `backend-mismatch` outcome.
 
 ### `ConnectionMissing`
 
-Connectors lists no live connection with the id a source or the postgres store names. Run `connectors connections connect` for it, then try again.
+Connectors lists no live connection with the id a source or the postgres store names, or not exactly one live connection with the profile it names. Run `connectors connections connect` for it, or revoke the extra ones, then try again.
 
 It carries:
 
 - `connection` — `String`
+- `reason` — `String`
 
 Reported by `cortex.instance.CreateInstance` on its `connection-missing` outcome.
 
@@ -1212,7 +1264,7 @@ It carries:
 
 - `reason` — `String`
 
-Reported by `cortex.instance.RunSource` on its `fetch-failed` outcome.
+Reported by `cortex.instance.RunSource` on its `fetch-only-failed` and `fetch-failed` outcomes.
 
 ### `InstanceBusy`
 
@@ -1421,4 +1473,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041` · contract digest `slice-sha256/2:44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `17e09111e8b07b05de318bdb51a95149ecca7a5002497fc00341b27224aad8e8` · contract digest `slice-sha256/2:0166cbe548974dfabcad41333301694ac564bae5ee942ef2545595cb53e8a6e0`. Do not edit this file; change the specification and regenerate it with `task generate`.

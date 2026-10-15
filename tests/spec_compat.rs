@@ -12,7 +12,10 @@
 //! `Cargo.toml` and `Cargo.lock` were those of `f2ce283`. Values that differ on every run (the
 //! temporary directory, the viewer's free port, the run's start time and duration) are replaced
 //! by placeholders on both sides. The example's EKR pin has moved since (0.0.32 then, 0.0.34
-//! now); the fixture's two copies of it moved with it, and nothing else in it changed.
+//! now); the fixture's two copies of it moved with it. A run's result and log line have since
+//! gained its model calls and token counts (`story:run-cost-split`); the fixture's run and log
+//! entries carry them as the stand-in `claude` makes them (one call, no `usage`), and nothing else
+//! in it changed.
 
 mod common;
 

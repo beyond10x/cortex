@@ -30,6 +30,9 @@
       ],
       "title": "ChildCall",
       "type": "object",
+      "x-ess-invariants": [
+        "paging.stop_older_than_since != true"
+      ],
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.ChildCall"
     },
@@ -74,6 +77,9 @@
       ],
       "title": "CompareLink",
       "type": "object",
+      "x-ess-invariants": [
+        "paging.stop_older_than_since != true"
+      ],
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.CompareLink"
     },
@@ -85,14 +91,19 @@
         },
         "connection": {
           "type": "string"
+        },
+        "profile": {
+          "type": "string"
         }
       },
       "required": [
-        "adapter",
-        "connection"
+        "adapter"
       ],
       "title": "ConnectionRef",
       "type": "object",
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ],
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.ConnectionRef"
     },
@@ -121,6 +132,9 @@
         "paging": {
           "$ref": "#/$defs/cortex.instance.Paging"
         },
+        "profile": {
+          "type": "string"
+        },
         "records": {
           "type": "string"
         },
@@ -136,7 +150,6 @@
       },
       "required": [
         "adapter",
-        "connection",
         "operation",
         "inputs",
         "records",
@@ -145,6 +158,10 @@
       ],
       "title": "ConnectorsSource",
       "type": "object",
+      "x-ess-invariants": [
+        "(paging.stop_older_than_since != true or defined(time))",
+        "(defined(connection) or defined(profile))"
+      ],
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.ConnectorsSource"
     },
@@ -480,7 +497,8 @@
       "enum": [
         "PageNumber",
         "Token",
-        "Keyset"
+        "Keyset",
+        "NextLink"
       ],
       "title": "PageStyle",
       "type": "string",
@@ -498,6 +516,9 @@
         },
         "param": {
           "type": "string"
+        },
+        "stop_older_than_since": {
+          "type": "boolean"
         },
         "style": {
           "$ref": "#/$defs/cortex.instance.PageStyle"
@@ -1118,6 +1139,9 @@
       ],
       "title": "StructuredChild",
       "type": "object",
+      "x-ess-invariants": [
+        "paging.stop_older_than_since != true"
+      ],
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.StructuredChild"
     },
@@ -1151,16 +1175,22 @@
         },
         "paging": {
           "$ref": "#/$defs/cortex.instance.Paging"
+        },
+        "profile": {
+          "type": "string"
         }
       },
       "required": [
         "adapter",
-        "connection",
         "operation",
         "inputs"
       ],
       "title": "StructuredConnectors",
       "type": "object",
+      "x-ess-invariants": [
+        "paging.stop_older_than_since != true",
+        "(defined(connection) or defined(profile))"
+      ],
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.StructuredConnectors"
     },
@@ -1333,22 +1363,27 @@
         },
         "input": {
           "$ref": "#/$defs/cortex.instance.WebInput"
+        },
+        "profile": {
+          "type": "string"
         }
       },
       "required": [
-        "connection",
         "input"
       ],
       "title": "WebSource",
       "type": "object",
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ],
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.WebSource"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:6695a97d3d556dcab78fa7c4f04a07136d3cba0096bbc8a3a8410a709056ecc8",
-    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
+    "contract_digest": "slice-sha256/2:418b946318f382211713bb6cc440482089d43637d73ec63b5d2989294b3ff5c8",
+    "source_digest": "17e09111e8b07b05de318bdb51a95149ecca7a5002497fc00341b27224aad8e8",
     "specification_version": "v1",
     "system": "cortex"
   }

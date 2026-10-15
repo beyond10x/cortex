@@ -117,6 +117,38 @@ example `"*-*-* 06:00:00"` for every day at 06:00.
 
 `settings` is `kind` plus `value`, where `kind` is `web`, `connectors`, `files` or `structured`.
 
+### Naming a connection
+
+A source that reads through Connectors, and a `postgres` store, name their Connectors connection
+in one of two forms, exactly one per place; `create`, `update` and `adopt` refuse both or neither
+with a reason naming the fields:
+
+| form | written as | means |
+|---|---|---|
+| by id | `connection: conn_…` | that connection |
+| by profile | `profile: <profile>` | the one live connection of the adapter with that profile |
+
+A profile is resolved each time cortex needs the connection, once per command: `cortex create`
+checks it, and every later command that uses the connection (a run, `quality`, `schema`,
+`mcp-line`) resolves it again. It resolves to the
+one connection that `connectors connections list --adapter <adapter>` lists with that `profile`
+and a `state` other than `revoked` (a `pending` one is revalidated as by id). The adapter is the
+source's own `adapter` (for `kind: web`, `tavily` when absent) or the store reference's `adapter`.
+None, or more than one, is refused: `cortex create` answers `connection-missing`, a run
+`fetch-failed`, each with a reason naming the adapter, the profile, the count and every matching
+id. cortex reads the first page of the list only, so a list with a further page is refused too.
+The frozen spec keeps the profile, never the id it resolved to, so an instance whose Connectors
+state is rebuilt with new connection ids keeps working, as in a container that runs
+`connectors connections connect` at every start ([Operating](./operating.md#connections-by-profile)).
+
+```yaml
+settings:
+  kind: web
+  value:
+    profile: tavily.api-key
+    input: {input: search, value: {queries: [widget engine], policy: {topic: news, max_results: 5, include_domains: [], exclude_domains: []}}}
+```
+
 ### `kind: web`
 
 Websites with their title, description and content, through a Connectors adapter that implements
@@ -125,7 +157,7 @@ Websites with their title, description and content, through a Connectors adapter
 | field | meaning |
 |---|---|
 | `adapter` | optional; `tavily` when absent |
-| `connection` | the Connectors connection id |
+| `connection` or `profile` | the Connectors connection, by id or by profile of `adapter` ([Naming a connection](#naming-a-connection)) |
 | `input` | `input: search` or `input: sites`, with its `value` |
 
 `input: search` runs `websearch.search` once per query, always asking for full content:
@@ -156,7 +188,7 @@ The records of any operation a Connectors adapter admits.
 
 | field | meaning |
 |---|---|
-| `adapter`, `connection`, `operation` | what to invoke |
+| `adapter`, `connection` or `profile`, `operation` | what to invoke; the connection by id or by profile of `adapter` ([Naming a connection](#naming-a-connection)) |
 | `inputs` | a list of JSON inputs; the operation is invoked once per input. `{since}`, `{until}`, `{since_epoch}` and `{until_epoch}` in a string value are replaced by the run's window |
 | `records` | dotted path to the array of records in the answer, for example `issues` |
 | `id` | dotted path to a record's stable id |
@@ -195,9 +227,10 @@ record. A run that is not successful (it stopped early, failed, left documents b
 `max_documents_per_run`, or left records unread) keeps its `{since}` as the lower bound of every
 later run until one succeeds, so the next run asks for them again. That holds before the first
 successful run too: the window does not slide with the clock. Records are left unread by a walk
-that reaches `max_pages` with pages left, by an empty page that still names a next one, and by a
-child call that fails for a record, which leaves that record out of the run. Each of these says so
-in `stopped`, in the run's result and in `cortex.log`; the other records still apply.
+that reaches `max_pages` with pages left, by an empty page that still names a next one, by a
+`NextLink` link without its parameter, and by a child call that fails for a record, which leaves
+that record out of the run. Each of these says so in `stopped`, in the run's result and in
+`cortex.log`; the other records still apply.
 
 A child call that fails for the same record on 3 runs in a row stops holding the window: from the
 third failure on, the record is left out and named in `skipped` (`<operation>: child call failed
@@ -209,12 +242,37 @@ lost. Every run works out, from the documents it holds back, the earliest window
 each held change: the earliest last application among them, less the 5 minutes. No later run's
 `{since}` is after that; a run that holds nothing back clears it.
 
-**`paging`** has the fields `style` (`PageNumber`, `Token` or `Keyset`), `param` (the dotted path
-of the input field to advance), `next` (optional, the dotted path in the answer of the next page,
-token or key) and `max_pages`. With `next`, its value is the next `param`, whatever the style.
-Without it, a `PageNumber` walk asks for the page after the current one (the input's `param`, or
-1 when absent), and a `Token` or `Keyset` walk reads one page. A walk stops at an empty page, at a
-missing `next`, at a page or token it has already asked for, or after `max_pages` pages.
+**`paging`** has the fields `style` (`PageNumber`, `Token`, `Keyset` or `NextLink`), `param` (the
+dotted path of the input field to advance), `next` (optional, the dotted path in the answer of the
+next page, token, key or link), `max_pages` and `stop_older_than_since` (optional). With `next`,
+its value is the next `param`, whatever the style, except `NextLink`. Without it, a `PageNumber`
+walk asks for the page after the current one (the input's `param`, or 1 when absent), and a
+`Token`, `Keyset` or `NextLink` walk reads one page. A walk stops at an empty page, at a missing
+`next`, at a page or token it has already asked for, or after `max_pages` pages.
+
+A `NextLink` walk reads a URL at `next`, relative or absolute, and asks next for the
+percent-decoded value of its query parameter named by the last segment of `param`:
+`_links.next: "/api/pages?cursor=abc&limit=50"` with `param: cursor` asks for `cursor: abc`, and
+`https://host/api/pages?limit=50&cursor=a%2Fb` for `cursor: a/b`. A missing, null or empty link
+ends the walk. A link without that parameter, or with it empty, ends it too and leaves records
+unread: the run says `<adapter>.<operation>: the next link names no <param>` in `stopped`.
+
+With `stop_older_than_since: true`, the walk ends at the first record whose `time` is older than
+the run's `{since}`; that record and the ones after it on its page are not taken. An operation that
+lists newest-modified first and takes no time filter is so read down to the last run and no
+further. A walk the rule ends has read everything the window asks for: it leaves nothing unread
+and the run can succeed. A record whose time is missing or cannot be read does not stop the walk.
+A walk that reaches `max_pages` before the rule fires leaves pages unread as without it, and the
+run keeps its `{since}`. Only a `connectors` source's own `paging` takes the rule, and only with a
+`time`; a spec that sets it elsewhere, or without `time`, is refused when it is loaded.
+
+```yaml
+operation: pages.changed
+records: results
+id: id
+time: version.createdAt
+paging: {style: NextLink, param: cursor, next: _links.next, max_pages: 20, stop_older_than_since: true}
+```
 
 :::caution[PageNumber paging can skip records]
 A `PageNumber` walk asks for pages by offset. When a write moves a record within the result set
@@ -330,7 +388,7 @@ a structured run costs 0.
 
 | field | meaning |
 |---|---|
-| `input` | `from: connectors` with its `value`: `adapter`, `connection`, `operation`, `inputs` and an optional `paging`, as for [`kind: connectors`](#kind-connectors), window included, and optional `children` (below). Or `from: files` with its `value`: `paths` and `glob`, as for [`kind: files`](#kind-files); each matching file is one JSON document (a leading byte-order mark is ignored) |
+| `input` | `from: connectors` with its `value`: `adapter`, `connection` or `profile`, `operation`, `inputs` and an optional `paging`, as for [`kind: connectors`](#kind-connectors), window included, and optional `children` (below). Or `from: files` with its `value`: `paths` and `glob`, as for [`kind: files`](#kind-files); each matching file is one JSON document (a leading byte-order mark is ignored) |
 | `records` | path to the array of records in the answer or in each file, for example `$.people` |
 | `mapping` | how a record becomes an entity (below) |
 | `dropped` | optional: `Keep` (the default) leaves every value the source asserted earlier; `Supersede` ends each value the source no longer lists (below) |
@@ -637,8 +695,12 @@ store:
   value:
     config: ~/brain/app.json
     connection: {adapter: postgres, connection: <connection id>}
-    schema_connection: {adapter: postgres, connection: <connection id>}
+    schema_connection: {adapter: postgres, profile: <profile>}
 ```
+
+`connection` and `schema_connection` each name their `adapter` and either a `connection` id or a
+`profile` of that adapter ([Naming a connection](#naming-a-connection)); a profile is resolved
+before every launch, to the id `connectors connections launch --connection` is given.
 
 | field | meaning |
 |---|---|
@@ -653,7 +715,8 @@ cortex sets reach it, and the connections' adapter alias in `permissions.connect
 removes every other `EKR_*` variable of its own environment from the launches it starts, so none
 from the operator's shell reaches the launched `ekr`. That needs
 an `ekr` whose `ekr.postgres/1` reads `password_file` (EKR 0.0.32 or later). `cortex create` refuses
-a spec whose connection Connectors does not list (`connection-missing`). A `config` without that
+a spec whose connection Connectors does not list, or whose profile names not exactly one live
+connection (`connection-missing`). A `config` without that
 `password_file`, or with a `password` key, is refused by `cortex create` (`seed-refused`),
 `cortex update` (`seed-change-refused`) and `cortex adopt` (exit 2), and with `schema_connection`
 `cortex create` refuses such a `--postgres-schema-config` file (`seed-refused`) before any `ekr`

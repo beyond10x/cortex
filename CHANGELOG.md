@@ -7,7 +7,7 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### What 1.0 holds
 
-1.0 is the first release whose interface is stable. It adds no feature over 0.3.1; it is 0.3.1's
+1.0 is the first release whose interface is stable. It adds no feature over 0.4.0; it is 0.4.0's
 feature set after a real instance ran for 7 days with nobody at the keyboard.
 
 - **Instances.** One spec file makes an instance: an EKR store on SQLite or PostgreSQL, a viewer,
@@ -35,6 +35,34 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - `model.backend: Codex` is accepted and fails every run; extraction uses `claude -p` only.
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
+
+## 0.4.0 — 2026-10-15
+
+### Added
+
+- A spec may name a Connectors connection by `profile` of its adapter instead of by id
+  (`profile: tavily.api-key`), on a source and on a `postgres` store's `connection` and
+  `schema_connection`. Each command resolves it to the one connection of that adapter and profile
+  that is not `revoked`; none or several is refused naming the adapter, the profile, the count and
+  every matching id. A `postgres` store's viewer unit holds the id resolved when it was written,
+  and `cortex update` rewrites it after a reconnect. The id form stays valid.
+- The `NextLink` paging style reads the next page's cursor out of a link in the page body
+  (`next: _links.next`), and `stop_older_than_since: true` ends a walk at the first record whose
+  `time` is older than the run's `{since}`; the rule needs a `time` and is refused without one.
+- `cortex run <instance>/<source> --fetch-only` fetches a source as a run would and prints its
+  window and how many fetched documents are new, changed, held or unchanged, with no model call and
+  no write to the store, the seen-state or `cortex.log`. A disabled source is fetched too.
+- A run's result and `cortex.log` line carry `model_calls`, the input, cache and output tokens the
+  calls reported, and an estimate of how the input splits between each prompt's fixed part and the
+  documents (`fixed_input_tokens`, `documents_input_tokens`).
+- `cortex adopt --seen <source>=<file>` takes entries with a key and `applied_at` and no `hash`:
+  the source's first run records the hash of each such document it fetches and does not extract
+  it. A key is the one cortex gives the document (for a files source, the file's absolute path).
+  An entry with no `applied_at`, or whose fields are not of their types, is refused naming its key.
+
+### Changed
+
+- The specification requires ess 0.60.0.
 
 ## 0.3.1 — 2026-10-15
 

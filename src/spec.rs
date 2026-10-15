@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use cortex_model::instance as m;
 
+use crate::connectors::Reference;
 use crate::model_map;
 
 pub const FORMAT: &str = "cortex.instance/1";
@@ -136,6 +137,9 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
             }
         }
     }
+    if let Some(reason) = reference_refusal(spec) {
+        return Err(reason);
+    }
     // A `connectors` source cites a record as `record:<adapter>:<operation>:<id>`, as a structured
     // source does, so a structured source that ends what it no longer lists would claim the
     // values the model extracted from that operation's records.
@@ -240,20 +244,79 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
     Ok(())
 }
 
-/// The connection ids the spec's sources name, with their adapter.
-pub fn connections(spec: &m::InstanceSpec) -> Vec<(String, String)> {
+/// Why a connection the spec names cannot be used: it names both an id (`connection`) and a
+/// profile (`profile`), or neither. The specification states only "at least one"; "not both" is
+/// its `UNMAPPED:` rule, held here. The reason names the place and the fields, never a value.
+fn reference_refusal(spec: &m::InstanceSpec) -> Option<String> {
+    let mut named: Vec<(String, bool, bool)> = Vec::new();
+    for source in &spec.sources {
+        let at = format!("sources.{}.settings.value", source.name);
+        match &source.settings {
+            m::SourceSettings::Web(w) => {
+                named.push((at, w.connection.is_some(), w.profile.is_some()))
+            }
+            m::SourceSettings::Connectors(c) => {
+                named.push((at, c.connection.is_some(), c.profile.is_some()))
+            }
+            m::SourceSettings::Structured(m::StructuredSource {
+                input: m::StructuredInput::Connectors(c),
+                ..
+            }) => named.push((
+                format!("{at}.input.value"),
+                c.connection.is_some(),
+                c.profile.is_some(),
+            )),
+            _ => {}
+        }
+    }
+    if let Some(m::StoreSpec::Postgres(p)) = &spec.store {
+        for (field, reference) in [
+            ("connection", &p.connection),
+            ("schema_connection", &p.schema_connection),
+        ] {
+            if let Some(r) = reference {
+                named.push((
+                    format!("store.value.{field}"),
+                    r.connection.is_some(),
+                    r.profile.is_some(),
+                ));
+            }
+        }
+    }
+    named
+        .into_iter()
+        .find_map(|(at, id, profile)| match (id, profile) {
+            (true, true) => Some(format!(
+                "{at}: names both connection and profile; name the connection by id (connection) \
+             or by profile (profile), not both"
+            )),
+            (false, false) => Some(format!(
+                "{at}: names no connection; name it by id (connection) or by profile (profile)"
+            )),
+            _ => None,
+        })
+}
+
+/// The connections the spec's sources name, by id or by profile, with their adapter.
+pub fn connections(spec: &m::InstanceSpec) -> Vec<(String, Reference)> {
     let mut out = Vec::new();
     for source in &spec.sources {
         match &source.settings {
             m::SourceSettings::Web(w) => out.push((
                 crate::sources::web_adapter(w).to_string(),
-                w.connection.clone(),
+                Reference::of(w.connection.as_ref(), w.profile.as_ref()),
             )),
-            m::SourceSettings::Connectors(c) => out.push((c.adapter.clone(), c.connection.clone())),
+            m::SourceSettings::Connectors(c) => out.push((
+                c.adapter.clone(),
+                Reference::of(c.connection.as_ref(), c.profile.as_ref()),
+            )),
             m::SourceSettings::Structured(m::StructuredSource {
                 input: m::StructuredInput::Connectors(c),
                 ..
-            }) => out.push((c.adapter.clone(), c.connection.clone())),
+            }) => out.push((
+                c.adapter.clone(),
+                Reference::of(c.connection.as_ref(), c.profile.as_ref()),
+            )),
             m::SourceSettings::Files(_)
             | m::SourceSettings::Structured(m::StructuredSource {
                 input: m::StructuredInput::Files(_),

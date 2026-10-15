@@ -17,7 +17,7 @@ use cortex_model::primitives::{Decimal, Timestamp};
 
 use crate::home::{Home, Registry};
 use crate::instance::Layout;
-use crate::run::{self, Failure, Report, Tools};
+use crate::run::{self, Counts, Failure, Report, Tools};
 
 #[derive(Default)]
 pub struct Shared {
@@ -42,12 +42,17 @@ pub type SharedRef = Rc<RefCell<Shared>>;
 /// outcome of `RunSource` without fetching anything.
 pub type Runner = Box<dyn FnMut(&m::SourceData) -> Result<Report, Failure>>;
 
+/// A stand-in for the fetch-only pipeline (`run::count`), which the conformance runner injects.
+pub type Counter = Box<dyn FnMut(&m::SourceData) -> Result<Counts, Failure>>;
+
 pub struct Ports {
     pub home: Home,
     pub tools: Tools,
     pub shared: SharedRef,
     /// `None` runs the real pipeline (`run::run`).
     pub runner: Option<Runner>,
+    /// `None` counts with the real pipeline (`run::count`).
+    pub counter: Option<Counter>,
 }
 
 impl InstanceStorage for Ports {
@@ -162,6 +167,24 @@ pub fn cost_decimal(cost_usd: Option<f64>) -> Option<Decimal> {
     cost_usd.map(|c| Decimal(format!("{c:.4}")))
 }
 
+/// The `SourceRan` event of a run of `source_id` that ran.
+fn source_ran(source_id: m::SourceId, report: &Report) -> m::SourceRan {
+    m::SourceRan {
+        source_id,
+        documents_new: report.documents_new,
+        documents_applied: report.documents_applied,
+        cost_usd: cost_decimal(report.cost_usd),
+        daily_ceiling_reached: report.daily_ceiling_reached,
+        model_calls: report.model_calls,
+        input_tokens: report.usage.input_tokens,
+        cache_read_input_tokens: report.usage.cache_read_input_tokens,
+        cache_creation_input_tokens: report.usage.cache_creation_input_tokens,
+        output_tokens: report.usage.output_tokens,
+        fixed_input_tokens: report.fixed_input_tokens,
+        documents_input_tokens: report.documents_input_tokens,
+    }
+}
+
 fn store(ports: &mut Ports, data: m::SourceData, state: m::SourceState) {
     let source = m::Source::new(data);
     let snapshot = match state {
@@ -268,13 +291,7 @@ impl Ports {
                 error: m::ApplyRefused { reason },
             },
             Ok(report) => {
-                let ran = m::SourceRan {
-                    source_id,
-                    documents_new: report.documents_new,
-                    documents_applied: report.documents_applied,
-                    cost_usd: cost_decimal(report.cost_usd),
-                    daily_ceiling_reached: report.daily_ceiling_reached,
-                };
+                let ran = source_ran(source_id, &report);
                 self.shared.borrow_mut().last_run = Some(report);
                 m::RunSourceOutcome::Ran { source_ran: ran }
             }
@@ -311,6 +328,54 @@ impl Ports {
             .run_at_ms
             .get_or_insert_with(crate::instance::now_ms)
     }
+
+    /// `fetch_only`: fetches the source and counts what it fetched against its seen state, in
+    /// either state the source is in, and records nothing on it. A failure of any kind answers
+    /// `fetch-only-failed`; `<instance>/seed` names no source and answers it too.
+    fn fetch_only(&mut self, source_id: m::SourceId) -> m::RunSourceOutcome {
+        const RUN: &str = "cortex.instance.RunSource";
+        let failed = |reason| m::RunSourceOutcome::FetchOnlyFailed {
+            error: m::FetchFailed { reason },
+        };
+        let Some(found) = SourceStorage::get(self, &source_id) else {
+            if self.seed_of(&source_id).is_some() {
+                return failed(format!(
+                    "{} names the instance's seed documents, not a source: --fetch-only counts a \
+                     source's documents",
+                    source_id.0
+                ));
+            }
+            return m::RunSourceOutcome::NoSuchSource {
+                error: m::SourceNotFound { source_id },
+            };
+        };
+        if self.decided(RUN, "fetch-only-failed") {
+            return failed(self.generate_string());
+        }
+        let layout = Layout::new(self.home.instance_dir(&found.data.instance_name.0));
+        let counted = match self.counter.as_mut() {
+            Some(counter) => counter(&found.data),
+            None => run::count(&layout, &self.tools, &found.data),
+        };
+        match counted {
+            Err(Failure::Fetch(reason) | Failure::Extract(reason) | Failure::Apply(reason)) => {
+                failed(reason)
+            }
+            Ok(c) => m::RunSourceOutcome::Fetched {
+                source_fetched: m::SourceFetched {
+                    source_id,
+                    since: Timestamp(crate::sources::rfc3339(c.since_ms)),
+                    until: Timestamp(crate::sources::rfc3339(c.until_ms)),
+                    fetched: c.fetched as i64,
+                    new: c.new as i64,
+                    changed: c.changed as i64,
+                    held: c.held as i64,
+                    unchanged: c.unchanged as i64,
+                    unread: c.unread,
+                },
+            },
+        }
+    }
 }
 
 impl RunSourceBehavior for Ports {
@@ -321,6 +386,9 @@ impl RunSourceBehavior for Ports {
         // them. Every outcome that names a source records itself on it.
         const RUN: &str = "cortex.instance.RunSource";
         self.shared.borrow_mut().run_at_ms = None;
+        if input.fetch_only == Some(true) {
+            return Ok(self.fetch_only(input.source_id));
+        }
         let Some(found) = SourceStorage::get(self, &input.source_id) else {
             if let Some(instance) = self.seed_of(&input.source_id) {
                 return Ok(self.run_seed(&instance, input.source_id));
@@ -382,13 +450,7 @@ impl RunSourceBehavior for Ports {
         data.runs += 1;
         data.consecutive_failures = 0;
         store(self, data, m::SourceState::Enabled);
-        let ran = m::SourceRan {
-            source_id: input.source_id,
-            documents_new: report.documents_new,
-            documents_applied: report.documents_applied,
-            cost_usd: cost_decimal(report.cost_usd),
-            daily_ceiling_reached: report.daily_ceiling_reached,
-        };
+        let ran = source_ran(input.source_id, &report);
         self.shared.borrow_mut().last_run = Some(report);
         Ok(m::RunSourceOutcome::Ran { source_ran: ran })
     }

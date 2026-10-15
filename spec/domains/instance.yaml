@@ -99,13 +99,32 @@ types:
     fields:
       # The Connectors adapter answering datasource.websearch/v1alpha1; absent means tavily.
       - {name: adapter, type: Optional<String>}
-      - {name: connection, type: String}
+      # The connection, named by id (`connection`) or by profile (`profile`), exactly one of the
+      # two; see `cortex.instance.ConnectionRef` for how a profile is resolved.
+      - {name: connection, type: Optional<String>}
+      - {name: profile, type: Optional<String>}
       - {name: input, type: cortex.instance.WebInput}
+    # UNMAPPED: not both `connection` and `profile`: conformance synthesis witnesses every
+    # Optional as present, so that invariant leaves no spec it can build; `spec::check` refuses it.
+    invariants:
+      - any:
+          - defined(connection)
+          - defined(profile)
 
+  # How a paged operation names its next page. `NextLink` reads a URL, relative or absolute, at the
+  # paging's `next` path; the percent-decoded value of its query parameter named by the last
+  # segment of `param` is the next `param`. A missing, null or empty link ends the walk; a link
+  # without that parameter ends it and leaves the operation's pages unread.
   - name: cortex.instance.PageStyle
     kind: enum
-    variants: [PageNumber, Token, Keyset]
+    variants: [PageNumber, Token, Keyset, NextLink]
 
+  # `stop_older_than_since: true` ends the walk at the first record whose `time` is older than the
+  # run's `{since}`: that record and the ones after it are not taken, and nothing is left unread.
+  # A record with no readable time does not stop it; `max_pages` reached first leaves pages
+  # unread as without the rule. Only a `connectors` source's own paging with a `time` takes it
+  # (the invariants of `ConnectorsSource`, `ChildCall`, `StructuredConnectors`, `StructuredChild`
+  # and `CompareLink`); `src/model_map.rs` refuses a spec that breaks one at load.
   - name: cortex.instance.Paging
     kind: struct
     fields:
@@ -113,6 +132,7 @@ types:
       - {name: param, type: String}
       - {name: next, type: Optional<String>}
       - {name: max_pages, type: Integer}
+      - {name: stop_older_than_since, type: Optional<Boolean>}
 
   - name: cortex.instance.ChildCall
     kind: struct
@@ -121,12 +141,16 @@ types:
       - {name: input, type: Json}
       - {name: records, type: String}
       - {name: paging, type: Optional<cortex.instance.Paging>}
+    invariants:
+      - paging.stop_older_than_since != true
 
   - name: cortex.instance.ConnectorsSource
     kind: struct
     fields:
       - {name: adapter, type: String}
-      - {name: connection, type: String}
+      # By id or by profile of `adapter`, exactly one, as on `cortex.instance.WebSource`.
+      - {name: connection, type: Optional<String>}
+      - {name: profile, type: Optional<String>}
       - {name: operation, type: String}
       # UNMAPPED: in every string value of an input, a run replaces the window placeholders by its
       # window, each end cut to the second: `{since}` and `{until}` by RFC 3339 in UTC
@@ -141,6 +165,13 @@ types:
       - {name: text, type: List<String>}
       - {name: paging, type: Optional<cortex.instance.Paging>}
       - {name: child, type: Optional<cortex.instance.ChildCall>}
+    # UNMAPPED: not both `connection` and `profile`: conformance synthesis witnesses every
+    # Optional as present, so that invariant leaves no spec it can build; `spec::check` refuses it.
+    invariants:
+      - any: ["paging.stop_older_than_since != true", "defined(time)"]
+      - any:
+          - defined(connection)
+          - defined(profile)
 
   - name: cortex.instance.RecordFormat
     kind: enum
@@ -206,6 +237,8 @@ types:
       - {name: mapping, type: cortex.instance.RecordMapping}
       - {name: time, type: Optional<String>}
       - {name: parent, type: String}
+    invariants:
+      - paging.stop_older_than_since != true
 
   - name: cortex.instance.CompareLink
     kind: struct
@@ -219,12 +252,16 @@ types:
       - {name: order, type: String}
       - {name: change_id, type: String}
       - {name: relation, type: String}
+    invariants:
+      - paging.stop_older_than_since != true
 
   - name: cortex.instance.StructuredConnectors
     kind: struct
     fields:
       - {name: adapter, type: String}
-      - {name: connection, type: String}
+      # By id or by profile of `adapter`, exactly one, as on `cortex.instance.WebSource`.
+      - {name: connection, type: Optional<String>}
+      - {name: profile, type: Optional<String>}
       - {name: operation, type: String}
       # UNMAPPED: the window placeholders of `cortex.instance.ConnectorsSource.inputs` hold here
       # alike: `{since}`, `{until}` (RFC 3339), `{since_epoch}`, `{until_epoch}` (whole epoch
@@ -233,6 +270,13 @@ types:
       - {name: paging, type: Optional<cortex.instance.Paging>}
       - {name: children, type: Optional<List<cortex.instance.StructuredChild>>}
       - {name: links, type: Optional<List<cortex.instance.CompareLink>>}
+    # UNMAPPED: not both `connection` and `profile`: conformance synthesis witnesses every
+    # Optional as present, so that invariant leaves no spec it can build; `spec::check` refuses it.
+    invariants:
+      - paging.stop_older_than_since != true
+      - any:
+          - defined(connection)
+          - defined(profile)
 
   - name: cortex.instance.StructuredFiles
     kind: struct
@@ -323,11 +367,31 @@ types:
 
   # A saved Connectors connection whose document a launched `ekr` reads on descriptor 3
   # (`connectors connections launch --consumer ekr`); cortex names it and never reads it.
+  #
+  # A connection is named by id (`connection: conn_…`) or by profile (`profile: <profile>`),
+  # exactly one of the two. ESS types no field that is a string or an object (a union is always
+  # tagged), so the profile form is a `profile` field beside an optional `connection`, here and on
+  # the three source settings, whose `adapter` is the source's own. A profile is resolved each
+  # time cortex needs the connection, never stored: to the one connection that
+  # `connectors connections list --adapter <adapter>` (its first page) lists with that `profile`
+  # and a `state` other than `revoked`. None, or more than one, is refused with a reason naming
+  # the adapter, the profile, the count and every matching id. The one place a resolved id is
+  # written down is the viewer's systemd unit, which launches through the id the profile resolved
+  # to at the last `create`, `adopt` or `update`: `update` resolves the profile again and rewrites
+  # the unit when that id changed, so an update after a reconnect points the viewer at the live
+  # connection.
   - name: cortex.instance.ConnectionRef
     kind: struct
     fields:
       - {name: adapter, type: String}
-      - {name: connection, type: String}
+      - {name: connection, type: Optional<String>}
+      - {name: profile, type: Optional<String>}
+    # UNMAPPED: not both `connection` and `profile`: conformance synthesis witnesses every
+    # Optional as present, so that invariant leaves no spec it can build; `spec::check` refuses it.
+    invariants:
+      - any:
+          - defined(connection)
+          - defined(profile)
 
   # With `connection`, every `ekr` of the store starts through `connectors connections launch`,
   # and `config` must name `password_file`; `schema_connection` does the same for
@@ -666,7 +730,9 @@ entities:
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: key, type: String}
-      - {name: content_hash, type: String}
+      # Absent for a document adopted by its key alone (`cortex adopt --seen`, an entry with
+      # `applied_at` and no hash) until the source's next run fetches it and records its hash.
+      - {name: content_hash, type: Optional<String>}
       - {name: unlinked_hash, type: Optional<String>}
       - {name: applied_at, type: Integer}
     invariants:
@@ -702,10 +768,15 @@ actors:
 errors:
   - name: cortex.instance.ConnectionMissing
     summary: >-
-      Connectors lists no live connection with the id a source or the postgres store names. Run
-      `connectors connections connect` for it, then try again.
+      Connectors lists no live connection with the id a source or the postgres store names, or
+      not exactly one live connection with the profile it names. Run
+      `connectors connections connect` for it, or revoke the extra ones, then try again.
+    # `connection` is the reference as the spec names it, `<adapter>:<id>` or
+    # `<adapter>:profile <profile>`; `reason` names the adapter, the reference, and for a profile
+    # the count of live connections listed with it and every matching id.
     fields:
       - {name: connection, type: String}
+      - {name: reason, type: String}
 
   - name: cortex.instance.SeedRefused
     summary: EKR refused the seed or the seed schema; no store was kept.
@@ -845,6 +916,12 @@ commands:
       display: Adopt an existing store
     # As for CreateInstance, the command line reads the spec file; `store` is `--store`. Each
     # source's seen documents start from the `cortex.seen/1` file `--seen` names for it, or empty.
+    # An entry of that file names a key and its `applied_at`, with or without a hash; one with no
+    # `applied_at` (missing or null), or whose fields are not of their types (`applied_at` an
+    # integer, `hash` a string or null), is refused, naming its key. An entry with no hash is a
+    # SeenDocument with no `content_hash`, which the source's next run records (see RunSource's
+    # `ran`). A key is the one cortex gives the document: for a files source, the file's absolute
+    # path (a record's followed by `#<id>`); a relative path matches no document.
     input:
       - {name: name, type: cortex.instance.InstanceName}
       - {name: description, type: String}
@@ -939,11 +1016,14 @@ commands:
         summary: Nothing was created.
 
       - name: connection-missing
-        external: Connectors lists no live connection for a connection id a source or the postgres store of the spec names
+        external: >-
+          Connectors lists no live connection for a connection id a source or the postgres store
+          of the spec names, or not exactly one live connection for a profile one names
         error: cortex.instance.ConnectionMissing
         payload:
           cortex.instance.ConnectionMissing:
             connection: {generated: true}
+            reason: {generated: true}
         summary: Nothing was created.
 
       - name: seed-refused
@@ -1033,7 +1113,11 @@ commands:
         payload:
           cortex.instance.InstanceUpdated:
             name: input.name
-        summary: The frozen spec is replaced; sources, model and serve settings take effect on the next run.
+        summary: >-
+          The frozen spec is replaced; sources, model and serve settings take effect on the next run.
+          The viewer unit holds the connection id resolved at the last create, adopt or update: it is
+          rewritten when the store's connection changed, or when its profile now resolves to
+          another id.
 
       - name: no-such-instance
         unknown_instance: true
@@ -1111,6 +1195,7 @@ commands:
       display: Run a source once
     input:
       - {name: source_id, type: cortex.instance.SourceId}
+      - {name: fetch_only, type: Optional<Boolean>}
     outcomes:
       # UNMAPPED: the exit status of each outcome, which an external scheduler reads instead of
       # the printed line: `ran` 0; `fetch-failed`, `extraction-failed`, `apply-refused` and
@@ -1128,7 +1213,13 @@ commands:
       # source carries, or whose hash differs once `refresh_after_days` have passed. A structured
       # source's change record that holds links also records `unlinked_hash`, the hash of its text
       # without them; a change whose text differs from the one applied only in its links is
-      # extracted at once, without waiting for `refresh_after_days`. ESS has no
+      # extracted at once, without waiting for `refresh_after_days`. A SeenDocument with no
+      # `content_hash` (adopted by key) is not extracted: the first run that fetches a document
+      # under its key records the hash of that document as the run renders and masks it, keeps its
+      # `applied_at`, and counts it as `hashed` in the run's report, not in `documents_new`; a
+      # later run extracts it when that hash changes. A key the run does not fetch keeps no hash.
+      # The hash is written to the state with the rest of the run, so a run that is undone (its
+      # gate failed) puts it back with `state/`, and the next run records it again. ESS has no
       # effect that creates or updates one record per element of a collection (`instances:` is
       # refused on `creates:`, `affects:` only updates), so the per-source state file holds it and
       # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.
@@ -1137,10 +1228,20 @@ commands:
       # `fetch-failed`, `extraction-failed` and `apply-refused` the hook is called once, with
       # `disabled` instead when the recorded failure disabled the source. ESS declares no effect
       # outside the model's records; tests/run_status.rs holds it.
+      # UNMAPPED: with `fetch_only` (`cortex run --fetch-only`), `fetched` exits 0 and
+      # `fetch-only-failed` exits 1 and prints `fetch-failed`. Neither writes the source's status
+      # file, `metrics.prom`, `cortex.log`, the seen documents or the window (`pending_since`),
+      # calls the hook, takes the home's snapshot or an EKR stage, or reads the store; the counts
+      # compare each fetched document with the source's SeenDocuments, which ESS cannot state per
+      # element (beyond10x/ess#459). A disabled source is counted too, as `fetched`: a held-state
+      # refusal beside `fetched` has no witness ESS 0.59.0 synthesizes. `<instance>/seed` with
+      # `fetch_only` answers `fetch-only-failed`: its documents are not a source's. tests/e2e.rs
+      # holds it.
       # Not a refusal: a run of a disabled source changes the source's status, which a refusal
       # may not. It answers no error, so the printed line and the exit status say it.
       - name: disabled
         when_subject_state: Disabled
+        when: {any: ["not defined(fetch_only)", fetch_only == false]}
         updates: cortex.instance.Source
         instance: source_id
         sets:
@@ -1155,6 +1256,42 @@ commands:
         summary: >-
           The source is disabled: nothing ran and nothing was counted, and the source's status
           records the outcome.
+
+      - name: fetch-only-failed
+        external: Connectors or the filesystem fails to deliver the source's documents in a fetch-only run
+        when: {all: ["defined(fetch_only)", fetch_only == true]}
+        error: cortex.instance.FetchFailed
+        payload:
+          cortex.instance.FetchFailed:
+            reason: {generated: true}
+        summary: >-
+          Nothing was written: not the source's status, its seen documents or its window, and no
+          failure is counted. The command line prints it as `fetch-failed`.
+
+      - name: fetched
+        when: {all: ["defined(fetch_only)", fetch_only == true]}
+        updates: cortex.instance.Source
+        instance: source_id
+        emits:
+          - cortex.instance.SourceFetched
+        payload:
+          cortex.instance.SourceFetched:
+            source_id: input.source_id
+            since: {generated: true}
+            until: {generated: true}
+            fetched: {generated: true}
+            new: {generated: true}
+            changed: {generated: true}
+            held: {generated: true}
+            unchanged: {generated: true}
+            unread: {generated: true}
+        summary: >-
+          A fetch-only run: the source was fetched over the window a run would ask about, its
+          documents masked and scrubbed as a run's are and compared with its seen documents by
+          content hash. `new` counts keys no seen document carries; `changed` those a run would
+          extract now; `held` those whose change `refresh_after_days` holds back; `unchanged` the
+          rest. No model was asked, and nothing was written: not the store, the seen documents,
+          the source's status or `cortex.log`; no snapshot or stage was taken and no run counted.
 
       - name: fetch-failed
         external: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first
@@ -1228,6 +1365,13 @@ commands:
             documents_applied: {generated: true}
             cost_usd: {generated: true}
             daily_ceiling_reached: {generated: true}
+            model_calls: {generated: true}
+            input_tokens: {generated: true}
+            cache_read_input_tokens: {generated: true}
+            cache_creation_input_tokens: {generated: true}
+            output_tokens: {generated: true}
+            fixed_input_tokens: {generated: true}
+            documents_input_tokens: {generated: true}
         summary: >-
           Every new or changed document within the policy's limits was extracted and applied, in
           batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no
@@ -1578,6 +1722,17 @@ events:
       - {name: instance_name, type: cortex.instance.InstanceName}
 
   # `daily_ceiling_reached` says the run stopped before a batch at the instance's daily ceiling.
+  # `model_calls` counts every model call the run made: a call asked again after an error answer
+  # that cost zero counts twice, and a call that failed counts too. The token fields add up, over
+  # those calls, what the model reported in its answer's `usage`: `input_tokens`,
+  # `cache_read_input_tokens`, `cache_creation_input_tokens` and `output_tokens`. Each is `0` for
+  # a run with no model call, the sum while every answer reported it, and absent as soon as one
+  # answer did not; a missing count is never `0`. The model reports input per call only, so
+  # `fixed_input_tokens` and `documents_input_tokens` are an estimate: each call's input, cache
+  # reads and cache writes together, apportioned by bytes between the fixed part of the request
+  # (the system prompt, the answer's schema, and the prompt up to the documents: the instance's
+  # description and instructions, the ontology and the known entity names) and the documents.
+  # The two add up to `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`.
   - name: cortex.instance.SourceRan
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
@@ -1585,11 +1740,33 @@ events:
       - {name: documents_applied, type: Integer}
       - {name: cost_usd, type: Optional<Decimal>}
       - {name: daily_ceiling_reached, type: Boolean}
+      - {name: model_calls, type: Integer}
+      - {name: input_tokens, type: Optional<Integer>}
+      - {name: cache_read_input_tokens, type: Optional<Integer>}
+      - {name: cache_creation_input_tokens, type: Optional<Integer>}
+      - {name: output_tokens, type: Optional<Integer>}
+      - {name: fixed_input_tokens, type: Optional<Integer>}
+      - {name: documents_input_tokens, type: Optional<Integer>}
 
   # A run of a disabled source, which ran nothing.
   - name: cortex.instance.RunSkipped
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
+
+  # A fetch-only run of a source: the window it asked about, as RFC 3339, and its documents
+  # counted against the source's seen documents. `fetched` is `new` + `changed` + `held` +
+  # `unchanged`; `unread` says, one line each, why the fetch left records unread.
+  - name: cortex.instance.SourceFetched
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+      - {name: since, type: Timestamp}
+      - {name: until, type: Timestamp}
+      - {name: fetched, type: Integer}
+      - {name: new, type: Integer}
+      - {name: changed, type: Integer}
+      - {name: held, type: Integer}
+      - {name: unchanged, type: Integer}
+      - {name: unread, type: List<String>}
 
   - name: cortex.instance.RunFailed
     fields:
