@@ -1032,3 +1032,49 @@ fn a_first_run_reads_refresh_after_days_of_history_and_none_with_zero() {
     let ran = run(&w, "one");
     assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
 }
+
+/// `issues.list` logs its arguments and answers no records, as a chat-history operation with
+/// nothing new does.
+const NOTHING_NEW: &str = r#"  *"--operation issues.list"*)
+    echo "$*" >> "$R/issues.log"
+    printf '{"ok":true,"result":{"adapter":"tracker","operation":"issues.list","revision":"r","result":{"issues":[]}}}\n' ;;
+"#;
+
+/// `{since_epoch}` and `{until_epoch}` render the run's window as whole epoch seconds, the same
+/// instants `{since}` and `{until}` render, for an API whose lower bound is epoch seconds (a
+/// chat history's `oldest`). Another placeholder, such as `{since_ms}`, reaches Connectors as
+/// written.
+#[test]
+fn the_window_fills_since_epoch_and_until_epoch_as_whole_epoch_seconds() {
+    let w = world_with(NOTHING_NEW);
+    let rest = r#"inputs:
+          - {channel: "C1", oldest: "{since_epoch}", latest: "{until_epoch}", until: "{until}", other: "{since_ms}"}
+        records: issues
+        id: key
+        text: ["{key}: {summary}"]"#;
+    create_source(&w, "epoch", rest, 3, 5000, 50);
+    let last_start: i64 = 1_790_000_000_999;
+    std::fs::create_dir_all(state_path(&w, "epoch").parent().unwrap()).unwrap();
+    std::fs::write(
+        state_path(&w, "epoch"),
+        format!(
+            r#"{{"format":"cortex.seen/1","documents":{{}},"last_success_started_at":{last_start}}}"#
+        ),
+    )
+    .unwrap();
+    run(&w, "epoch");
+
+    let asked = w.lines("issues.log")[0].clone();
+    assert_eq!(field(&asked, "channel"), "C1", "{asked}");
+    assert_eq!(
+        field(&asked, "oldest"),
+        ((last_start - OVERLAP_MS).div_euclid(1000)).to_string(),
+        "{asked}"
+    );
+    assert_eq!(field(&asked, "oldest"), "1789999700", "{asked}");
+    // `{until_epoch}` is the second `{until}` names.
+    let until = field(&asked, "until");
+    let latest: i64 = field(&asked, "latest").parse().unwrap();
+    assert_eq!(rfc3339(latest * 1000), until, "{asked}");
+    assert_eq!(field(&asked, "other"), "{since_ms}", "{asked}");
+}
