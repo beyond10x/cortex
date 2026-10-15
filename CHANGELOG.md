@@ -7,7 +7,7 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### What 1.0 holds
 
-1.0 is the first release whose interface is stable. It adds no feature over 0.2.3; it is 0.2.3's
+1.0 is the first release whose interface is stable. It adds no feature over 0.3.0; it is 0.3.0's
 feature set after a real instance ran for 7 days with nobody at the keyboard.
 
 - **Instances.** One spec file makes an instance: an EKR store on SQLite or PostgreSQL, a viewer,
@@ -23,17 +23,42 @@ feature set after a real instance ran for 7 days with nobody at the keyboard.
   mints every evidence id, dates facts by when their source said them, supersedes a changed value,
   and writes extracted relations as edges. Credentials are masked before storage; a `redaction`
   policy keeps personal data from the model and a gate refuses a batch it still finds. A snapshot
-  before each run makes `cortex restore` undo a bad one; two failed runs in a row disable a source.
+  before each run makes `cortex restore` undo a bad one, and a gated run on PostgreSQL runs in an EKR
+  stage it abandons on failure; two failed runs in a row disable a source, and a daily ceiling
+  holds model spend. A metric file, a failure hook and `cortex sources` show how each run ended.
   `cortex quality` judges a sample of facts; `cortex schema` proposes schema changes.
-- **Project.** Specified in ESS with 55 conformance scenarios; CI runs `task check` on every pull
+- **Project.** Specified in ESS with 58 conformance scenarios; CI runs `task check` on every pull
   request; each release carries an `x86_64-unknown-linux-gnu` binary checked against `SHA256SUMS`.
 
 Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 - `model.backend: Codex` is accepted and fails every run; extraction uses `claude -p` only.
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
-- A run on a PostgreSQL store cannot be undone; `cortex restore` covers SQLite stores.
 - Linux with systemd user units only, and one released target.
+
+## 0.3.0 — 2026-10-15
+
+### Added
+
+- A run on a PostgreSQL store held to a gate can be undone: it runs in an EKR stage (`ekr stage
+  begin`), which is published when the gate passes and abandoned when it fails, with `state/` put
+  back. A stage a killed run left is settled by the next run. SQLite runs and runs without a gate
+  are unchanged.
+- `model.daily_ceiling_usd` holds an instance's model calls, across all its sources and
+  `quality` and `schema`, to a spend per UTC day (`spend.json`). A run that reaches it stops
+  before its next batch, keeps what it applied, and counts no failure.
+- `monitoring` in the spec file: `metrics` writes a Prometheus text file after every run, and
+  `hook` calls a command once per failed run. `cortex sources` shows each source's last outcome,
+  its time and its reason.
+- `cortex run` exits by outcome: 0 for `ran`, 1 for a failed run or an unknown source, 3 for a
+  disabled source, 2 for an error before any outcome.
+
+### Changed
+
+- When `claude` answers an error, the run's reason and `batch-<n>/claude/error.txt` keep the text
+  it gave, masked and bounded. An error answer that cost nothing is asked once more after a
+  minute before the run fails.
+- `cortex setup` installs EKR 0.0.34 by default, and the examples pin it.
 
 ## 0.2.3 — 2026-10-13
 
