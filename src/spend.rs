@@ -160,6 +160,9 @@ mod tests {
             backend: None,
             budget_usd: cortex_model::primitives::Decimal("1".into()),
             daily_ceiling_usd: ceiling.map(|c| cortex_model::primitives::Decimal(c.into())),
+            budget_tokens: None,
+            daily_ceiling_tokens: None,
+            gateway: None,
             timeout_s: 60,
             instructions: None,
         }

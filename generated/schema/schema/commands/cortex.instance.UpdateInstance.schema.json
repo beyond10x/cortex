@@ -32,8 +32,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "17e09111e8b07b05de318bdb51a95149ecca7a5002497fc00341b27224aad8e8",
-    "contract_digest": "slice-sha256/2:daf048eecd4b226dbd63e0f6efceb53b9ce9d07916d6ea046eacb8c041df9df6",
+    "source_digest": "972a2240d6d0adf2428e68bc8b7826fea28297c6b090df40dc3cfc498c920474",
+    "contract_digest": "slice-sha256/2:89983142fe9f02d16d65096cc201e14279de362ded72af907fba7f16bcb78665",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -479,6 +479,28 @@
         "Codex"
       ]
     },
+    "cortex.instance.ModelGateway": {
+      "title": "ModelGateway",
+      "x-ess-name": "cortex.instance.ModelGateway",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "base_url": {
+          "type": "string"
+        },
+        "token_env": {
+          "type": "string"
+        },
+        "max_context_tokens": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "base_url",
+        "token_env"
+      ],
+      "additionalProperties": false
+    },
     "cortex.instance.ModelSpec": {
       "title": "ModelSpec",
       "x-ess-name": "cortex.instance.ModelSpec",
@@ -500,6 +522,15 @@
           "type": "string",
           "format": "decimal",
           "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "budget_tokens": {
+          "type": "integer"
+        },
+        "daily_ceiling_tokens": {
+          "type": "integer"
+        },
+        "gateway": {
+          "$ref": "#/$defs/cortex.instance.ModelGateway"
         },
         "timeout_s": {
           "type": "integer"
