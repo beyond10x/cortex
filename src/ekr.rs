@@ -317,28 +317,44 @@ impl Store {
         self.stage_cmd(args)
     }
 
-    /// The store's head revision (`ekr head`, `revision`), read on the store itself.
-    pub fn head(&self) -> Result<i64, String> {
-        if let Some(launch) = &self.launch {
-            launch.ready(&launch.connection)?;
-        }
-        let cmd = self.store_cmd(&[OsStr::new("head")])?;
-        json(&run(cmd, "head")?, "head")?["revision"]
-            .as_i64()
-            .ok_or_else(|| "ekr head answered no revision".to_string())
-    }
-
-    /// `ekr stage begin`: a stage forked from the store at its head, answered by its id. The
-    /// store's head and history do not move.
-    pub fn begin_stage(&self) -> Result<String, String> {
+    /// `ekr stage begin`: a stage forked from the store at its head, answered by its id and its
+    /// base, the head it was forked at (what `ekr stage publish --expect-head` names). The store's
+    /// head and history do not move.
+    pub fn begin_stage(&self) -> Result<(String, i64), String> {
         let begun = json(
             &run(self.stage_command(&["begin"])?, "stage begin")?,
             "stage begin",
         )?;
-        begun["stage_id"]
+        match (begun["stage_id"].as_str(), begun["base"].as_i64()) {
+            (Some(stage), Some(base)) => Ok((stage.to_string(), base)),
+            _ => Err(format!(
+                "ekr stage begin answered no stage_id and base: {begun}"
+            )),
+        }
+    }
+
+    /// The ids of this store's stages that are still `Begun` (`ekr stage list`, whose entries
+    /// name their store, the host's `tenant`): stages a run began and neither published nor
+    /// abandoned, each holding a copy of the store.
+    pub fn begun_stages(&self) -> Result<Vec<String>, String> {
+        let host = std::fs::read_to_string(&self.host)
+            .map_err(|e| format!("cannot read {}: {e}", self.host.display()))?;
+        let host: Value = serde_json::from_str(&host).map_err(|e| format!("host.json: {e}"))?;
+        let tenant = host["tenant"]
             .as_str()
-            .map(str::to_string)
-            .ok_or_else(|| "ekr stage begin answered no stage_id".to_string())
+            .ok_or_else(|| "host.json names no tenant".to_string())?;
+        let listed = json(
+            &run(self.stage_command(&["list"])?, "stage list")?,
+            "stage list",
+        )?;
+        let listed = listed
+            .as_array()
+            .ok_or_else(|| format!("ekr stage list answered no list: {listed}"))?;
+        Ok(listed
+            .iter()
+            .filter(|s| s["state"] == "Begun" && s["store"] == tenant)
+            .filter_map(|s| s["stage_id"].as_str().map(str::to_string))
+            .collect())
     }
 
     /// `ekr stage publish <stage> --expect-head <head>`: every revision the stage committed lands

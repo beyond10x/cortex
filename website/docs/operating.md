@@ -25,7 +25,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report |
 | `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
-| `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
+| `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
 | `instances/<name>/cortex.log` | one JSON line per run: counts, cost, seconds, why it stopped |
 
 ## systemd units
@@ -222,25 +222,32 @@ A `postgres` store has no snapshot; its backup is the operator's database backup
 `cortex restore` answers `backend-unsupported`.
 
 A run on a `postgres` store that the spec holds to a `gate` can still be undone, through EKR's
-staged runs (`ekr stage`, EKR 0.0.33). Before its first batch, cortex reads `ekr head`, begins a
-stage (`ekr stage begin`, which copies the store into a tenant of its own and leaves the store's
-head where it is), and writes `instances/<name>/stage.json` with the stage, that head and a copy
-of `state/`. Every `ekr` of the run joins the stage with `EKR_STAGE`, which a Connectors launch
-passes on, so the run's reads see its own commits and its commits stay in the stage:
+staged runs (`ekr stage`, EKR 0.0.33). Before its first batch, cortex begins a stage (`ekr stage
+begin`, which copies the store into a tenant of its own and leaves the store's head where it is,
+and answers the head it began at), and writes `instances/<name>/stage.json` with the stage, that
+head and a copy of `state/`. Every `ekr` of the run joins the stage with `EKR_STAGE`, which a
+Connectors launch passes on, so the run's reads see its own commits and its commits stay in the stage:
 
 - A run that passes its gate is published, `ekr stage publish <stage> --expect-head <head>`:
-  every revision it committed lands in the store at once. If the store's head moved since the run
-  began, EKR refuses (`stage-head-moved`) and publishes nothing; the run fails as `apply-refused`,
-  and `state/` is put back.
+  every revision it committed lands in the store at once. `stage.json` records that the publish
+  began before it does. If the store's head moved since the run began, EKR refuses
+  (`stage-head-moved`) and publishes nothing; the stage is abandoned, the run fails as
+  `apply-refused` with the refusal in its `reason`, and `state/` is put back.
 - A run that fails its gate is abandoned (`ekr stage abandon`): `ekr head` answers the head from
   before the run, and `state/` is put back from `stage.json`.
 - A run that fails part-way, before its gate, keeps what it applied, as on `sqlite`: its stage
-  is published, or abandoned when nothing committed in it.
+  is published; a refused publish is said in the run's `reason`, and `state/` is put back.
+- A run that committed nothing in its stage, whatever its end, has the stage abandoned and
+  keeps `state/` as it left it, as on `sqlite`.
 
-A `stage.json` left by a killed run is settled by the next run of the instance: its stage is
-abandoned and `state/` put back, or, if the stage was published before the kill, kept as it is.
-`ekr stage list` lists every stage the store has had. Beginning a stage copies the store, so it
-takes longer as the store grows. A run on a `postgres` store with no `gate` runs in no stage.
+A `stage.json` left by a killed run, or by an abandon that failed, is settled by the next run of
+the instance. A stage whose publish had begun is published again at the same head, which
+completes a publish the kill interrupted, and `state/` is kept as it is; any other stage, or one
+whose publish is now refused because the head moved, is abandoned and `state/` put back. Then
+every stage of the store still `Begun` in `ekr stage list` (which lists every stage the store
+has had), such as one a run began and was killed before it wrote `stage.json`, is abandoned: each
+holds a copy of the store. Beginning a stage copies the store, so it takes longer as the store
+grows. A run on a `postgres` store with no `gate` runs in no stage.
 
 ## Adopting an existing store
 
