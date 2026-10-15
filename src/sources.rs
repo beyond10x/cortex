@@ -8,7 +8,7 @@ use std::path::Path;
 use cortex_model::instance as m;
 use serde_json::{json, Value};
 
-use crate::connectors::{body, Connectors, InvokeError};
+use crate::connectors::{body, Connectors, InvokeError, Reference};
 use crate::model_map::to_serde;
 
 /// What one document cites itself as in EKR.
@@ -446,9 +446,25 @@ pub fn fetch(
         child_failures: child_failures.clone(),
         ..Fetched::default()
     };
+    // The connection is resolved once, before anything is fetched: a profile that names no
+    // connection, or more than one, fails the fetch before any credential is used.
+    let resolve = |adapter: &str, connection: &Option<String>, profile: &Option<String>| {
+        connectors
+            .resolve(
+                adapter,
+                &Reference::of(connection.as_ref(), profile.as_ref()),
+            )
+            .map_err(FetchError::from)
+    };
     match settings {
-        m::SourceSettings::Web(web) => fetch_web(web, connectors).map(documents),
-        m::SourceSettings::Connectors(c) => fetch_records(c, connectors, window, child_failures),
+        m::SourceSettings::Web(web) => {
+            let connection = resolve(web_adapter(web), &web.connection, &web.profile)?;
+            fetch_web(web, &connection, connectors).map(documents)
+        }
+        m::SourceSettings::Connectors(c) => {
+            let connection = resolve(&c.adapter, &c.connection, &c.profile)?;
+            fetch_records(c, &connection, connectors, window, child_failures)
+        }
         m::SourceSettings::Files(f) => {
             fetch_files(f, base, max_context).map(|(docs, skipped)| Fetched {
                 skipped,
@@ -457,10 +473,13 @@ pub fn fetch(
         }
         m::SourceSettings::Structured(st) => match &st.input {
             m::StructuredInput::Connectors(c) => {
-                fetch_structured(st, c, connectors, window, redactor).map(|mut fetched| {
-                    fetched.child_failures = child_failures.clone();
-                    fetched
-                })
+                let connection = resolve(&c.adapter, &c.connection, &c.profile)?;
+                fetch_structured(st, c, &connection, connectors, window, redactor).map(
+                    |mut fetched| {
+                        fetched.child_failures = child_failures.clone();
+                        fetched
+                    },
+                )
             }
             m::StructuredInput::Files(f) => {
                 fetch_structured_files(st, f, base).map(|documents| Fetched {
@@ -600,6 +619,7 @@ fn fetch_structured_files(
 fn fetch_structured(
     st: &m::StructuredSource,
     c: &m::StructuredConnectors,
+    connection: &str,
     connectors: &Connectors,
     window: &Window,
     redactor: Option<&crate::redact::Redactor>,
@@ -615,7 +635,7 @@ fn fetch_structured(
     let children = c.children.as_deref().unwrap_or_default();
     let invoker = |operation: &str| {
         let operation = operation.to_string();
-        move |input: &Value| Ok(connectors.invoke(&c.adapter, &c.connection, &operation, input)?)
+        move |input: &Value| Ok(connectors.invoke(&c.adapter, connection, &operation, input)?)
     };
     for input in &c.inputs {
         let records = walk(
@@ -927,7 +947,11 @@ fn items<'a>(answer: &'a Value, key: &str) -> impl Iterator<Item = &'a Value> {
     body(answer)[key].as_array().into_iter().flatten()
 }
 
-fn fetch_web(web: &m::WebSource, connectors: &Connectors) -> Result<Vec<Document>, FetchError> {
+fn fetch_web(
+    web: &m::WebSource,
+    connection: &str,
+    connectors: &Connectors,
+) -> Result<Vec<Document>, FetchError> {
     let adapter = web_adapter(web);
     let mut docs = Vec::new();
     match &web.input {
@@ -935,7 +959,7 @@ fn fetch_web(web: &m::WebSource, connectors: &Connectors) -> Result<Vec<Document
             for query in &search.queries {
                 let answer = connectors.invoke(
                     adapter,
-                    &web.connection,
+                    connection,
                     "websearch.search",
                     &search_input(query, &search.policy),
                 )?;
@@ -945,15 +969,14 @@ fn fetch_web(web: &m::WebSource, connectors: &Connectors) -> Result<Vec<Document
         m::WebInput::Sites(sites) => match sites.mode {
             m::WebMode::Pages => {
                 let input = json!({"urls": sites.urls});
-                let answer =
-                    connectors.invoke(adapter, &web.connection, "websearch.fetch", &input)?;
+                let answer = connectors.invoke(adapter, connection, "websearch.fetch", &input)?;
                 docs.extend(items(&answer, "pages").filter_map(website));
             }
             m::WebMode::Crawl => {
                 for url in &sites.urls {
                     let input = crawl_input(url, sites.policy.as_ref());
                     let answer =
-                        connectors.invoke(adapter, &web.connection, "websearch.crawl", &input)?;
+                        connectors.invoke(adapter, connection, "websearch.crawl", &input)?;
                     docs.extend(items(&answer, "pages").filter_map(website));
                 }
             }
@@ -1001,13 +1024,14 @@ pub fn render(template: &str, record: &Value) -> String {
     out
 }
 
-/// One invocation of `operation` on the source's adapter and connection.
+/// One invocation of `operation` on the source's adapter and its resolved `connection`.
 fn invoker<'a>(
     connectors: &'a Connectors,
     c: &'a m::ConnectorsSource,
+    connection: &'a str,
     operation: &'a str,
 ) -> impl FnMut(&Value) -> Result<Value, FetchError> + 'a {
-    move |input| Ok(connectors.invoke(&c.adapter, &c.connection, operation, input)?)
+    move |input| Ok(connectors.invoke(&c.adapter, connection, operation, input)?)
 }
 
 /// The records of a `connectors` source, one document per record. Each input, with the run's
@@ -1019,6 +1043,7 @@ fn invoker<'a>(
 /// failed run on, in `skipped` instead. A successful call clears the parent's count.
 fn fetch_records(
     c: &m::ConnectorsSource,
+    connection: &str,
     connectors: &Connectors,
     window: &Window,
     child_failures: &BTreeMap<String, u32>,
@@ -1040,7 +1065,7 @@ fn fetch_records(
         });
     for input in &c.inputs {
         let records = walk_until(
-            &mut invoker(connectors, c, &c.operation),
+            &mut invoker(connectors, c, connection, &c.operation),
             &format!("{}.{}", c.adapter, c.operation),
             &with_window(&to_serde(input), window),
             &c.records,
@@ -1071,7 +1096,7 @@ fn fetch_records(
             }
             if let Some(child) = &c.child {
                 let children = match walk(
-                    &mut invoker(connectors, c, &child.operation),
+                    &mut invoker(connectors, c, connection, &child.operation),
                     &format!("{}.{}", c.adapter, child.operation),
                     &render_json(&to_serde(&child.input), record),
                     &child.records,

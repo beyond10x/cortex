@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "be3a67fd069694af44248b990d6343c617f9d4a51b49e88db98f5b295283dd2f",
-    "contract_digest": "slice-sha256/2:d102e0e4a1b8e88c147c889dbcd9bd82b05b8f6984601a6855b3fcdaaa4db6bf",
+    "source_digest": "600f063232e16994b404336c5f6deb4afa1bf82b7bf5a7f0872b87687e43f7a2",
+    "contract_digest": "slice-sha256/2:7fc16b6797ec796cfe089ade6fcdbb4f2f1d50e1ce976b6d95d92dcd865afda0",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -20,13 +20,18 @@
         },
         "connection": {
           "type": "string"
+        },
+        "profile": {
+          "type": "string"
         }
       },
       "required": [
-        "adapter",
-        "connection"
+        "adapter"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ]
     }
   }
 }

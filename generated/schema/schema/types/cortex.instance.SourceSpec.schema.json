@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "be3a67fd069694af44248b990d6343c617f9d4a51b49e88db98f5b295283dd2f",
-    "contract_digest": "slice-sha256/2:c887e096c6b22582842c7fca2f7e240de18bb8cbe1b987eb0bfbcfc399d74920",
+    "source_digest": "600f063232e16994b404336c5f6deb4afa1bf82b7bf5a7f0872b87687e43f7a2",
+    "contract_digest": "slice-sha256/2:014ef46e098e93a8d9bcd12bd53ab2da2b81840c534a2afc3ed1e23983329bf9",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -104,6 +104,9 @@
         "connection": {
           "type": "string"
         },
+        "profile": {
+          "type": "string"
+        },
         "operation": {
           "type": "string"
         },
@@ -135,7 +138,6 @@
       },
       "required": [
         "adapter",
-        "connection",
         "operation",
         "inputs",
         "records",
@@ -144,7 +146,8 @@
       ],
       "additionalProperties": false,
       "x-ess-invariants": [
-        "(paging.stop_older_than_since != true or defined(time))"
+        "(paging.stop_older_than_since != true or defined(time))",
+        "(defined(connection) or defined(profile))"
       ]
     },
     "cortex.instance.CrawlPolicy": {
@@ -724,6 +727,9 @@
         "connection": {
           "type": "string"
         },
+        "profile": {
+          "type": "string"
+        },
         "operation": {
           "type": "string"
         },
@@ -749,13 +755,13 @@
       },
       "required": [
         "adapter",
-        "connection",
         "operation",
         "inputs"
       ],
       "additionalProperties": false,
       "x-ess-invariants": [
-        "paging.stop_older_than_since != true"
+        "paging.stop_older_than_since != true",
+        "(defined(connection) or defined(profile))"
       ]
     },
     "cortex.instance.StructuredFiles": {
@@ -928,15 +934,20 @@
         "connection": {
           "type": "string"
         },
+        "profile": {
+          "type": "string"
+        },
         "input": {
           "$ref": "#/$defs/cortex.instance.WebInput"
         }
       },
       "required": [
-        "connection",
         "input"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ]
     }
   }
 }

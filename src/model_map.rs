@@ -146,7 +146,8 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
 fn connection_ref(c: &s::CortexInstanceConnectionRef) -> m::ConnectionRef {
     m::ConnectionRef {
         adapter: c.adapter.clone(),
-        connection: c.connection.clone(),
+        connection: opt(&c.connection),
+        profile: opt(&c.profile),
     }
 }
 
@@ -309,7 +310,8 @@ fn structured(
             s::CortexInstanceStructuredInput::V0(c) => {
                 m::StructuredInput::Connectors(m::StructuredConnectors {
                     adapter: c.value.adapter.clone(),
-                    connection: c.value.connection.clone(),
+                    connection: opt(&c.value.connection),
+                    profile: opt(&c.value.profile),
                     operation: c.value.operation.clone(),
                     inputs: c.value.inputs.iter().map(json).collect(),
                     paging: paging(&c.value.paging, at, Some(STOP_ONLY_ON_SOURCE))?,
@@ -378,7 +380,8 @@ fn settings(
         s::CortexInstanceSourceSettings::V0(c) => {
             m::SourceSettings::Connectors(m::ConnectorsSource {
                 adapter: c.value.adapter.clone(),
-                connection: c.value.connection.clone(),
+                connection: opt(&c.value.connection),
+                profile: opt(&c.value.profile),
                 operation: c.value.operation.clone(),
                 inputs: c.value.inputs.iter().map(json).collect(),
                 records: c.value.records.clone(),
@@ -416,7 +419,8 @@ fn settings(
         }
         s::CortexInstanceSourceSettings::V3(w) => m::SourceSettings::Web(m::WebSource {
             adapter: opt(&w.value.adapter),
-            connection: w.value.connection.clone(),
+            connection: opt(&w.value.connection),
+            profile: opt(&w.value.profile),
             input: web_input(&w.value.input, at)?,
         }),
     })

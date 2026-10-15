@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "be3a67fd069694af44248b990d6343c617f9d4a51b49e88db98f5b295283dd2f",
-    "contract_digest": "slice-sha256/2:2a254310a7fef992565b4c25b8fbee46daf9885627bbc3e027feb30b5e3aabaa",
+    "source_digest": "600f063232e16994b404336c5f6deb4afa1bf82b7bf5a7f0872b87687e43f7a2",
+    "contract_digest": "slice-sha256/2:e376ae884161c8983a538721b64e042764af3e7be5b62370e39018fc48c006e6",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -20,13 +20,18 @@
         },
         "connection": {
           "type": "string"
+        },
+        "profile": {
+          "type": "string"
         }
       },
       "required": [
-        "adapter",
-        "connection"
+        "adapter"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ]
     },
     "cortex.instance.PostgresStore": {
       "title": "PostgresStore",

@@ -45,17 +45,21 @@ Every value satisfies `paging.stop_older_than_since != true`.
 
 ### `ConnectionRef`
 
-`cortex.instance.ConnectionRef` is a record of two fields:
+`cortex.instance.ConnectionRef` is a record of three fields:
 
 - `adapter` — `String`
-- `connection` — `String`
+- `connection` — `Optional<String>`, which may be absent
+- `profile` — `Optional<String>`, which may be absent
+
+Every value satisfies `(defined(connection) or defined(profile))`.
 
 ### `ConnectorsSource`
 
-`cortex.instance.ConnectorsSource` is a record of 10 fields:
+`cortex.instance.ConnectorsSource` is a record of 11 fields:
 
 - `adapter` — `String`
-- `connection` — `String`
+- `connection` — `Optional<String>`, which may be absent
+- `profile` — `Optional<String>`, which may be absent
 - `operation` — `String`
 - `inputs` — `List<Json>`
 - `records` — `String`
@@ -65,7 +69,7 @@ Every value satisfies `paging.stop_older_than_since != true`.
 - `paging` — `Optional<cortex.instance.Paging>`, which may be absent
 - `child` — `Optional<cortex.instance.ChildCall>`, which may be absent
 
-Every value satisfies `(paging.stop_older_than_since != true or defined(time))`.
+Every value satisfies `(paging.stop_older_than_since != true or defined(time))` and `(defined(connection) or defined(profile))`.
 
 ### `CrawlPolicy`
 
@@ -500,17 +504,18 @@ Every value satisfies `paging.stop_older_than_since != true`.
 
 ### `StructuredConnectors`
 
-`cortex.instance.StructuredConnectors` is a record of seven fields:
+`cortex.instance.StructuredConnectors` is a record of eight fields:
 
 - `adapter` — `String`
-- `connection` — `String`
+- `connection` — `Optional<String>`, which may be absent
+- `profile` — `Optional<String>`, which may be absent
 - `operation` — `String`
 - `inputs` — `List<Json>`
 - `paging` — `Optional<cortex.instance.Paging>`, which may be absent
 - `children` — `Optional<List<cortex.instance.StructuredChild>>`, which may be absent
 - `links` — `Optional<List<cortex.instance.CompareLink>>`, which may be absent
 
-Every value satisfies `paging.stop_older_than_since != true`.
+Every value satisfies `paging.stop_older_than_since != true` and `(defined(connection) or defined(profile))`.
 
 ### `StructuredFiles`
 
@@ -572,11 +577,14 @@ Every value satisfies `paging.stop_older_than_since != true`.
 
 ### `WebSource`
 
-`cortex.instance.WebSource` is a record of three fields:
+`cortex.instance.WebSource` is a record of four fields:
 
 - `adapter` — `Optional<String>`, which may be absent
-- `connection` — `String`
+- `connection` — `Optional<String>`, which may be absent
+- `profile` — `Optional<String>`, which may be absent
 - `input` — `cortex.instance.WebInput`
+
+Every value satisfies `(defined(connection) or defined(profile))`.
 
 Five of the types above are reached by nothing else in this system: `cortex.instance.DailySpend`, `cortex.instance.HookResult`, `cortex.instance.QualityVerdict`, `cortex.instance.SchemaProposal` and `cortex.instance.SchemaProposals`. No entity, view, command, event, error or crossing names them, so it is either vocabulary something outside this specification uses or a leftover — and only a person can tell which.
 
@@ -820,7 +828,7 @@ It has five outcomes.
 
 **`name-taken`** — Nothing was created. Taken when a record already carries the identity the command's creating branch would create, and no input-guarded refusal applies. No entity in this specification changes. It reports `cortex.instance.NameTaken`, carrying `name`. It emits nothing. A test reaches it by sending the command twice with one identity: the first call creates the record, the second is answered by this branch.
 
-**`connection-missing`** — Nothing was created. Decided outside the input: Connectors lists no live connection for a connection id a source or the postgres store of the spec names. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ConnectionMissing`, carrying `connection`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`connection-missing`** — Nothing was created. Decided outside the input: Connectors lists no live connection for a connection id a source or the postgres store of the spec names, or not exactly one live connection for a profile one names. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ConnectionMissing`, carrying `connection` and `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`seed-refused`** — Nothing was created. Decided outside the input: EKR refuses the minimal seed, the ekr-seed/2 file or the seed schema document. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SeedRefused`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
@@ -986,7 +994,7 @@ It has four outcomes.
 
 **`not-active`** — The instance is removed; nothing changed. Taken when the existing subject's stored fields satisfy `state == Removed`. No entity in this specification changes. It reports `cortex.instance.InstanceNotActive`, carrying `state`. It emits nothing. A test establishes and independently observes the subject enum fact before selecting this branch.
 
-**`updated`** — The frozen spec is replaced; sources, model and serve settings take effect on the next run. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.InstanceUpdated`. It sets `description` from `input.description` and `model` from `input.model`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+**`updated`** — The frozen spec is replaced; sources, model and serve settings take effect on the next run. The viewer unit holds the connection id resolved at the last create, adopt or update: it is rewritten when the store's connection changed, or when its profile now resolves to another id. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.InstanceUpdated`. It sets `description` from `input.description` and `model` from `input.model`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
 **`no-such-instance`** — Nothing changed. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
@@ -1229,11 +1237,12 @@ Reported by `cortex.instance.AdoptInstance` on its `backend-mismatch` outcome.
 
 ### `ConnectionMissing`
 
-Connectors lists no live connection with the id a source or the postgres store names. Run `connectors connections connect` for it, then try again.
+Connectors lists no live connection with the id a source or the postgres store names, or not exactly one live connection with the profile it names. Run `connectors connections connect` for it, or revoke the extra ones, then try again.
 
 It carries:
 
 - `connection` — `String`
+- `reason` — `String`
 
 Reported by `cortex.instance.CreateInstance` on its `connection-missing` outcome.
 
@@ -1464,4 +1473,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `be3a67fd069694af44248b990d6343c617f9d4a51b49e88db98f5b295283dd2f` · contract digest `slice-sha256/2:02f8d3c83a9c17e0d223dcedbf87e9a5d2822fe02e8fef61ed89dd82241cbf3c`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `600f063232e16994b404336c5f6deb4afa1bf82b7bf5a7f0872b87687e43f7a2` · contract digest `slice-sha256/2:0130728aba5b943a6329934389c01207b197b3f616804d5ce89b2f1ff5424b12`. Do not edit this file; change the specification and regenerate it with `task generate`.

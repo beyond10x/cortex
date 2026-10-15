@@ -110,11 +110,13 @@ fn every_sqlite_form_the_published_schema_accepts_parses_to_sqlite() {
             config: "pg.json".into(),
             connection: Some(m::ConnectionRef {
                 adapter: "pg".into(),
-                connection: "app".into(),
+                connection: Some("app".into()),
+                profile: None,
             }),
             schema_connection: Some(m::ConnectionRef {
                 adapter: "pg".into(),
-                connection: "owner".into(),
+                connection: Some("owner".into()),
+                profile: None,
             }),
         })))
     );

@@ -99,8 +99,17 @@ types:
     fields:
       # The Connectors adapter answering datasource.websearch/v1alpha1; absent means tavily.
       - {name: adapter, type: Optional<String>}
-      - {name: connection, type: String}
+      # The connection, named by id (`connection`) or by profile (`profile`), exactly one of the
+      # two; see `cortex.instance.ConnectionRef` for how a profile is resolved.
+      - {name: connection, type: Optional<String>}
+      - {name: profile, type: Optional<String>}
       - {name: input, type: cortex.instance.WebInput}
+    # UNMAPPED: not both `connection` and `profile`: conformance synthesis witnesses every
+    # Optional as present, so that invariant leaves no spec it can build; `spec::check` refuses it.
+    invariants:
+      - any:
+          - defined(connection)
+          - defined(profile)
 
   # How a paged operation names its next page. `NextLink` reads a URL, relative or absolute, at the
   # paging's `next` path; the percent-decoded value of its query parameter named by the last
@@ -139,7 +148,9 @@ types:
     kind: struct
     fields:
       - {name: adapter, type: String}
-      - {name: connection, type: String}
+      # By id or by profile of `adapter`, exactly one, as on `cortex.instance.WebSource`.
+      - {name: connection, type: Optional<String>}
+      - {name: profile, type: Optional<String>}
       - {name: operation, type: String}
       # UNMAPPED: in every string value of an input, a run replaces the window placeholders by its
       # window, each end cut to the second: `{since}` and `{until}` by RFC 3339 in UTC
@@ -154,8 +165,13 @@ types:
       - {name: text, type: List<String>}
       - {name: paging, type: Optional<cortex.instance.Paging>}
       - {name: child, type: Optional<cortex.instance.ChildCall>}
+    # UNMAPPED: not both `connection` and `profile`: conformance synthesis witnesses every
+    # Optional as present, so that invariant leaves no spec it can build; `spec::check` refuses it.
     invariants:
       - any: ["paging.stop_older_than_since != true", "defined(time)"]
+      - any:
+          - defined(connection)
+          - defined(profile)
 
   - name: cortex.instance.RecordFormat
     kind: enum
@@ -243,7 +259,9 @@ types:
     kind: struct
     fields:
       - {name: adapter, type: String}
-      - {name: connection, type: String}
+      # By id or by profile of `adapter`, exactly one, as on `cortex.instance.WebSource`.
+      - {name: connection, type: Optional<String>}
+      - {name: profile, type: Optional<String>}
       - {name: operation, type: String}
       # UNMAPPED: the window placeholders of `cortex.instance.ConnectorsSource.inputs` hold here
       # alike: `{since}`, `{until}` (RFC 3339), `{since_epoch}`, `{until_epoch}` (whole epoch
@@ -252,8 +270,13 @@ types:
       - {name: paging, type: Optional<cortex.instance.Paging>}
       - {name: children, type: Optional<List<cortex.instance.StructuredChild>>}
       - {name: links, type: Optional<List<cortex.instance.CompareLink>>}
+    # UNMAPPED: not both `connection` and `profile`: conformance synthesis witnesses every
+    # Optional as present, so that invariant leaves no spec it can build; `spec::check` refuses it.
     invariants:
       - paging.stop_older_than_since != true
+      - any:
+          - defined(connection)
+          - defined(profile)
 
   - name: cortex.instance.StructuredFiles
     kind: struct
@@ -344,11 +367,31 @@ types:
 
   # A saved Connectors connection whose document a launched `ekr` reads on descriptor 3
   # (`connectors connections launch --consumer ekr`); cortex names it and never reads it.
+  #
+  # A connection is named by id (`connection: conn_…`) or by profile (`profile: <profile>`),
+  # exactly one of the two. ESS types no field that is a string or an object (a union is always
+  # tagged), so the profile form is a `profile` field beside an optional `connection`, here and on
+  # the three source settings, whose `adapter` is the source's own. A profile is resolved each
+  # time cortex needs the connection, never stored: to the one connection that
+  # `connectors connections list --adapter <adapter>` (its first page) lists with that `profile`
+  # and a `state` other than `revoked`. None, or more than one, is refused with a reason naming
+  # the adapter, the profile, the count and every matching id. The one place a resolved id is
+  # written down is the viewer's systemd unit, which launches through the id the profile resolved
+  # to at the last `create`, `adopt` or `update`: `update` resolves the profile again and rewrites
+  # the unit when that id changed, so an update after a reconnect points the viewer at the live
+  # connection.
   - name: cortex.instance.ConnectionRef
     kind: struct
     fields:
       - {name: adapter, type: String}
-      - {name: connection, type: String}
+      - {name: connection, type: Optional<String>}
+      - {name: profile, type: Optional<String>}
+    # UNMAPPED: not both `connection` and `profile`: conformance synthesis witnesses every
+    # Optional as present, so that invariant leaves no spec it can build; `spec::check` refuses it.
+    invariants:
+      - any:
+          - defined(connection)
+          - defined(profile)
 
   # With `connection`, every `ekr` of the store starts through `connectors connections launch`,
   # and `config` must name `password_file`; `schema_connection` does the same for
@@ -723,10 +766,15 @@ actors:
 errors:
   - name: cortex.instance.ConnectionMissing
     summary: >-
-      Connectors lists no live connection with the id a source or the postgres store names. Run
-      `connectors connections connect` for it, then try again.
+      Connectors lists no live connection with the id a source or the postgres store names, or
+      not exactly one live connection with the profile it names. Run
+      `connectors connections connect` for it, or revoke the extra ones, then try again.
+    # `connection` is the reference as the spec names it, `<adapter>:<id>` or
+    # `<adapter>:profile <profile>`; `reason` names the adapter, the reference, and for a profile
+    # the count of live connections listed with it and every matching id.
     fields:
       - {name: connection, type: String}
+      - {name: reason, type: String}
 
   - name: cortex.instance.SeedRefused
     summary: EKR refused the seed or the seed schema; no store was kept.
@@ -960,11 +1008,14 @@ commands:
         summary: Nothing was created.
 
       - name: connection-missing
-        external: Connectors lists no live connection for a connection id a source or the postgres store of the spec names
+        external: >-
+          Connectors lists no live connection for a connection id a source or the postgres store
+          of the spec names, or not exactly one live connection for a profile one names
         error: cortex.instance.ConnectionMissing
         payload:
           cortex.instance.ConnectionMissing:
             connection: {generated: true}
+            reason: {generated: true}
         summary: Nothing was created.
 
       - name: seed-refused
@@ -1054,7 +1105,11 @@ commands:
         payload:
           cortex.instance.InstanceUpdated:
             name: input.name
-        summary: The frozen spec is replaced; sources, model and serve settings take effect on the next run.
+        summary: >-
+          The frozen spec is replaced; sources, model and serve settings take effect on the next run.
+          The viewer unit holds the connection id resolved at the last create, adopt or update: it is
+          rewritten when the store's connection changed, or when its profile now resolves to
+          another id.
 
       - name: no-such-instance
         unknown_instance: true

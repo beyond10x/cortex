@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest be3a67fd069694af44248b990d6343c617f9d4a51b49e88db98f5b295283dd2f
-// contract digest 02f8d3c83a9c17e0d223dcedbf87e9a5d2822fe02e8fef61ed89dd82241cbf3c
+// model digest 600f063232e16994b404336c5f6deb4afa1bf82b7bf5a7f0872b87687e43f7a2
+// contract digest 0130728aba5b943a6329934389c01207b197b3f616804d5ce89b2f1ff5424b12
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -57,23 +57,30 @@ pub struct CompareLink {
 }
 
 /// ConnectionRef — `cortex.instance.ConnectionRef`.
+///
+/// Every value satisfies `(defined(connection) or defined(profile))` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConnectionRef {
     /// `adapter` — `String`.
     pub adapter: String,
-    /// `connection` — `String`.
-    pub connection: String,
+    /// `connection` — `Optional<String>`.
+    pub connection: Option<String>,
+    /// `profile` — `Optional<String>`.
+    pub profile: Option<String>,
 }
 
 /// ConnectorsSource — `cortex.instance.ConnectorsSource`.
 ///
 /// Every value satisfies `(paging.stop_older_than_since != true or defined(time))` — declared here, enforced by whatever behaviour constructs one.
+/// Every value satisfies `(defined(connection) or defined(profile))` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConnectorsSource {
     /// `adapter` — `String`.
     pub adapter: String,
-    /// `connection` — `String`.
-    pub connection: String,
+    /// `connection` — `Optional<String>`.
+    pub connection: Option<String>,
+    /// `profile` — `Optional<String>`.
+    pub profile: Option<String>,
     /// `operation` — `String`.
     pub operation: String,
     /// `inputs` — `List<Json>`.
@@ -827,12 +834,15 @@ pub struct StructuredChild {
 /// StructuredConnectors — `cortex.instance.StructuredConnectors`.
 ///
 /// Every value satisfies `paging.stop_older_than_since != true` — declared here, enforced by whatever behaviour constructs one.
+/// Every value satisfies `(defined(connection) or defined(profile))` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructuredConnectors {
     /// `adapter` — `String`.
     pub adapter: String,
-    /// `connection` — `String`.
-    pub connection: String,
+    /// `connection` — `Optional<String>`.
+    pub connection: Option<String>,
+    /// `profile` — `Optional<String>`.
+    pub profile: Option<String>,
     /// `operation` — `String`.
     pub operation: String,
     /// `inputs` — `List<Json>`.
@@ -933,12 +943,16 @@ pub enum WebMode {
 }
 
 /// WebSource — `cortex.instance.WebSource`.
+///
+/// Every value satisfies `(defined(connection) or defined(profile))` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WebSource {
     /// `adapter` — `Optional<String>`.
     pub adapter: Option<String>,
-    /// `connection` — `String`.
-    pub connection: String,
+    /// `connection` — `Optional<String>`.
+    pub connection: Option<String>,
+    /// `profile` — `Optional<String>`.
+    pub profile: Option<String>,
     /// `input` — `cortex.instance.WebInput`.
     pub input: WebInput,
 }
@@ -1607,7 +1621,7 @@ pub enum CreateInstanceOutcome {
         /// Why it was refused: `cortex.instance.NameTaken`.
         error: NameTaken,
     },
-    /// `connection-missing` — externally decided (Connectors lists no live connection for a connection id a source or the postgres store of the spec names).
+    /// `connection-missing` — externally decided (Connectors lists no live connection for a connection id a source or the postgres store of the spec names, or not exactly one live connection for a profile one names).
     ///
     /// Nothing was created.
     ConnectionMissing {
@@ -2039,7 +2053,7 @@ pub enum UpdateInstanceOutcome {
     },
     /// `updated` — otherwise.
     ///
-    /// The frozen spec is replaced; sources, model and serve settings take effect on the next run.
+    /// The frozen spec is replaced; sources, model and serve settings take effect on the next run. The viewer unit holds the connection id resolved at the last create, adopt or update: it is rewritten when the store's connection changed, or when its profile now resolves to another id.
     Updated {
         /// The `cortex.instance.InstanceUpdated` this outcome publishes.
         instance_updated: InstanceUpdated,
@@ -2261,11 +2275,13 @@ pub struct BackendMismatch {
 
 /// The declared error `cortex.instance.ConnectionMissing`.
 ///
-/// Connectors lists no live connection with the id a source or the postgres store names. Run `connectors connections connect` for it, then try again.
+/// Connectors lists no live connection with the id a source or the postgres store names, or not exactly one live connection with the profile it names. Run `connectors connections connect` for it, or revoke the extra ones, then try again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConnectionMissing {
     /// `connection` — `String`.
     pub connection: String,
+    /// `reason` — `String`.
+    pub reason: String,
 }
 
 /// The declared error `cortex.instance.ExtractionFailed`.

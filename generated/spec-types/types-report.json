@@ -1,12 +1,12 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "be3a67fd069694af44248b990d6343c617f9d4a51b49e88db98f5b295283dd2f",
+  "source_digest": "600f063232e16994b404336c5f6deb4afa1bf82b7bf5a7f0872b87687e43f7a2",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:66dc3940cfb1a95f14f7540d13b84bc46ad13c1e3cc34e56be212df551bc7f3e",
-    "projection_digest": "0a8c510b61d26e171f26944c0f0ed5d6377bd14649660b6e4f94f523c7b116c5"
+    "contract_digest": "slice-sha256/2:418b946318f382211713bb6cc440482089d43637d73ec63b5d2989294b3ff5c8",
+    "projection_digest": "6eca0a04982be72a8d3177d103420f93b0ac2c4b88bf5759dea39a63860eb0de"
   },
   "generator_version": "0.60.0",
   "target": "rust",
@@ -933,6 +933,11 @@
       "detail": "enforce the retained model invariant statements; structural codecs do not evaluate predicates"
     },
     {
+      "pointer": "/$defs/cortex.instance.ConnectionRef/x-ess-invariants",
+      "rule": "model_invariants",
+      "detail": "enforce the retained model invariant statements; structural codecs do not evaluate predicates"
+    },
+    {
       "pointer": "/$defs/cortex.instance.ConnectorsSource/properties/inputs/items",
       "rule": "rust_exact_numbers",
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
@@ -1166,6 +1171,11 @@
       "pointer": "/$defs/cortex.instance.WebInput",
       "rule": "untagged_selection",
       "detail": "native union decoding chooses the first structurally decodable alternative; it does not certify source branch constraints or external dispatch"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.WebSource/x-ess-invariants",
+      "rule": "model_invariants",
+      "detail": "enforce the retained model invariant statements; structural codecs do not evaluate predicates"
     }
   ]
 }

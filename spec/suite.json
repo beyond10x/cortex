@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "be3a67fd069694af44248b990d6343c617f9d4a51b49e88db98f5b295283dd2f",
-    "contract_digest": "02f8d3c83a9c17e0d223dcedbf87e9a5d2822fe02e8fef61ed89dd82241cbf3c",
+    "spec_digest": "600f063232e16994b404336c5f6deb4afa1bf82b7bf5a7f0872b87687e43f7a2",
+    "contract_digest": "0130728aba5b943a6329934389c01207b197b3f616804d5ce89b2f1ff5424b12",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
@@ -89,11 +89,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -462,11 +464,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -967,11 +971,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -1410,11 +1416,13 @@
                     "config": "spec.store.config-1048594",
                     "connection": {
                       "adapter": "spec.store.connection.adapter-1048594",
-                      "connection": "spec.store.connection.connection-1048594"
+                      "connection": "spec.store.connection.connection-1048594",
+                      "profile": "spec.store.connection.profile-1048594"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter-1048594",
-                      "connection": "spec.store.schema_connection.connection-1048594"
+                      "connection": "spec.store.schema_connection.connection-1048594",
+                      "profile": "spec.store.schema_connection.profile-1048594"
                     }
                   }
                 }
@@ -1574,11 +1582,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -1850,11 +1860,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -2300,11 +2312,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -2750,11 +2764,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -3200,11 +3216,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -3639,11 +3657,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -4136,11 +4156,13 @@
                     "config": "spec.store.config-1048594",
                     "connection": {
                       "adapter": "spec.store.connection.adapter-1048594",
-                      "connection": "spec.store.connection.connection-1048594"
+                      "connection": "spec.store.connection.connection-1048594",
+                      "profile": "spec.store.connection.profile-1048594"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter-1048594",
-                      "connection": "spec.store.schema_connection.connection-1048594"
+                      "connection": "spec.store.schema_connection.connection-1048594",
+                      "profile": "spec.store.schema_connection.profile-1048594"
                     }
                   }
                 }
@@ -4296,11 +4318,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -4464,11 +4488,13 @@
                     "config": "spec.store.config-1048595",
                     "connection": {
                       "adapter": "spec.store.connection.adapter-1048595",
-                      "connection": "spec.store.connection.connection-1048595"
+                      "connection": "spec.store.connection.connection-1048595",
+                      "profile": "spec.store.connection.profile-1048595"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter-1048595",
-                      "connection": "spec.store.schema_connection.connection-1048595"
+                      "connection": "spec.store.schema_connection.connection-1048595",
+                      "profile": "spec.store.schema_connection.profile-1048595"
                     }
                   }
                 }
@@ -4624,11 +4650,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -4903,11 +4931,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -5400,11 +5430,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -5839,11 +5871,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -6516,11 +6550,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -6895,11 +6931,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -7402,11 +7440,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -8126,11 +8166,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -8857,11 +8899,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -9413,11 +9457,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -9874,11 +9920,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -10730,11 +10778,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -11764,11 +11814,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -12108,11 +12160,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -12536,11 +12590,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -13100,11 +13156,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -13528,11 +13586,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -13956,11 +14016,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -14445,11 +14507,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -15203,11 +15267,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -15704,11 +15770,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -15927,11 +15995,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -16300,11 +16370,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -16591,11 +16663,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -16939,11 +17013,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -17230,11 +17306,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -17649,11 +17727,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -17940,11 +18020,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -18231,11 +18313,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -18650,11 +18734,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -18955,11 +19041,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -19526,11 +19614,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -19982,11 +20072,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -20500,11 +20592,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -21006,11 +21100,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -21248,11 +21344,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -21411,11 +21509,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -21558,11 +21658,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -22048,11 +22150,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -22211,11 +22315,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
@@ -22340,11 +22446,13 @@
                     "config": "spec.store.config-1",
                     "connection": {
                       "adapter": "spec.store.connection.adapter-1",
-                      "connection": "spec.store.connection.connection-1"
+                      "connection": "spec.store.connection.connection-1",
+                      "profile": "spec.store.connection.profile-1"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter-1",
-                      "connection": "spec.store.schema_connection.connection-1"
+                      "connection": "spec.store.schema_connection.connection-1",
+                      "profile": "spec.store.schema_connection.profile-1"
                     }
                   }
                 }
@@ -22819,11 +22927,13 @@
                     "config": "spec.store.config-1",
                     "connection": {
                       "adapter": "spec.store.connection.adapter-1",
-                      "connection": "spec.store.connection.connection-1"
+                      "connection": "spec.store.connection.connection-1",
+                      "profile": "spec.store.connection.profile-1"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter-1",
-                      "connection": "spec.store.schema_connection.connection-1"
+                      "connection": "spec.store.schema_connection.connection-1",
+                      "profile": "spec.store.schema_connection.profile-1"
                     }
                   }
                 }
@@ -22948,11 +23058,13 @@
                     "config": "spec.store.config",
                     "connection": {
                       "adapter": "spec.store.connection.adapter",
-                      "connection": "spec.store.connection.connection"
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
                     },
                     "schema_connection": {
                       "adapter": "spec.store.schema_connection.adapter",
-                      "connection": "spec.store.schema_connection.connection"
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
                     }
                   }
                 }
