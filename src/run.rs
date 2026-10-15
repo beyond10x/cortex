@@ -194,62 +194,144 @@ fn load_entities(layout: &Layout) -> BTreeMap<String, Vec<String>> {
         .unwrap_or_default()
 }
 
-pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Report, Failure> {
-    let spec = layout.load_spec().map_err(Failure::Fetch)?;
-    let meta = layout.load_meta().map_err(Failure::Fetch)?;
-    let source_spec = spec
-        .sources
-        .iter()
-        .find(|s| s.name == source.name)
-        .ok_or_else(|| Failure::Fetch(format!("the spec has no source {:?}", source.name)))?;
-    // The window a `connectors` source asks about: from just before the start of its last
-    // successful run, its held-back changes or a run that did not succeed, to the start of this
-    // one.
-    let start = now_ms();
-    let seen_path = layout.seen(&source.name);
-    let state = SeenState::load(&seen_path).map_err(Failure::Fetch)?;
-    let window = Window::of_run(
-        start,
-        state.last_success_started_at,
-        state.held_since,
-        state.pending_since,
-        source_spec.policy.refresh_after_days,
-    );
-    // A structured source's links order and match records by the identities the run gives them,
-    // which the redaction policy takes part in.
-    let ran = redact::compile(spec.redaction.as_ref())
-        .map_err(Failure::Extract)
-        .and_then(|redactor| {
-            sources::fetch(
-                &source_spec.settings,
-                &tools.connectors,
-                &meta.spec_dir,
-                &window,
-                &state.child_failures,
-                source_spec.policy.max_chars_per_document.max(0) as usize,
-                redactor.as_ref(),
-            )
-            .map_err(|e| match e {
-                FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
-            })
+/// What a fetch-only run counted (`cortex.instance.SourceFetched`): the window its fetch asked
+/// about, and the documents it fetched, masked and scrubbed as a run's are, against the source's
+/// seen state.
+#[derive(Debug, Default)]
+pub struct Counts {
+    pub since_ms: i64,
+    pub until_ms: i64,
+    /// `new` + `changed` + `held` + `unchanged`.
+    pub fetched: usize,
+    /// Keys the seen state does not carry.
+    pub new: usize,
+    /// Seen keys whose text a run would extract now ([`SeenState::wants`]).
+    pub changed: usize,
+    /// Seen keys whose change `refresh_after_days` holds back ([`SeenState::holds`]).
+    pub held: usize,
+    pub unchanged: usize,
+    /// Why the fetch left records unread, one line each, masked as a run's `stopped` is.
+    pub unread: Vec<String>,
+}
+
+/// What a source's run reads before it fetches: the instance's spec, the source's place in it,
+/// its seen state and the window it asks about.
+struct Planned {
+    spec: m::InstanceSpec,
+    spec_dir: PathBuf,
+    source: usize,
+    state: SeenState,
+    seen_path: PathBuf,
+    window: Window,
+}
+
+impl Planned {
+    fn of(layout: &Layout, source: &m::SourceData) -> Result<Self, Failure> {
+        let spec = layout.load_spec().map_err(Failure::Fetch)?;
+        let meta = layout.load_meta().map_err(Failure::Fetch)?;
+        let index = spec
+            .sources
+            .iter()
+            .position(|s| s.name == source.name)
+            .ok_or_else(|| Failure::Fetch(format!("the spec has no source {:?}", source.name)))?;
+        // The window a `connectors` source asks about: from just before the start of its last
+        // successful run, its held-back changes or a run that did not succeed, to the start of
+        // this one.
+        let start = now_ms();
+        let seen_path = layout.seen(&source.name);
+        let state = SeenState::load(&seen_path).map_err(Failure::Fetch)?;
+        let window = Window::of_run(
+            start,
+            state.last_success_started_at,
+            state.held_since,
+            state.pending_since,
+            spec.sources[index].policy.refresh_after_days,
+        );
+        Ok(Self {
+            spec,
+            spec_dir: meta.spec_dir,
+            source: index,
+            state,
+            seen_path,
+            window,
         })
-        .and_then(|fetched| {
-            let structured_source = match &source_spec.settings {
-                m::SourceSettings::Structured(st) => Some(st),
-                _ => None,
-            };
-            process(
-                layout,
-                tools,
-                &spec,
-                &source.name,
-                fetched,
-                &source_spec.policy,
-                Some(window),
-                structured_source,
-                true,
-            )
-        });
+    }
+
+    fn source(&self) -> &m::SourceSpec {
+        &self.spec.sources[self.source]
+    }
+
+    fn structured(&self) -> Option<&m::StructuredSource> {
+        match &self.source().settings {
+            m::SourceSettings::Structured(st) => Some(st),
+            _ => None,
+        }
+    }
+
+    /// Fetches the source over the window. A structured source's links order and match records
+    /// by the identities the run gives them, which the redaction policy takes part in.
+    fn fetch(&self, tools: &Tools) -> Result<sources::Fetched, Failure> {
+        let source = self.source();
+        let redactor = redact::compile(self.spec.redaction.as_ref()).map_err(Failure::Extract)?;
+        sources::fetch(
+            &source.settings,
+            &tools.connectors,
+            &self.spec_dir,
+            &self.window,
+            &self.state.child_failures,
+            source.policy.max_chars_per_document.max(0) as usize,
+            redactor.as_ref(),
+        )
+        .map_err(|e| match e {
+            FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
+        })
+    }
+}
+
+/// `cortex run --fetch-only`: fetches the source as [`run`] does, masks and scrubs what it
+/// fetched and counts it against the seen state, then stops. It asks no model and writes nothing:
+/// not the store, the seen state (a failed fetch records no `pending_since`), `runs/`, a
+/// snapshot, an EKR stage or `cortex.log`.
+pub fn count(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Counts, Failure> {
+    let planned = Planned::of(layout, source)?;
+    let fetched = planned.fetch(tools)?;
+    let mut counts = Counts {
+        since_ms: planned.window.since_ms,
+        until_ms: planned.window.until_ms,
+        ..Counts::default()
+    };
+    process_in(
+        layout,
+        tools,
+        &planned.spec,
+        &source.name,
+        fetched,
+        &planned.source().policy,
+        Some(planned.window),
+        planned.structured(),
+        false,
+        &mut Undo::new(BeforeApply::none()),
+        Some(&mut counts),
+    )?;
+    Ok(counts)
+}
+
+pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Report, Failure> {
+    let planned = Planned::of(layout, source)?;
+    let (window, seen_path) = (planned.window, planned.seen_path.clone());
+    let ran = planned.fetch(tools).and_then(|fetched| {
+        process(
+            layout,
+            tools,
+            &planned.spec,
+            &source.name,
+            fetched,
+            &planned.source().policy,
+            Some(window),
+            planned.structured(),
+            true,
+        )
+    });
     if ran.is_err() {
         // A failed run reads nothing it can be trusted to have read: the next run's `{since}` is
         // no later than this one's. The failure is the run's answer; a state that cannot be
@@ -367,12 +449,16 @@ fn process(
         structured_source,
         undoable,
         &mut before,
+        None,
     );
     settle(ran, before)
 }
 
 /// [`process`], with the run's snapshot and stage in `before`, which [`settle`] settles once the
 /// run ended, whichever way it did.
+///
+/// With `counts`, a fetch-only run ([`count`]): it fills `counts` once the documents are masked,
+/// scrubbed and compared with the seen state, and returns before anything is selected or written.
 #[allow(clippy::too_many_arguments)]
 fn process_in(
     layout: &Layout,
@@ -385,6 +471,7 @@ fn process_in(
     structured_source: Option<&m::StructuredSource>,
     undoable: bool,
     before: &mut Undo,
+    counts: Option<&mut Counts>,
 ) -> Result<Report, Failure> {
     let started = now_ms();
     let applied_at = window.map_or(started, |w| w.until_ms);
@@ -564,6 +651,29 @@ fn process_in(
         .filter_map(|d| seen.documents.get(&d.key))
         .map(|s| s.applied_at - sources::OVERLAP_MS)
         .min();
+    // A fetch-only run stops here, with what this run would select counted.
+    if let Some(counts) = counts {
+        let refresh = policy.refresh_after_days;
+        for d in &docs {
+            let count = if !seen.documents.contains_key(&d.key) {
+                &mut counts.new
+            } else if seen.wants(d, started, refresh) {
+                &mut counts.changed
+            } else if seen.holds(d, started, refresh) {
+                &mut counts.held
+            } else {
+                &mut counts.unchanged
+            };
+            *count += 1;
+        }
+        counts.fetched = docs.len();
+        counts.unread = fetched
+            .unread
+            .iter()
+            .map(|u| masked_key(redactor.as_ref(), u))
+            .collect();
+        return Ok(report);
+    }
     let selected = seen.select(
         docs,
         started,

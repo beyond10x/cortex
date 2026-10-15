@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 02ea50aeeb75f9fbaea135e9e9633d13d60d0a69d2569825e7acd0e701f53ac2
-// contract digest 48c9a93146f61ca1a81edc4a19d13ea685255875870e719e749268ac342e517a
+// model digest be3a67fd069694af44248b990d6343c617f9d4a51b49e88db98f5b295283dd2f
+// contract digest 02f8d3c83a9c17e0d223dcedbf87e9a5d2822fe02e8fef61ed89dd82241cbf3c
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -1930,6 +1930,8 @@ pub enum RestoreSnapshotOutcome {
 pub struct RunSource {
     /// `source_id` — `cortex.instance.SourceId`.
     pub source_id: SourceId,
+    /// `fetch_only` — `Optional<Boolean>`.
+    pub fetch_only: Option<bool>,
 }
 
 /// Everything `cortex.instance.RunSource` can result in — one variant per declared outcome.
@@ -1939,12 +1941,26 @@ pub struct RunSource {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunSourceOutcome {
-    /// `disabled` — when the existing subject is in Disabled.
+    /// `disabled` — when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)`.
     ///
     /// The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome.
     Disabled {
         /// The `cortex.instance.RunSkipped` this outcome publishes.
         run_skipped: RunSkipped,
+    },
+    /// `fetch-only-failed` — externally decided (Connectors or the filesystem fails to deliver the source's documents in a fetch-only run) when eligible ((defined(fetch_only) and fetch_only == true)).
+    ///
+    /// Nothing was written: not the source's status, its seen documents or its window, and no failure is counted. The command line prints it as `fetch-failed`.
+    FetchOnlyFailed {
+        /// Why it was refused: `cortex.instance.FetchFailed`.
+        error: FetchFailed,
+    },
+    /// `fetched` — when `(defined(fetch_only) and fetch_only == true)`.
+    ///
+    /// A fetch-only run: the source was fetched over the window a run would ask about, its documents masked and scrubbed as a run's are and compared with its seen documents by content hash. `new` counts keys no seen document carries; `changed` those a run would extract now; `held` those whose change `refresh_after_days` holds back; `unchanged` the rest. No model was asked, and nothing was written: not the store, the seen documents, the source's status or `cortex.log`; no snapshot or stage was taken and no run counted.
+    Fetched {
+        /// The `cortex.instance.SourceFetched` this outcome publishes.
+        source_fetched: SourceFetched,
     },
     /// `fetch-failed` — externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first).
     ///
@@ -2171,6 +2187,29 @@ pub struct SourceDisabled {
 pub struct SourceEnabled {
     /// `source_id` — `cortex.instance.SourceId`.
     pub source_id: SourceId,
+}
+
+/// SourceFetched — the event `cortex.instance.SourceFetched`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceFetched {
+    /// `source_id` — `cortex.instance.SourceId`.
+    pub source_id: SourceId,
+    /// `since` — `Timestamp`.
+    pub since: crate::primitives::Timestamp,
+    /// `until` — `Timestamp`.
+    pub until: crate::primitives::Timestamp,
+    /// `fetched` — `Integer`.
+    pub fetched: i64,
+    /// `new` — `Integer`.
+    pub new: i64,
+    /// `changed` — `Integer`.
+    pub changed: i64,
+    /// `held` — `Integer`.
+    pub held: i64,
+    /// `unchanged` — `Integer`.
+    pub unchanged: i64,
+    /// `unread` — `List<String>`.
+    pub unread: Vec<String>,
 }
 
 /// SourceRan — the event `cortex.instance.SourceRan`.
@@ -2563,7 +2602,7 @@ pub mod obligations {
     ///
     /// Why it is not generated: kept an obligation by a refusal that compensates (`compensates: true`), on `fetch-failed`.
     ///
-    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
+    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)`, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-only-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents in a fetch-only run) when eligible ((defined(fetch_only) and fetch_only == true)), error `cortex.instance.FetchFailed`; `fetched` when `(defined(fetch_only) and fetch_only == true)`, updates `cortex.instance.Source`, emits `cortex.instance.SourceFetched`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
     pub trait RunSourceBehavior {
         /// Decides and enacts exactly one declared outcome of `cortex.instance.RunSource`.
         ///

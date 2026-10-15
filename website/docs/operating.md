@@ -104,6 +104,9 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 2 | none | an error before any outcome, on stderr as `cortex: <message>` (an unreadable registry, a home that cannot be locked) |
 | 3 | `disabled` | the source is disabled after two failed runs in a row; nothing ran. `cortex source enable` switches it back on |
 
+With `--fetch-only` (see [Counting what a run would extract](#counting-what-a-run-would-extract)),
+`fetched` exits 0 and a fetch that failed exits 1 as `fetch-failed`.
+
 The JSON line on stdout says the same, with its `detail`. With `--record-failure`, a failed run
 prints a second line, the recorded failure's (`counted` or `disabled`); the exit status is the
 run's.
@@ -163,6 +166,32 @@ the UTC day reaches `model.daily_ceiling_usd` (see
 [the spec file](./spec-file.md#the-daily-ceiling)). When a batch fails after an earlier
 one was applied, the run ends as `ran` with `stopped` set; when the first batch fails, nothing was
 applied and the run fails.
+
+### Counting what a run would extract
+
+`cortex run <instance>/<source> --fetch-only` runs steps 1 and 2 and the comparison of step 3,
+and stops there. It fetches over the window a run would ask about, masks and scrubs each document
+as a run does, and compares its content hash with the source's seen state:
+
+```json
+{"command":"run","outcome":"fetched","detail":{"source_id":"news/feed",
+ "window":{"since":"2026-10-15T09:50:00Z","until":"2026-10-15T10:00:00Z"},
+ "fetched":20,"new":3,"changed":1,"held":0,"unchanged":16,"unread":[]}}
+```
+
+`new` counts documents whose key was never applied, `changed` those a run would extract now,
+`held` those whose change waits for `refresh_after_days`, and `unchanged` the rest; `fetched` is
+their sum. `max_documents_per_run` does not cut the counts. `unread` lists, masked as a run's
+`stopped` is, why the fetch left records unread. Use it to check a new source, connection or
+schedule, and to count the documents a run at your cadence would send to the model, before
+paying for extraction.
+
+Nothing else happens: no model call, no snapshot and no PostgreSQL stage, nothing written to the
+store, `state/<source>.json`, the source's status, `metrics.prom` or `cortex.log`, no hook
+call, and no run or failure counted. A fetch that fails answers `fetch-failed` and leaves the
+window where it was. A disabled source is counted too; `<instance>/seed` is not a source and
+answers `fetch-failed`. `--fetch-only` cannot be combined with `--record-failure`. It holds the
+home's lock while it fetches, as a run does.
 
 ## Failures
 

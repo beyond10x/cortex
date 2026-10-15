@@ -130,8 +130,11 @@ enum Command {
         /// `<instance>/<source>`.
         source_id: String,
         /// On a failed run, record the failure (`cortex.instance.RecordFailure`), as the timers do.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "fetch_only")]
         record_failure: bool,
+        /// Fetch the source and count what a run would extract, with no model call and no write.
+        #[arg(long)]
+        fetch_only: bool,
     },
     /// Put an instance's store back to a snapshot a run took before it applied anything
     /// (`cortex.instance.RestoreSnapshot`).
@@ -287,6 +290,7 @@ fn main() -> ExitCode {
                 tools: tools(),
                 shared: shared.clone(),
                 runner: None,
+                counter: None,
             }));
             let ctx = Ctx {
                 home: &home,
@@ -372,7 +376,8 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
         Command::Run {
             source_id,
             record_failure,
-        } => run_source(app, ctx, &source_id, record_failure),
+            fetch_only,
+        } => run_source(app, ctx, &source_id, record_failure, fetch_only),
         Command::Source { command } => match command {
             SourceCommand::Add {
                 instance_name,
@@ -1714,18 +1719,26 @@ const EXIT_DISABLED: u8 = 3;
 /// The exit status of each `run` outcome, which an external scheduler reads instead of the line.
 fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
     match outcome {
-        m::RunSourceOutcome::Ran { .. } => 0,
+        m::RunSourceOutcome::Ran { .. } | m::RunSourceOutcome::Fetched { .. } => 0,
         m::RunSourceOutcome::Disabled { .. } => EXIT_DISABLED,
-        m::RunSourceOutcome::FetchFailed { .. }
+        m::RunSourceOutcome::FetchOnlyFailed { .. }
+        | m::RunSourceOutcome::FetchFailed { .. }
         | m::RunSourceOutcome::ExtractionFailed { .. }
         | m::RunSourceOutcome::ApplyRefused { .. }
         | m::RunSourceOutcome::NoSuchSource { .. } => 1,
     }
 }
 
-fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCode {
+fn run_source(
+    app: &mut App,
+    ctx: &Ctx,
+    source_id: &str,
+    record: bool,
+    fetch_only: bool,
+) -> ExitCode {
     let outcome = match app.run_source(m::RunSource {
         source_id: m::SourceId(source_id.to_string()),
+        fetch_only: fetch_only.then_some(true),
     }) {
         Ok(o) => o,
         Err(e) => return fail(e),
@@ -1804,6 +1817,32 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
                 None,
             )
         }
+        m::RunSourceOutcome::Fetched { source_fetched: f } => (
+            Done {
+                outcome: "fetched",
+                ok: true,
+                detail: json!({
+                    "source_id": f.source_id.0,
+                    "window": {"since": f.since.0, "until": f.until.0},
+                    "fetched": f.fetched,
+                    "new": f.new,
+                    "changed": f.changed,
+                    "held": f.held,
+                    "unchanged": f.unchanged,
+                    "unread": f.unread,
+                }),
+            },
+            None,
+        ),
+        // Printed as the failed fetch it is; it records and counts nothing.
+        m::RunSourceOutcome::FetchOnlyFailed { error } => (
+            Done {
+                outcome: "fetch-failed",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            None,
+        ),
         m::RunSourceOutcome::FetchFailed { error } => (
             Done {
                 outcome: "fetch-failed",
@@ -1850,7 +1889,10 @@ fn run_source(app: &mut App, ctx: &Ctx, source_id: &str, record: bool) -> ExitCo
         (true, Some(reason)) => record_failure(app, ctx, source_id, reason).1,
         _ => false,
     };
-    report_run(ctx, source_id, disabled);
+    // A fetch-only run reports nothing: no status file, no metric, no hook.
+    if !fetch_only {
+        report_run(ctx, source_id, disabled);
+    }
     ExitCode::from(status)
 }
 
