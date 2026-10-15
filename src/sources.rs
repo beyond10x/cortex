@@ -123,12 +123,22 @@ pub fn rfc3339(ms: i64) -> String {
     )
 }
 
-/// `input` with `{since}` and `{until}` in every string value replaced by the window's instants.
+/// `input` with the window placeholders in every string value replaced by the window's instants:
+/// `{since}` and `{until}` in RFC 3339, `{since_epoch}` and `{until_epoch}` as whole seconds since
+/// the Unix epoch, cut to the second as [`rfc3339`] cuts them, so both name the same instant.
 fn with_window(input: &Value, window: &Window) -> Value {
     match input {
         Value::String(t) => Value::String(
             t.replace("{since}", &rfc3339(window.since_ms))
-                .replace("{until}", &rfc3339(window.until_ms)),
+                .replace("{until}", &rfc3339(window.until_ms))
+                .replace(
+                    "{since_epoch}",
+                    &window.since_ms.div_euclid(1000).to_string(),
+                )
+                .replace(
+                    "{until_epoch}",
+                    &window.until_ms.div_euclid(1000).to_string(),
+                ),
         ),
         Value::Array(items) => Value::Array(items.iter().map(|v| with_window(v, window)).collect()),
         Value::Object(fields) => Value::Object(
@@ -1571,6 +1581,26 @@ mod tests {
             ),
             json!({"jql": "updated >= \"1970-01-01T00:00:00Z\"",
                 "range": ["1970-01-01T00:00:00Z", "1970-01-02T00:00:00Z"], "n": 1})
+        );
+        assert_eq!(
+            with_window(
+                &json!({"channel": "C1", "oldest": "{since_epoch}", "latest": "{until_epoch}"}),
+                &window
+            ),
+            json!({"channel": "C1", "oldest": "0", "latest": "86400"})
+        );
+        let late = Window {
+            since_ms: 1_790_000_000_999,
+            until_ms: 1_790_000_001_000,
+        };
+        assert_eq!(
+            with_window(&json!(["{since_epoch}", "{since}"]), &late),
+            json!(["1790000000", rfc3339(1_790_000_000_000)])
+        );
+        // Another placeholder is not the window's: it passes unchanged.
+        assert_eq!(
+            with_window(&json!({"a": "{since_ms}", "b": "{until_epochs}"}), &late),
+            json!({"a": "{since_ms}", "b": "{until_epochs}"})
         );
         let after_a_run = Window::of_run(1_000_000, Some(900_000), None, None, 7);
         assert_eq!(after_a_run.since_ms, 900_000 - OVERLAP_MS);

@@ -7,7 +7,7 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### What 1.0 holds
 
-1.0 is the first release whose interface is stable. It adds no feature over 0.3.0; it is 0.3.0's
+1.0 is the first release whose interface is stable. It adds no feature over 0.3.1; it is 0.3.1's
 feature set after a real instance ran for 7 days with nobody at the keyboard.
 
 - **Instances.** One spec file makes an instance: an EKR store on SQLite or PostgreSQL, a viewer,
@@ -35,6 +35,15 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - `model.backend: Codex` is accepted and fails every run; extraction uses `claude -p` only.
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
+
+## 0.3.1 — 2026-10-15
+
+### Added
+
+- `{since_epoch}` and `{until_epoch}` in a string value of a Connectors or structured source's
+  `inputs` are replaced by the run's window as whole seconds since the Unix epoch, the same
+  instants `{since}` and `{until}` name, for an operation whose bounds are epoch seconds. Any other
+  text in braces is passed to the operation as written.
 
 ## 0.3.0 — 2026-10-15
 
