@@ -192,8 +192,10 @@ and its `reason` says it was not undone.
 Every run of a source records its outcome on the source, whatever it is, including `disabled`:
 `cortex sources` shows `last_outcome`, `last_run_at` (when the run started, UTC to the second)
 and `last_reason` (the run's `reason`; `null` for `ran` and `disabled`). The status is
-`instances/<name>/status/<source>.json`. A run of `<instance>/seed` is not a source's and records
-no status.
+`instances/<name>/status/<source>.json`. Each write of an instance's status files and its metric
+file holds `instances/<name>/status/.lock` for that write only, so no count is lost to a
+concurrent writer; it is held for milliseconds, never during a run or a hook. A run of
+`<instance>/seed` is not a source's and records no status.
 
 With [`monitoring.metrics`](./spec-file.md#monitoring), every run of a source then rewrites
 `instances/<name>/metrics.prom` whole, through a temporary file and a rename, in the Prometheus
@@ -216,11 +218,15 @@ With [`monitoring.hook`](./spec-file.md#monitoring), each run that fails calls t
 after its line is printed and its failure recorded: `<command…> <instance>/<source> <outcome>`, with
 the outcome `fetch-failed`, `extraction-failed` or `apply-refused`, or `disabled` when that run's
 recorded failure disabled the source. A run that ran or found the source disabled calls no
-hook. The hook runs in the instance directory with cortex's environment, so a
-secret it needs (a webhook URL, a token) stays in its own configuration, never in the spec. It may
-run `timeout_s` seconds (default 10), during which a run holding the home's lock keeps it; then it
-is killed. `cortex.log` records each call as a line with `source`, `outcome` and `hook.result`:
-`called` (exit status 0), `failed` (with `hook.status`, or `hook.reason` when it could not start)
+hook. The hook runs in the instance directory, in a process group of its own, with cortex's
+environment, so a secret it needs (a webhook URL, a token) stays in its own configuration, never
+in the spec. A relative program path holding a `/` (`./hooks/notify`) is read against the spec
+file's directory, as seed paths are; a bare name is looked up on `PATH`. The call lasts
+`timeout_s` seconds at most (default 10), during which a run holding the home's lock keeps it;
+then the hook's whole process group is killed. A process the hook starts in the background and
+leaves running when it exits is neither waited for nor killed. `cortex.log` records each call as
+a line with `source`, `outcome` and `hook.result`: `called` (exit status 0), `failed` (with
+`hook.status`, or `hook.reason` when it could not start)
 or `timed-out`. Neither a failed hook nor a metric file that cannot be written changes the run's
 outcome or its exit status; the latter is recorded in `cortex.log` as `metrics.failed`.
 

@@ -383,3 +383,21 @@ fn a_hook_with_no_command_is_refused_by_the_spec() {
     assert!(stderr.contains("monitoring.hook.command"), "{stderr}");
     assert!(!instance_dir(&w).exists());
 }
+
+#[test]
+fn a_relative_hook_path_is_read_against_the_spec_file_s_directory() {
+    let w = World::new();
+    hook(&w, 0);
+    // The spec file is in the world's root, beside `bin/hook`; the hook starts in the instance
+    // directory, where no `bin/hook` is.
+    create(
+        &w,
+        &spec_with(&w, "monitoring:\n  hook: {command: [./bin/hook]}\n"),
+    );
+    std::fs::write(w.root.join("fail"), "").unwrap();
+
+    let (code, _, _) = run(&w);
+    assert_eq!(code, 1);
+    assert_eq!(w.lines("hook.log"), ["t/news fetch-failed"]);
+    assert_eq!(hook_lines(&w)[0]["hook"]["result"], "called");
+}

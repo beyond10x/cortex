@@ -393,10 +393,12 @@ types:
 
   # A command cortex calls once for each run of a source that answers `fetch-failed`,
   # `extraction-failed` or `apply-refused`: `command` is its argument vector (no shell), started in
-  # the instance directory with the source id and the outcome appended as its last two arguments.
-  # The outcome is `disabled` when the run's recorded failure disabled the source. It holds no
-  # secret: one the hook needs it reads itself, outside cortex. It may run `timeout_s` seconds,
-  # absent means 10, then it is killed.
+  # the instance directory, in a process group of its own, with the source id and the outcome
+  # appended as its last two arguments. A relative program path holding a `/` is read against the
+  # spec file's directory, as seed paths are; a bare name is looked up on `PATH`. The outcome is
+  # `disabled` when the run's recorded failure disabled the source. It holds no secret: one the
+  # hook needs it reads itself, outside cortex. The call lasts `timeout_s` seconds at most, absent
+  # means 10; then the hook's process group is killed.
   - name: cortex.instance.RunHook
     kind: struct
     fields:
@@ -622,8 +624,8 @@ entities:
       - {name: schedule, type: String}
       - {name: runs, type: Integer}
       - {name: consecutive_failures, type: Integer}
-      # The source's last run: its outcome, when it started and, for an outcome that is not `ran`,
-      # why. Absent until the source first runs.
+      # The source's last run: its outcome, when it started and why. `ran` and `disabled` clear
+      # `last_reason`; every other outcome sets it. Absent until the source first runs.
       - {name: last_outcome, type: Optional<cortex.instance.RunOutcome>}
       - {name: last_run_at, type: Optional<Timestamp>}
       - {name: last_reason, type: Optional<String>}

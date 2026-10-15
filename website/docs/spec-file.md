@@ -602,8 +602,8 @@ monitoring:
 |---|---|
 | `metrics` | `true` rewrites `metrics.prom` in the instance directory after every run of a source, in the Prometheus text format, for a textfile collector or a sidecar to read. Without it, no metric file is written |
 | `hook` | optional: a command called once for each run that fails, with the source id and the outcome appended as its last two arguments |
-| `hook.command` | the program and its first arguments, run without a shell in the instance directory. It must name a program. It holds no secret: a hook that needs one reads it itself |
-| `hook.timeout_s` | how long the hook may run before it is killed, in seconds, above 0. Without it, 10 |
+| `hook.command` | the program and its first arguments, run without a shell in the instance directory, in a process group of its own. It must name a program. A relative path holding a `/` is read against the spec file's directory; a bare name is looked up on `PATH`. It holds no secret: a hook that needs one reads it itself |
+| `hook.timeout_s` | how long the call may last, in seconds, above 0; then the hook's process group is killed. Without it, 10 |
 
 ## `serve`
 
