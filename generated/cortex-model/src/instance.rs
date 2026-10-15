@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041
-// contract digest 44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd
+// model digest daf81c202d0ba3299839a429a36a2fea9c0f10e647fe615d838a5adca8e819c2
+// contract digest b68fc73efbf7a11ceb61cdcdf11d0af08dcddf94d2b77537897d195d8b04a042
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -17,6 +17,8 @@ pub enum ChangeDetection {
 }
 
 /// ChildCall — `cortex.instance.ChildCall`.
+///
+/// Every value satisfies `paging.stop_older_than_since != true` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChildCall {
     /// `operation` — `String`.
@@ -30,6 +32,8 @@ pub struct ChildCall {
 }
 
 /// CompareLink — `cortex.instance.CompareLink`.
+///
+/// Every value satisfies `paging.stop_older_than_since != true` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompareLink {
     /// `operation` — `String`.
@@ -62,6 +66,8 @@ pub struct ConnectionRef {
 }
 
 /// ConnectorsSource — `cortex.instance.ConnectorsSource`.
+///
+/// Every value satisfies `(paging.stop_older_than_since != true or defined(time))` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConnectorsSource {
     /// `adapter` — `String`.
@@ -318,6 +324,8 @@ pub enum PageStyle {
     Token,
     /// `Keyset`.
     Keyset,
+    /// `NextLink`.
+    NextLink,
 }
 
 /// Paging — `cortex.instance.Paging`.
@@ -331,6 +339,8 @@ pub struct Paging {
     pub next: Option<String>,
     /// `max_pages` — `Integer`.
     pub max_pages: i64,
+    /// `stop_older_than_since` — `Optional<Boolean>`.
+    pub stop_older_than_since: Option<bool>,
 }
 
 /// PostgresStore — `cortex.instance.PostgresStore`.
@@ -794,6 +804,8 @@ pub enum StoreSpec {
 }
 
 /// StructuredChild — `cortex.instance.StructuredChild`.
+///
+/// Every value satisfies `paging.stop_older_than_since != true` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructuredChild {
     /// `operation` — `String`.
@@ -813,6 +825,8 @@ pub struct StructuredChild {
 }
 
 /// StructuredConnectors — `cortex.instance.StructuredConnectors`.
+///
+/// Every value satisfies `paging.stop_older_than_since != true` — declared here, enforced by whatever behaviour constructs one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructuredConnectors {
     /// `adapter` — `String`.

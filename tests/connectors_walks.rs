@@ -1032,3 +1032,175 @@ fn a_first_run_reads_refresh_after_days_of_history_and_none_with_zero() {
     let ran = run(&w, "one");
     assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
 }
+
+/// `issues.list` lists newest-modified first in `results`, three pages linked by `_links.next`: no
+/// cursor answers P-1 and P-2 with a relative link to cursor `abc`; `abc` answers P-3, P-4 and P-5
+/// with an absolute link to cursor `a/b` (percent-encoded); `a/b` answers P-6 and no link. Every
+/// record is stamped at `version.createdAt` with the instant in the file `new`, except P-6 and
+/// P-4, stamped with the one in `old`, P-4 only when the file `p4-old` exists.
+const LINKED: &str = r#"  *"--operation issues.list"*)
+    echo "$*" >> "$R/issues.log"
+    NEW=$(cat "$R/new"); OLD=$(cat "$R/old"); P4=$NEW; [ -e "$R/p4-old" ] && P4=$OLD
+    rec() { printf '{"id":"%s","title":"Page %s","version":{"createdAt":"%s"}}' "$1" "$1" "$2"; }
+    case "$*" in
+      *'"cursor":"a/b"'*) PAGE="$(rec P-6 "$OLD")"; NEXT='null' ;;
+      *'"cursor":"abc"'*) PAGE="$(rec P-3 "$NEW"),$(rec P-4 "$P4"),$(rec P-5 "$NEW")"; NEXT='"https://host/api/pages?limit=50&cursor=a%2Fb"' ;;
+      *) PAGE="$(rec P-1 "$NEW"),$(rec P-2 "$NEW")"; NEXT='"/api/pages?cursor=abc&limit=50"' ;;
+    esac
+    printf '{"ok":true,"result":{"adapter":"tracker","operation":"issues.list","revision":"r","result":{"results":[%s],"_links":{"next":%s}}}}\n' "$PAGE" "$NEXT" ;;
+"#;
+
+/// The settings of a `connectors` source over [`LINKED`], reading at most `max_pages` pages, with
+/// the stop rule.
+fn linked(max_pages: i64) -> String {
+    format!(
+        r#"inputs:
+          - {{limit: 50}}
+        records: results
+        id: id
+        time: version.createdAt
+        text: ["{{id}}: {{title}}"]
+        paging: {{style: NextLink, param: cursor, next: _links.next, max_pages: {max_pages}, stop_older_than_since: true}}"#
+    )
+}
+
+/// A world over [`LINKED`] whose new records are an hour old and whose old ones ten days old.
+fn linked_world() -> World {
+    let w = world_with(LINKED);
+    std::fs::write(w.root.join("new"), rfc3339(now_ms() - 3_600_000)).unwrap();
+    std::fs::write(w.root.join("old"), rfc3339(now_ms() - 10 * DAY_MS)).unwrap();
+    w
+}
+
+/// `story:next-link-paging`: a `NextLink` walk follows the link's cursor and, with
+/// `stop_older_than_since`, stops at the first record older than `{since}`, reading everything the
+/// window asks for: no `stopped` line, and the next run's `{since}` moves forward.
+#[test]
+fn a_next_link_walk_stops_at_the_first_record_older_than_since_and_moves_the_window() {
+    let w = linked_world();
+    std::fs::write(w.root.join("p4-old"), "").unwrap();
+    create_source(&w, "linked", &linked(20), 3, 5000, 50);
+    let ran = run(&w, "linked");
+
+    let pages = w.lines("issues.log");
+    assert_eq!(pages.len(), 2, "no third page: {pages:#?}");
+    assert!(!pages[0].contains("\"cursor\""), "{}", pages[0]);
+    assert!(pages[1].contains("\"cursor\":\"abc\""), "{}", pages[1]);
+    assert_eq!(ran["detail"]["documents_new"], 3, "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 3, "{ran}");
+    assert!(ran["detail"]["stopped"].is_null(), "{ran}");
+    let docs = prompted(&w, "linked");
+    for key in ["P-1", "P-2", "P-3"] {
+        assert!(
+            docs.iter()
+                .any(|d| d.contains(&format!("Source: record:tracker:issues.list:{key}\n"))),
+            "no document for {key} in {docs:#?}"
+        );
+    }
+    let seen = state(&w, "linked");
+    let started = seen["last_success_started_at"]
+        .as_i64()
+        .unwrap_or_else(|| panic!("the window did not move: {seen}"));
+    assert!(seen.get("pending_since").is_none(), "{seen}");
+
+    // The next run's `{since}` is five minutes before the first run's start: the hour-old P-1 is
+    // older, so the walk stops at it and reads no record.
+    std::fs::remove_file(w.root.join("issues.log")).unwrap();
+    let again = run(&w, "linked");
+    assert_eq!(w.lines("issues.log").len(), 1);
+    assert_eq!(again["detail"]["documents_new"], 0, "{again}");
+    assert!(again["detail"]["stopped"].is_null(), "{again}");
+    assert!(state(&w, "linked")["last_success_started_at"].as_i64() > Some(started));
+}
+
+/// A walk that reaches `max_pages` before the stop rule fires leaves pages unread and holds the
+/// window.
+#[test]
+fn a_next_link_walk_cut_by_max_pages_before_an_older_record_holds_the_window() {
+    let w = linked_world();
+    create_source(&w, "linked-capped", &linked(2), 3, 5000, 50);
+    let before = now_ms();
+    let ran = run(&w, "linked-capped");
+
+    assert_eq!(w.lines("issues.log").len(), 2);
+    assert_eq!(ran["detail"]["documents_applied"], 5, "{ran}");
+    assert_eq!(
+        ran["detail"]["stopped"], "tracker.issues.list: max_pages 2 reached with pages left",
+        "{ran}"
+    );
+    let seen = state(&w, "linked-capped");
+    assert!(seen.get("last_success_started_at").is_none(), "{seen}");
+    let pending = seen["pending_since"]
+        .as_i64()
+        .unwrap_or_else(|| panic!("no pending_since: {seen}"));
+    assert!(
+        (before - 3 * DAY_MS..=now_ms() - 3 * DAY_MS).contains(&pending),
+        "pending_since {pending} is not the run's since: {seen}"
+    );
+}
+
+/// `cortex create` on `text`: its exit status and what it wrote to stderr.
+fn create_refused(w: &World, name: &str, text: &str) -> (Option<i32>, String) {
+    let path = w.root.join(format!("{name}.yaml"));
+    std::fs::write(&path, text).unwrap();
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_cortex"))
+        .args(["create", "--spec", path.to_str().unwrap(), "--no-units"])
+        .env("CORTEX_HOME", &w.home)
+        .env("CORTEX_CONNECTORS", w.bin.join("connectors"))
+        .env("CORTEX_CLAUDE", w.bin.join("claude"))
+        .env("CORTEX_SYSTEMCTL", w.bin.join("systemctl"))
+        .env("CORTEX_UNIT_DIR", &w.units)
+        .output()
+        .unwrap();
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+/// `stop_older_than_since` reads each record's `time`: a `connectors` source without one is
+/// refused at load, naming the field, and so is the rule on a child call's paging.
+#[test]
+fn the_stop_rule_on_a_source_without_time_is_refused_at_load() {
+    let w = linked_world();
+    let stop = "stop_older_than_since: true}";
+    let text = std::fs::read_to_string(spec(&w, "untimed", 3, 50)).unwrap();
+
+    let untimed = text.replace(
+        "paging: {style: Token, param: cursor, next: next, max_pages: 10}",
+        &format!(
+            "paging: {{style: NextLink, param: cursor, next: _links.next, max_pages: 10, {stop}"
+        ),
+    );
+    assert!(untimed.contains(stop), "{untimed}");
+    let (code, stderr) = create_refused(&w, "untimed", &untimed);
+    assert_eq!(code, Some(2), "{stderr}");
+    assert!(
+        stderr.contains("sources.tracker.paging.stop_older_than_since"),
+        "{stderr}"
+    );
+    assert!(!w.home.join("instances/untimed").exists());
+
+    let child = text
+        .replace(
+            "        id: key\n",
+            "        id: key\n        time: updated\n",
+        )
+        .replace(
+            "paging: {style: Token, param: after, next: next_after, max_pages: 10}",
+            &format!(
+                "paging: {{style: Token, param: after, next: next_after, max_pages: 10, {stop}"
+            ),
+        );
+    assert!(
+        child.contains(stop) && child.contains("time: updated"),
+        "{child}"
+    );
+    let (code, stderr) = create_refused(&w, "untimed", &child);
+    assert_eq!(code, Some(2), "{stderr}");
+    assert!(
+        stderr.contains("sources.tracker.child.paging.stop_older_than_since"),
+        "{stderr}"
+    );
+    assert!(!w.home.join("instances/untimed").exists());
+}

@@ -175,9 +175,10 @@ fn set_at(v: &mut Value, path: &str, value: Value) {
 }
 
 /// The page to ask for after `answer`, or `None` when the walk ends. With `next`, the value at
-/// that path of the answer, whatever the style; a missing, null or empty one ends the walk.
-/// Without it, a `PageNumber` walk asks for the page after the current one (the input's `param`,
-/// `1` when absent); a `Token` or `Keyset` walk has nothing to advance by and ends.
+/// that path of the answer, whatever the style (a `NextLink` walk then reads its cursor out of
+/// it, [`link_param`]); a missing, null or empty one ends the walk. Without it, a `PageNumber`
+/// walk asks for the page after the current one (the input's `param`, `1` when absent); a
+/// `Token`, `Keyset` or `NextLink` walk has nothing to advance by and ends.
 fn next_page(p: &m::Paging, input: &Value, answer: &Value) -> Option<Value> {
     let next = match &p.next {
         Some(path) => match at(answer, path)? {
@@ -194,7 +195,7 @@ fn next_page(p: &m::Paging, input: &Value, answer: &Value) -> Option<Value> {
                 };
                 json!(current + 1)
             }
-            m::PageStyle::Token | m::PageStyle::Keyset => return None,
+            m::PageStyle::Token | m::PageStyle::Keyset | m::PageStyle::NextLink => return None,
         },
     };
     Some(next)
@@ -204,13 +205,48 @@ fn next_page(p: &m::Paging, input: &Value, answer: &Value) -> Option<Value> {
 /// an empty page, at a missing `next` (see [`next_page`]), at a page or token it has already asked
 /// for, or after `max_pages` pages; without `paging` one page is read. A walk that leaves pages
 /// unread adds why to `unread`, once per operation: it reached `max_pages` with a next page still
-/// to read, or an empty page still named a next one.
+/// to read, an empty page still named a next one, or a `NextLink` link did not name `param`.
 fn walk(
     invoke: &mut dyn FnMut(&Value) -> Result<Value, FetchError>,
     what: &str,
     input: &Value,
     records: &str,
     paging: Option<&m::Paging>,
+    unread: &mut Vec<String>,
+) -> Result<Vec<Value>, FetchError> {
+    walk_until(invoke, what, input, records, paging, None, unread)
+}
+
+/// Where a walk ends before its pages do (`stop_older_than_since`): at the first record whose time,
+/// at the path `time`, is older than `since_ms`, the window's start.
+#[derive(Debug, Clone, Copy)]
+struct StopAt<'a> {
+    time: &'a str,
+    since_ms: i64,
+}
+
+impl StopAt<'_> {
+    /// Whether `record` ends the walk. Its time is read as [`instant`] reads a text, from a string
+    /// or a number; a record with no readable time does not end it.
+    fn reached(&self, record: &Value) -> bool {
+        let time = match at(record, self.time) {
+            Some(Value::String(t)) => instant(t),
+            Some(Value::Number(n)) => instant(&n.to_string()),
+            _ => None,
+        };
+        time.is_some_and(|t| t < self.since_ms)
+    }
+}
+
+/// [`walk`], ended also by `stop`: the record that reaches it and the ones after it on its page are
+/// not taken, no later page is asked for, and nothing is added to `unread`.
+fn walk_until(
+    invoke: &mut dyn FnMut(&Value) -> Result<Value, FetchError>,
+    what: &str,
+    input: &Value,
+    records: &str,
+    paging: Option<&m::Paging>,
+    stop: Option<StopAt>,
     unread: &mut Vec<String>,
 ) -> Result<Vec<Value>, FetchError> {
     let mut input = input.clone();
@@ -236,11 +272,25 @@ fn walk(
             }
             break;
         }
+        if let Some(cut) = stop.and_then(|s| page.iter().position(|r| s.reached(r))) {
+            found.extend(page[..cut].iter().cloned());
+            break;
+        }
         found.extend(page.iter().cloned());
         let Some(p) = paging else { break };
-        let Some(next) = next_page(p, &input, answer) else {
+        let Some(mut next) = next_page(p, &input, answer) else {
             break;
         };
+        if p.style == m::PageStyle::NextLink {
+            let name = p.param.rsplit('.').next().unwrap_or(&p.param);
+            match next.as_str().and_then(|link| link_param(link, name)) {
+                Some(value) => next = Value::String(value),
+                None => {
+                    note(unread, format!("{what}: the next link names no {name}"));
+                    break;
+                }
+            }
+        }
         if asked.contains(&next) {
             break;
         }
@@ -255,6 +305,45 @@ fn walk(
         set_at(&mut input, &p.param, next);
     }
     Ok(found)
+}
+
+/// The percent-decoded value of the query parameter `name` of `link`, a URL relative or absolute
+/// (`/api/pages?cursor=abc&limit=50`, `https://host/api/pages?limit=50&cursor=a%2Fb`). `None` when
+/// the link has no such parameter, gives it no value, or its value is not UTF-8 once decoded.
+fn link_param(link: &str, name: &str) -> Option<String> {
+    let link = link.split('#').next().unwrap_or_default();
+    let (_, query) = link.split_once('?')?;
+    query
+        .split('&')
+        .filter_map(|pair| pair.split_once('=').or(Some((pair, ""))))
+        .find(|(key, _)| percent_decode(key).as_deref() == Some(name))
+        .and_then(|(_, value)| percent_decode(value))
+        .filter(|value| !value.is_empty())
+}
+
+/// `text` with every `%XX` replaced by the byte it names; `None` when the result is not UTF-8. A
+/// `%` not followed by two hex digits is kept as it is.
+fn percent_decode(text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = bytes
+            .get(i + 1..i + 3)
+            .filter(|h| bytes[i] == b'%' && h.iter().all(u8::is_ascii_hexdigit))
+            .and_then(|h| u8::from_str_radix(std::str::from_utf8(h).ok()?, 16).ok());
+        match hex {
+            Some(b) => {
+                out.push(b);
+                i += 3;
+            }
+            None => {
+                out.push(bytes[i]);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).ok()
 }
 
 /// Adds `why` to `unread` unless it is there already.
@@ -912,7 +1001,8 @@ fn invoker<'a>(
 }
 
 /// The records of a `connectors` source, one document per record. Each input, with the run's
-/// window filled in, is walked page by page; with a `child`, the child operation is invoked once
+/// window filled in, is walked page by page, ended with `stop_older_than_since` at the first
+/// record older than the window's start ([`StopAt`]); with a `child`, the child operation is invoked once
 /// per record, its input filled from the record, its pages walked the same way, and each of its
 /// records appended to the parent's text as one JSON paragraph. A parent whose child call fails
 /// is left out of this fetch and named in `unread`; from its [`CHILD_FAILURE_LIMIT`]th consecutive
@@ -928,13 +1018,24 @@ fn fetch_records(
     let mut skipped = Vec::new();
     let mut failures = child_failures.clone();
     let mut keys = std::collections::BTreeSet::new();
+    // `stop_older_than_since`: the spec admits it only with a `time` (`model_map::paging`).
+    let stop = c
+        .paging
+        .as_ref()
+        .filter(|p| p.stop_older_than_since == Some(true))
+        .and(c.time.as_deref())
+        .map(|time| StopAt {
+            time,
+            since_ms: window.since_ms,
+        });
     for input in &c.inputs {
-        let records = walk(
+        let records = walk_until(
             &mut invoker(connectors, c, &c.operation),
             &format!("{}.{}", c.adapter, c.operation),
             &with_window(&to_serde(input), window),
             &c.records,
             c.paging.as_ref(),
+            stop,
             &mut unread,
         )?;
         for record in &records {
@@ -1470,6 +1571,7 @@ mod tests {
             param: "page".into(),
             next: next.map(str::to_string),
             max_pages,
+            stop_older_than_since: None,
         }
     }
 
@@ -1943,6 +2045,7 @@ mod max_pages_tests {
             param: "page".into(),
             next: Some("next".into()),
             max_pages,
+            stop_older_than_since: None,
         };
         let mut capped = Vec::new();
         for _ in 0..2 {
@@ -1972,5 +2075,223 @@ mod max_pages_tests {
     fn a_walk_whose_last_page_is_its_max_pages_th_is_not_capped() {
         assert!(capped(3, 3).is_empty());
         assert!(capped(10, 3).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod next_link_tests {
+    use super::*;
+
+    const DAY_MS: i64 = 86_400_000;
+    /// The window's start in the stop rule's cases: 2026-10-10T00:00:00Z.
+    const SINCE_MS: i64 = 1_760_054_400_000;
+
+    fn next_link(max_pages: i64, stop: bool) -> m::Paging {
+        m::Paging {
+            style: m::PageStyle::NextLink,
+            param: "cursor".into(),
+            next: Some("_links.next".into()),
+            max_pages,
+            stop_older_than_since: stop.then_some(true),
+        }
+    }
+
+    /// Walks `p` over a stand-in operation that answers `pages(input)` at `items`, with the stop
+    /// rule reading `at` from [`SINCE_MS`] when `stop` is set; answers the records, the inputs it
+    /// was asked with and what the walk left unread.
+    fn walked(
+        p: &m::Paging,
+        stop: bool,
+        pages: impl Fn(&Value) -> Value,
+    ) -> (Vec<Value>, Vec<Value>, Vec<String>) {
+        let mut asked = Vec::new();
+        let mut unread = Vec::new();
+        let records = walk_until(
+            &mut |input: &Value| {
+                asked.push(input.clone());
+                Ok(pages(input))
+            },
+            "t.op",
+            &json!({}),
+            "items",
+            Some(p),
+            stop.then_some(StopAt {
+                time: "at",
+                since_ms: SINCE_MS,
+            }),
+            &mut unread,
+        )
+        .unwrap();
+        (records, asked, unread)
+    }
+
+    #[test]
+    fn a_next_link_walk_asks_for_the_decoded_cursor_of_a_relative_or_absolute_link() {
+        let p = next_link(10, false);
+        let (records, asked, unread) = walked(&p, false, |input| match input.get("cursor") {
+            None => json!({"items": [1], "_links": {"next": "/api/pages?cursor=abc&limit=50"}}),
+            Some(c) if c == "abc" => json!({"items": [2], "_links":
+                {"next": "https://host/api/pages?limit=50&cursor=a%2Fb"}}),
+            Some(_) => json!({"items": [3], "_links": {"next": null}}),
+        });
+        assert_eq!(records, [json!(1), json!(2), json!(3)]);
+        assert_eq!(
+            asked,
+            [
+                json!({}),
+                json!({"cursor": "abc"}),
+                json!({"cursor": "a/b"})
+            ]
+        );
+        assert!(unread.is_empty(), "{unread:?}");
+    }
+
+    #[test]
+    fn a_dotted_param_takes_the_link_parameter_named_by_its_last_segment() {
+        let mut p = next_link(10, false);
+        p.param = "query.cursor".into();
+        let (_, asked, _) = walked(&p, false, |input| match at(input, "query.cursor") {
+            None => json!({"items": [1], "_links": {"next": "?limit=5&cursor=x%20y#top"}}),
+            Some(_) => json!({"items": [2]}),
+        });
+        assert_eq!(asked, [json!({}), json!({"query": {"cursor": "x y"}})]);
+    }
+
+    #[test]
+    fn a_missing_null_or_empty_link_ends_the_walk_with_nothing_unread() {
+        let p = next_link(10, false);
+        for next in [json!({}), json!({"next": null}), json!({"next": " "})] {
+            let (_, asked, unread) =
+                walked(&p, false, |_| json!({"items": [1], "_links": next.clone()}));
+            assert_eq!(asked.len(), 1, "{next}");
+            assert!(unread.is_empty(), "{next}: {unread:?}");
+        }
+    }
+
+    #[test]
+    fn a_link_without_the_parameter_ends_the_walk_and_says_so() {
+        let p = next_link(10, false);
+        for link in [
+            "/api/pages?limit=50",
+            "/api/pages",
+            "/api/pages?cursor=&limit=5",
+            "/api/pages?xcursor=1",
+            "/api/pages#cursor=1",
+        ] {
+            let (records, asked, unread) = walked(
+                &p,
+                false,
+                |_| json!({"items": [1], "_links": {"next": link}}),
+            );
+            assert_eq!((records.len(), asked.len()), (1, 1), "{link}");
+            assert_eq!(unread, ["t.op: the next link names no cursor"], "{link}");
+        }
+    }
+
+    #[test]
+    fn a_link_asking_again_for_a_cursor_already_asked_for_ends_the_walk() {
+        let p = next_link(10, false);
+        let (_, asked, unread) = walked(
+            &p,
+            false,
+            |_| json!({"items": [1], "_links": {"next": "/p?cursor=same"}}),
+        );
+        assert_eq!(asked, [json!({}), json!({"cursor": "same"})]);
+        assert!(unread.is_empty(), "{unread:?}");
+    }
+
+    /// Three pages, newest first: the second holds the first record older than `{since}`.
+    fn newest_first(input: &Value) -> Value {
+        let stamp = |ms: i64| rfc3339(ms);
+        match input.get("cursor").and_then(Value::as_str) {
+            None => json!({"items": [
+                {"id": 1, "at": stamp(SINCE_MS + 3 * DAY_MS)},
+                {"id": 2, "at": stamp(SINCE_MS + 2 * DAY_MS)}],
+                "_links": {"next": "/p?cursor=p2"}}),
+            Some("p2") => json!({"items": [
+                {"id": 3, "at": stamp(SINCE_MS + DAY_MS)},
+                {"id": 4, "at": stamp(SINCE_MS - 1000)},
+                {"id": 5, "at": stamp(SINCE_MS + DAY_MS)}],
+                "_links": {"next": "/p?cursor=p3"}}),
+            Some(_) => json!({"items": [{"id": 6, "at": stamp(SINCE_MS - DAY_MS)}],
+                "_links": {"next": null}}),
+        }
+    }
+
+    fn ids(records: &[Value]) -> Vec<i64> {
+        records.iter().map(|r| r["id"].as_i64().unwrap()).collect()
+    }
+
+    #[test]
+    fn the_stop_rule_ends_the_walk_at_the_first_record_older_than_since() {
+        let p = next_link(10, true);
+        let (records, asked, unread) = walked(&p, true, newest_first);
+        assert_eq!(ids(&records), [1, 2, 3]);
+        assert_eq!(asked.len(), 2, "no third page: {asked:?}");
+        assert!(unread.is_empty(), "{unread:?}");
+    }
+
+    #[test]
+    fn without_the_stop_rule_every_page_is_read() {
+        let p = next_link(10, false);
+        let (records, asked, _) = walked(&p, false, newest_first);
+        assert_eq!(ids(&records), [1, 2, 3, 4, 5, 6]);
+        assert_eq!(asked.len(), 3);
+    }
+
+    #[test]
+    fn a_record_at_since_or_without_a_readable_time_does_not_stop_the_walk() {
+        let p = next_link(10, true);
+        let (records, asked, unread) = walked(&p, true, |input| match input.get("cursor") {
+            None => json!({"items": [
+                {"id": 1, "at": rfc3339(SINCE_MS)},
+                {"id": 2},
+                {"id": 3, "at": "not a time"},
+                {"id": 4, "at": null}],
+                "_links": {"next": "/p?cursor=p2"}}),
+            Some(_) => json!({"items": [
+                {"id": 5, "at": (SINCE_MS + DAY_MS) / 1000},
+                {"id": 6, "at": (SINCE_MS - DAY_MS) / 1000},
+                {"id": 7}]}),
+        });
+        assert_eq!(ids(&records), [1, 2, 3, 4, 5]);
+        assert_eq!(asked.len(), 2);
+        assert!(unread.is_empty(), "{unread:?}");
+    }
+
+    #[test]
+    fn max_pages_reached_before_the_stop_rule_fires_leaves_pages_unread() {
+        let p = next_link(1, true);
+        let (records, asked, unread) = walked(&p, true, newest_first);
+        assert_eq!((ids(&records), asked.len()), (vec![1, 2], 1));
+        assert_eq!(unread, ["t.op: max_pages 1 reached with pages left"]);
+
+        // The rule firing on the last page max_pages allows leaves nothing unread.
+        let p = next_link(2, true);
+        let (records, asked, unread) = walked(&p, true, newest_first);
+        assert_eq!((ids(&records), asked.len()), (vec![1, 2, 3], 2));
+        assert!(unread.is_empty(), "{unread:?}");
+    }
+
+    #[test]
+    fn a_token_walk_takes_the_stop_rule_too() {
+        let p = m::Paging {
+            style: m::PageStyle::Token,
+            param: "cursor".into(),
+            next: Some("next".into()),
+            max_pages: 10,
+            stop_older_than_since: Some(true),
+        };
+        let (records, asked, unread) = walked(&p, true, |input| {
+            let mut page = newest_first(input);
+            let link = page["_links"]["next"]
+                .as_str()
+                .map(|l| l.replace("/p?cursor=", ""));
+            page["next"] = json!(link);
+            page
+        });
+        assert_eq!(ids(&records), [1, 2, 3]);
+        assert_eq!(asked.len(), 2);
+        assert!(unread.is_empty(), "{unread:?}");
     }
 }

@@ -183,9 +183,10 @@ record. A run that is not successful (it stopped early, failed, left documents b
 `max_documents_per_run`, or left records unread) keeps its `{since}` as the lower bound of every
 later run until one succeeds, so the next run asks for them again. That holds before the first
 successful run too: the window does not slide with the clock. Records are left unread by a walk
-that reaches `max_pages` with pages left, by an empty page that still names a next one, and by a
-child call that fails for a record, which leaves that record out of the run. Each of these says so
-in `stopped`, in the run's result and in `cortex.log`; the other records still apply.
+that reaches `max_pages` with pages left, by an empty page that still names a next one, by a
+`NextLink` link without its parameter, and by a child call that fails for a record, which leaves
+that record out of the run. Each of these says so in `stopped`, in the run's result and in
+`cortex.log`; the other records still apply.
 
 A child call that fails for the same record on 3 runs in a row stops holding the window: from the
 third failure on, the record is left out and named in `skipped` (`<operation>: child call failed
@@ -197,12 +198,37 @@ lost. Every run works out, from the documents it holds back, the earliest window
 each held change: the earliest last application among them, less the 5 minutes. No later run's
 `{since}` is after that; a run that holds nothing back clears it.
 
-**`paging`** has the fields `style` (`PageNumber`, `Token` or `Keyset`), `param` (the dotted path
-of the input field to advance), `next` (optional, the dotted path in the answer of the next page,
-token or key) and `max_pages`. With `next`, its value is the next `param`, whatever the style.
-Without it, a `PageNumber` walk asks for the page after the current one (the input's `param`, or
-1 when absent), and a `Token` or `Keyset` walk reads one page. A walk stops at an empty page, at a
-missing `next`, at a page or token it has already asked for, or after `max_pages` pages.
+**`paging`** has the fields `style` (`PageNumber`, `Token`, `Keyset` or `NextLink`), `param` (the
+dotted path of the input field to advance), `next` (optional, the dotted path in the answer of the
+next page, token, key or link), `max_pages` and `stop_older_than_since` (optional). With `next`,
+its value is the next `param`, whatever the style, except `NextLink`. Without it, a `PageNumber`
+walk asks for the page after the current one (the input's `param`, or 1 when absent), and a
+`Token`, `Keyset` or `NextLink` walk reads one page. A walk stops at an empty page, at a missing
+`next`, at a page or token it has already asked for, or after `max_pages` pages.
+
+A `NextLink` walk reads a URL at `next`, relative or absolute, and asks next for the
+percent-decoded value of its query parameter named by the last segment of `param`:
+`_links.next: "/api/pages?cursor=abc&limit=50"` with `param: cursor` asks for `cursor: abc`, and
+`https://host/api/pages?limit=50&cursor=a%2Fb` for `cursor: a/b`. A missing, null or empty link
+ends the walk. A link without that parameter, or with it empty, ends it too and leaves records
+unread: the run says `<adapter>.<operation>: the next link names no <param>` in `stopped`.
+
+With `stop_older_than_since: true`, the walk ends at the first record whose `time` is older than
+the run's `{since}`; that record and the ones after it on its page are not taken. An operation that
+lists newest-modified first and takes no time filter is so read down to the last run and no
+further. A walk the rule ends has read everything the window asks for: it leaves nothing unread
+and the run can succeed. A record whose time is missing or cannot be read does not stop the walk.
+A walk that reaches `max_pages` before the rule fires leaves pages unread as without it, and the
+run keeps its `{since}`. Only a `connectors` source's own `paging` takes the rule, and only with a
+`time`; a spec that sets it elsewhere, or without `time`, is refused when it is loaded.
+
+```yaml
+operation: pages.changed
+records: results
+id: id
+time: version.createdAt
+paging: {style: NextLink, param: cursor, next: _links.next, max_pages: 20, stop_older_than_since: true}
+```
 
 :::caution[PageNumber paging can skip records]
 A `PageNumber` walk asks for pages by offset. When a write moves a record within the result set
