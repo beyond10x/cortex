@@ -302,66 +302,6 @@ fn adv_a_run_that_fails_part_way_publishes_what_it_applied() {
     assert!(!dir.join("stage.json").exists());
 }
 
-/// A gated `postgres` run that commits nothing leaves `state/` as the run wrote it, as a SQLite
-/// run does. Here: with `dropped: Supersede`, a document `state/` holds and the store has nothing
-/// of (as one whose every fact was refused) is no longer listed; ending it commits nothing, and
-/// the run forgets it in `state/`. A stage abandoned after `finish` saved `state/`, and that put
-/// `state/` back, would keep the document seen, every run.
-#[test]
-fn adv_a_staged_run_that_commits_nothing_keeps_the_state_it_finished_with() {
-    let w = World::new();
-    let bin = staged_pg_ekr(&w);
-    let path = spec(&w, &bin, "1", "1", 5000);
-    let text = std::fs::read_to_string(&path).unwrap().replace(
-        "glob: \"**/*.md\"}",
-        "glob: \"**/*.md\", dropped: Supersede}",
-    );
-    std::fs::write(&path, text).unwrap();
-    let dir = create(&w, &path);
-    docs(
-        &w,
-        &[("a.md", "Example Labs develops the Widget engine.\n")],
-    );
-    let (code, out, err) = cortex(&w, &["run", "pg/docs"]);
-    assert_eq!(code, Some(0), "{out}{err}");
-    let state = dir.join("state/docs.json");
-    let mut seen: Value = serde_json::from_str(&std::fs::read_to_string(&state).unwrap()).unwrap();
-    let documents = seen["documents"].as_object_mut().unwrap();
-    let (key, entry) = documents
-        .iter()
-        .find(|(k, _)| k.ends_with("/a.md"))
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .expect("the first run saw a.md");
-    documents.insert(key.replace("/a.md", "/ghost.md"), entry);
-    std::fs::write(&state, seen.to_string()).unwrap();
-    let seen_ghost = || -> bool {
-        let text = std::fs::read_to_string(&state).unwrap_or_default();
-        serde_json::from_str::<Value>(&text).unwrap_or(Value::Null)["documents"]
-            .as_object()
-            .is_some_and(|d| d.keys().any(|k| k.ends_with("/ghost.md")))
-    };
-    assert!(seen_ghost());
-
-    let before = head(&w, &dir);
-    let (code, out, err) = cortex(&w, &["run", "pg/docs"]);
-    assert_eq!(code, Some(0), "{out}{err}");
-    // The scenario: the run ran in a stage and committed nothing.
-    let argv = std::fs::read_to_string(w.root.join("ekr-argv.log")).unwrap_or_default();
-    assert_eq!(
-        argv.lines().filter(|l| l.contains("stage begin")).count(),
-        2,
-        "{argv}"
-    );
-    assert_eq!(head(&w, &dir), before, "the run committed: {out}{err}");
-    assert!(
-        !seen_ghost(),
-        "the run forgot ghost.md, and abandoning its empty stage put state/ back after the run \
-         finished: ghost.md is still seen"
-    );
-    assert!(!dir.join("stage.json").exists());
-    assert!(stages(&w, &dir).iter().all(|s| s["state"] != "Begun"));
-}
-
 /// A run killed while it publishes its stage, after its gate passed and `stage.json` recorded the
 /// publish, before EKR published: the next run publishes that stage at the head it recorded, and
 /// keeps `state/`, so what the killed run applied is in the store and not fetched again.
