@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
-    "contract_digest": "44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd",
+    "spec_digest": "06b85f787fc2795d4652e89f304e6ec0784cef9e8021da1f3563b7091d3f7d0f",
+    "contract_digest": "28ce847368f1ae1edf3b06d9d030781ab3fe4feeb2aa981f9075fce52b40231b",
     "scenario_initial_state": "empty"
   },
   "scenarios": {

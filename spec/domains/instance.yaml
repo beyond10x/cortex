@@ -657,7 +657,9 @@ entities:
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: key, type: String}
-      - {name: content_hash, type: String}
+      # Absent for a document adopted by its key alone (`cortex adopt --seen`, an entry with
+      # `applied_at` and no hash) until the source's next run fetches it and records its hash.
+      - {name: content_hash, type: Optional<String>}
       - {name: unlinked_hash, type: Optional<String>}
       - {name: applied_at, type: Integer}
     invariants:
@@ -836,6 +838,9 @@ commands:
       display: Adopt an existing store
     # As for CreateInstance, the command line reads the spec file; `store` is `--store`. Each
     # source's seen documents start from the `cortex.seen/1` file `--seen` names for it, or empty.
+    # An entry of that file names a key and its `applied_at`, with or without a hash; one with no
+    # `applied_at` is refused, naming its key. An entry with no hash is a SeenDocument with no
+    # `content_hash`, which the source's next run records (see RunSource's `ran`).
     input:
       - {name: name, type: cortex.instance.InstanceName}
       - {name: description, type: String}
@@ -1119,7 +1124,13 @@ commands:
       # source carries, or whose hash differs once `refresh_after_days` have passed. A structured
       # source's change record that holds links also records `unlinked_hash`, the hash of its text
       # without them; a change whose text differs from the one applied only in its links is
-      # extracted at once, without waiting for `refresh_after_days`. ESS has no
+      # extracted at once, without waiting for `refresh_after_days`. A SeenDocument with no
+      # `content_hash` (adopted by key) is not extracted: the first run that fetches a document
+      # under its key records the hash of that document as the run renders and masks it, keeps its
+      # `applied_at`, and counts it as `hashed` in the run's report, not in `documents_new`; a
+      # later run extracts it when that hash changes. A key the run does not fetch keeps no hash.
+      # The hash is written to the state with the rest of the run, so a run that is undone (its
+      # gate failed) puts it back with `state/`, and the next run records it again. ESS has no
       # effect that creates or updates one record per element of a collection (`instances:` is
       # refused on `creates:`, `affects:` only updates), so the per-source state file holds it and
       # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.

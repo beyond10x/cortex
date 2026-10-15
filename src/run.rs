@@ -38,6 +38,9 @@ pub enum Failure {
 #[derive(Debug)]
 pub struct Report {
     pub documents_new: i64,
+    /// Fetched documents whose key was seen with no hash (adopted by key alone): their hash was
+    /// recorded and they were not extracted ([`SeenState::hash_unhashed`]).
+    pub hashed: usize,
     pub documents_applied: i64,
     /// `0` when no model was asked, the sum when every answer carried a cost, `None` as soon as
     /// one answer carried none: a missing cost is never written as `0`.
@@ -101,6 +104,7 @@ impl Default for Report {
     fn default() -> Self {
         Self {
             documents_new: 0,
+            hashed: 0,
             documents_applied: 0,
             cost_usd: Some(0.0),
             facts_refused: 0,
@@ -511,6 +515,9 @@ fn process_in(
     let seen_path = layout.seen(label);
     let mut seen = SeenState::load(&seen_path).map_err(Failure::Fetch)?;
     seen.unlinked = unlinked;
+    // A document adopted by its key alone is seen with the text fetched now, and not extracted;
+    // its hash is written with the rest of the run's state, so a run that is undone puts it back.
+    report.hashed = seen.hash_unhashed(&docs);
     let wanted = docs
         .iter()
         .filter(|d| seen.wants(d, started, policy.refresh_after_days))
@@ -1301,7 +1308,7 @@ fn end_dropped(
         .filter(|d| {
             seen.documents
                 .get(&d.key)
-                .is_none_or(|s| s.hash != crate::state::doc_hash(d))
+                .is_none_or(|s| s.hash.as_deref() != Some(&crate::state::doc_hash(d)))
                 || evidence::lead_bytes(d, &r.source.lead(d)) > evidence::PAYLOAD_MAX_BYTES
         })
         .map(|d| d.key.clone())
@@ -1456,6 +1463,10 @@ fn log_line(label: &str, report: &Report, started: i64) -> serde_json::Value {
     // Present only when a document was cut: a run that cut nothing logs what it did before.
     if report.truncated > 0 {
         line["truncated"] = json!(report.truncated);
+    }
+    // Present only when a document adopted by key was hashed: other runs log what they did before.
+    if report.hashed > 0 {
+        line["hashed"] = json!(report.hashed);
     }
     // Present only when a parent was skipped: a run that skipped none logs what it did before.
     if !report.skipped.is_empty() {

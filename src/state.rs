@@ -17,7 +17,11 @@ use crate::sources::{Document, Origin};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Seen {
-    pub hash: String,
+    /// The hash of the text applied ([`doc_hash`]). Absent for a document adopted by its key alone
+    /// (`cortex adopt --seen`, an entry with `applied_at` and no hash) until a run fetches it and
+    /// records it ([`SeenState::hash_unhashed`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
     /// Milliseconds since the Unix epoch.
     pub applied_at: i64,
     /// For a structured source's change record applied with links, the hash of its text without
@@ -111,10 +115,24 @@ impl SeenState {
 
     /// A `cortex.seen/1` document an operator names with `cortex adopt --seen`, read as a state
     /// file is: a missing file or another `format` is an error, and a key that still holds a
-    /// credential is dropped.
+    /// credential is dropped. An entry names its `applied_at`, with or without a hash (a document
+    /// adopted by its key alone); one with no `applied_at` is an error naming its key.
     pub fn read_document(path: &Path) -> Result<Self, String> {
         if !path.is_file() {
             return Err(format!("{} is no file", path.display()));
+        }
+        let text =
+            std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+        if let Ok(serde_json::Value::Object(document)) = serde_json::from_slice(&text) {
+            if let Some(serde_json::Value::Object(entries)) = document.get("documents") {
+                if let Some((key, _)) = entries.iter().find(|(_, e)| e.get("applied_at").is_none())
+                {
+                    return Err(format!(
+                        "{}: document {key:?} has no applied_at: name it, with or without a hash",
+                        path.display()
+                    ));
+                }
+            }
         }
         let state = Self::load(path)?;
         if state.format != FORMAT {
@@ -148,28 +166,31 @@ impl SeenState {
     }
 
     /// Whether a run should extract `doc`: its key is new, or its text changed past the refresh
-    /// window, or changed at all for a record read from a file or in its links alone.
+    /// window, or changed at all for a record read from a file or in its links alone. A key seen
+    /// with no hash (adopted by key, not yet fetched) is not extracted.
     pub fn wants(&self, doc: &Document, now_ms: i64, refresh_after_days: i64) -> bool {
         match self.documents.get(&doc.key) {
             None => true,
-            Some(seen) => {
+            Some(seen) => seen.hash.as_ref().is_some_and(|hash| {
                 (!waits(doc)
                     || now_ms - seen.applied_at >= refresh_after_days * DAY_MS
                     || self.relinked(doc, seen))
-                    && seen.hash != doc_hash(doc)
-            }
+                    && *hash != doc_hash(doc)
+            }),
         }
     }
 
     /// Whether `doc` changed but is held back: its key was applied less than `refresh_after_days`
     /// ago, with other text, and it is not a record read from a file nor a change whose links
-    /// alone changed.
+    /// alone changed. A key seen with no hash is not held.
     pub fn holds(&self, doc: &Document, now_ms: i64, refresh_after_days: i64) -> bool {
         waits(doc)
             && self.documents.get(&doc.key).is_some_and(|seen| {
-                now_ms - seen.applied_at < refresh_after_days * DAY_MS
-                    && seen.hash != doc_hash(doc)
-                    && !self.relinked(doc, seen)
+                seen.hash.as_ref().is_some_and(|hash| {
+                    now_ms - seen.applied_at < refresh_after_days * DAY_MS
+                        && *hash != doc_hash(doc)
+                        && !self.relinked(doc, seen)
+                })
             })
     }
 
@@ -177,9 +198,35 @@ impl SeenState {
     /// links: its hash without them ([`SeenState::unlinked`]) is the one remembered, or, for a
     /// text applied with none, its `hash`.
     fn relinked(&self, doc: &Document, seen: &Seen) -> bool {
-        self.unlinked
-            .get(&doc.key)
-            .is_some_and(|unlinked| *unlinked == *seen.unlinked_hash.as_ref().unwrap_or(&seen.hash))
+        self.unlinked.get(&doc.key).is_some_and(|unlinked| {
+            seen.unlinked_hash.as_ref().or(seen.hash.as_ref()) == Some(unlinked)
+        })
+    }
+
+    /// Records, for every fetched document whose key is seen with no hash (adopted by its key
+    /// alone), the hash of the document as this run fetched it, keeping its `applied_at`, and
+    /// answers how many it recorded. Such a document is then seen as applied with that text, so it
+    /// is not extracted; a key that is not fetched keeps no hash.
+    pub fn hash_unhashed(&mut self, docs: &[Document]) -> usize {
+        let mut hashed = 0;
+        for doc in docs {
+            let Some(seen) = self
+                .documents
+                .get_mut(&doc.key)
+                .filter(|seen| seen.hash.is_none())
+            else {
+                continue;
+            };
+            let hash = doc_hash(doc);
+            seen.unlinked_hash = self
+                .unlinked
+                .get(&doc.key)
+                .filter(|unlinked| **unlinked != hash)
+                .cloned();
+            seen.hash = Some(hash);
+            hashed += 1;
+        }
+        hashed
     }
 
     /// The seen documents of `source`, as `cortex.instance.SeenDocument` declares them, in key
@@ -210,7 +257,7 @@ impl SeenState {
         self.documents.insert(
             doc.key.clone(),
             Seen {
-                hash,
+                hash: Some(hash),
                 applied_at: now_ms,
                 unlinked_hash,
             },
@@ -286,6 +333,83 @@ mod tests {
         std::fs::write(&path, r#"{"format": "other/1", "documents": {}}"#).unwrap();
         let other = SeenState::read_document(&path).unwrap_err();
         assert!(other.contains("other/1"), "{other}");
+    }
+
+    /// An entry of a `--seen` document may name a key and its `applied_at` with no hash (adopted
+    /// by key); one with no `applied_at` is refused, naming its key.
+    #[test]
+    fn a_seen_document_entry_needs_applied_at_and_may_lack_a_hash() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("chat.json");
+        std::fs::write(
+            &path,
+            r#"{"format": "cortex.seen/1", "documents": {"archive/2026-09.jsonl#1.0": {"applied_at": 1}}}"#,
+        )
+        .unwrap();
+        let read = SeenState::read_document(&path).unwrap();
+        assert_eq!(
+            read.documents["archive/2026-09.jsonl#1.0"],
+            Seen {
+                hash: None,
+                applied_at: 1,
+                unlinked_hash: None,
+            }
+        );
+        // Saved as the adopted state: still no hash.
+        read.save(&path).unwrap();
+        assert!(!std::fs::read_to_string(&path).unwrap().contains("hash"));
+
+        for entry in [r#"{}"#, r#"{"hash": "ab"}"#] {
+            std::fs::write(
+                &path,
+                format!(r#"{{"format": "cortex.seen/1", "documents": {{"a#7": {entry}}}}}"#),
+            )
+            .unwrap();
+            let refused = SeenState::read_document(&path).unwrap_err();
+            assert!(refused.contains("\"a#7\""), "{refused}");
+            assert!(refused.contains("applied_at"), "{refused}");
+        }
+    }
+
+    /// A document seen with no hash is neither wanted nor held; once a run fetched it, it carries
+    /// the hash of what the run fetched under its key, keeps its `applied_at`, and is extracted
+    /// again only when that hash changes. A key that is not fetched keeps no hash.
+    #[test]
+    fn a_document_seen_without_a_hash_is_hashed_when_fetched_and_not_extracted() {
+        let record = |key: &str, text: &str| Document {
+            origin: Origin::FileRecord,
+            ..doc(key, text)
+        };
+        let adopted = Seen {
+            hash: None,
+            applied_at: 1,
+            unlinked_hash: None,
+        };
+        let mut state = SeenState::default();
+        state.documents.insert("a".into(), adopted.clone());
+        state.documents.insert("gone".into(), adopted.clone());
+        state.documents.insert("c".into(), adopted.clone());
+        let fetched = vec![record("a", "one"), doc("c", "three"), record("b", "two")];
+        assert!(!state.wants(&fetched[0], DAY_MS, 7));
+        assert!(!state.holds(&fetched[1], DAY_MS, 7));
+
+        assert_eq!(state.hash_unhashed(&fetched), 2);
+        assert_eq!(state.documents["a"].hash, Some(text_hash("one")));
+        assert_eq!(state.documents["a"].applied_at, 1);
+        assert_eq!(state.documents["c"].hash, Some(text_hash("three")));
+        assert_eq!(state.documents["gone"], adopted);
+        assert_eq!(state.hash_unhashed(&fetched), 0, "hashed once");
+
+        let keys = |docs: Vec<Document>| docs.into_iter().map(|d| d.key).collect::<Vec<_>>();
+        assert_eq!(keys(state.select(fetched, DAY_MS, 7, 10)), ["b"]);
+        let edited = vec![record("a", "one, edited"), doc("c", "three, edited")];
+        assert_eq!(keys(state.select(edited.clone(), DAY_MS, 7, 10)), ["a"]);
+        assert_eq!(keys(state.select(edited, 8 * DAY_MS, 7, 10)), ["a", "c"]);
+
+        let rows = state.rows(&m::SourceId("t/chat".into()));
+        let gone = rows.iter().find(|r| r.key == "gone").unwrap();
+        assert_eq!(gone.content_hash, None);
+        assert!(gone.broken_invariant().is_none());
     }
 
     #[test]
@@ -420,7 +544,7 @@ mod tests {
                     document_id: m::DocumentId("t/news https://example.org/a".into()),
                     source_id: source.clone(),
                     key: "https://example.org/a".into(),
-                    content_hash: text_hash("one"),
+                    content_hash: Some(text_hash("one")),
                     unlinked_hash: None,
                     applied_at: 5,
                 },
@@ -428,7 +552,7 @@ mod tests {
                     document_id: m::DocumentId("t/news https://example.org/b".into()),
                     source_id: source.clone(),
                     key: "https://example.org/b".into(),
-                    content_hash: text_hash("two"),
+                    content_hash: Some(text_hash("two")),
                     unlinked_hash: None,
                     applied_at: 7,
                 },

@@ -64,7 +64,7 @@
         },
         {
           "name": "content_hash",
-          "type": "string"
+          "type": "Optional<string>"
         },
         {
           "name": "unlinked_hash",
