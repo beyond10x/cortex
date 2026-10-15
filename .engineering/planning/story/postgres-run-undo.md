@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:postgres-run-undo
 kind: story
-status: draft
+status: active
 title: A run on a PostgreSQL store can be undone
 relations:
 - decomposes: epic:organisation-scale-instance
@@ -24,7 +24,10 @@ scope:
   path: website/docs/operating.md
 - confidence: inferred
   path: website/docs/spec-file.md
-revision: 17
+revision: 19
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-15T03:29:14Z", actor: "human:timo", revision: 18, decided_on: {"recorded":{"review_outcome":3}}}
+- {from: "proposed", to: "active", at: "2026-10-15T03:29:15Z", actor: "human:timo", revision: 19, decided_on: {"recorded":{"review_outcome":3}}}
 ---
 ## Outcome
 
