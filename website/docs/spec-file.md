@@ -542,7 +542,8 @@ snapshots: {keep: 3}
 ## `gate`
 
 Optional. Checks a source run is held to once it applied something; a run that fails one is
-undone from the snapshot taken before it and fails as `apply-refused`. See
+undone and fails as `apply-refused`: on a `sqlite` store from the snapshot taken before it, on a
+`postgres` store by abandoning the EKR stage it ran in. See
 [Operating](./operating.md#failures).
 
 ```yaml

@@ -119,6 +119,7 @@ impl Layout {
             backend,
             store,
             launch,
+            stage: None,
         }
     }
 

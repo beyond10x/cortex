@@ -546,6 +546,7 @@ fn seed_instance(
         backend: ekr::Backend::Sqlite,
         store: layout.dir.join("seed-check.sqlite"),
         launch: None,
+        stage: None,
     };
     let checked = seed_and_apply(&scratch, &seed_path, schema.as_deref());
     remove_scratch(&layout.dir, "seed-check.sqlite");

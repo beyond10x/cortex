@@ -25,6 +25,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report |
 | `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
+| `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
 | `instances/<name>/cortex.log` | one JSON line per run: counts, cost, seconds, why it stopped |
 
 ## systemd units
@@ -159,8 +160,11 @@ the store's restore is refused (another connection held its write lock for 5 sec
 `state/` is still put back, so the next run fetches the run's documents again; the `reason` says
 the store still holds the run. `cortex.log` records the run's line with `gate.failed`, each
 failed check's measure, bounds and value, `gate.restored`, the snapshot restored (`null` when the
-store was not), and `gate.reason`. A run with no snapshot (a `postgres` store,
-`snapshots.keep: 0`) cannot be undone: it still fails, and its `reason` says it was not undone.
+store was not), and `gate.reason`. On a `postgres` store the run ran in an EKR stage, which is
+abandoned, so nothing of the run reaches the store, and `state/` is put back (see
+[Undoing a run](#undoing-a-run)); `gate.restored` is `null`, and the `reason` names the stage. A
+run on a `sqlite` store with no snapshot (`snapshots.keep: 0`) cannot be undone: it still fails,
+and its `reason` says it was not undone.
 
 If Connectors refuses a read because a connection's validation lapsed, cortex revalidates the
 connection once and retries.
@@ -216,6 +220,27 @@ close the store writes the log back.
 
 A `postgres` store has no snapshot; its backup is the operator's database backup, and
 `cortex restore` answers `backend-unsupported`.
+
+A run on a `postgres` store that the spec holds to a `gate` can still be undone, through EKR's
+staged runs (`ekr stage`, EKR 0.0.33). Before its first batch, cortex reads `ekr head`, begins a
+stage (`ekr stage begin`, which copies the store into a tenant of its own and leaves the store's
+head where it is), and writes `instances/<name>/stage.json` with the stage, that head and a copy
+of `state/`. Every `ekr` of the run joins the stage with `EKR_STAGE`, which a Connectors launch
+passes on, so the run's reads see its own commits and its commits stay in the stage:
+
+- A run that passes its gate is published, `ekr stage publish <stage> --expect-head <head>`:
+  every revision it committed lands in the store at once. If the store's head moved since the run
+  began, EKR refuses (`stage-head-moved`) and publishes nothing; the run fails as `apply-refused`,
+  and `state/` is put back.
+- A run that fails its gate is abandoned (`ekr stage abandon`): `ekr head` answers the head from
+  before the run, and `state/` is put back from `stage.json`.
+- A run that fails part-way, before its gate, keeps what it applied, as on `sqlite`: its stage
+  is published, or abandoned when nothing committed in it.
+
+A `stage.json` left by a killed run is settled by the next run of the instance: its stage is
+abandoned and `state/` put back, or, if the stage was published before the kill, kept as it is.
+`ekr stage list` lists every stage the store has had. Beginning a stage copies the store, so it
+takes longer as the store grows. A run on a `postgres` store with no `gate` runs in no stage.
 
 ## Adopting an existing store
 

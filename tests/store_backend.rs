@@ -697,6 +697,184 @@ fn a_postgres_instance_is_provisioned_seeded_run_and_served_from_postgres() {
     }
 }
 
+/// An `ekr` at `<root>/bin/ekr-staged` that logs the stage it was started in (`EKR_STAGE`, or
+/// `-`) and its arguments to `<root>/ekr-stage.log`, and runs the real one.
+fn stage_logging_ekr(w: &World) -> PathBuf {
+    let path = w.bin.join("ekr-staged");
+    common::executable(
+        &path,
+        &format!(
+            "printf '%s|%s\\n' \"${{EKR_STAGE:--}}\" \"$*\" >> \"{root}/ekr-stage.log\"\nexec \"{ekr}\" \"$@\"\n",
+            root = w.root.display(),
+            ekr = ekr().display()
+        ),
+    );
+    path
+}
+
+/// `ekr <args>` on an instance's PostgreSQL store, read by `ekr` directly through its own host
+/// document: its JSON answer.
+fn postgres_ekr(dir: &Path, config: &Path, args: &[&str]) -> Value {
+    let out = Command::new(ekr())
+        .args(args)
+        .env("EKR_HOST", dir.join("host.json"))
+        .env("EKR_BACKEND", "postgres")
+        .env("EKR_STORE", config)
+        .env_remove("EKR_STAGE")
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "ekr {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    serde_json::from_slice(&out.stdout).unwrap()
+}
+
+/// `story:postgres-run-undo`: a run on a `postgres` store with a gate runs in an EKR stage. One
+/// that passes its gate is published; one that fails `facts_refused max 0` leaves `ekr head` at the
+/// head before the run and the seen state unchanged. Every `ekr` of the run is launched through the
+/// connection with `EKR_STAGE`, which crosses the launch.
+#[test]
+fn a_postgres_run_that_fails_its_gate_is_undone() {
+    if !container_runtime("the PostgreSQL run undo case") {
+        return;
+    }
+    let w = World::new();
+    let pg = Postgres::start(&w.root);
+    let state = w.root.join("connectors-state");
+    let (app, owner) = pg.launched(&state);
+    let staged_ekr = stage_logging_ekr(&w);
+    launching_connectors(&w, &state, &staged_ekr);
+    let gated = |max: &str| {
+        let spec = spec_with_ekr(&w, "pg", &launched_store(&app), &staged_ekr);
+        let mut text = std::fs::read_to_string(&spec).unwrap();
+        text.push_str(&format!(
+            "gate:\n  checks:\n    - {{measure: facts_refused, max: \"{max}\"}}\n"
+        ));
+        std::fs::write(&spec, text).unwrap();
+        spec
+    };
+    // The stand-in model refuses one fact per batch: a gate of `max 1` passes, `max 0` fails.
+    let spec = gated("1");
+    let (code, out, err) = cortex(
+        &w,
+        &[
+            "create",
+            "--spec",
+            spec.to_str().unwrap(),
+            "--postgres-schema-config",
+            owner.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(0), "{out}{err}");
+    let dir = w.home.join("instances/pg");
+    let stages = |dir: &Path| postgres_ekr(dir, &pg.app, &["stage", "list"]);
+
+    // A run that passes its gate is published: its commits are in the store.
+    let (code, out, err) = cortex(&w, &["run", "pg/docs"]);
+    let ran = last_json(&out);
+    assert_eq!(
+        (code, ran["outcome"].as_str()),
+        (Some(0), Some("ran")),
+        "{out}{err}"
+    );
+    assert_eq!(ran["detail"]["facts_refused"], 1, "{ran}");
+    let kept = postgres_head(&dir, &pg.app)["revision"].as_i64().unwrap();
+    assert!(kept > 0, "the passing run published nothing: {ran}");
+    let listed = stages(&dir);
+    assert_eq!(listed.as_array().map(Vec::len), Some(1), "{listed}");
+    assert_eq!(listed[0]["state"], "Published", "{listed}");
+    assert_eq!(listed[0]["base"], 0, "{listed}");
+
+    // The gate tightens and a new document arrives.
+    let spec = gated("0");
+    let (code, out, err) = cortex(&w, &["update", "pg", "--spec", spec.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{out}{err}");
+    std::fs::write(
+        w.root.join("docs/c.md"),
+        "Example Labs acquired Sprocket.\n",
+    )
+    .unwrap();
+    let seen_before = std::fs::read_to_string(dir.join("state/docs.json")).unwrap();
+    let log_lines = std::fs::read_to_string(w.root.join("ekr-stage.log"))
+        .unwrap()
+        .lines()
+        .count();
+
+    let (code, out, err) = cortex(&w, &["run", "pg/docs"]);
+    let refused = last_json(&out);
+    assert_ne!(code, Some(0), "{out}{err}");
+    assert_eq!(refused["outcome"], "apply-refused", "{out}{err}");
+    let reason = refused["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(reason.contains("facts_refused = 1"), "{reason}");
+    assert!(reason.contains("the run was undone"), "{reason}");
+    assert_eq!(
+        postgres_head(&dir, &pg.app)["revision"].as_i64(),
+        Some(kept),
+        "ekr head is not where it was before the run: {reason}"
+    );
+    // `run` widens the window of a failed run; the documents seen are what they were.
+    let seen =
+        |text: &str| -> Value { serde_json::from_str::<Value>(text).unwrap()["documents"].clone() };
+    let seen_after = std::fs::read_to_string(dir.join("state/docs.json")).unwrap();
+    assert_eq!(seen(&seen_after), seen(&seen_before), "{seen_after}");
+    let listed = stages(&dir);
+    assert_eq!(listed.as_array().map(Vec::len), Some(2), "{listed}");
+    let undone = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["state"] == "Abandoned")
+        .unwrap_or_else(|| panic!("no abandoned stage: {listed}"));
+    assert_eq!(undone["base"].as_i64(), Some(kept), "{listed}");
+
+    // The failing run's `apply-extraction` and the gate's reads ran in its stage, through the
+    // launch; the stage verbs ran on the store.
+    let id = undone["stage_id"].as_str().unwrap();
+    let log = std::fs::read_to_string(w.root.join("ekr-stage.log")).unwrap();
+    let run_log: Vec<&str> = log.lines().skip(log_lines).collect();
+    let in_stage = |verb: &str| {
+        run_log
+            .iter()
+            .any(|l| l.starts_with(&format!("{id}|{verb}")))
+    };
+    assert!(in_stage("apply-extraction"), "{log}");
+    assert!(in_stage("ontology"), "{log}");
+    for verb in ["stage begin", &format!("stage abandon {id}")] {
+        assert!(
+            run_log.iter().any(|l| *l == format!("-|{verb}")),
+            "{verb} in {log}"
+        );
+    }
+    assert!(
+        !dir.join("stage.json").exists(),
+        "the run left its stage record"
+    );
+
+    // What beginning a stage costs on this store: its size, and the time `ekr stage begin` took.
+    let graph = postgres_ekr(&dir, &pg.app, &["snapshot"]);
+    let count = |key: &str| {
+        graph["graph"]["graph"][key]
+            .as_object()
+            .map_or(0, |m| m.len())
+    };
+    let started = std::time::Instant::now();
+    let begun = postgres_ekr(&dir, &pg.app, &["stage", "begin"]);
+    let took = started.elapsed();
+    postgres_ekr(
+        &dir,
+        &pg.app,
+        &["stage", "abandon", begun["stage_id"].as_str().unwrap()],
+    );
+    eprintln!(
+        "MEASURE stage begin: {} ms on a store of {} nodes, {} assertions, head {kept}",
+        took.as_millis(),
+        count("nodes"),
+        count("assertions")
+    );
+}
+
 /// A store that names a connection is refused unless its `ekr.postgres/1` file takes the password
 /// from descriptor 3 and Connectors lists the connection; a schema connection needs a connection.
 /// No refusal prints a value of the configuration.
@@ -1785,6 +1963,7 @@ fn review_the_direct_viewer_exec_start_quotes_the_ekr_path() {
         backend: cortex_cli::ekr::Backend::Postgres,
         store: w.root.join("pg/app.json"),
         launch: None,
+        stage: None,
     };
     world_systemd(&w).install_view("q", &store, 18996).unwrap();
     let unit = std::fs::read_to_string(w.units.join("cortex-q-view.service")).unwrap();
@@ -1814,6 +1993,7 @@ fn review_the_launched_viewer_exec_start_quotes_every_word() {
             },
             schema_connection: None,
         }),
+        stage: None,
     };
     world_systemd(&w).install_view("q", &store, 18996).unwrap();
     let unit = std::fs::read_to_string(w.units.join("cortex-q-view.service")).unwrap();
