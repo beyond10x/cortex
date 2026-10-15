@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-15T15:25:17Z",
+  "actor": "human:timo",
+  "artifact": "story:adopt-seen-by-key",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check steps on wave/20261015b 90cb17f: validate, drift, fmt, clippy --workspace, docs-check exit 0; cargo test --locked --workspace --no-fail-fast 54 lanes, 656 passed, 1 failed (the command-line coverage test ran the host ess 0.59.0 against requires 0.60.0); that binary rerun with ess 0.60.0, 1 passed, 0 failed"
+  }
+}
