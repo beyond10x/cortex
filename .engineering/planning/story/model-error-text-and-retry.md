@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:model-error-text-and-retry
 kind: story
-status: active
+status: implemented
 title: A model error answer keeps its reason and is retried once
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-15T03:29:15Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-15T03:29:15Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-15T03:50:55Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 
