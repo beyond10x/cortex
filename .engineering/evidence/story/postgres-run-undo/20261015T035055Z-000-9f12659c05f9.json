@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-15T03:50:55Z",
+  "actor": "human:timo",
+  "artifact": "story:postgres-run-undo",
+  "kind": "story",
+  "revision": 19,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check steps on wave/20261015a 61c1a37: validate, drift, fmt, clippy --workspace exit 0; cargo test --locked --workspace --no-fail-fast exit 0, 52 lanes, 598 passed, 0 failed; docs-check exit 0"
+  }
+}
