@@ -49,8 +49,8 @@ jobs:
 
       - name: Install pinned specification and planning tools
         env:
-          ESS_VERSION: "0.59.0"
-          ESS_SHA256: b0a22eb459fdfb2dec8ea173030416ef6c5ef9950944f3270c4407dda8b0f753
+          ESS_VERSION: "0.60.0"
+          ESS_SHA256: 89980809ffcb2cfe7e94efb662bdbd5387a9733e1fc5a69c2743045c753a5730
           AEP_VERSION: "0.71.2"
           AEP_SHA256: 63fd71b2d31748b56b9e55c3958e551fc4441424102c39b84d59214f94671b60
         run: |

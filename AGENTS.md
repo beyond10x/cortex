@@ -48,7 +48,7 @@ A change here that moves none of these is a question for the operator, not a tas
 
 ## The specification comes first
 
-`spec/` is an ESS specification (`ess/20`, pinned to ESS 0.59.0 in `spec/ess-inputs.yaml`). It is
+`spec/` is an ESS specification (`ess/20`, pinned to ESS 0.60.0 in `spec/ess-inputs.yaml`). It is
 the source of truth for every noun, command, outcome, error and event.
 
 - Change `spec/`, then run `task generate`. Never edit anything under `generated/` or
