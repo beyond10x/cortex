@@ -23,7 +23,7 @@ Model Context Protocol specification, and a budget of $0.50 per run.
 format: cortex.instance/1
 name: example
 description: Developments in open-source vector databases and the companies behind them.
-ekr: {version: "0.0.33"}
+ekr: {version: "0.0.34"}
 seed: {schema: seed/schema.yaml, documents: []}
 model: {model: claude-sonnet-5-5, budget_usd: "1", timeout_s: 900}
 sources: []
@@ -37,7 +37,7 @@ serve: {}
 | `description` | what the instance is about; every extraction prompt carries it |
 | `ekr` | the EKR version the instance runs on, and optionally the binary |
 | `seed` | what the store starts from |
-| `model` | the model that extracts, its per-run budget and its timeout |
+| `model` | the model that extracts, its per-run budget, its optional daily ceiling and its timeout |
 | `sources` | the data sources and their schedules |
 | `serve` | the viewer's port |
 
@@ -70,8 +70,36 @@ different seed files answers `seed-change-refused`.
 | `model` | the model name passed to `claude --model` |
 | `backend` | optional: `Claude` (the default) runs `claude -p`. `Codex` is accepted by `create` and `update` but extracts nothing in this release: every run fails as `extraction-failed`, naming `story:codex-model-backend` (see [Commands](./commands.md#global-options)) |
 | `budget_usd` | the spending limit of one run, in US dollars, as a decimal string; above 0. A run stops starting new batches once it is spent |
+| `daily_ceiling_usd` | optional: the most the instance's model calls spend in one UTC calendar day, in US dollars, as a decimal string; above 0. Absent means no ceiling. See [The daily ceiling](#the-daily-ceiling) |
 | `timeout_s` | the time limit of one model call, in seconds; above 0 |
 | `instructions` | optional text file whose content is added to every extraction prompt |
+
+### The daily ceiling
+
+```yaml
+model: {model: claude-sonnet-5-5, budget_usd: "1", daily_ceiling_usd: "5", timeout_s: 900}
+```
+
+`daily_ceiling_usd` covers every model call of the instance in one UTC calendar day: the runs of
+all its sources, the seed extraction, `cortex quality` and `cortex schema`. Each call is given
+(`--max-budget-usd`) the lesser of what is left of its own `budget_usd` and what is left of the
+ceiling today. Every answer that states a cost adds it to the spend of the day, a failed answer
+included; an answer with no cost adds nothing. The day starts at 00:00 UTC.
+
+Once the spend of the day reaches the ceiling, no call is made until the next UTC day:
+
+- a run stops before its next batch and answers `ran`, with the batches before it applied,
+  `stopped` naming the ceiling (`daily ceiling of 5 USD reached: 5.0000 USD spent on 2026-10-14
+  (UTC)`) and `daily_ceiling_reached: true`. A run stopped before its first batch applies nothing
+  and makes no model call. Either way it counts no failure, and the documents it did not extract
+  are extracted by a run on a later day;
+- `cortex quality` answers `judge-failed` and `cortex schema` answers `propose-failed`, the reason
+  naming the ceiling.
+
+The spend of the day is `spend.json` in the instance directory (see
+[Operating](./operating.md#where-things-live)); it is kept whether or not the spec names a ceiling,
+and `cortex restore` leaves it as it is. A ceiling changed with `cortex update` holds from the next
+run or command, against what the day has spent so far.
 
 ## `sources`
 
@@ -542,7 +570,8 @@ snapshots: {keep: 3}
 ## `gate`
 
 Optional. Checks a source run is held to once it applied something; a run that fails one is
-undone from the snapshot taken before it and fails as `apply-refused`. See
+undone and fails as `apply-refused`: on a `sqlite` store from the snapshot taken before it, on a
+`postgres` store by abandoning the EKR stage it ran in. See
 [Operating](./operating.md#failures).
 
 ```yaml
@@ -557,6 +586,24 @@ gate:
 | `checks` | the checks, each with a `measure` and a `min`, a `max` or both. Without a `gate` section, or with no checks, a run is not checked |
 | `measure` | a number of the run report `cortex run` prints: `documents_new`, `documents_applied`, `facts_refused`, `parts_rejected`, `masked`, `truncated`, `unrestored` or `cost_usd`. Any other name is the dotted path of a number in what `ekr quality` prints for the store after the run, such as `assertions.active` or `sharing_nodes` |
 | `min`, `max` | decimals, written as strings; the check fails when the measure is below `min` or above `max`. Both are compared at 4 decimal places, the precision `cortex run` prints a cost at, so a cost printed as `0.3000` is within `max: "0.3"`. A measure that cannot be read (a misspelt name, a `cost_usd` no answer carried, an `ekr quality` that fails) fails its check |
+
+## `monitoring`
+
+Optional. What a run of a source reports besides its printed line, `cortex.log` and the source's
+status in `cortex sources`; see [Operating](./operating.md#failures).
+
+```yaml
+monitoring:
+  metrics: true
+  hook: {command: [/usr/local/bin/notify-oncall, --channel, brains], timeout_s: 10}
+```
+
+| field | meaning |
+|---|---|
+| `metrics` | `true` rewrites `metrics.prom` in the instance directory after every run of a source, in the Prometheus text format, for a textfile collector or a sidecar to read. Without it, no metric file is written |
+| `hook` | optional: a command called once for each run that fails, with the source id and the outcome appended as its last two arguments |
+| `hook.command` | the program and its first arguments, run without a shell in the instance directory, in a process group of its own. It must name a program. A relative path holding a `/` is read against the spec file's directory; a bare name is looked up on `PATH`. It holds no secret: a hook that needs one reads it itself |
+| `hook.timeout_s` | how long the call may last, in seconds, above 0; then the hook's process group is killed. Without it, 10 |
 
 ## `serve`
 

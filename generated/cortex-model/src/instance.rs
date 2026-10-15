@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 55e415691487d2c675c5ecd72f81699560230b7355147e8df34b86eee64e1ff7
-// contract digest a22ec4c6788a24ce31bc536ccedeb291be32f912d3bc272713ff3f4470761db9
+// model digest 03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041
+// contract digest 44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -105,6 +105,17 @@ pub struct CrawlPolicy {
     pub allow_external: bool,
 }
 
+/// DailySpend — `cortex.instance.DailySpend`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DailySpend {
+    /// `format` — `String`.
+    pub format: String,
+    /// `day` — `String`.
+    pub day: String,
+    /// `spent_usd` — `Decimal`.
+    pub spent_usd: crate::primitives::Decimal,
+}
+
 /// DocumentId — `cortex.instance.DocumentId`: a distinct wrapper around `String`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocumentId(pub String);
@@ -185,6 +196,17 @@ pub struct GateCheck {
     pub max: Option<crate::primitives::Decimal>,
 }
 
+/// HookResult — `cortex.instance.HookResult`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookResult {
+    /// `called`.
+    Called,
+    /// `failed`.
+    Failed,
+    /// `timed-out`.
+    TimedOut,
+}
+
 /// The states of `cortex.instance.Instance`, as runtime values.
 ///
 /// Synthesised from the lifecycle, so the two cannot disagree. Which *moves* are legal is not
@@ -228,6 +250,8 @@ pub struct InstanceSpec {
     pub snapshots: Option<SnapshotPolicy>,
     /// `gate` — `Optional<cortex.instance.RunGate>`.
     pub gate: Option<RunGate>,
+    /// `monitoring` — `Optional<cortex.instance.MonitoringSpec>`.
+    pub monitoring: Option<MonitoringSpec>,
 }
 
 /// ModelBackend — `cortex.instance.ModelBackend`: one of a closed set of names.
@@ -248,10 +272,21 @@ pub struct ModelSpec {
     pub backend: Option<ModelBackend>,
     /// `budget_usd` — `Decimal`.
     pub budget_usd: crate::primitives::Decimal,
+    /// `daily_ceiling_usd` — `Optional<Decimal>`.
+    pub daily_ceiling_usd: Option<crate::primitives::Decimal>,
     /// `timeout_s` — `Integer`.
     pub timeout_s: i64,
     /// `instructions` — `Optional<String>`.
     pub instructions: Option<String>,
+}
+
+/// MonitoringSpec — `cortex.instance.MonitoringSpec`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MonitoringSpec {
+    /// `metrics` — `Optional<Boolean>`.
+    pub metrics: Option<bool>,
+    /// `hook` — `Optional<cortex.instance.RunHook>`.
+    pub hook: Option<RunHook>,
 }
 
 /// NewEdgeType — `cortex.instance.NewEdgeType`.
@@ -473,6 +508,30 @@ pub struct RelationMapping {
 pub struct RunGate {
     /// `checks` — `List<cortex.instance.GateCheck>`.
     pub checks: Vec<GateCheck>,
+}
+
+/// RunHook — `cortex.instance.RunHook`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunHook {
+    /// `command` — `List<String>`.
+    pub command: Vec<String>,
+    /// `timeout_s` — `Optional<Integer>`.
+    pub timeout_s: Option<i64>,
+}
+
+/// RunOutcome — `cortex.instance.RunOutcome`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunOutcome {
+    /// `ran`.
+    Ran,
+    /// `fetch-failed`.
+    FetchFailed,
+    /// `extraction-failed`.
+    ExtractionFailed,
+    /// `apply-refused`.
+    ApplyRefused,
+    /// `disabled`.
+    Disabled,
 }
 
 /// SchemaCardinality — `cortex.instance.SchemaCardinality`: one of a closed set of names.
@@ -1214,6 +1273,12 @@ pub struct SourceData {
     pub runs: i64,
     /// `consecutive_failures` — `Integer`.
     pub consecutive_failures: i64,
+    /// `last_outcome` — `Optional<cortex.instance.RunOutcome>`.
+    pub last_outcome: Option<RunOutcome>,
+    /// `last_run_at` — `Optional<Timestamp>`.
+    pub last_run_at: Option<crate::primitives::Timestamp>,
+    /// `last_reason` — `Optional<String>`.
+    pub last_reason: Option<String>,
 }
 
 impl SourceData {
@@ -1622,7 +1687,7 @@ pub enum MeasureQualityOutcome {
         /// Why it was refused: `cortex.instance.SampleFailed`.
         error: SampleFailed,
     },
-    /// `judge-failed` — externally decided (A judge's model call fails, times out, answers no valid verdicts or finds the budget spent, or the redaction policy refuses what the judge would be shown).
+    /// `judge-failed` — externally decided (A judge's model call fails, times out, answers no valid verdicts or finds the budget or the daily ceiling spent, or the redaction policy refuses what the judge would be shown).
     ///
     /// No pass rate was written; the verdicts of the batches judged before stay.
     JudgeFailed {
@@ -1672,7 +1737,7 @@ pub enum ProposeSchemaChangesOutcome {
         /// Why it was refused: `cortex.instance.SampleFailed`.
         error: SampleFailed,
     },
-    /// `propose-failed` — externally decided (A model call fails, times out, answers no valid proposals or finds the budget spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology).
+    /// `propose-failed` — externally decided (A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology).
     ///
     /// Nothing was applied and no `proposals.jsonl` was written.
     ProposeFailed {
@@ -1860,40 +1925,40 @@ pub struct RunSource {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunSourceOutcome {
-    /// `ran` — when the existing subject is in Enabled.
+    /// `disabled` — when the existing subject is in Disabled.
     ///
-    /// Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called.
-    Ran {
-        /// The `cortex.instance.SourceRan` this outcome publishes.
-        source_ran: SourceRan,
+    /// The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome.
+    Disabled {
+        /// The `cortex.instance.RunSkipped` this outcome publishes.
+        run_skipped: RunSkipped,
     },
     /// `fetch-failed` — externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first).
     ///
-    /// Nothing was applied; the scheduler then sends RecordFailure.
+    /// Nothing was applied; the source's status records the outcome and its reason, and the scheduler then sends RecordFailure.
     FetchFailed {
         /// Why it was refused: `cortex.instance.FetchFailed`.
         error: FetchFailed,
     },
-    /// `extraction-failed` — externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document).
+    /// `extraction-failed` — externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait).
     ///
-    /// Nothing was applied; the scheduler then sends RecordFailure.
+    /// Nothing was applied; the source's status records the outcome and its reason, and the scheduler then sends RecordFailure. When the model answered an error, `reason` holds the error text it gave, masked for credential shapes as fetched text is and cut at a character boundary to a bound, and the batch's `claude/error.txt` holds the same text. An error answer with a cost above zero, or with no cost reported, is not asked again.
     ExtractionFailed {
         /// Why it was refused: `cortex.instance.ExtractionFailed`.
         error: ExtractionFailed,
     },
     /// `apply-refused` — externally decided (EKR refuses the merged extraction document).
     ///
-    /// Nothing was applied; the scheduler then sends RecordFailure.
+    /// Nothing was applied; the source's status records the outcome and its reason, and the scheduler then sends RecordFailure.
     ApplyRefused {
         /// Why it was refused: `cortex.instance.ApplyRefused`.
         error: ApplyRefused,
     },
-    /// `disabled` — otherwise.
+    /// `ran` — otherwise.
     ///
-    /// The source is disabled; nothing ran.
-    Disabled {
-        /// Why it was refused: `cortex.instance.SourceDisabledError`.
-        error: SourceDisabledError,
+    /// Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd`: the batches before it are applied, the rest are extracted by a run on a later day.
+    Ran {
+        /// The `cortex.instance.SourceRan` this outcome publishes.
+        source_ran: SourceRan,
     },
     /// `no-such-source` — for an identity no record carries.
     ///
@@ -2028,6 +2093,13 @@ pub struct RunFailed {
     pub reason: String,
 }
 
+/// RunSkipped — the event `cortex.instance.RunSkipped`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunSkipped {
+    /// `source_id` — `cortex.instance.SourceId`.
+    pub source_id: SourceId,
+}
+
 /// SchemaChangesProposed — the event `cortex.instance.SchemaChangesProposed`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SchemaChangesProposed {
@@ -2098,6 +2170,8 @@ pub struct SourceRan {
     pub documents_applied: i64,
     /// `cost_usd` — `Optional<Decimal>`.
     pub cost_usd: Option<crate::primitives::Decimal>,
+    /// `daily_ceiling_reached` — `Boolean`.
+    pub daily_ceiling_reached: bool,
 }
 
 /// The declared error `cortex.instance.ApplyRefused`.
@@ -2174,7 +2248,7 @@ pub struct InstanceNotFound {
 
 /// The declared error `cortex.instance.JudgeFailed`.
 ///
-/// A judge's model call failed, timed out, answered no valid verdicts or found the budget spent, or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was written.
+/// A judge's model call failed, timed out, answered no valid verdicts or found the budget or the instance's daily ceiling spent, or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JudgeFailed {
     /// `reason` — `String`.
@@ -2192,7 +2266,7 @@ pub struct NameTaken {
 
 /// The declared error `cortex.instance.ProposeFailed`.
 ///
-/// A model call for schema proposals failed, timed out, answered no valid proposals or found the budget spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+/// A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProposeFailed {
     /// `reason` — `String`.
@@ -2342,6 +2416,12 @@ pub struct Sources {
     pub consecutive_failures: i64,
     /// `state` — `cortex.instance.Source.State`.
     pub state: SourceState,
+    /// `last_outcome` — `Optional<cortex.instance.RunOutcome>`.
+    pub last_outcome: Option<RunOutcome>,
+    /// `last_run_at` — `Optional<Timestamp>`.
+    pub last_run_at: Option<crate::primitives::Timestamp>,
+    /// `last_reason` — `Optional<String>`.
+    pub last_reason: Option<String>,
 }
 
 /// What this bounded context owes its implementor, and the seams of what is generated.
@@ -2453,9 +2533,9 @@ pub mod obligations {
 
     /// The behaviour `cortex.instance.RunSource` — an implementation obligation.
     ///
-    /// Why it is not generated: kept an obligation by `when_subject_state:` beside `external:` in one command.
+    /// Why it is not generated: kept an obligation by a refusal that compensates (`compensates: true`), on `fetch-failed`.
     ///
-    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `ran` when the existing subject is in Enabled, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document), error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), error `cortex.instance.ApplyRefused`; `disabled` otherwise, error `cortex.instance.SourceDisabledError`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
+    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
     pub trait RunSourceBehavior {
         /// Decides and enacts exactly one declared outcome of `cortex.instance.RunSource`.
         ///

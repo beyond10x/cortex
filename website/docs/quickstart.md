@@ -25,7 +25,7 @@ and `README.md` in a directory of the same name, and `SHA256SUMS`, the tarball's
 Download both, check the tarball against the checksum, and put the binary on your `PATH`:
 
 ```sh
-version=0.2.3
+version=0.3.0
 base=https://github.com/beyond10x/cortex/releases/download/v$version
 curl -fsSLO "$base/cortex-$version-x86_64-unknown-linux-gnu.tar.gz"
 curl -fsSLO "$base/SHA256SUMS"
@@ -41,7 +41,7 @@ the download is not the released file, and it must not be installed. `cortex --v
 `cortex <version>`. With the [GitHub CLI](https://cli.github.com/),
 `gh release download v$version --repo beyond10x/cortex` downloads both files in one step.
 
-`cortex setup` installs the pinned `ekr` (0.0.33 unless you pass `--ekr-version`) with
+`cortex setup` installs the pinned `ekr` (0.0.34 unless you pass `--ekr-version`) with
 `cargo install` under `~/.cache/cortex/bin/<version>/`, and does nothing when it is already there.
 
 ### Building from source

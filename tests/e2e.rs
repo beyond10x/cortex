@@ -146,10 +146,11 @@ fn two_failed_runs_in_a_row_disable_a_source_until_it_is_enabled() {
         .iter()
         .any(|l| l == "--user disable --now cortex-f-news.timer"));
 
+    // A disabled source answers its own exit status, not a failed run's 1.
     let (code, refused) = w.cortex(&["run", "f/news"]);
     assert_eq!(
         (code, refused["outcome"].as_str()),
-        (1, Some("disabled")),
+        (3, Some("disabled")),
         "{refused}"
     );
 

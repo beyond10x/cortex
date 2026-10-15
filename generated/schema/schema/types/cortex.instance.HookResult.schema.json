@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.HookResult",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
+    "contract_digest": "slice-sha256/2:8d2f1d240ad4342b7956d3abe9a6de6ad7982b683cbfde2b062a62fb60c05f0a",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.HookResult": {
+      "title": "HookResult",
+      "x-ess-name": "cortex.instance.HookResult",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "called",
+        "failed",
+        "timed-out"
+      ]
+    }
+  }
+}

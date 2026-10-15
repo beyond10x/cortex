@@ -554,6 +554,104 @@ pub fn rewind_state(layout: &Layout, snapshot: &str) -> Result<bool, String> {
     Ok(true)
 }
 
+/// `<instance>/stage.json`: while a run on a `postgres` store runs in an EKR stage, the stage, the
+/// store's head the run began from, whether the run began to publish it, and every file of `state/`
+/// as it was before the run (the form of a snapshot's copy of `state/`). The run removes it once
+/// its stage is published or abandoned; one found when a run starts was left by a run that was
+/// killed, or whose abandon failed.
+pub fn stage_record(layout: &Layout) -> PathBuf {
+    layout.dir.join("stage.json")
+}
+
+/// The record [`stage_record`] names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StageRecord {
+    /// The stage's id, as `ekr stage begin` printed it.
+    pub stage: String,
+    /// The store's head before the run, the stage's base: what `ekr stage publish --expect-head`
+    /// names.
+    pub head: i64,
+    /// Whether the run began to publish the stage: a run killed while publishing left it sealing,
+    /// and publishing it again with the same head completes it.
+    pub publishing: bool,
+}
+
+impl StageRecord {
+    /// Copies `state/` as it is now and writes the record of `stage`, begun at `head`.
+    pub fn write(layout: &Layout, stage: &str, head: i64) -> Result<Self, String> {
+        let mut doc: Value =
+            serde_json::from_str(&read_state(&live_state(layout))?).expect("plain JSON");
+        doc["format"] = json!("cortex.stage/1");
+        doc["stage_id"] = json!(stage);
+        doc["head"] = json!(head);
+        crate::home::write_atomic(
+            &stage_record(layout),
+            serde_json::to_string_pretty(&doc)
+                .expect("plain JSON")
+                .as_bytes(),
+        )?;
+        Ok(Self {
+            stage: stage.to_string(),
+            head,
+            publishing: false,
+        })
+    }
+
+    /// Records whether the run began to publish the stage, before it does and after a publish it
+    /// gave up on.
+    pub fn set_publishing(&mut self, layout: &Layout, publishing: bool) -> Result<(), String> {
+        let path = stage_record(layout);
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+        let mut doc: Value =
+            serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        doc["publishing"] = json!(publishing);
+        crate::home::write_atomic(
+            &path,
+            serde_json::to_string_pretty(&doc)
+                .expect("plain JSON")
+                .as_bytes(),
+        )?;
+        self.publishing = publishing;
+        Ok(())
+    }
+
+    /// The record a run left, or none.
+    pub fn read(layout: &Layout) -> Result<Option<Self>, String> {
+        let path = stage_record(layout);
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(format!("cannot read {}: {e}", path.display())),
+        };
+        let doc: Value =
+            serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        match (doc["stage_id"].as_str(), doc["head"].as_i64()) {
+            (Some(stage), Some(head)) => Ok(Some(Self {
+                stage: stage.to_string(),
+                head,
+                publishing: doc["publishing"].as_bool().unwrap_or(false),
+            })),
+            _ => Err(format!("{} names no stage and head", path.display())),
+        }
+    }
+
+    /// Puts `state/` back to the copy the record holds.
+    pub fn rewind_state(&self, layout: &Layout) -> Result<(), String> {
+        write_state(layout, &stage_record(layout))
+    }
+
+    /// Removes the record, once its stage is published or abandoned.
+    pub fn remove(layout: &Layout) -> Result<(), String> {
+        let path = stage_record(layout);
+        match std::fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(format!("cannot remove {}: {e}", path.display())),
+        }
+    }
+}
+
 /// Puts the store and `state/` of the instance `name` back to `snapshot`, for a caller that
 /// already holds the home's lock (`cortex restore` takes it; a run holds it). A running viewer is
 /// stopped first and started again after, whatever the restore answered. The snapshot is written
@@ -668,6 +766,7 @@ mod tests {
             backend: ekr::Backend::Sqlite,
             store: layout.store(),
             launch: None,
+            stage: None,
         }
     }
 

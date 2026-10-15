@@ -9,8 +9,9 @@ description: Every cortex command, its arguments and what it prints.
 Every command that changes something prints one JSON line,
 `{"command": …, "outcome": …, "detail": …}`, and exits 0 for a successful outcome and 1 for a
 refused one. An error before any outcome (an unreadable spec file, a home that cannot be locked)
-goes to stderr as `cortex: <message>` with exit status 2. `cortex list` and `cortex sources` print
-one JSON line per row.
+goes to stderr as `cortex: <message>` with exit status 2. `cortex run` has one status of its own,
+3 for a disabled source; see [Exit statuses of `cortex run`](./operating.md#exit-statuses-of-cortex-run).
+`cortex list` and `cortex sources` print one JSON line per row.
 
 The outcomes are the ones the specification declares; the
 [generated reference](./reference/ess/cortex-instance.md#commands) lists each command's outcomes,
@@ -57,7 +58,8 @@ prompt, called as a run's extraction is, and shown as the spec's `redaction` pol
 documents. The model answers `yes`, `no` or `unclear`, with a reason, for each fact. `ekr
 fact-quality` turns the verdicts into a pass rate with its Wilson interval at 95 %; `yes` counts as
 passed, and `no` and `unclear` as failed. The measurement spends at most the spec's
-`model.budget_usd`.
+`model.budget_usd`, and no more than its `model.daily_ceiling_usd` leaves of the UTC day (see
+[the spec file](./spec-file.md#the-daily-ceiling)).
 
 It writes two files under `quality/<UTC stamp>/` in the instance directory (the stamp is
 `YYYYMMDDTHHMMSSZ`):
@@ -71,7 +73,7 @@ A `measured` line's detail carries `stamp`, `revision` and `seed` (which draw th
 again), `judged`, `passed`, `unclear`, `rate` (null when the store holds no fact), `lower`,
 `upper`, `cost_usd` (as a run reports it: null when an answer carried no cost) and `dir`.
 `sample-failed` (EKR refused the size or could not read the store) asks no model and writes
-nothing. `judge-failed` (a model call failed or found the budget spent, or `refuse_if_left`
+nothing. `judge-failed` (a model call failed or found the budget or the daily ceiling spent, or `refuse_if_left`
 refused what the judge would be shown) writes no `fact-quality.json`; `verdicts.jsonl` keeps the
 verdicts of the batches judged before, and a failed model call's reason states the cost so far.
 
@@ -84,7 +86,8 @@ shown as `cortex quality` shows it to the judge (the spec's `redaction` policy a
 ontology's type and property names. The model answers a list of proposals, each one change with a
 reason, the ids of the facts it rests on and the labels (`E1`, `E2`, …) of the evidence it rests
 on. A proposal citing a fact or a label its batch does not hold, citing no fact, or not in that form, is dropped.
-The round spends at most the spec's `model.budget_usd`.
+The round spends at most the spec's `model.budget_usd`, and no more than its `model.daily_ceiling_usd`
+leaves of the UTC day.
 
 The changes the model may propose are a closed list:
 
@@ -121,7 +124,7 @@ wrote stays beside it as `schema-<nnnn>.yaml`, numbered by the proposal's line f
 An `applied` or `proposed` line's detail carries `stamp`, `revision` (the head the sample was drawn
 at), `proposed`, `applied`, `refused`, `recorded_only`, `invalid`, `dropped`, `cost_usd` (as a run
 reports it) and `dir`. `sample-failed` asks no model and writes nothing. `propose-failed` (a model
-call failed or found the budget spent, `refuse_if_left` refused what the model would be shown, or
+call failed or found the budget or the daily ceiling spent, `refuse_if_left` refused what the model would be shown, or
 EKR could not read the ontology) applies nothing and writes no `proposals.jsonl`; its reason states
 the cost so far.
 
@@ -131,11 +134,11 @@ A source id is `<instance>/<source>`.
 
 | command | does | outcomes |
 |---|---|---|
-| `cortex run <instance>/<source> [--record-failure]` | run one source once. With `--record-failure`, which the timers pass, a failed run is also counted. `<instance>/seed`, for an instance with no source of that name, extracts the seed documents no seed extraction applied yet, such as those a `partial` create left. Like a source run it keeps a snapshot named `<time>-seed` before it applies and is held to the spec's `gate`; on an adopted instance it answers `fetch-failed`, because the seed belongs to the store's earlier life | `ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `disabled`, `no-such-source` |
+| `cortex run <instance>/<source> [--record-failure]` | run one source once. With `--record-failure`, which the timers pass, a failed run is also counted. Its exit status tells a scheduler which outcome it was (see [Exit statuses of `cortex run`](./operating.md#exit-statuses-of-cortex-run)): 0 `ran`, 1 a failed run or `no-such-source`, 3 `disabled`. `<instance>/seed`, for an instance with no source of that name, extracts the seed documents no seed extraction applied yet, such as those a `partial` create left. Like a source run it keeps a snapshot named `<time>-seed` before it applies and is held to the spec's `gate`; on an adopted instance it answers `fetch-failed`, because the seed belongs to the store's earlier life | `ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `disabled`, `no-such-source` |
 | `cortex source enable <instance>/<source>` | enable a source that two failed runs in a row disabled, and its timer | `enabled`, `wrong-state`, `no-such-source` |
 | `cortex source record-failure <instance>/<source> --reason <text>` | count one failed run; the second in a row disables the source and its timer | `counted`, `disabled`, `already-disabled`, `no-such-source` |
 | `cortex source add --instance-name <name> --source-id <id> --name <name> --kind <Web\|Connectors\|Files> --schedule <calendar>` | register a source in the registry; `create` and `update` do this for the spec's sources | `added` |
-| `cortex sources` | sources: id, kind, state, schedule, runs, consecutive failures | |
+| `cortex sources` | sources: id, kind, state, schedule, runs, consecutive failures, and the last run's outcome, time and reason (`last_outcome`, `last_run_at`, `last_reason`; see [Operating](./operating.md#seeing-a-failure)) | |
 
 A `ran` line's detail carries `documents_new`, `documents_applied`, `cost_usd`, `facts_refused`
 (facts the model cited unissued evidence for), `parts_rejected` (parts EKR rejected), `rejected` (each document a rejected part belongs to, with EKR's refusal, or the codes of the issues validation raised, such as `invalid-supersession`; present only when there is one), `masked`
@@ -144,11 +147,13 @@ A `ran` line's detail carries `documents_new`, `documents_applied`, `cost_usd`, 
 and `null` when any answer carried none; a missing cost is never written as `0`. When the spec
 has a `redaction` policy it also carries `redacted` (values replaced by placeholders in the
 prompts sent, per class or rule) and `unrestored` (placeholders in the model's answers that had no
-value to put back).
+value to put back). A run the instance's daily ceiling stopped also carries
+`daily_ceiling_reached: true`, and its `stopped` names the ceiling (see
+[the spec file](./spec-file.md#the-daily-ceiling)).
 
 ## Setup
 
 | command | does |
 |---|---|
-| `cortex setup [--ekr-version <v>]` | install `ekr` at the version (default 0.0.33) with `cargo install` when it is missing |
+| `cortex setup [--ekr-version <v>]` | install `ekr` at the version (default 0.0.34) with `cargo install` when it is missing |
 | `cortex schema` | print the spec file's JSON Schema (with an instance name it proposes schema changes instead, see [Proposing schema changes](#proposing-schema-changes)) |

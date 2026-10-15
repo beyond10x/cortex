@@ -73,6 +73,14 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `instructions` — `Optional<String>`, which may be absent
 - `allow_external` — `Boolean`
 
+### `DailySpend`
+
+`cortex.instance.DailySpend` is a record of three fields:
+
+- `format` — `String`
+- `day` — `String`
+- `spent_usd` — `Decimal`
+
 ### `DocumentId`
 
 `cortex.instance.DocumentId` wraps `String` and is not interchangeable with one: the whole value of naming it separately is the crossings the model then refuses.
@@ -127,13 +135,17 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `min` — `Optional<Decimal>`, which may be absent
 - `max` — `Optional<Decimal>`, which may be absent
 
+### `HookResult`
+
+`cortex.instance.HookResult` is one of `called`, `failed` and `timed-out`.
+
 ### `InstanceName`
 
 `cortex.instance.InstanceName` wraps `String` and is not interchangeable with one: the whole value of naming it separately is the crossings the model then refuses.
 
 ### `InstanceSpec`
 
-`cortex.instance.InstanceSpec` is a record of 12 fields:
+`cortex.instance.InstanceSpec` is a record of 13 fields:
 
 - `format` — `String`
 - `name` — `cortex.instance.InstanceName`
@@ -147,6 +159,7 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `redaction` — `Optional<cortex.instance.RedactionPolicy>`, which may be absent
 - `snapshots` — `Optional<cortex.instance.SnapshotPolicy>`, which may be absent
 - `gate` — `Optional<cortex.instance.RunGate>`, which may be absent
+- `monitoring` — `Optional<cortex.instance.MonitoringSpec>`, which may be absent
 
 ### `ModelBackend`
 
@@ -154,13 +167,21 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 
 ### `ModelSpec`
 
-`cortex.instance.ModelSpec` is a record of five fields:
+`cortex.instance.ModelSpec` is a record of six fields:
 
 - `model` — `String`
 - `backend` — `Optional<cortex.instance.ModelBackend>`, which may be absent
 - `budget_usd` — `Decimal`
+- `daily_ceiling_usd` — `Optional<Decimal>`, which may be absent
 - `timeout_s` — `Integer`
 - `instructions` — `Optional<String>`, which may be absent
+
+### `MonitoringSpec`
+
+`cortex.instance.MonitoringSpec` is a record of two fields:
+
+- `metrics` — `Optional<Boolean>`, which may be absent
+- `hook` — `Optional<cortex.instance.RunHook>`, which may be absent
 
 ### `NewEdgeType`
 
@@ -299,6 +320,17 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 `cortex.instance.RunGate` is a record of one field:
 
 - `checks` — `List<cortex.instance.GateCheck>`
+
+### `RunHook`
+
+`cortex.instance.RunHook` is a record of two fields:
+
+- `command` — `List<String>`
+- `timeout_s` — `Optional<Integer>`, which may be absent
+
+### `RunOutcome`
+
+`cortex.instance.RunOutcome` is one of `ran`, `fetch-failed`, `extraction-failed`, `apply-refused` and `disabled`.
 
 ### `SchemaCardinality`
 
@@ -535,7 +567,7 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 - `connection` — `String`
 - `input` — `cortex.instance.WebInput`
 
-Three of the types above are reached by nothing else in this system: `cortex.instance.QualityVerdict`, `cortex.instance.SchemaProposal` and `cortex.instance.SchemaProposals`. No entity, view, command, event, error or crossing names them, so it is either vocabulary something outside this specification uses or a leftover — and only a person can tell which.
+Five of the types above are reached by nothing else in this system: `cortex.instance.DailySpend`, `cortex.instance.HookResult`, `cortex.instance.QualityVerdict`, `cortex.instance.SchemaProposal` and `cortex.instance.SchemaProposals`. No entity, view, command, event, error or crossing names them, so it is either vocabulary something outside this specification uses or a leftover — and only a person can tell which.
 
 ## Entities
 
@@ -629,6 +661,9 @@ It holds:
 - `schedule` — `String`
 - `runs` — `Integer`
 - `consecutive_failures` — `Integer`
+- `last_outcome` — `Optional<cortex.instance.RunOutcome>`, which may be absent
+- `last_run_at` — `Optional<Timestamp>`, which may be absent
+- `last_reason` — `Optional<String>`, which may be absent
 
 It owns any number of [`SeenDocument`](#seendocument), as `seen`, carried by `SeenDocument.source_id`. Its `instance_name` is what [`Instance`](#instance) owns it by, as `sources`.
 
@@ -701,6 +736,9 @@ It exposes:
 - `runs` — `Integer`
 - `consecutive_failures` — `Integer`
 - `state` — `cortex.instance.Source.State`
+- `last_outcome` — `Optional<cortex.instance.RunOutcome>`, which may be absent
+- `last_run_at` — `Optional<Timestamp>`, which may be absent
+- `last_reason` — `Optional<String>`, which may be absent
 
 It declares no order, so the rows come back in whatever order the implementation has, and two reads may disagree.
 
@@ -808,7 +846,7 @@ It has four outcomes.
 
 **`sample-failed`** — No model was asked and nothing was written. Decided outside the input: EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SampleFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`judge-failed`** — No pass rate was written; the verdicts of the batches judged before stay. Decided outside the input: A judge's model call fails, times out, answers no valid verdicts or finds the budget spent, or the redaction policy refuses what the judge would be shown. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.JudgeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`judge-failed`** — No pass rate was written; the verdicts of the batches judged before stay. Decided outside the input: A judge's model call fails, times out, answers no valid verdicts or finds the budget or the daily ceiling spent, or the redaction policy refuses what the judge would be shown. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.JudgeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`measured`** — Every sampled fact was judged. `judged` counts them, `passed` those judged `yes` and `unclear` those the judge could not tell, which count as failed. `rate` is the pass rate, absent when the store holds no fact to draw; `lower` and `upper` are its Wilson interval at 95 %, 0 and 1 then. `cost_usd` is what the judge's model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. `revision` and `seed` draw the same sample again. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.QualityMeasured`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -828,7 +866,7 @@ It has five outcomes.
 
 **`sample-failed`** — No model was asked and nothing was written. Decided outside the input: EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SampleFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`propose-failed`** — Nothing was applied and no `proposals.jsonl` was written. Decided outside the input: A model call fails, times out, answers no valid proposals or finds the budget spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ProposeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`propose-failed`** — Nothing was applied and no `proposals.jsonl` was written. Decided outside the input: A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ProposeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`proposed`** — A dry run: every proposal not dropped is recorded and none is applied; `applied` and `refused` are 0, and a change EKR would be asked to apply is `dry-run`. `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. Taken when `dry_run` holds of the input. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaChangesProposed`. A test reaches it by constructing an input that satisfies that condition.
 
@@ -902,15 +940,15 @@ It takes:
 
 It has six outcomes.
 
-**`ran`** — Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. Taken when the existing subject is in Enabled. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceRan`. It sets `runs` from `its previous value plus 1` and `consecutive_failures` from `"0"`. A test establishes the declared subject state and constructs input selecting this branch in that state.
+**`disabled`** — The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome. Taken when the existing subject is in Disabled. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.RunSkipped`. It sets `last_outcome` from `"disabled"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test establishes the declared subject state and constructs input selecting this branch in that state.
 
-**`fetch-failed`** — Nothing was applied; the scheduler then sends RecordFailure. Decided outside the input: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.FetchFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`fetch-failed`** — Nothing was applied; the source's status records the outcome and its reason, and the scheduler then sends RecordFailure. Decided outside the input: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.FetchFailed`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"fetch-failed"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
-**`extraction-failed`** — Nothing was applied; the scheduler then sends RecordFailure. Decided outside the input: The model call fails, times out, exceeds the run budget before any batch, or returns no valid document. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ExtractionFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`extraction-failed`** — Nothing was applied; the source's status records the outcome and its reason, and the scheduler then sends RecordFailure. When the model answered an error, `reason` holds the error text it gave, masked for credential shapes as fetched text is and cut at a character boundary to a bound, and the batch's `claude/error.txt` holds the same text. An error answer with a cost above zero, or with no cost reported, is not asked again. Decided outside the input: The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.ExtractionFailed`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"extraction-failed"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
-**`apply-refused`** — Nothing was applied; the scheduler then sends RecordFailure. Decided outside the input: EKR refuses the merged extraction document. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ApplyRefused`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`apply-refused`** — Nothing was applied; the source's status records the outcome and its reason, and the scheduler then sends RecordFailure. Decided outside the input: EKR refuses the merged extraction document. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.ApplyRefused`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"apply-refused"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
-**`disabled`** — The source is disabled; nothing ran. The default branch, taken when no other outcome's condition matched. No entity in this specification changes. It reports `cortex.instance.SourceDisabledError`, carrying `source_id`. It emits nothing. A test reaches it by constructing an input that satisfies no other outcome's condition.
+**`ran`** — Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd`: the batches before it are applied, the rest are extracted by a run on a later day. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceRan`. It sets `runs` from `its previous value plus 1`, `consecutive_failures` from `"0"`, `last_outcome` from `"ran"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
 **`no-such-source`** — Nothing ran. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.SourceNotFound`, carrying `source_id`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
@@ -1024,6 +1062,18 @@ Emitted by `cortex.instance.RecordFailure` on its `counted` outcome.
 
 Nothing in this system reacts to it.
 
+### `RunSkipped`
+
+`cortex.instance.RunSkipped`.
+
+It carries:
+
+- `source_id` — `cortex.instance.SourceId`
+
+Emitted by `cortex.instance.RunSource` on its `disabled` outcome.
+
+Nothing in this system reacts to it.
+
 ### `SchemaChangesProposed`
 
 `cortex.instance.SchemaChangesProposed`.
@@ -1106,6 +1156,7 @@ It carries:
 - `documents_new` — `Integer`
 - `documents_applied` — `Integer`
 - `cost_usd` — `Optional<Decimal>`, which may be absent
+- `daily_ceiling_reached` — `Boolean`
 
 Emitted by `cortex.instance.RunSource` on its `ran` outcome.
 
@@ -1205,7 +1256,7 @@ Reported by `cortex.instance.UpdateInstance` on its `no-such-instance` outcome.
 
 ### `JudgeFailed`
 
-A judge's model call failed, timed out, answered no valid verdicts or found the budget spent, or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was written.
+A judge's model call failed, timed out, answered no valid verdicts or found the budget or the instance's daily ceiling spent, or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was written.
 
 It carries:
 
@@ -1227,7 +1278,7 @@ Reported by `cortex.instance.CreateInstance` on its `name-taken` outcome.
 
 ### `ProposeFailed`
 
-A model call for schema proposals failed, timed out, answered no valid proposals or found the budget spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
 
 It carries:
 
@@ -1307,8 +1358,6 @@ It carries:
 
 Reported by `cortex.instance.RecordFailure` on its `already-disabled` outcome.
 
-Reported by `cortex.instance.RunSource` on its `disabled` outcome.
-
 ### `SourceNotDisabled`
 
 The source is already enabled, so nothing changed.
@@ -1372,4 +1421,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `55e415691487d2c675c5ecd72f81699560230b7355147e8df34b86eee64e1ff7` · contract digest `slice-sha256/2:a22ec4c6788a24ce31bc536ccedeb291be32f912d3bc272713ff3f4470761db9`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041` · contract digest `slice-sha256/2:44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd`. Do not edit this file; change the specification and regenerate it with `task generate`.

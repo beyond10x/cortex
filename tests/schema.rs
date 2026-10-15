@@ -1203,3 +1203,87 @@ exec "$R/bin/claude-proposer" "$@"
     let lines = lines(&schema_dirs(&w, "raced")[0]);
     assert_eq!(lines[0]["status"], "invalid", "{lines:?}");
 }
+
+/// Adversary, `story:daily-instance-budget`: an instance `name` as [`instance`] makes, with the
+/// daily ceiling `ceiling`.
+fn adv_capped(name: &str, products: usize, ceiling: &str) -> World {
+    let w = World::new();
+    let path = w.spec(name, "conn_test");
+    let text = std::fs::read_to_string(&path).unwrap().replace(
+        "budget_usd: \"1\", timeout_s: 60}",
+        &format!("budget_usd: \"1\", timeout_s: 60, daily_ceiling_usd: \"{ceiling}\"}}"),
+    );
+    std::fs::write(&path, text).unwrap();
+    extract_products(&w, products);
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    let (code, ran) = w.cortex(&["run", &format!("{name}/news")]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    proposer(&w);
+    w
+}
+
+fn adv_spent(w: &World, name: &str) -> String {
+    let path = w.home.join("instances").join(name).join("spend.json");
+    let spend: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    spend["spent_usd"].as_str().unwrap().to_string()
+}
+
+fn adv_schema_budgets(w: &World) -> Vec<String> {
+    w.lines("schema-args.log")
+        .iter()
+        .map(|line| {
+            let mut words = line.split(' ');
+            words.find(|w| *w == "--max-budget-usd");
+            words.next().expect("a budget").to_string()
+        })
+        .collect()
+}
+
+/// Adversary, `story:daily-instance-budget`: `cortex schema` is given what the ceiling leaves,
+/// adds its costs to the spend of the day, and with the ceiling reached answers `propose-failed`
+/// naming it without asking the model (`website/docs/spec-file.md`, "The daily ceiling"). No
+/// case of the unit drives the schema path with a ceiling.
+#[test]
+fn adv_schema_spends_from_the_daily_ceiling_and_a_reached_one_asks_no_model() {
+    // The run spent 0.01 of 0.05; two batches of 0.02 each spend the rest.
+    let w = adv_capped("capped", 30, "0.05");
+    answer(&w, json!([]));
+    let (code, out) = w.cortex(&["schema", "capped", "--sample", "25", "--dry-run"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("proposed")),
+        "{out}"
+    );
+    assert_eq!(adv_schema_budgets(&w), ["0.0400", "0.0200"], "{out}");
+    assert_eq!(adv_spent(&w, "capped"), "0.05");
+
+    let (code, out) = w.cortex(&["schema", "capped", "--sample", "25"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("propose-failed")),
+        "{out}"
+    );
+    let reason = out["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.starts_with("daily ceiling of 0.05 USD reached"),
+        "{out}"
+    );
+    assert_eq!(w.lines("schema-calls.log").len(), 2, "no third call");
+}
+
+/// Adversary, `story:daily-instance-budget`: a failed proposing answer that states a cost adds it
+/// to the spend of the day.
+#[test]
+fn adv_a_failed_schema_answer_adds_its_cost_to_the_spend_of_the_day() {
+    let w = adv_capped("refusing", 3, "1");
+    assert_eq!(adv_spent(&w, "refusing"), "0.01");
+    std::fs::write(w.root.join("schema-error"), "").unwrap();
+    let (code, out) = w.cortex(&["schema", "refusing", "--sample", "5"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("propose-failed")),
+        "{out}"
+    );
+    assert_eq!(adv_spent(&w, "refusing"), "0.03", "{out}");
+}

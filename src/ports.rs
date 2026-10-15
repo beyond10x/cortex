@@ -13,7 +13,7 @@ use cortex_model::behaviour::{Context, ExternalCommand, InstanceStorage, SourceS
 use cortex_model::instance as m;
 use cortex_model::instance::obligations::{RecordFailureBehavior, RunSourceBehavior};
 use cortex_model::obligation::UnmetObligation;
-use cortex_model::primitives::Decimal;
+use cortex_model::primitives::{Decimal, Timestamp};
 
 use crate::home::{Home, Registry};
 use crate::instance::Layout;
@@ -32,6 +32,8 @@ pub struct Shared {
     pub optional_decimals: VecDeque<Option<Decimal>>,
     /// The report of the last run, for the caller to print.
     pub last_run: Option<Report>,
+    /// When the last `RunSource` started, in Unix milliseconds, once it recorded an outcome.
+    pub run_at_ms: Option<i64>,
 }
 
 pub type SharedRef = Rc<RefCell<Shared>>;
@@ -271,6 +273,7 @@ impl Ports {
                     documents_new: report.documents_new,
                     documents_applied: report.documents_applied,
                     cost_usd: cost_decimal(report.cost_usd),
+                    daily_ceiling_reached: report.daily_ceiling_reached,
                 };
                 self.shared.borrow_mut().last_run = Some(report);
                 m::RunSourceOutcome::Ran { source_ran: ran }
@@ -282,30 +285,42 @@ impl Ports {
 /// The name `create` records the seed documents under, as a source of the instance.
 const SEED: &str = "seed";
 
+impl Ports {
+    /// Records the run's outcome on the source: `last_outcome`, `last_run_at` (when the run
+    /// started) and `last_reason`, in the state the source holds.
+    fn note(
+        &mut self,
+        found: m::SourceSnapshot,
+        outcome: m::RunOutcome,
+        reason: Option<String>,
+    ) -> m::SourceData {
+        let at = self.run_at();
+        let mut data = found.data;
+        data.last_outcome = Some(outcome);
+        data.last_run_at = Some(Timestamp(crate::sources::rfc3339(at)));
+        data.last_reason = reason;
+        store(self, data.clone(), found.state);
+        data
+    }
+
+    /// When the run started, in Unix milliseconds: taken once per run and kept in [`Shared`].
+    fn run_at(&mut self) -> i64 {
+        *self
+            .shared
+            .borrow_mut()
+            .run_at_ms
+            .get_or_insert_with(crate::instance::now_ms)
+    }
+}
+
 impl RunSourceBehavior for Ports {
     fn run_source(&mut self, input: m::RunSource) -> Result<m::RunSourceOutcome, UnmetObligation> {
-        // As the generated behaviours do: an external branch the context has already decided is
-        // taken first, in declaration order. A real run decides none in advance; the pipeline
-        // below decides them.
+        // As the generated behaviours do: the source is read first, its held state answers
+        // `disabled`, then an external branch the context has already decided is taken, in
+        // declaration order. A real run decides none in advance; the pipeline below decides
+        // them. Every outcome that names a source records itself on it.
         const RUN: &str = "cortex.instance.RunSource";
-        if self.decided(RUN, "fetch-failed") {
-            let reason = self.generate_string();
-            return Ok(m::RunSourceOutcome::FetchFailed {
-                error: m::FetchFailed { reason },
-            });
-        }
-        if self.decided(RUN, "extraction-failed") {
-            let reason = self.generate_string();
-            return Ok(m::RunSourceOutcome::ExtractionFailed {
-                error: m::ExtractionFailed { reason },
-            });
-        }
-        if self.decided(RUN, "apply-refused") {
-            let reason = self.generate_string();
-            return Ok(m::RunSourceOutcome::ApplyRefused {
-                error: m::ApplyRefused { reason },
-            });
-        }
+        self.shared.borrow_mut().run_at_ms = None;
         let Some(found) = SourceStorage::get(self, &input.source_id) else {
             if let Some(instance) = self.seed_of(&input.source_id) {
                 return Ok(self.run_seed(&instance, input.source_id));
@@ -317,36 +332,53 @@ impl RunSourceBehavior for Ports {
             });
         };
         if found.state == m::SourceState::Disabled {
+            self.note(found, m::RunOutcome::Disabled, None);
             return Ok(m::RunSourceOutcome::Disabled {
-                error: m::SourceDisabledError {
+                run_skipped: m::RunSkipped {
                     source_id: input.source_id,
                 },
             });
         }
-        let layout = Layout::new(self.home.instance_dir(&found.data.instance_name.0));
-        let result = match self.runner.as_mut() {
-            Some(runner) => runner(&found.data),
-            None => run::run(&layout, &self.tools, &found.data),
+        let forced = [
+            ("fetch-failed", Failure::Fetch as fn(String) -> Failure),
+            ("extraction-failed", Failure::Extract),
+            ("apply-refused", Failure::Apply),
+        ]
+        .into_iter()
+        .find(|(outcome, _)| self.decided(RUN, outcome));
+        let result = match forced {
+            Some((_, failure)) => Err(failure(self.generate_string())),
+            None => {
+                self.run_at();
+                let layout = Layout::new(self.home.instance_dir(&found.data.instance_name.0));
+                match self.runner.as_mut() {
+                    Some(runner) => runner(&found.data),
+                    None => run::run(&layout, &self.tools, &found.data),
+                }
+            }
         };
         let report = match result {
             Err(Failure::Fetch(reason)) => {
+                self.note(found, m::RunOutcome::FetchFailed, Some(reason.clone()));
                 return Ok(m::RunSourceOutcome::FetchFailed {
                     error: m::FetchFailed { reason },
-                })
+                });
             }
             Err(Failure::Extract(reason)) => {
+                self.note(found, m::RunOutcome::ExtractionFailed, Some(reason.clone()));
                 return Ok(m::RunSourceOutcome::ExtractionFailed {
                     error: m::ExtractionFailed { reason },
-                })
+                });
             }
             Err(Failure::Apply(reason)) => {
+                self.note(found, m::RunOutcome::ApplyRefused, Some(reason.clone()));
                 return Ok(m::RunSourceOutcome::ApplyRefused {
                     error: m::ApplyRefused { reason },
-                })
+                });
             }
             Ok(report) => report,
         };
-        let mut data = found.data;
+        let mut data = self.note(found, m::RunOutcome::Ran, None);
         data.runs += 1;
         data.consecutive_failures = 0;
         store(self, data, m::SourceState::Enabled);
@@ -355,6 +387,7 @@ impl RunSourceBehavior for Ports {
             documents_new: report.documents_new,
             documents_applied: report.documents_applied,
             cost_usd: cost_decimal(report.cost_usd),
+            daily_ceiling_reached: report.daily_ceiling_reached,
         };
         self.shared.borrow_mut().last_run = Some(report);
         Ok(m::RunSourceOutcome::Ran { source_ran: ran })

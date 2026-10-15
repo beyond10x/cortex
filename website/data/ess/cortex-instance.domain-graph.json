@@ -116,6 +116,18 @@
         {
           "name": "consecutive_failures",
           "type": "integer"
+        },
+        {
+          "name": "last_outcome",
+          "type": "Optional<RunOutcome>"
+        },
+        {
+          "name": "last_run_at",
+          "type": "Optional<timestamp>"
+        },
+        {
+          "name": "last_reason",
+          "type": "Optional<string>"
         }
       ],
       "id": "cortex.instance.Source",

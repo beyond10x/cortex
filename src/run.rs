@@ -17,6 +17,7 @@ use crate::redact::{self, Redactor};
 use crate::schedule::Systemd;
 use crate::snapshot::{self, BeforeApply, RestoreError};
 use crate::sources::{self, FetchError, Window};
+use crate::spend;
 use crate::state::{text_hash, SeenState};
 use crate::structured;
 
@@ -65,6 +66,8 @@ pub struct Report {
     /// changed value, and retracted as no longer listed.
     pub superseded: usize,
     pub retracted: usize,
+    /// Whether the run stopped before a batch at the instance's daily ceiling (said in `stopped`).
+    pub daily_ceiling_reached: bool,
 }
 
 /// An applied document a part EKR rejected belongs to: its key and EKR's refusals, joined.
@@ -111,6 +114,7 @@ impl Default for Report {
             rejected: Vec::new(),
             superseded: 0,
             retracted: 0,
+            daily_ceiling_reached: false,
         }
     }
 }
@@ -307,6 +311,39 @@ fn process(
     window: Option<Window>,
     structured_source: Option<&m::StructuredSource>,
     undoable: bool,
+) -> Result<Report, Failure> {
+    // A staged run that was killed left its stage and the `state/` from before it.
+    Staged::recover(layout, spec)?;
+    let mut before = Undo::new(BeforeApply::none());
+    let ran = process_in(
+        layout,
+        tools,
+        spec,
+        label,
+        fetched,
+        policy,
+        window,
+        structured_source,
+        undoable,
+        &mut before,
+    );
+    settle(ran, before)
+}
+
+/// [`process`], with the run's snapshot and stage in `before`, which [`settle`] settles once the
+/// run ended, whichever way it did.
+#[allow(clippy::too_many_arguments)]
+fn process_in(
+    layout: &Layout,
+    tools: &Tools,
+    spec: &m::InstanceSpec,
+    label: &str,
+    fetched: sources::Fetched,
+    policy: &m::FetchPolicy,
+    window: Option<Window>,
+    structured_source: Option<&m::StructuredSource>,
+    undoable: bool,
+    before: &mut Undo,
 ) -> Result<Report, Failure> {
     let started = now_ms();
     let applied_at = window.map_or(started, |w| w.until_ms);
@@ -506,15 +543,20 @@ fn process(
         return Ok(report);
     }
 
-    let store = layout.store_handle(spec);
+    let mut store = layout.store_handle(spec);
     // A run into a live store copies the store and `state/` once, before its first
     // `apply-extraction`, and keeps the copy, named by the run's start and label, once that apply
     // commits; the seed of a new store takes none.
-    let mut before = Undo::new(if undoable {
+    *before = Undo::new(if undoable {
         BeforeApply::new(layout, &store, label, started, snapshot::keep(spec))
     } else {
         BeforeApply::none()
     });
+    // On a `postgres` store, whose snapshot is the operator's database backup, a run held to a
+    // gate runs in an EKR stage instead.
+    if undoable && gated(spec) {
+        before.staged = Staged::begin(layout, &mut store)?;
+    }
     let host = std::fs::read_to_string(layout.host()).map_err(|e| Failure::Apply(e.to_string()))?;
     let operator = crate::ekr::operator(&host).map_err(Failure::Apply)?;
     if let Some(source) = &structured {
@@ -536,15 +578,15 @@ fn process(
             &mut seen,
             &seen_path,
             &mut report,
-            &mut before,
+            before,
         )?;
         // A fetch that left records unread lists only part of the source: nothing is ended.
         if let Some(listed) = listed.as_deref().filter(|_| fetched.unread.is_empty()) {
-            end_dropped(&records, listed, &seen, &mut report, &mut before)?;
+            end_dropped(&records, listed, &seen, &mut report, before)?;
         }
         unread(&mut report, &fetched.unread, redactor.as_ref());
         if undoable {
-            held_to_gate(layout, spec, &store, label, &report, &before, started)?;
+            held_to_gate(layout, spec, &store, label, &report, before, started)?;
         }
         let failures = fetched.child_failures.clone();
         finish(
@@ -574,6 +616,8 @@ fn process(
     // Dollars the costed answers spent. An answer with no cost spends none; such a run is bounded
     // by `policy.max_documents_per_run` and `model.timeout_s`.
     let mut spent = 0.0;
+    // The instance's daily ceiling, across its sources and commands; a run holds the home's lock.
+    let mut daily = spend::Daily::new(layout, &spec.model, None);
     let mut entities = load_entities(layout);
 
     let issued: Vec<_> = selected
@@ -598,6 +642,14 @@ fn process(
             report.stopped = Some(format!("budget of {budget} USD spent"));
             break;
         }
+        let remaining = match daily.allow(remaining) {
+            Ok(usd) => usd,
+            Err(why) => {
+                report.stopped = Some(why);
+                report.daily_ceiling_reached = true;
+                break;
+            }
+        };
         let ontology = store.ontology().map_err(Failure::Apply)?;
         // The model is shown the batch with personal data replaced by placeholders; the mapping
         // stays in `pseudonyms`, in memory, until this batch's answer is restored.
@@ -631,7 +683,13 @@ fn process(
             }
         };
         let dir = run_dir.join(format!("batch-{n}"));
-        let answer = match model.ask(&dir.join("claude"), &schema, &prompt, remaining) {
+        let asked = model.ask(&dir.join("claude"), &schema, &prompt, remaining);
+        // Every costed answer, a failed one included, adds to the spend of the day.
+        daily.add(match &asked {
+            Ok(answer) => answer.cost_usd,
+            Err(refused) => refused.cost_usd,
+        });
+        let answer = match asked.map_err(|refused| refused.message) {
             Ok(answer) => answer,
             Err(e) if report.documents_applied == 0 => return Err(Failure::Extract(e)),
             Err(e) => {
@@ -708,7 +766,7 @@ fn process(
     }
     unread(&mut report, &fetched.unread, redactor.as_ref());
     if undoable {
-        held_to_gate(layout, spec, &store, label, &report, &before, started)?;
+        held_to_gate(layout, spec, &store, label, &report, before, started)?;
     }
     let failures = fetched.child_failures.clone();
     finish(
@@ -719,12 +777,15 @@ fn process(
 }
 
 /// The run's snapshot ([`BeforeApply`]), the name it was kept under, and whether an apply
-/// committed: what the run gate needs to undo the run.
+/// committed: what the run gate needs to undo the run. On a `postgres` store, the run's stage
+/// ([`Staged`]) instead.
 struct Undo {
     before: BeforeApply,
     /// The snapshot's name, once the first `apply-extraction` committed and it was kept.
     kept: Option<String>,
     applied: bool,
+    /// The stage the run runs in, until the gate publishes or abandons it, or [`settle`] does.
+    staged: Option<Staged>,
 }
 
 impl Undo {
@@ -733,6 +794,7 @@ impl Undo {
             before,
             kept: None,
             applied: false,
+            staged: None,
         }
     }
 
@@ -753,6 +815,226 @@ impl Undo {
     }
 }
 
+/// Settles the stage of a run that ended without its gate settling it: one that failed part-way,
+/// or one that committed nothing. A run that committed something keeps what it applied, as on
+/// SQLite: its stage is published, and a publish that is refused is said in the run's reason. A
+/// run that committed nothing has its stage abandoned, and `state/` stays as the run left it, as a
+/// SQLite run's does.
+fn settle(ran: Result<Report, Failure>, mut before: Undo) -> Result<Report, Failure> {
+    let Some(staged) = before.staged.take() else {
+        return ran;
+    };
+    if !before.applied {
+        if let Err(e) = staged.discard() {
+            eprintln!("cortex: {e}");
+        }
+        return ran;
+    }
+    match (ran, staged.publish()) {
+        (ran, Ok(())) => ran,
+        (Ok(_), Err(e)) => Err(Failure::Apply(e)),
+        (Err(failed), Err(e)) => Err(failed.and(&e)),
+    }
+}
+
+impl Failure {
+    /// The same failure, its reason followed by `more`.
+    fn and(self, more: &str) -> Self {
+        match self {
+            Failure::Fetch(m) => Failure::Fetch(format!("{m}; {more}")),
+            Failure::Extract(m) => Failure::Extract(format!("{m}; {more}")),
+            Failure::Apply(m) => Failure::Apply(format!("{m}; {more}")),
+        }
+    }
+}
+
+/// Whether the spec holds a run to a gate.
+fn gated(spec: &m::InstanceSpec) -> bool {
+    spec.gate.as_ref().is_some_and(|g| !g.checks.is_empty())
+}
+
+/// A run on a `postgres` store held to a gate runs in an EKR stage (`ekr stage`, EKR 0.0.33):
+/// every `ekr` of the run joins it (`EKR_STAGE`, which crosses a Connectors launch), so its reads
+/// see its own commits and its commits reach the store only when the stage is published, after
+/// the run passed its gate. Until then [`snapshot::stage_record`] holds the stage, the head the run
+/// began from and `state/` as it was before the run.
+struct Staged {
+    /// The store in no stage, for the stage verbs.
+    store: crate::ekr::Store,
+    layout: Layout,
+    record: snapshot::StageRecord,
+}
+
+impl Staged {
+    /// On a `postgres` store: begins a stage at the store's head, records it and that head (the
+    /// stage's base) with a copy of `state/`, and puts `store` in the stage. A SQLite store runs
+    /// in none.
+    fn begin(layout: &Layout, store: &mut crate::ekr::Store) -> Result<Option<Self>, Failure> {
+        if store.backend != crate::ekr::Backend::Postgres {
+            return Ok(None);
+        }
+        let (stage, head) = store.begin_stage().map_err(Failure::Apply)?;
+        let record = match snapshot::StageRecord::write(layout, &stage, head) {
+            Ok(record) => record,
+            Err(e) => {
+                let _ = store.abandon_stage(&stage);
+                return Err(Failure::Apply(e));
+            }
+        };
+        let plain = store.clone();
+        store.stage = Some(stage);
+        Ok(Some(Self {
+            store: plain,
+            layout: Layout::new(layout.dir.clone()),
+            record,
+        }))
+    }
+
+    /// Settles what a run that did not finish left. The stage `stage.json` names: one the run
+    /// began to publish is published again at the same head, which completes a publish a kill
+    /// interrupted (or answers the one that completed), and keeps `state/` as it is; any other, or
+    /// one whose publish is refused because the head moved, is abandoned and `state/` put back to
+    /// the copy from before that run, so its documents are fetched again. Then every stage of a
+    /// `postgres` store still `Begun` (`ekr stage list`), such as one begun by a run killed before
+    /// it wrote `stage.json`, is abandoned: nothing records it, and it holds a copy of the store.
+    fn recover(layout: &Layout, spec: &m::InstanceSpec) -> Result<(), Failure> {
+        let store = layout.store_handle(spec);
+        if let Some(record) = snapshot::StageRecord::read(layout).map_err(Failure::Apply)? {
+            let not_settled = |e: String| {
+                Failure::Apply(format!(
+                    "stage {} of a run that did not finish is not settled: {e}",
+                    record.stage
+                ))
+            };
+            let published = record.publishing
+                && match store.publish_stage(&record.stage, record.head) {
+                    Ok(()) => true,
+                    Err(e) if e.contains("stage-head-moved") => false,
+                    Err(e) => return Err(not_settled(e)),
+                };
+            if !published {
+                match store.abandon_stage(&record.stage) {
+                    Ok(()) => record.rewind_state(layout).map_err(Failure::Apply)?,
+                    Err(e) if e.contains("stage-already-published") => {}
+                    Err(e) => return Err(not_settled(e)),
+                }
+            }
+            snapshot::StageRecord::remove(layout).map_err(Failure::Apply)?;
+        }
+        if store.backend == crate::ekr::Backend::Postgres {
+            match store.begun_stages() {
+                Ok(begun) => {
+                    for stage in begun {
+                        if let Err(e) = store.abandon_stage(&stage) {
+                            eprintln!("cortex: stage {stage}, left begun, was not abandoned: {e}");
+                        }
+                    }
+                }
+                Err(e) => eprintln!("cortex: the store's stages were not listed: {e}"),
+            }
+        }
+        Ok(())
+    }
+
+    /// Publishes the stage at the head the run began from, recorded in `stage.json` first so a
+    /// run killed while publishing is completed by the next. A refusal (the store's head moved
+    /// since, `stage-head-moved`) publishes nothing: the stage is abandoned and `state/` is put
+    /// back.
+    fn publish(mut self) -> Result<(), String> {
+        let published = match self.record.set_publishing(&self.layout, true) {
+            Ok(()) => self
+                .store
+                .publish_stage(&self.record.stage, self.record.head),
+            Err(e) => Err(format!("the stage's publish could not be recorded: {e}")),
+        };
+        match published {
+            Ok(()) => {
+                if let Err(e) = snapshot::StageRecord::remove(&self.layout) {
+                    eprintln!("cortex: {e}");
+                }
+                Ok(())
+            }
+            Err(e) => {
+                let state = self.rewind();
+                let stage = self.record.stage.clone();
+                let abandoned = match self.store.abandon_stage(&stage) {
+                    Ok(()) => {
+                        if let Err(e) = snapshot::StageRecord::remove(&self.layout) {
+                            eprintln!("cortex: {e}");
+                        }
+                        format!("its stage {stage} was abandoned")
+                    }
+                    Err(a) => {
+                        // The next run abandons it, and publishes nothing of it.
+                        if let Err(e) = self.record.set_publishing(&self.layout, false) {
+                            eprintln!("cortex: {e}");
+                        }
+                        format!(
+                            "its stage {stage} was not abandoned ({a}); the next run abandons it"
+                        )
+                    }
+                };
+                Err(format!(
+                    "the run was not published, so nothing of it is in the store: {e}; \
+                     {abandoned}; {state}"
+                ))
+            }
+        }
+    }
+
+    /// Abandons the stage of a run that failed its gate: nothing of the run reaches the store, and
+    /// `state/` is put back. An abandon that fails leaves `stage.json` for the next run, which
+    /// abandons the stage. Answers what was done, for the failure's reason.
+    fn abandon(self) -> String {
+        let (stage, head) = (&self.record.stage, self.record.head);
+        let state = self.rewind();
+        match self.store.abandon_stage(stage) {
+            Ok(()) => {
+                if let Err(e) = snapshot::StageRecord::remove(&self.layout) {
+                    eprintln!("cortex: {e}");
+                }
+                format!(
+                    "the run was undone: its stage {stage} was abandoned, so the store's head is \
+                     still {head}, and {state}"
+                )
+            }
+            Err(e) => format!(
+                "the run was undone: its stage {stage} was not published, so the store's head is \
+                 still {head}, but it was not abandoned either ({e}), and the next run abandons \
+                 it; {state}"
+            ),
+        }
+    }
+
+    /// Abandons the stage of a run that committed nothing in it, leaving `state/` as the run left
+    /// it. An abandon that fails leaves `stage.json`, its copy of `state/` taken now, so the next
+    /// run abandons the stage and keeps `state/` as it is.
+    fn discard(self) -> Result<(), String> {
+        let (stage, head) = (&self.record.stage, self.record.head);
+        match self.store.abandon_stage(stage) {
+            Ok(()) => snapshot::StageRecord::remove(&self.layout),
+            Err(e) => {
+                snapshot::StageRecord::write(&self.layout, stage, head)?;
+                Err(format!(
+                    "stage {stage}, in which nothing was committed, was not abandoned: {e}; the \
+                     next run abandons it"
+                ))
+            }
+        }
+    }
+
+    /// Puts `state/` back to the copy from before the run; answers what was done.
+    fn rewind(&self) -> String {
+        match self.record.rewind_state(&self.layout) {
+            Ok(()) => {
+                "state/ is back where it was before the run, so its documents are fetched again"
+                    .into()
+            }
+            Err(e) => format!("state/ was not put back: {e}"),
+        }
+    }
+}
+
 /// Holds a source run that applied something to the spec's `gate`. A failed check fails the run
 /// as `apply-refused`, so the scheduler counts it as a failed run of the source: the run is undone
 /// ([`undo`]), and `cortex.log` records each failed check with its measure and value, the snapshot
@@ -763,7 +1045,7 @@ fn held_to_gate(
     store: &crate::ekr::Store,
     label: &str,
     report: &Report,
-    before: &Undo,
+    before: &mut Undo,
     started: i64,
 ) -> Result<(), Failure> {
     let Some(checks) = spec.gate.as_ref().filter(|g| !g.checks.is_empty()) else {
@@ -774,7 +1056,10 @@ fn held_to_gate(
     }
     let failed = gate::evaluate(checks, report, || gate::quality(store));
     if failed.is_empty() {
-        return Ok(());
+        return match before.staged.take() {
+            Some(staged) => staged.publish().map_err(Failure::Apply),
+            None => Ok(()),
+        };
     }
     // `<home>/instances/<name>`: the units live with the home, not the instance.
     let home = layout
@@ -782,12 +1067,15 @@ fn held_to_gate(
         .parent()
         .and_then(std::path::Path::parent)
         .unwrap_or(&layout.dir);
-    let (restored, undone) = undo(
-        layout,
-        &spec.name.0,
-        before.kept.as_deref(),
-        &Systemd::from_env(home),
-    );
+    let (restored, undone) = match before.staged.take() {
+        Some(staged) => (None, staged.abandon()),
+        None => undo(
+            layout,
+            &spec.name.0,
+            before.kept.as_deref(),
+            &Systemd::from_env(home),
+        ),
+    };
     let why = format!("{}; {undone}", gate::reason(&failed));
     let mut line = log_line(label, report, started);
     line["gate"] = json!({
@@ -803,8 +1091,8 @@ fn held_to_gate(
 /// `state/` are restored (`snapshot::restore_held`; the command holds the home's lock). Answers
 /// the snapshot restored, and what was done, for the failure's reason. A restore that is refused or
 /// fails still puts `state/` back, so the run's documents are fetched again, and the reason says
-/// the store still holds the run. Without a kept snapshot (`postgres`, `snapshots.keep` 0)
-/// nothing is undone.
+/// the store still holds the run. Without a kept snapshot (`snapshots.keep` 0) nothing is undone.
+/// A run on a `postgres` store is undone by abandoning its stage ([`Staged::abandon`]).
 fn undo(
     layout: &Layout,
     instance: &str,
@@ -814,8 +1102,8 @@ fn undo(
     let Some(name) = kept else {
         return (
             None,
-            "the run was not undone: no snapshot was kept before it (a postgres store, \
-             snapshots.keep 0, or a snapshot that could not be kept)"
+            "the run was not undone: no snapshot was kept before it (snapshots.keep 0, or a \
+             snapshot that could not be kept)"
                 .into(),
         );
     };
@@ -1322,6 +1610,7 @@ mod tests {
             backend: crate::ekr::Backend::Sqlite,
             store: layout.store(),
             launch: None,
+            stage: None,
         };
         let mut before = BeforeApply::new(&layout, &store, "news", 1000, 3);
         before.take().unwrap();

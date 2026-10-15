@@ -372,6 +372,9 @@
         "model": {
           "$ref": "#/$defs/cortex.instance.ModelSpec"
         },
+        "monitoring": {
+          "$ref": "#/$defs/cortex.instance.MonitoringSpec"
+        },
         "name": {
           "$ref": "#/$defs/cortex.instance.InstanceName"
         },
@@ -433,6 +436,11 @@
           "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
           "type": "string"
         },
+        "daily_ceiling_usd": {
+          "format": "decimal",
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+          "type": "string"
+        },
         "instructions": {
           "type": "string"
         },
@@ -452,6 +460,21 @@
       "type": "object",
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.ModelSpec"
+    },
+    "cortex.instance.MonitoringSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "hook": {
+          "$ref": "#/$defs/cortex.instance.RunHook"
+        },
+        "metrics": {
+          "type": "boolean"
+        }
+      },
+      "title": "MonitoringSpec",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.MonitoringSpec"
     },
     "cortex.instance.PageStyle": {
       "enum": [
@@ -729,6 +752,27 @@
       "type": "object",
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.RunGate"
+    },
+    "cortex.instance.RunHook": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "timeout_s": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "title": "RunHook",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.RunHook"
     },
     "cortex.instance.SearchInput": {
       "additionalProperties": false,
@@ -1303,8 +1347,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:8cdad122e547e3a1a95f6315daa732679d4cccda6539794046b6a191692ccb2a",
-    "source_digest": "55e415691487d2c675c5ecd72f81699560230b7355147e8df34b86eee64e1ff7",
+    "contract_digest": "slice-sha256/2:6695a97d3d556dcab78fa7c4f04a07136d3cba0096bbc8a3a8410a709056ecc8",
+    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
     "specification_version": "v1",
     "system": "cortex"
   }

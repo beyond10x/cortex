@@ -611,3 +611,77 @@ exec "$R/bin/claude-judge" "$@"
         "another command found the home's lock held while the judge was asked: {probe}"
     );
 }
+
+/// The `--max-budget-usd` each judge call was given, in call order.
+fn judge_budgets(w: &World) -> Vec<String> {
+    w.lines("judge-args.log")
+        .iter()
+        .map(|line| {
+            let mut words = line.split(' ');
+            words.find(|w| *w == "--max-budget-usd");
+            words.next().expect("a budget").to_string()
+        })
+        .collect()
+}
+
+/// `model.daily_ceiling_usd` (`story:daily-instance-budget`): the judge is given what the ceiling
+/// leaves of the day the run already spent from, adds its own costs to it, and once it is reached
+/// asks no model.
+#[test]
+fn the_judge_spends_from_the_daily_ceiling_and_a_reached_one_stops_it_before_a_call() {
+    let w = World::new();
+    let path = w.spec("ceiling", "conn_test");
+    let text = std::fs::read_to_string(&path).unwrap().replace(
+        "budget_usd: \"1\", timeout_s: 60}",
+        "budget_usd: \"1\", timeout_s: 60, daily_ceiling_usd: \"0.04\"}",
+    );
+    std::fs::write(&path, text).unwrap();
+    extract_products(&w, 30);
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    let (code, ran) = w.cortex(&["run", "ceiling/news"]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    judge(&w);
+
+    // The run spent 0.01 of the 0.04: the first call is given 0.03, the second what is left.
+    let (code, out) = w.cortex(&["quality", "ceiling", "--sample", "25"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("measured")),
+        "{out}"
+    );
+    assert_eq!(judge_budgets(&w), ["0.0300", "0.0100"], "{out}");
+
+    let (code, out) = w.cortex(&["quality", "ceiling", "--sample", "25"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("judge-failed")),
+        "{out}"
+    );
+    let reason = out["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.starts_with("daily ceiling of 0.04 USD reached"),
+        "{out}"
+    );
+    assert_eq!(w.lines("judge-calls.log").len(), 2, "no third judge call");
+}
+
+/// Adversary, `story:daily-instance-budget`: a failed judge answer that states a cost adds it to
+/// the spend of the day ("failed answers included"); the unit's case reads only the budgets given.
+#[test]
+fn adv_a_failed_judge_answer_adds_its_cost_to_the_spend_of_the_day() {
+    let w = instance("refusing", 3, "");
+    std::fs::write(w.root.join("judge-error"), "").unwrap();
+    let (code, out) = w.cortex(&["quality", "refusing", "--sample", "3"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("judge-failed")),
+        "{out}"
+    );
+    let path = w.home.join("instances/refusing/spend.json");
+    let spend: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    assert_eq!(
+        spend["spent_usd"], "0.03",
+        "the run's 0.01 and the judge's 0.02: {out}"
+    );
+}

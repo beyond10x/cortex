@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "55e415691487d2c675c5ecd72f81699560230b7355147e8df34b86eee64e1ff7",
-    "contract_digest": "slice-sha256/2:8cdad122e547e3a1a95f6315daa732679d4cccda6539794046b6a191692ccb2a",
+    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
+    "contract_digest": "slice-sha256/2:6695a97d3d556dcab78fa7c4f04a07136d3cba0096bbc8a3a8410a709056ecc8",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -407,6 +407,9 @@
         },
         "gate": {
           "$ref": "#/$defs/cortex.instance.RunGate"
+        },
+        "monitoring": {
+          "$ref": "#/$defs/cortex.instance.MonitoringSpec"
         }
       },
       "required": [
@@ -448,6 +451,11 @@
           "format": "decimal",
           "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
         },
+        "daily_ceiling_usd": {
+          "type": "string",
+          "format": "decimal",
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
         "timeout_s": {
           "type": "integer"
         },
@@ -460,6 +468,21 @@
         "budget_usd",
         "timeout_s"
       ],
+      "additionalProperties": false
+    },
+    "cortex.instance.MonitoringSpec": {
+      "title": "MonitoringSpec",
+      "x-ess-name": "cortex.instance.MonitoringSpec",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "metrics": {
+          "type": "boolean"
+        },
+        "hook": {
+          "$ref": "#/$defs/cortex.instance.RunHook"
+        }
+      },
       "additionalProperties": false
     },
     "cortex.instance.PageStyle": {
@@ -736,6 +759,27 @@
       },
       "required": [
         "checks"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RunHook": {
+      "title": "RunHook",
+      "x-ess-name": "cortex.instance.RunHook",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeout_s": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command"
       ],
       "additionalProperties": false
     },

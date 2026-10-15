@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.MonitoringSpec",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
+    "contract_digest": "slice-sha256/2:4b45e353f6af61930d93a1602a7fd4704577c428bea08f1bd39288303b0a0a26",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.MonitoringSpec": {
+      "title": "MonitoringSpec",
+      "x-ess-name": "cortex.instance.MonitoringSpec",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "metrics": {
+          "type": "boolean"
+        },
+        "hook": {
+          "$ref": "#/$defs/cortex.instance.RunHook"
+        }
+      },
+      "additionalProperties": false
+    },
+    "cortex.instance.RunHook": {
+      "title": "RunHook",
+      "x-ess-name": "cortex.instance.RunHook",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeout_s": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

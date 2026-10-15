@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 55e415691487d2c675c5ecd72f81699560230b7355147e8df34b86eee64e1ff7
-  contract digest a22ec4c6788a24ce31bc536ccedeb291be32f912d3bc272713ff3f4470761db9
+  model digest 03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041
+  contract digest 44705b6c69b68b0c2f7e62491e2ff9d43261c5411efcab3d7f90314cfc50aadd
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-137 capabilities: **133 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+143 capabilities: **139 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -20,6 +20,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.ConnectionRef` |
 | domain type | `cortex.instance.ConnectorsSource` |
 | domain type | `cortex.instance.CrawlPolicy` |
+| domain type | `cortex.instance.DailySpend` |
 | domain type | `cortex.instance.DocumentId` |
 | domain type | `cortex.instance.DropPolicy` |
 | domain type | `cortex.instance.EkrPin` |
@@ -27,11 +28,13 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.FileRecords` |
 | domain type | `cortex.instance.FilesSource` |
 | domain type | `cortex.instance.GateCheck` |
+| domain type | `cortex.instance.HookResult` |
 | domain type | `cortex.instance.Instance.State` |
 | domain type | `cortex.instance.InstanceName` |
 | domain type | `cortex.instance.InstanceSpec` |
 | domain type | `cortex.instance.ModelBackend` |
 | domain type | `cortex.instance.ModelSpec` |
+| domain type | `cortex.instance.MonitoringSpec` |
 | domain type | `cortex.instance.NewEdgeType` |
 | domain type | `cortex.instance.NewNodeType` |
 | domain type | `cortex.instance.PageStyle` |
@@ -51,6 +54,8 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.RedactionRule` |
 | domain type | `cortex.instance.RelationMapping` |
 | domain type | `cortex.instance.RunGate` |
+| domain type | `cortex.instance.RunHook` |
+| domain type | `cortex.instance.RunOutcome` |
 | domain type | `cortex.instance.SchemaCardinality` |
 | domain type | `cortex.instance.SchemaChange` |
 | domain type | `cortex.instance.SchemaProperty` |
@@ -114,6 +119,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | event type | `cortex.instance.InstanceUpdated` |
 | event type | `cortex.instance.QualityMeasured` |
 | event type | `cortex.instance.RunFailed` |
+| event type | `cortex.instance.RunSkipped` |
 | event type | `cortex.instance.SchemaChangesProposed` |
 | event type | `cortex.instance.SnapshotRestored` |
 | event type | `cortex.instance.SourceAdded` |
@@ -162,7 +168,7 @@ What the specification fully determines is generated; what it cannot determine i
 | capability | source | why not generated | contract |
 | --- | --- | --- | --- |
 | command behaviour | `cortex.instance.RecordFailure` | kept an obligation by a subject predicate choosing between a move and an update | given `cortex.instance.RecordFailure` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject's stored fields satisfy `consecutive_failures >= 1`, takes `disable` of `cortex.instance.Source`, emits `cortex.instance.SourceDisabled`; `counted` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.RunFailed`; `already-disabled` from a state no declared move starts in, error `cortex.instance.SourceDisabledError`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound` |
-| command behaviour | `cortex.instance.RunSource` | kept an obligation by `when_subject_state:` beside `external:` in one command | given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `ran` when the existing subject is in Enabled, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document), error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), error `cortex.instance.ApplyRefused`; `disabled` otherwise, error `cortex.instance.SourceDisabledError`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound` |
+| command behaviour | `cortex.instance.RunSource` | kept an obligation by a refusal that compensates (`compensates: true`), on `fetch-failed` | given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound` |
 
 ## Refused — not represented by this synthesis
 

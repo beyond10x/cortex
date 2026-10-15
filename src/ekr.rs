@@ -185,6 +185,7 @@ pub struct Launch {
 }
 
 /// One instance's store, through its host.
+#[derive(Clone)]
 pub struct Store {
     pub bin: PathBuf,
     pub host: PathBuf,
@@ -194,6 +195,10 @@ pub struct Store {
     pub store: PathBuf,
     /// For a PostgreSQL store that names a connection: every `ekr` starts through the launch.
     pub launch: Option<Launch>,
+    /// `EKR_STAGE`: the stage every `ekr` of a staged run joins ([`Store::begin_stage`]), so its
+    /// reads see the run's own commits and its writes reach the store only when the stage is
+    /// published. None outside a staged run.
+    pub stage: Option<String>,
 }
 
 impl Launch {
@@ -258,8 +263,20 @@ impl Store {
 
     /// The `ekr` invocation of `args` on this store, built and not run: the pinned `ekr` itself, or
     /// for a launched store `connectors connections launch`, whose consumer gets the `EKR_*`
-    /// variables (`pass_env`).
+    /// variables (`pass_env`), `EKR_STAGE` in a staged run included. Outside one, an `EKR_STAGE`
+    /// this process inherited is removed.
     fn cmd(&self, args: &[&OsStr]) -> Result<Command, String> {
+        let mut cmd = self.store_cmd(args)?;
+        match &self.stage {
+            Some(stage) => cmd.env("EKR_STAGE", stage),
+            None => cmd.env_remove("EKR_STAGE"),
+        };
+        Ok(cmd)
+    }
+
+    /// [`Store::cmd`] on the store itself, in no stage: the `ekr stage` verbs, which refuse
+    /// `--stage`.
+    fn store_cmd(&self, args: &[&OsStr]) -> Result<Command, String> {
         let mut cmd = match &self.launch {
             Some(launch) => launch.command(&launch.connection, args)?,
             None => {
@@ -270,7 +287,8 @@ impl Store {
         };
         cmd.env("EKR_HOST", &self.host)
             .env("EKR_BACKEND", self.backend.name())
-            .env("EKR_STORE", &self.store);
+            .env("EKR_STORE", &self.store)
+            .env_remove("EKR_STAGE");
         Ok(cmd)
     }
 
@@ -280,6 +298,78 @@ impl Store {
             launch.ready(&launch.connection)?;
         }
         self.cmd(args)
+    }
+
+    /// `ekr stage <args>` on the store, built and not run.
+    fn stage_cmd(&self, args: &[&str]) -> Result<Command, String> {
+        let args: Vec<&OsStr> = std::iter::once("stage")
+            .chain(args.iter().copied())
+            .map(OsStr::new)
+            .collect();
+        self.store_cmd(&args)
+    }
+
+    /// [`Store::stage_cmd`], after a launched store's connection is ready.
+    fn stage_command(&self, args: &[&str]) -> Result<Command, String> {
+        if let Some(launch) = &self.launch {
+            launch.ready(&launch.connection)?;
+        }
+        self.stage_cmd(args)
+    }
+
+    /// `ekr stage begin`: a stage forked from the store at its head, answered by its id and its
+    /// base, the head it was forked at (what `ekr stage publish --expect-head` names). The store's
+    /// head and history do not move.
+    pub fn begin_stage(&self) -> Result<(String, i64), String> {
+        let begun = json(
+            &run(self.stage_command(&["begin"])?, "stage begin")?,
+            "stage begin",
+        )?;
+        match (begun["stage_id"].as_str(), begun["base"].as_i64()) {
+            (Some(stage), Some(base)) => Ok((stage.to_string(), base)),
+            _ => Err(format!(
+                "ekr stage begin answered no stage_id and base: {begun}"
+            )),
+        }
+    }
+
+    /// The ids of this store's stages that are still `Begun` (`ekr stage list`, whose entries
+    /// name their store, the host's `tenant`): stages a run began and neither published nor
+    /// abandoned, each holding a copy of the store.
+    pub fn begun_stages(&self) -> Result<Vec<String>, String> {
+        let host = std::fs::read_to_string(&self.host)
+            .map_err(|e| format!("cannot read {}: {e}", self.host.display()))?;
+        let host: Value = serde_json::from_str(&host).map_err(|e| format!("host.json: {e}"))?;
+        let tenant = host["tenant"]
+            .as_str()
+            .ok_or_else(|| "host.json names no tenant".to_string())?;
+        let listed = json(
+            &run(self.stage_command(&["list"])?, "stage list")?,
+            "stage list",
+        )?;
+        let listed = listed
+            .as_array()
+            .ok_or_else(|| format!("ekr stage list answered no list: {listed}"))?;
+        Ok(listed
+            .iter()
+            .filter(|s| s["state"] == "Begun" && s["store"] == tenant)
+            .filter_map(|s| s["stage_id"].as_str().map(str::to_string))
+            .collect())
+    }
+
+    /// `ekr stage publish <stage> --expect-head <head>`: every revision the stage committed lands
+    /// in the store at once, or, when the store's head is no longer `head` (`stage-head-moved`),
+    /// none does and the answer is the refusal.
+    pub fn publish_stage(&self, stage: &str, head: i64) -> Result<(), String> {
+        let head = head.to_string();
+        let cmd = self.stage_command(&["publish", stage, "--expect-head", &head])?;
+        run(cmd, "stage publish").map(drop)
+    }
+
+    /// `ekr stage abandon <stage>`: the stage is forgotten; the store's head and history do not
+    /// move. A stage already published is refused (`stage-already-published`).
+    pub fn abandon_stage(&self, stage: &str) -> Result<(), String> {
+        run(self.stage_command(&["abandon", stage])?, "stage abandon").map(drop)
     }
 
     /// The connection [`Store::provision`] launches through: the schema connection, when the
@@ -819,6 +909,7 @@ mod tests {
             backend,
             store: PathBuf::from(store),
             launch: None,
+            stage: None,
         }
     }
 
@@ -990,6 +1081,47 @@ mod tests {
         // Without a schema connection the schema role's own file is used by `ekr` directly.
         let direct = launched(false).schema_cmd(&schema).unwrap();
         assert_eq!(argv(&direct).0, "/opt/ekr/bin/ekr");
+    }
+
+    /// Whether `cmd` removes `key` from the environment it inherits.
+    fn removes(cmd: &std::process::Command, key: &str) -> bool {
+        cmd.get_envs().any(|(k, v)| k == key && v.is_none())
+    }
+
+    /// A staged run's `ekr` joins its stage with `EKR_STAGE`, through a launch too, whose
+    /// consumer gets every `EKR_*` variable cortex sets; the `ekr stage` verbs, which refuse a
+    /// stage, run on the store; and outside a stage an inherited `EKR_STAGE` is removed.
+    #[test]
+    fn a_staged_store_names_its_stage_to_every_verb_but_the_stage_verbs() {
+        for base in [
+            launched(false),
+            store(Backend::Postgres, "/etc/brain/pg.json"),
+        ] {
+            let staged = Store {
+                stage: Some("st-1".into()),
+                ..base.clone()
+            };
+            assert!(
+                env(&staged).contains(&("EKR_STAGE".into(), "st-1".into())),
+                "{:?}",
+                env(&staged)
+            );
+            let verb = staged.store_cmd(&[OsStr::new("stage"), OsStr::new("begin")]);
+            let verb = verb.unwrap();
+            assert!(removes(&verb, "EKR_STAGE"), "{verb:?}");
+            assert!(!env(&base).iter().any(|(k, _)| k == "EKR_STAGE"));
+            assert!(removes(
+                &base.cmd(&[OsStr::new("head")]).unwrap(),
+                "EKR_STAGE"
+            ));
+        }
+        let publish = launched(false)
+            .stage_cmd(&["publish", "st-1", "--expect-head", "7"])
+            .unwrap();
+        assert_eq!(
+            argv(&publish).1.last().map(String::as_str),
+            Some(r#"["stage","publish","st-1","--expect-head","7"]"#)
+        );
     }
 
     #[test]

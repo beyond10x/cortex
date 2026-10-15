@@ -2,13 +2,17 @@
 format: aep.planning-md/3
 id: story:run-failures-observable
 kind: story
-status: draft
+status: implemented
 title: A failed scheduled run shows as a source status, a metric and a hook call
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - serves: vision:self-updating-instances
 - depends_on: story:scheduler-one-shot-run
-revision: 1
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-15T03:29:15Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-15T03:29:15Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-15T03:50:56Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

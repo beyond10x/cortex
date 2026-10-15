@@ -278,14 +278,34 @@ types:
     kind: enum
     variants: [Claude, Codex]
 
+  # `daily_ceiling_usd`, when given, bounds what the instance's model calls spend in one UTC
+  # calendar day, across every source run, seed extraction, quality measurement and schema
+  # proposal of the instance: each call is allowed the lesser of what is left of its own
+  # `budget_usd` and what is left of the ceiling (`cortex.instance.DailySpend`). A number of US
+  # dollars, above 0; absent means no ceiling.
   - name: cortex.instance.ModelSpec
     kind: struct
     fields:
       - {name: model, type: String}
       - {name: backend, type: Optional<cortex.instance.ModelBackend>}
       - {name: budget_usd, type: Decimal}
+      - {name: daily_ceiling_usd, type: Optional<Decimal>}
       - {name: timeout_s, type: Integer}
       - {name: instructions, type: Optional<String>}
+
+  # The spend of the day of one instance: `spend.json` in the instance directory, `format`
+  # `cortex.daily-spend/1`. `day` is the UTC calendar day it counts, `YYYY-MM-DD`; `spent_usd` the
+  # sum of the costs of the model answers of that day that stated one. A day starts at 00:00 UTC:
+  # a file whose `day` is not today's counts as nothing spent, and the next costed answer starts it
+  # again. Every costed answer is added under the home's lock as soon as it is read, failed answers
+  # included; an answer with no cost adds nothing. The file is kept whether or not the spec names a
+  # ceiling, and a snapshot restore leaves it as it is.
+  - name: cortex.instance.DailySpend
+    kind: struct
+    fields:
+      - {name: format, type: String}
+      - {name: day, type: String}
+      - {name: spent_usd, type: Decimal}
 
   - name: cortex.instance.SqliteStore
     kind: struct
@@ -365,6 +385,45 @@ types:
     fields:
       - {name: view_port, type: Optional<Integer>}
 
+  # The outcome of a source's last run, as `cortex run` printed it: what a source's status
+  # (`cortex sources`) and the metric file report.
+  - name: cortex.instance.RunOutcome
+    kind: enum
+    variants: [ran, fetch-failed, extraction-failed, apply-refused, disabled]
+
+  # A command cortex calls once for each run of a source that answers `fetch-failed`,
+  # `extraction-failed` or `apply-refused`: `command` is its argument vector (no shell), started in
+  # the instance directory, in a process group of its own, with the source id and the outcome
+  # appended as its last two arguments. A relative program path holding a `/` is read against the
+  # spec file's directory, as seed paths are; a bare name is looked up on `PATH`. The outcome is
+  # `disabled` when the run's recorded failure disabled the source. It holds no secret: one the
+  # hook needs it reads itself, outside cortex. The call lasts `timeout_s` seconds at most, absent
+  # means 10; then the hook's process group is killed.
+  - name: cortex.instance.RunHook
+    kind: struct
+    fields:
+      - {name: command, type: List<String>}
+      - {name: timeout_s, type: Optional<Integer>}
+
+  # What became of a hook call, as `cortex.log` records it beside the source and the outcome:
+  # `called` when it exited 0, `failed` when it could not start or exited otherwise, `timed-out`
+  # when it was killed at its timeout. Neither changes the run's outcome or its exit status.
+  - name: cortex.instance.HookResult
+    kind: enum
+    variants: [called, failed, timed-out]
+
+  # Where a run reports besides its printed line, `cortex.log` and the source's status. With
+  # `metrics: true`, every run of a source rewrites `metrics.prom` in the instance directory whole
+  # (a temporary file, then a rename), in the Prometheus text format, for a textfile collector or a
+  # sidecar; cortex serves no port. It holds `cortex_source_runs_total{source, outcome}`, the runs
+  # of each source by outcome, and `cortex_source_last_run_timestamp_seconds{source}`. A metric
+  # file cortex cannot write is recorded in `cortex.log` and changes no run's outcome.
+  - name: cortex.instance.MonitoringSpec
+    kind: struct
+    fields:
+      - {name: metrics, type: Optional<Boolean>}
+      - {name: hook, type: Optional<cortex.instance.RunHook>}
+
   - name: cortex.instance.InstanceSpec
     kind: struct
     fields:
@@ -380,6 +439,7 @@ types:
       - {name: redaction, type: Optional<cortex.instance.RedactionPolicy>}
       - {name: snapshots, type: Optional<cortex.instance.SnapshotPolicy>}
       - {name: gate, type: Optional<cortex.instance.RunGate>}
+      - {name: monitoring, type: Optional<cortex.instance.MonitoringSpec>}
 
   # A judge's answer on one sampled fact: `yes` when the evidence the fact cites supports it, `no`
   # when it does not, `unclear` when the judge cannot tell. EKR's `ekr.fact-judgements/1` knows only
@@ -564,6 +624,11 @@ entities:
       - {name: schedule, type: String}
       - {name: runs, type: Integer}
       - {name: consecutive_failures, type: Integer}
+      # The source's last run: its outcome, when it started and why. `ran` and `disabled` clear
+      # `last_reason`; every other outcome sets it. Absent until the source first runs.
+      - {name: last_outcome, type: Optional<cortex.instance.RunOutcome>}
+      - {name: last_run_at, type: Optional<Timestamp>}
+      - {name: last_reason, type: Optional<String>}
     relations:
       - name: seen
         kind: owns
@@ -749,17 +814,18 @@ errors:
 
   - name: cortex.instance.JudgeFailed
     summary: >-
-      A judge's model call failed, timed out, answered no valid verdicts or found the budget spent,
-      or the redaction policy refused what the judge would be shown. `verdicts.jsonl` keeps the
-      verdicts of the batches judged before; no `fact-quality.json` was written.
+      A judge's model call failed, timed out, answered no valid verdicts or found the budget or the
+      instance's daily ceiling spent, or the redaction policy refused what the judge would be shown.
+      `verdicts.jsonl` keeps the verdicts of the batches judged before; no `fact-quality.json` was
+      written.
     fields:
       - {name: reason, type: String}
 
   - name: cortex.instance.ProposeFailed
     summary: >-
       A model call for schema proposals failed, timed out, answered no valid proposals or found the
-      budget spent, the redaction policy refused what the model would be shown, or EKR could not
-      read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+      budget or the instance's daily ceiling spent, the redaction policy refused what the model
+      would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
     fields:
       - {name: reason, type: String}
 
@@ -1037,6 +1103,10 @@ commands:
     input:
       - {name: source_id, type: cortex.instance.SourceId}
     outcomes:
+      # UNMAPPED: the exit status of each outcome, which an external scheduler reads instead of
+      # the printed line: `ran` 0; `fetch-failed`, `extraction-failed`, `apply-refused` and
+      # `no-such-source` 1; `disabled` 3; and 2 for an error before any outcome. ESS declares no
+      # exit status for a command line's outcomes; tests/e2e.rs and tests/run_status.rs hold it.
       # UNMAPPED: `<instance>/seed`, when the instance is active and has no source named `seed`,
       # names the instance's seed documents: it extracts those no seed extraction applied yet (what
       # a `partial` create left) and answers these outcomes with no Source to update. Like a source
@@ -1053,13 +1123,93 @@ commands:
       # effect that creates or updates one record per element of a collection (`instances:` is
       # refused on `creates:`, `affects:` only updates), so the per-source state file holds it and
       # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.
+      # UNMAPPED: after every outcome that names a source, the instance's `monitoring` reports it:
+      # `metrics.prom` is rewritten with the source's run counted under its outcome, and for
+      # `fetch-failed`, `extraction-failed` and `apply-refused` the hook is called once, with
+      # `disabled` instead when the recorded failure disabled the source. ESS declares no effect
+      # outside the model's records; tests/run_status.rs holds it.
+      # Not a refusal: a run of a disabled source changes the source's status, which a refusal
+      # may not. It answers no error, so the printed line and the exit status say it.
+      - name: disabled
+        when_subject_state: Disabled
+        updates: cortex.instance.Source
+        instance: source_id
+        sets:
+          last_outcome: disabled
+          last_run_at: {generated: true}
+          last_reason: {cleared: true}
+        emits:
+          - cortex.instance.RunSkipped
+        payload:
+          cortex.instance.RunSkipped:
+            source_id: input.source_id
+        summary: >-
+          The source is disabled: nothing ran and nothing was counted, and the source's status
+          records the outcome.
+
+      - name: fetch-failed
+        external: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first
+        error: cortex.instance.FetchFailed
+        compensates: true
+        updates: cortex.instance.Source
+        instance: source_id
+        sets:
+          last_outcome: fetch-failed
+          last_run_at: {generated: true}
+          last_reason: {generated: true}
+        payload:
+          cortex.instance.FetchFailed:
+            reason: {generated: true}
+        summary: >-
+          Nothing was applied; the source's status records the outcome and its reason, and the
+          scheduler then sends RecordFailure.
+
+      - name: extraction-failed
+        external: The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait
+        error: cortex.instance.ExtractionFailed
+        compensates: true
+        updates: cortex.instance.Source
+        instance: source_id
+        sets:
+          last_outcome: extraction-failed
+          last_run_at: {generated: true}
+          last_reason: {generated: true}
+        payload:
+          cortex.instance.ExtractionFailed:
+            reason: {generated: true}
+        summary: >-
+          Nothing was applied; the source's status records the outcome and its reason, and the
+          scheduler then sends RecordFailure. When the model answered an error, `reason` holds the
+          error text it gave, masked for credential shapes as fetched text is and cut at a
+          character boundary to a bound, and the batch's `claude/error.txt` holds the same text.
+          An error answer with a cost above zero, or with no cost reported, is not asked again.
+
+      - name: apply-refused
+        external: EKR refuses the merged extraction document
+        error: cortex.instance.ApplyRefused
+        compensates: true
+        updates: cortex.instance.Source
+        instance: source_id
+        sets:
+          last_outcome: apply-refused
+          last_run_at: {generated: true}
+          last_reason: {generated: true}
+        payload:
+          cortex.instance.ApplyRefused:
+            reason: {generated: true}
+        summary: >-
+          Nothing was applied; the source's status records the outcome and its reason, and the
+          scheduler then sends RecordFailure.
+
       - name: ran
-        when_subject_state: Enabled
         updates: cortex.instance.Source
         instance: source_id
         sets:
           runs: {increment: 1}
           consecutive_failures: 0
+          last_outcome: ran
+          last_run_at: {generated: true}
+          last_reason: {cleared: true}
         emits:
           - cortex.instance.SourceRan
         payload:
@@ -1068,41 +1218,13 @@ commands:
             documents_new: {generated: true}
             documents_applied: {generated: true}
             cost_usd: {generated: true}
+            daily_ceiling_reached: {generated: true}
         summary: >-
           Every new or changed document within the policy's limits was extracted and applied, in
           batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no
-          model was called.
-
-      - name: fetch-failed
-        external: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first
-        error: cortex.instance.FetchFailed
-        payload:
-          cortex.instance.FetchFailed:
-            reason: {generated: true}
-        summary: Nothing was applied; the scheduler then sends RecordFailure.
-
-      - name: extraction-failed
-        external: The model call fails, times out, exceeds the run budget before any batch, or returns no valid document
-        error: cortex.instance.ExtractionFailed
-        payload:
-          cortex.instance.ExtractionFailed:
-            reason: {generated: true}
-        summary: Nothing was applied; the scheduler then sends RecordFailure.
-
-      - name: apply-refused
-        external: EKR refuses the merged extraction document
-        error: cortex.instance.ApplyRefused
-        payload:
-          cortex.instance.ApplyRefused:
-            reason: {generated: true}
-        summary: Nothing was applied; the scheduler then sends RecordFailure.
-
-      - name: disabled
-        error: cortex.instance.SourceDisabledError
-        payload:
-          cortex.instance.SourceDisabledError:
-            source_id: input.source_id
-        summary: The source is disabled; nothing ran.
+          model was called. `daily_ceiling_reached` is true when the run stopped before a batch
+          because the instance's spend of the UTC day reached `model.daily_ceiling_usd`: the
+          batches before it are applied, the rest are extracted by a run on a later day.
 
       - name: no-such-source
         unknown_instance: true
@@ -1269,7 +1391,8 @@ commands:
     # `ekr fact-quality` turns the verdicts into a pass rate with its Wilson interval at 95 %. The
     # measurement writes `quality/<UTC stamp>/verdicts.jsonl` and `quality/<UTC stamp>/
     # fact-quality.json` (the `ekr.fact-quality/1` document, as EKR printed it) under the instance
-    # directory, and spends at most the spec's `model.budget_usd`. It reads the store and writes
+    # directory, and spends at most the spec's `model.budget_usd` and what is left of its
+    # `model.daily_ceiling_usd` for the UTC day. It reads the store and writes
     # nothing to it, so a removed instance's store, which stays, is measured too.
     input:
       - {name: name, type: cortex.instance.InstanceName}
@@ -1284,7 +1407,7 @@ commands:
         summary: No model was asked and nothing was written.
 
       - name: judge-failed
-        external: A judge's model call fails, times out, answers no valid verdicts or finds the budget spent, or the redaction policy refuses what the judge would be shown
+        external: A judge's model call fails, times out, answers no valid verdicts or finds the budget or the daily ceiling spent, or the redaction policy refuses what the judge would be shown
         error: cortex.instance.JudgeFailed
         payload:
           cortex.instance.JudgeFailed:
@@ -1341,7 +1464,8 @@ commands:
     # `dry_run`, cortex takes the lock again and asks EKR to apply each proposal it can write as
     # one schema transaction of its own, in order, against the ontology at the head. Every proposal
     # not dropped is a `cortex.instance.SchemaProposal` line of `schema/<UTC stamp>/proposals.jsonl`
-    # under the instance directory. Spends at most the spec's `model.budget_usd`.
+    # under the instance directory. Spends at most the spec's `model.budget_usd` and what is left
+    # of its `model.daily_ceiling_usd` for the UTC day.
     input:
       - {name: name, type: cortex.instance.InstanceName}
       - {name: sample, type: Integer}
@@ -1356,7 +1480,7 @@ commands:
         summary: No model was asked and nothing was written.
 
       - name: propose-failed
-        external: A model call fails, times out, answers no valid proposals or finds the budget spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology
+        external: A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology
         error: cortex.instance.ProposeFailed
         payload:
           cortex.instance.ProposeFailed:
@@ -1444,12 +1568,19 @@ events:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: instance_name, type: cortex.instance.InstanceName}
 
+  # `daily_ceiling_reached` says the run stopped before a batch at the instance's daily ceiling.
   - name: cortex.instance.SourceRan
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: documents_new, type: Integer}
       - {name: documents_applied, type: Integer}
       - {name: cost_usd, type: Optional<Decimal>}
+      - {name: daily_ceiling_reached, type: Boolean}
+
+  # A run of a disabled source, which ran nothing.
+  - name: cortex.instance.RunSkipped
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
 
   - name: cortex.instance.RunFailed
     fields:
@@ -1527,6 +1658,9 @@ views:
       - {name: runs, type: Integer}
       - {name: consecutive_failures, type: Integer}
       - {name: state, type: cortex.instance.Source.State}
+      - {name: last_outcome, type: Optional<cortex.instance.RunOutcome>}
+      - {name: last_run_at, type: Optional<Timestamp>}
+      - {name: last_reason, type: Optional<String>}
     naming:
       wire: sources
       display: Sources

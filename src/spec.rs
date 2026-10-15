@@ -205,6 +205,15 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
     if budget.is_nan() || budget <= 0.0 {
         return Err("model.budget_usd must be above 0".into());
     }
+    if let Some(ceiling) = &spec.model.daily_ceiling_usd {
+        let usd: f64 = ceiling
+            .0
+            .parse()
+            .map_err(|_| format!("model.daily_ceiling_usd {:?} is not a number", ceiling.0))?;
+        if usd.is_nan() || usd <= 0.0 {
+            return Err("model.daily_ceiling_usd must be above 0".into());
+        }
+    }
     if spec.model.timeout_s <= 0 {
         return Err("model.timeout_s must be above 0".into());
     }
@@ -218,6 +227,14 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
                     ));
                 }
             }
+        }
+    }
+    if let Some(hook) = spec.monitoring.as_ref().and_then(|o| o.hook.as_ref()) {
+        if hook.command.first().is_none_or(|c| c.is_empty()) {
+            return Err("monitoring.hook.command must name a program".into());
+        }
+        if hook.timeout_s.is_some_and(|t| t <= 0) {
+            return Err("monitoring.hook.timeout_s must be above 0".into());
         }
     }
     Ok(())

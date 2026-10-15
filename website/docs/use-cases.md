@@ -99,5 +99,5 @@ Every fact carries the file or record it came from.
 **Question.** Any "where is X decided" or "what does Y mean here" question, answered with a
 citation.
 
-**Ready:** yes. With the pinned EKR 0.0.33, extracted relations are graph edges, so `search`
+**Ready:** yes. With the pinned EKR 0.0.34, extracted relations are graph edges, so `search`
 counts them in a node's degree and `expand` walks them.

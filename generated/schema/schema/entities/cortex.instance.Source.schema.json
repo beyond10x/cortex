@@ -34,6 +34,16 @@
     "consecutive_failures": {
       "type": "integer"
     },
+    "last_outcome": {
+      "$ref": "#/$defs/cortex.instance.RunOutcome"
+    },
+    "last_run_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_reason": {
+      "type": "string"
+    },
     "state": {
       "$ref": "#/$defs/cortex.instance.Source.State"
     }
@@ -52,8 +62,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "55e415691487d2c675c5ecd72f81699560230b7355147e8df34b86eee64e1ff7",
-    "contract_digest": "slice-sha256/2:700fbb7d768097d3fb0f0017d73052aeae564b56f4cdd9eff5f396d638446bb8",
+    "source_digest": "03585fc6899da312c810c49d36ceac09da7880518acdb08a1812091f2aee6041",
+    "contract_digest": "slice-sha256/2:593ac5fa8fdcc815316f968fe1b6d4f0c2b52d92307e9b416632435574b7a297",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -62,6 +72,19 @@
       "x-ess-name": "cortex.instance.InstanceName",
       "x-ess-kind": "newtype",
       "type": "string"
+    },
+    "cortex.instance.RunOutcome": {
+      "title": "RunOutcome",
+      "x-ess-name": "cortex.instance.RunOutcome",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "ran",
+        "fetch-failed",
+        "extraction-failed",
+        "apply-refused",
+        "disabled"
+      ]
     },
     "cortex.instance.Source.State": {
       "title": "State",

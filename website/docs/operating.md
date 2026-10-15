@@ -22,10 +22,14 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `instances/<name>/meta.json` | the viewer's port and the directory the spec was created from |
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
 | `instances/<name>/state/entities.json` | entity names from earlier runs, offered to the model so it reuses them |
-| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report |
+| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report, or claude's error text (`claude/error.txt`) |
 | `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
+| `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
 | `instances/<name>/cortex.log` | one JSON line per run: counts, cost, seconds, why it stopped |
+| `instances/<name>/spend.json` | the spend of the day (`cortex.daily-spend/1`): the UTC day and what the instance's model answers that day cost, held to `model.daily_ceiling_usd`. With a ceiling, a file cortex cannot read (not JSON or not `cortex.daily-spend/1`), or one of today whose `spent_usd` is not a number of 0 or more, stops every model call of the instance until it is deleted; deleting it counts the day as nothing spent |
+| `instances/<name>/status/<source>.json` | the source's last run (outcome, time, reason) and its runs by outcome |
+| `instances/<name>/metrics.prom` | with `monitoring.metrics`, the runs of each source by outcome, in the Prometheus text format |
 
 ## systemd units
 
@@ -88,6 +92,22 @@ anyway. The command's `binary` detail says what happened: `replaced`, the `old` 
 and the `new` one, and the `reason` when the copy was kept. `cortex list` shows the recorded
 version as `binary_version`. `--no-units`, and a spec with no source, leave the copy alone.
 
+## Exit statuses of `cortex run`
+
+A scheduler or a script reads which outcome a run had from its exit status alone:
+
+| exit status | outcome | means |
+|---|---|---|
+| 0 | `ran` | the source ran; `documents_new` 0 means nothing had changed |
+| 1 | `fetch-failed`, `extraction-failed`, `apply-refused` | the run failed and applied nothing; with `--record-failure` the failure is counted |
+| 1 | `no-such-source` | the home holds no such source |
+| 2 | none | an error before any outcome, on stderr as `cortex: <message>` (an unreadable registry, a home that cannot be locked) |
+| 3 | `disabled` | the source is disabled after two failed runs in a row; nothing ran. `cortex source enable` switches it back on |
+
+The JSON line on stdout says the same, with its `detail`. With `--record-failure`, a failed run
+prints a second line, the recorded failure's (`counted` or `disabled`); the exit status is the
+run's.
+
 ## What one run does
 
 1. **Fetch** the source's documents (web pages or records through `connectors`, or local files).
@@ -138,7 +158,9 @@ document by the source's `mapping` and applied without a model call, at a cost o
 [the spec file](./spec-file.md#kind-structured)). It masks every string in a record rather than
 the text as a whole, and never cuts a record.
 
-The run stops starting batches when its `budget_usd` is spent. When a batch fails after an earlier
+The run stops starting batches when its `budget_usd` is spent, or when the instance's spend of
+the UTC day reaches `model.daily_ceiling_usd` (see
+[the spec file](./spec-file.md#the-daily-ceiling)). When a batch fails after an earlier
 one was applied, the run ends as `ran` with `stopped` set; when the first batch fails, nothing was
 applied and the run fails.
 
@@ -159,11 +181,66 @@ the store's restore is refused (another connection held its write lock for 5 sec
 `state/` is still put back, so the next run fetches the run's documents again; the `reason` says
 the store still holds the run. `cortex.log` records the run's line with `gate.failed`, each
 failed check's measure, bounds and value, `gate.restored`, the snapshot restored (`null` when the
-store was not), and `gate.reason`. A run with no snapshot (a `postgres` store,
-`snapshots.keep: 0`) cannot be undone: it still fails, and its `reason` says it was not undone.
+store was not), and `gate.reason`. On a `postgres` store the run ran in an EKR stage, which is
+abandoned, so nothing of the run reaches the store, and `state/` is put back (see
+[Undoing a run](#undoing-a-run)); `gate.restored` is `null`, and the `reason` names the stage. A
+run on a `sqlite` store with no snapshot (`snapshots.keep: 0`) cannot be undone: it still fails,
+and its `reason` says it was not undone.
+
+### Seeing a failure
+
+Every run of a source records its outcome on the source, whatever it is, including `disabled`:
+`cortex sources` shows `last_outcome`, `last_run_at` (when the run started, UTC to the second)
+and `last_reason` (the run's `reason`; `null` for `ran` and `disabled`). The status is
+`instances/<name>/status/<source>.json`. Each write of an instance's status files and its metric
+file holds `instances/<name>/status/.lock` for that write only, so no count is lost to a
+concurrent writer; it is held for milliseconds, never during a run or a hook. A run of
+`<instance>/seed` is not a source's and records no status.
+
+With [`monitoring.metrics`](./spec-file.md#monitoring), every run of a source then rewrites
+`instances/<name>/metrics.prom` whole, through a temporary file and a rename, in the Prometheus
+text format. Point a node exporter's textfile collector, or a sidecar, at it; cortex serves no
+port. It holds two series per source of the instance:
+
+```text
+# TYPE cortex_source_runs_total counter
+cortex_source_runs_total{source="example/news",outcome="fetch-failed"} 1
+# TYPE cortex_source_last_run_timestamp_seconds gauge
+cortex_source_last_run_timestamp_seconds{source="example/news"} 1791962441.269
+```
+
+`cortex_source_runs_total` counts the source's runs under each outcome (`ran`,
+`fetch-failed`, `extraction-failed`, `apply-refused`, `disabled`), every outcome written, 0 for
+one that never happened. The counts are kept in the status file and start from the first run
+cortex recorded one for.
+
+With [`monitoring.hook`](./spec-file.md#monitoring), each run that fails calls the hook once,
+after its line is printed and its failure recorded: `<command…> <instance>/<source> <outcome>`, with
+the outcome `fetch-failed`, `extraction-failed` or `apply-refused`, or `disabled` when that run's
+recorded failure disabled the source. A run that ran or found the source disabled calls no
+hook. The hook runs in the instance directory, in a process group of its own, with cortex's
+environment, so a secret it needs (a webhook URL, a token) stays in its own configuration, never
+in the spec. A relative program path holding a `/` (`./hooks/notify`) is read against the spec
+file's directory, as seed paths are; a bare name is looked up on `PATH`. The call lasts
+`timeout_s` seconds at most (default 10), during which a run holding the home's lock keeps it;
+then the hook's whole process group is killed. A process the hook starts in the background and
+leaves running when it exits is neither waited for nor killed. `cortex.log` records each call as
+a line with `source`, `outcome` and `hook.result`: `called` (exit status 0), `failed` (with
+`hook.status`, or `hook.reason` when it could not start)
+or `timed-out`. Neither a failed hook nor a metric file that cannot be written changes the run's
+outcome or its exit status; the latter is recorded in `cortex.log` as `metrics.failed`.
 
 If Connectors refuses a read because a connection's validation lapsed, cortex revalidates the
 connection once and retries.
+
+When `claude` answers an error, the `extraction-failed` reason keeps the error text it gave
+(`claude answered an error (success), cost 0.0000 USD: Not logged in …`), and the batch's
+`claude/error.txt` under the run directory holds the same text. The text is masked for credential
+shapes as fetched text is, and cut at a character boundary to 1,000 bytes (`…` marks a cut). An
+error answer that cost zero, the shape of an answer given before any model was asked such as a
+sign-in or usage-limit message, is asked once more after 60 seconds; if that answer is valid the
+run goes on and no failure is counted, and a second error fails the run as above. An error answer
+with a cost above zero, or with no cost reported, is not asked again.
 
 ## Undoing a run
 
@@ -216,6 +293,34 @@ close the store writes the log back.
 
 A `postgres` store has no snapshot; its backup is the operator's database backup, and
 `cortex restore` answers `backend-unsupported`.
+
+A run on a `postgres` store that the spec holds to a `gate` can still be undone, through EKR's
+staged runs (`ekr stage`, EKR 0.0.33). Before its first batch, cortex begins a stage (`ekr stage
+begin`, which copies the store into a tenant of its own and leaves the store's head where it is,
+and answers the head it began at), and writes `instances/<name>/stage.json` with the stage, that
+head and a copy of `state/`. Every `ekr` of the run joins the stage with `EKR_STAGE`, which a
+Connectors launch passes on, so the run's reads see its own commits and its commits stay in the stage:
+
+- A run that passes its gate is published, `ekr stage publish <stage> --expect-head <head>`:
+  every revision it committed lands in the store at once. `stage.json` records that the publish
+  began before it does. If the store's head moved since the run began, EKR refuses
+  (`stage-head-moved`) and publishes nothing; the stage is abandoned, the run fails as
+  `apply-refused` with the refusal in its `reason`, and `state/` is put back.
+- A run that fails its gate is abandoned (`ekr stage abandon`): `ekr head` answers the head from
+  before the run, and `state/` is put back from `stage.json`.
+- A run that fails part-way, before its gate, keeps what it applied, as on `sqlite`: its stage
+  is published; a refused publish is said in the run's `reason`, and `state/` is put back.
+- A run that committed nothing in its stage, whatever its end, has the stage abandoned and
+  keeps `state/` as it left it, as on `sqlite`.
+
+A `stage.json` left by a killed run, or by an abandon that failed, is settled by the next run of
+the instance. A stage whose publish had begun is published again at the same head, which
+completes a publish the kill interrupted, and `state/` is kept as it is; any other stage, or one
+whose publish is now refused because the head moved, is abandoned and `state/` put back. Then
+every stage of the store still `Begun` in `ekr stage list` (which lists every stage the store
+has had), such as one a run began and was killed before it wrote `stage.json`, is abandoned: each
+holds a copy of the store. Beginning a stage copies the store, so it takes longer as the store
+grows. A run on a `postgres` store with no `gate` runs in no stage.
 
 ## Adopting an existing store
 
@@ -278,7 +383,7 @@ user's configuration:
 - `--tools ""`, `--setting-sources ""`, `--strict-mcp-config`, `--disable-slash-commands` and
   `--no-session-persistence`: no tools, no settings, no MCP servers, no slash commands;
 - `--json-schema` with EKR's extraction schema, and `--max-budget-usd` with what is left of the
-  run's budget;
+  run's budget, or of the instance's daily ceiling when less is left of it;
 - the call is stopped after `timeout_s` seconds.
 
 The model sees fetched text and nothing else. Fetched text is untrusted: it is masked for
