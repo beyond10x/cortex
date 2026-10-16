@@ -2,12 +2,14 @@
 format: aep.planning-md/3
 id: architecture-decision-record:answer-service-in-cortex
 kind: architecture-decision-record
-status: proposed
+status: accepted
 title: An ask service, its answer records and an eval loop move into cortex
 summary: cortex gains a long-running ask service with its own domain and tables beside the store, and eval as a batch verb
 relations:
 - decides: epic:instance-answers-questions
-revision: 1
+revision: 3
+transitions:
+- {from: "proposed", to: "accepted", at: "2026-10-16T01:42:17Z", actor: "human:timo", revision: 3}
 ---
 ## Context
 
@@ -104,3 +106,10 @@ Two stories already in the plan touch the same ground and are not repeated here:
 - The gated-change protocol `eval.gated_change/1` and its conformance cases: cortex consumes it once
   published, and does not define it.
 - Rendering answers, vitals or topics in a user interface.
+
+## Status
+
+Accepted by the operator on 2026-10-15: cortex takes on the ask service, its answer records
+with votes and a review queue, and the eval loop, as the Decision section states. The four
+stories (ask-service, answer-records-and-review, eval-run, eval-cases-from-review) go into the
+first wave after 0.5.0.
