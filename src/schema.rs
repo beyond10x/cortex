@@ -470,8 +470,8 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn, home: &Home) -> Result<
                     so_far(proposals.len(), n, batches.len(), cost_usd)
                 )));
             }
-            Some(budget) => budget - spent,
-            None => f64::INFINITY,
+            Some(budget) => Some(budget - spent),
+            None => None,
         };
         if let Err(why) = tokens.check() {
             return Err(Failure::Propose(format!(
@@ -479,7 +479,7 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn, home: &Home) -> Result<
                 so_far(proposals.len(), n, batches.len(), cost_usd)
             )));
         }
-        let remaining = daily.allow(remaining).map_err(|why| {
+        let remaining = daily.allow_bound(remaining).map_err(|why| {
             Failure::Propose(format!(
                 "{why}; {}",
                 so_far(proposals.len(), n, batches.len(), cost_usd)

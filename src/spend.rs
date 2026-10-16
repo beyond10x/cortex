@@ -271,6 +271,25 @@ impl<'a> Daily<'a> {
         self.check(left).map_err(|refusal| refusal.reason)
     }
 
+    /// [`Daily::check`] for a command's dollar bound `left` ([`dollar_budget`] less what it
+    /// spent): `None` when no dollar budget applies (behind a model gateway, see
+    /// [`counts_dollars`]), and then the call is bounded in dollars only by a ceiling, when there
+    /// is one. The answer is the call's dollar bound, `None` when nothing bounds it in dollars.
+    pub fn check_bound(&self, left: Option<f64>) -> Result<Option<f64>, Refusal> {
+        match left {
+            Some(left) => self.check(left).map(Some),
+            None => {
+                let allowed = self.check(f64::MAX)?;
+                Ok(self.ceiling.is_some().then_some(allowed))
+            }
+        }
+    }
+
+    /// [`Daily::check_bound`], its refusal the reason alone, as [`Daily::allow`] gives it.
+    pub fn allow_bound(&self, left: Option<f64>) -> Result<Option<f64>, String> {
+        self.check_bound(left).map_err(|refusal| refusal.reason)
+    }
+
     /// [`Daily::allow`], its refusal saying whether a ceiling was reached.
     pub fn check(&self, left: f64) -> Result<f64, Refusal> {
         if self.ceiling.is_none() && self.token_ceiling.is_none() {
@@ -446,6 +465,15 @@ mod tests {
             Ok(f64::INFINITY),
             "no dollar ceiling"
         );
+        assert_eq!(
+            daily.check_bound(None),
+            Ok(None),
+            "no dollar bound reaches claude"
+        );
+        let mut plain_model = model(None);
+        plain_model.budget_tokens = Some(1000);
+        let plain_daily = Daily::new(&layout, &plain_model, None);
+        assert_eq!(plain_daily.check_bound(Some(0.5)), Ok(Some(0.5)));
         let read = || -> Value {
             serde_json::from_str(&std::fs::read_to_string(path(&layout)).unwrap()).unwrap()
         };
