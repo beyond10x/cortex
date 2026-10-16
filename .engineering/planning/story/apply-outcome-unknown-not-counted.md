@@ -4,11 +4,11 @@ id: story:apply-outcome-unknown-not-counted
 kind: story
 status: active
 title: An unknown outcome of a store write fails a run without counting against the source
-summary: An apply-extraction (or other store write) whose outcome is unknown fails the run as store-outcome-unknown, uncounted, and the next run neither loses nor doubles the batch
+summary: An apply-extraction (or other store write) whose outcome is unknown fails the run as store-outcome-unknown, uncounted, and the next run loses no batch
 relations:
 - decomposes: epic:organisation-scale-instance
 - serves: vision:self-updating-instances
-revision: 5
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-16T13:49:47Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-16T13:49:47Z", actor: "human:timo", revision: 4}
@@ -19,7 +19,7 @@ A source run whose `ekr apply-extraction` (or any other store write of the run o
 verbs) answers that its outcome is unknown ("publication outcome is unknown") fails as
 `store-outcome-unknown`, exit status 4, as an unknown stage verb does since 0.5.1: it is not
 recorded as a failure of the source and never disables it. What the run leaves is settled so that
-the next run neither loses nor doubles a batch:
+the next run loses no batch (a batch that did land may be written a second time, as a re-extraction writes it):
 
 - In a stage (a gated run on a `postgres` store): the stage is abandoned by the next run, which
   fetches the run's documents again (`state/` put back, as for a run killed in its stage).
