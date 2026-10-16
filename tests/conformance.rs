@@ -489,6 +489,10 @@ impl Scenario {
                     "apply-refused",
                     Some(("ApplyRefused", json!({"reason": error.reason}))),
                 ),
+                m::RunSourceOutcome::StoreOutcomeUnknown { error } => (
+                    "store-outcome-unknown",
+                    Some(("StoreOutcomeUnknown", json!({"reason": error.reason}))),
+                ),
                 m::RunSourceOutcome::Ran { .. } => ("ran", None),
                 m::RunSourceOutcome::FetchOnlyFailed { error } => (
                     "fetch-only-failed",
@@ -905,7 +909,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        61,
+        63,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

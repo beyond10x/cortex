@@ -25,7 +25,7 @@ and `README.md` in a directory of the same name, and `SHA256SUMS`, the tarball's
 Download both, check the tarball against the checksum, and put the binary on your `PATH`:
 
 ```sh
-version=0.5.0
+version=0.5.1
 base=https://github.com/beyond10x/cortex/releases/download/v$version
 curl -fsSLO "$base/cortex-$version-x86_64-unknown-linux-gnu.tar.gz"
 curl -fsSLO "$base/SHA256SUMS"
