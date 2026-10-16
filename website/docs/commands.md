@@ -9,8 +9,9 @@ description: Every cortex command, its arguments and what it prints.
 Every command that changes something prints one JSON line,
 `{"command": …, "outcome": …, "detail": …}`, and exits 0 for a successful outcome and 1 for a
 refused one. An error before any outcome (an unreadable spec file, a home that cannot be locked)
-goes to stderr as `cortex: <message>` with exit status 2. `cortex run` has one status of its own,
-3 for a disabled source; see [Exit statuses of `cortex run`](./operating.md#exit-statuses-of-cortex-run).
+goes to stderr as `cortex: <message>` with exit status 2. `cortex run` has three of its own:
+3 for a disabled source, 4 when the store outcome is unknown (`store-outcome-unknown`) and 5 when
+Connectors stayed unavailable before anything was fetched (`connection-unavailable`); see [Exit statuses of `cortex run`](./operating.md#exit-statuses-of-cortex-run).
 `cortex list` and `cortex sources` print one JSON line per row.
 
 The outcomes are the ones the specification declares; the

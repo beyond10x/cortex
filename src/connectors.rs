@@ -220,7 +220,8 @@ impl Connectors {
     }
 
     /// The id `reference` names among `adapter`'s connections: an id as given, a profile through
-    /// [`pick`] over `connections list --adapter <adapter>`, its refusal as
+    /// [`pick`] over `connections list --adapter <adapter>` (a retryable failure of that read is
+    /// tried again as in [`Self::attempts`]), its refusal as
     /// [`InvokeError::Missing`]. A profile resolved once is answered again from this process's
     /// memory, so one command uses one connection throughout.
     pub fn resolve(&self, adapter: &str, reference: &Reference) -> Result<String, InvokeError> {
@@ -236,10 +237,12 @@ impl Connectors {
         if let Some(id) = resolved.lock().expect("not poisoned").get(&key) {
             return Ok(id.clone());
         }
-        let listed = self.json(
-            &["connections", "list", "--adapter", adapter],
-            "connections list",
-        )?;
+        let listed = self.attempts(|| {
+            self.json_or_unavailable(
+                &["connections", "list", "--adapter", adapter],
+                "connections list",
+            )
+        })?;
         let id = pick(adapter, profile, &listed).map_err(InvokeError::Missing)?;
         resolved
             .lock()
@@ -279,11 +282,22 @@ impl Connectors {
     /// `CORTEX_REVALIDATE_PAUSE_MS` (5000) before the second and doubling after it; one that
     /// remains is [`InvokeError::Unavailable`], naming the last error. A refusal is not retried.
     fn revalidate(&self, adapter: &str, connection: &str, force: bool) -> Result<(), InvokeError> {
+        self.attempts(|| self.revalidate_once(adapter, connection, force))
+    }
+
+    /// Runs `attempt` until it is not [`InvokeError::Unavailable`], at most
+    /// `CORTEX_REVALIDATE_ATTEMPTS` times (4, at least 1), pausing `CORTEX_REVALIDATE_PAUSE_MS`
+    /// (5000) before the second and doubling after it; an unavailable answer that remains names the
+    /// number of attempts. Shared by the revalidation and the profile resolution.
+    fn attempts<T>(
+        &self,
+        mut attempt_once: impl FnMut() -> Result<T, InvokeError>,
+    ) -> Result<T, InvokeError> {
         let attempts = setting("CORTEX_REVALIDATE_ATTEMPTS", 4).max(1);
         let mut pause = Duration::from_millis(setting("CORTEX_REVALIDATE_PAUSE_MS", 5000));
         let mut attempt = 1;
         loop {
-            match self.revalidate_once(adapter, connection, force) {
+            match attempt_once() {
                 Err(InvokeError::Unavailable(_)) if attempt < attempts => {
                     std::thread::sleep(pause);
                     pause = pause.saturating_mul(2);

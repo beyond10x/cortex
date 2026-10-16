@@ -171,7 +171,6 @@ fn status_file(dir: &Path) -> Value {
 /// profile is the first read before the revalidation. Answering it the retryable failure once is
 /// retried like the list read inside the revalidation, and the run applies.
 #[test]
-#[ignore = "adversary finding: the connections list that resolves a profile is not retried; the run fails as fetch-failed and is counted"]
 fn a_profile_resolution_failing_retryably_once_is_retried_and_the_run_applies() {
     let w = world();
     created(&w, "pa", "profile: tavily.api-key");
@@ -186,7 +185,6 @@ fn a_profile_resolution_failing_retryably_once_is_retried_and_the_run_applies() 
 /// the source enabled with no failure counted. This is the story's symptom for a source that
 /// names a profile.
 #[test]
-#[ignore = "adversary finding: a profile-named source whose connections list stays unavailable fails as fetch-failed, is counted, and two runs disable it"]
 fn a_profile_resolution_failing_on_every_attempt_is_not_counted_and_never_disables() {
     let w = world();
     created(&w, "pb", "profile: tavily.api-key");
@@ -302,7 +300,10 @@ fn a_connection_unavailable_run_keeps_an_earlier_failure_count() {
     let (code, ran) = run(&w, "kc/news");
     assert_eq!(code, 1, "{ran}");
     let r = row(&w, "kc/news");
-    assert_eq!(r["state"], "Disabled", "the second counted failure disables: {r}");
+    assert_eq!(
+        r["state"], "Disabled",
+        "the second counted failure disables: {r}"
+    );
     assert_eq!(
         w.lines("hook.log"),
         [

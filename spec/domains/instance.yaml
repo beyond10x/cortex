@@ -992,7 +992,8 @@ errors:
   - name: cortex.instance.ConnectionUnavailable
     summary: >-
       Connectors answered a retryable operational failure (`kind` `operational`, `next_action`
-      `retry_explicitly`) to every attempt of the run's revalidation of its connection, at most 4
+      `retry_explicitly`) to every attempt of the run's revalidation of its connection, or of the `connections list` read that
+      resolves a profile-named connection, at most 4
       attempts with pauses of 5 s, 10 s and 20 s, before the run fetched any document. Nothing about
       the source was wrong: the failure is not counted against it, and the next run starts as
       usual.
@@ -1512,7 +1513,8 @@ commands:
       - name: connection-unavailable
         external: >-
           Connectors answers a retryable operational failure to every attempt of `connections
-          revalidate` (or of the `connections list` read before it) before the run's first fetch
+          revalidate` (or of the `connections list` read before it, which for a source naming a profile is
+          also the read that resolves the profile) before the run's first fetch
         error: cortex.instance.ConnectionUnavailable
         compensates: true
         updates: cortex.instance.Source
