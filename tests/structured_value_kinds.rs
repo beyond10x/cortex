@@ -287,7 +287,10 @@ fn a_record_whose_value_does_not_convert_is_refused_alone() {
         .unwrap_or_else(|| panic!("no run line in cortex.log: {logged:?}"));
     assert_eq!(line["unconverted"], json!(unconverted), "{line}");
 
-    // The record is read again, and applied once its value converts.
+    // The record is skipped until its text changes, then applied once its value converts.
+    let (_, same) = run(&w, "b");
+    assert_eq!(same["detail"]["documents_applied"], 0, "{same}");
+    assert!(same["detail"].get("unconverted").is_none(), "{same}");
     items(
         &w,
         json!([

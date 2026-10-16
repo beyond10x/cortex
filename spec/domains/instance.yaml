@@ -212,7 +212,9 @@ types:
   # decimal integer string; `Decimal`: a number or a decimal string; `Boolean`: `true`/`false` in
   # JSON or text; `Timestamp`: RFC 3339) is refused alone: it is left out of the batch and named
   # with its key and the property in the run's report and `cortex.log`, and the rest of the batch
-  # is applied. A `value_kind` that differs from the kind the store declares is refused when the
+  # is applied. The record is marked seen with its key and content hash, like an applied one, so
+  # it is skipped until its source text changes and no longer counts against a later run's
+  # `max_documents_per_run`; a changed record is selected again. A `value_kind` that differs from the kind the store declares is refused when the
   # spec is read (`create`, `update`, a run), naming the node type, the property and both kinds.
   # The specification has no construct for a conversion of a record's value or for the store's
   # ontology; `src/structured.rs` holds them and `tests/structured_value_kinds.rs` tests them.

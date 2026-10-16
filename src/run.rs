@@ -1444,7 +1444,7 @@ struct Records<'a> {
 /// mapped values alone are over that bound is not applied, but named in `skipped` and recorded as
 /// seen, as its next run would refuse it again. A record with a mapped value that does not convert
 /// to its property's kind ([`structured::Source::unconverted`]) is left out of its batch, named in
-/// `unconverted`, and neither applied nor marked seen.
+/// `unconverted`, and marked seen like an applied one, so it is skipped until its text changes.
 fn apply_records(
     layout: &Layout,
     r: &Records<'_>,
@@ -1470,6 +1470,7 @@ fn apply_records(
                             value_kind,
                         }),
                 );
+            seen.record(&d, r.applied_at);
             continue;
         }
         let lead = r.source.lead(&d);

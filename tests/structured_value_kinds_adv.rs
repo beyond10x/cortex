@@ -290,9 +290,7 @@ fn a_decimal_cortex_accepts_never_refuses_the_batch() {
     let (code, ran) = run(&w, "dec");
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
     let applied = ran["detail"]["documents_applied"].as_i64().unwrap_or(0);
-    let unconverted = ran["detail"]["unconverted"]
-        .as_array()
-        .map_or(0, Vec::len) as i64;
+    let unconverted = ran["detail"]["unconverted"].as_array().map_or(0, Vec::len) as i64;
     let rejected = ran["detail"]["parts_rejected"].as_i64().unwrap_or(0);
     assert_eq!(applied + unconverted, 4, "{ran}");
     assert_eq!(rejected, 0, "{ran}");
@@ -328,13 +326,21 @@ fn supersede_does_not_end_the_decimals_it_just_wrote() {
     );
     created(&w, &path);
     let (code, first) = run(&w, "sup");
-    assert_eq!((code, first["outcome"].as_str()), (0, Some("ran")), "{first}");
+    assert_eq!(
+        (code, first["outcome"].as_str()),
+        (0, Some("ran")),
+        "{first}"
+    );
     assert_eq!(first["detail"]["documents_applied"], 3, "{first}");
     assert_eq!(values(&w, "sup", "price").len(), 3, "{first}");
     let (_, second) = run(&w, "sup");
     let held = values(&w, "sup", "price");
     assert_eq!(held.len(), 3, "{held:?} {second}");
-    assert_eq!(second["detail"]["retracted"].as_i64().unwrap_or(0), 0, "{second}");
+    assert_eq!(
+        second["detail"]["retracted"].as_i64().unwrap_or(0),
+        0,
+        "{second}"
+    );
 }
 
 /// The same for a `Timestamp` with an offset and a `Boolean` in upper case: what the run wrote is
@@ -362,7 +368,11 @@ fn supersede_does_not_end_timestamps_or_booleans_it_just_wrote() {
     );
     created(&w, &path);
     let (code, first) = run(&w, "sut");
-    assert_eq!((code, first["outcome"].as_str()), (0, Some("ran")), "{first}");
+    assert_eq!(
+        (code, first["outcome"].as_str()),
+        (0, Some("ran")),
+        "{first}"
+    );
     run(&w, "sut");
     assert_eq!(
         values(&w, "sut", "due"),
