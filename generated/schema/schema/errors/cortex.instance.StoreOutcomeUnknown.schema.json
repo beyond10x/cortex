@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "StoreOutcomeUnknown payload",
-  "description": "EKR could not say whether a stage verb took effect (`ekr stage begin`, `ekr stage publish` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage.",
+  "description": "EKR could not say whether a store write of the run took effect (`ekr stage begin`, `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage, or extracts the batch again.",
   "x-ess-name": "cortex.instance.StoreOutcomeUnknown",
   "x-ess-kind": "error-payload",
   "type": "object",
@@ -17,8 +17,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "61c5316f20f1049ea080d95316e60af51163abfc0944180ebf8ad16dc2e9d091",
-    "contract_digest": "slice-sha256/2:ef49a744f8383b2de3befc0a3f5b8062a2b9fa17650bbb0fae3a844029069b08",
+    "source_digest": "dbacd32ea9b177c3754478f65c36a9ea7dab17516423166e01ae6aa4be6dc431",
+    "contract_digest": "slice-sha256/2:00f1d47371940b75a3eb0c6dbfd8162dd0e0472c1806848ab9e759eb46e1647d",
     "regenerate": "ess generate"
   }
 }

@@ -8,7 +8,7 @@ summary: An apply-extraction (or other store write) whose outcome is unknown fai
 relations:
 - decomposes: epic:organisation-scale-instance
 - serves: vision:self-updating-instances
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-16T13:49:47Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-16T13:49:47Z", actor: "human:timo", revision: 4}
@@ -24,8 +24,11 @@ the next run neither loses nor doubles a batch:
 - In a stage (a gated run on a `postgres` store): the stage is abandoned by the next run, which
   fetches the run's documents again (`state/` put back, as for a run killed in its stage).
 - Outside a stage (an ungated `postgres` store, or `sqlite`): the run's documents are not marked
-  seen past the batch whose apply was unknown, so the next run extracts that batch again; EKR's
-  content-hash idempotence answers a batch that did land without writing it twice.
+  seen past the batch whose apply was unknown, so the next run extracts that batch again: no
+  batch is lost. A batch that did land under the fault is written a second time, a second set of
+  assertions and evidence, exactly as any re-extraction writes one (`cortex adopt`'s help,
+  `website/docs/operating.md` "Adopting an existing store"); EKR has no content-hash idempotence
+  for `apply-extraction`, and cortex does not look the batch up in the store.
 
 ## Why
 
@@ -61,7 +64,9 @@ its `external` and summary grow to name store writes besides the stage verbs.
 - A stand-in `ekr` whose `apply-extraction` answers "publication outcome is unknown" after
   committing, on an ungated `postgres` store: two runs with `--record-failure` exit 4 as
   `store-outcome-unknown`; `consecutive_failures` stays 0; the third run (no fault) extracts the
-  batch again and the store holds its facts once.
+  batch again and marks it seen, so no batch is lost; the store holds one set of the batch's
+  assertions and evidence per run whose apply landed (two after the faulted runs, a further one
+  after the third), its nodes once, as re-extraction writes.
 - The same inside a stage (gated `postgres` run): the run exits 4; the next run abandons the stage,
   puts `state/` back and applies the batch once.
 - The same before committing: the next run applies the batch once.
