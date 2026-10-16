@@ -18,7 +18,7 @@ use cortex_cli::instance::{Layout, Meta};
 use cortex_cli::ports::{cost_decimal, Ports, Shared, SharedRef};
 use cortex_cli::schedule::{self, Systemd};
 use cortex_cli::snapshot::{self, Refusal, RestoreError};
-use cortex_cli::{ekr, home, instance, model_map, quality, run, schema, spec};
+use cortex_cli::{ekr, home, instance, model_map, quality, run, schema, spec, structured};
 
 /// Spin up EKR knowledge brains from a spec, fed on a schedule by Connectors data sources.
 #[derive(Parser)]
@@ -550,7 +550,8 @@ fn seed_instance(
     };
     let schema = spec.seed.schema.as_ref().map(|s| layout.dir.join(s));
     if store.backend == ekr::Backend::Sqlite {
-        return seed_and_apply(&store, &seed_path, schema.as_deref());
+        seed_and_apply(&store, &seed_path, schema.as_deref())?;
+        return kind_refusal(spec, &store);
     }
 
     // PostgreSQL outlives the instance directory a refusal deletes, so nothing is written to it
@@ -577,7 +578,8 @@ fn seed_instance(
         launch: None,
         stage: None,
     };
-    let checked = seed_and_apply(&scratch, &seed_path, schema.as_deref());
+    let checked = seed_and_apply(&scratch, &seed_path, schema.as_deref())
+        .and_then(|()| kind_refusal(spec, &scratch));
     remove_scratch(&layout.dir, "seed-check.sqlite");
     checked.map_err(|e| {
         format!("{e} (found on a scratch SQLite store; no PostgreSQL lineage was written)")
@@ -604,6 +606,16 @@ fn unix_millis() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+}
+
+/// Refuses `spec` when a structured mapping names a value kind that differs from the one `store`
+/// declares for that property ([`structured::spec_refusal`]).
+fn kind_refusal(spec: &m::InstanceSpec, store: &ekr::Store) -> Result<(), String> {
+    if !structured::has_structured(spec) {
+        return Ok(());
+    }
+    let ontology = store.ontology()?;
+    structured::spec_refusal(spec, &ontology).map_or(Ok(()), Err)
 }
 
 /// Seeds `store` and applies the seed schema, refusing a schema with rejected parts.
@@ -1330,6 +1342,13 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
             }
         }
     }
+    // A structured mapping whose value kind differs from the one the instance's store declares is
+    // refused as well; a store that cannot be read now leaves that to the run.
+    if refusal.is_none() && structured::has_structured(&spec) && layout.host().is_file() {
+        if let Ok(ontology) = layout.store_handle(&spec).ontology() {
+            refusal = structured::spec_refusal(&spec, &ontology);
+        }
+    }
     let seed_digest = match &refusal {
         Some(reason) => format!("refused: {reason}"),
         None => home::seed_digest(&loaded.dir, &spec),
@@ -1851,6 +1870,15 @@ fn run_source(
                     .rejected
                     .iter()
                     .map(run::Rejected::json)
+                    .collect::<Vec<_>>());
+            }
+            // Present only when a record's value did not convert to its property's kind: a run
+            // that had none reports as before.
+            if !report.unconverted.is_empty() {
+                detail["unconverted"] = json!(report
+                    .unconverted
+                    .iter()
+                    .map(run::Unconverted::json)
                     .collect::<Vec<_>>());
             }
             // Present only when the policy pseudonymises: a spec file without one reports as

@@ -36,6 +36,21 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Fixed
+
+- A `structured` source writes each mapped property in the value kind the store holds for it.
+  Before, cortex declared and wrote every mapped property as a `String`, so a batch mapping a
+  property the store declared `Integer` or `Boolean` was refused whole on a PostgreSQL store, and
+  on a SQLite store the property was redeclared `String`. A property mapping takes an optional
+  `value_kind` (`String`, `Integer`, `Decimal`, `Boolean`, `Timestamp`); without one, cortex uses
+  the kind the store's ontology declares for that property of the node type, and `String` when it
+  declares none. Each value is converted to the kind (`"4"` to `4`, `"false"` to `false`, RFC 3339
+  text to a `Timestamp`). A record whose value does not convert is left out of its batch alone and
+  named, with its key and the property, in the run's new `unconverted` field and in `cortex.log`;
+  the rest of the batch is applied. A `value_kind` that differs from the kind the store declares is
+  refused when the spec is read (`create`, `update`, a run), naming the node type, the property
+  and both kinds.
+
 ## 0.5.1 — 2026-10-16
 
 ### Fixed

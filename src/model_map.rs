@@ -275,6 +275,13 @@ fn record_mapping(mapping: &s::CortexInstanceRecordMapping) -> m::RecordMapping 
             .map(|p| m::PropertyMapping {
                 property: p.property.clone(),
                 path: p.path.clone(),
+                value_kind: opt(&p.value_kind).map(|k| match *k {
+                    s::CortexInstanceSchemaValueKind::V0 => m::SchemaValueKind::Boolean,
+                    s::CortexInstanceSchemaValueKind::V1 => m::SchemaValueKind::Decimal,
+                    s::CortexInstanceSchemaValueKind::V2 => m::SchemaValueKind::Integer,
+                    s::CortexInstanceSchemaValueKind::V3 => m::SchemaValueKind::String,
+                    s::CortexInstanceSchemaValueKind::V4 => m::SchemaValueKind::Timestamp,
+                }),
             })
             .collect(),
         relations: mapping

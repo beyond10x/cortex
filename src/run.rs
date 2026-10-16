@@ -68,6 +68,10 @@ pub struct Report {
     pub skipped: Vec<String>,
     /// Applied documents a part EKR rejected belongs to, each with EKR's refusal.
     pub rejected: Vec<Rejected>,
+    /// Structured records left out because a mapped value does not convert to its property's
+    /// kind (`structured::convert`); neither applied nor marked seen, so the next run reads them
+    /// again.
+    pub unconverted: Vec<Unconverted>,
     /// Assertions of a structured source with `dropped: Supersede` this run superseded by a
     /// changed value, and retracted as no longer listed.
     pub superseded: usize,
@@ -92,6 +96,25 @@ pub struct Report {
 pub struct Rejected {
     pub document: String,
     pub refusal: String,
+}
+
+/// A structured record left out of its batch: its key, and the mapped property whose value does
+/// not convert to the kind the property is written in.
+#[derive(Debug)]
+pub struct Unconverted {
+    pub document: String,
+    pub property: String,
+    pub value_kind: m::SchemaValueKind,
+}
+
+impl Unconverted {
+    pub fn json(&self) -> serde_json::Value {
+        json!({
+            "document": self.document,
+            "property": self.property,
+            "value_kind": structured::kind_name(self.value_kind),
+        })
+    }
 }
 
 impl Rejected {
@@ -130,6 +153,7 @@ impl Default for Report {
             truncated: 0,
             skipped: Vec::new(),
             rejected: Vec::new(),
+            unconverted: Vec::new(),
             superseded: 0,
             retracted: 0,
             daily_ceiling_reached: false,
@@ -504,7 +528,7 @@ fn process_in(
     let mut keys: HashSet<String> = HashSet::new();
     // A record's matches of the irreversible rules, counted when the record is applied.
     let mut record_scrubbed: HashMap<String, BTreeMap<String, usize>> = HashMap::new();
-    let structured = structured_source.map(|st| structured::Source::new(st, redactor.as_ref()));
+    let mut structured = structured_source.map(|st| structured::Source::new(st, redactor.as_ref()));
     // A child call that failed for one parent: the run names the parent, by its identity, and the
     // operation in `skipped`, and keeps the values of that parent's records of the operation.
     let mut held: Vec<structured::Held> = Vec::new();
@@ -707,6 +731,14 @@ fn process_in(
     }
 
     let mut store = layout.store_handle(spec);
+    // Each mapped property is written in the kind its mapping names, else the one the store
+    // declares; a mapping whose kind differs from the store's is refused before anything is
+    // written.
+    if let (Some(s), Some(st)) = (structured.as_mut(), structured_source) {
+        let ontology = store.ontology().map_err(Failure::Apply)?;
+        s.kinds = structured::kinds(st, &ontology)
+            .map_err(|e| Failure::Apply(format!("source {label}: {e}")))?;
+    }
     // A run into a live store copies the store and `state/` once, before its first
     // `apply-extraction`, and keeps the copy, named by the run's start and label, once that apply
     // commits; the seed of a new store takes none.
@@ -1410,7 +1442,9 @@ struct Records<'a> {
 /// read and tried again. Each record's evidence leads with its mapped values
 /// ([`structured::Source::lead`]) before the cut at [`evidence::PAYLOAD_MAX_BYTES`]; a record whose
 /// mapped values alone are over that bound is not applied, but named in `skipped` and recorded as
-/// seen, as its next run would refuse it again.
+/// seen, as its next run would refuse it again. A record with a mapped value that does not convert
+/// to its property's kind ([`structured::Source::unconverted`]) is left out of its batch, named in
+/// `unconverted`, and neither applied nor marked seen.
 fn apply_records(
     layout: &Layout,
     r: &Records<'_>,
@@ -1423,6 +1457,21 @@ fn apply_records(
     let mut entities = load_entities(layout);
     let mut issued = Vec::new();
     for d in selected {
+        let unconverted = r.source.unconverted(&d);
+        if !unconverted.is_empty() {
+            report
+                .unconverted
+                .extend(
+                    unconverted
+                        .into_iter()
+                        .map(|(property, value_kind)| Unconverted {
+                            document: d.key.clone(),
+                            property,
+                            value_kind,
+                        }),
+                );
+            continue;
+        }
         let lead = r.source.lead(&d);
         let bytes = evidence::lead_bytes(&d, &lead);
         if bytes > evidence::PAYLOAD_MAX_BYTES {
@@ -1705,6 +1754,14 @@ fn log_line(label: &str, report: &Report, started: i64) -> serde_json::Value {
             .rejected
             .iter()
             .map(Rejected::json)
+            .collect::<Vec<_>>());
+    }
+    // Present only when a record's value did not convert: a run that had none logs as before.
+    if !report.unconverted.is_empty() {
+        line["unconverted"] = json!(report
+            .unconverted
+            .iter()
+            .map(Unconverted::json)
             .collect::<Vec<_>>());
     }
     // Present only when the policy pseudonymises: a spec file without one logs what it did before.

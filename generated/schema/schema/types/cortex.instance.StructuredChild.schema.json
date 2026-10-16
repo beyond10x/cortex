@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "e78c4bc74cc74a7f9c33db865a399ccfe8e41b4c737b5c6d0666f35f5015613e",
-    "contract_digest": "slice-sha256/2:acd9d8c8157f9ae87ba15f5751ab93dc88feda012cad2981a2f764982902636e",
+    "source_digest": "61c5316f20f1049ea080d95316e60af51163abfc0944180ebf8ad16dc2e9d091",
+    "contract_digest": "slice-sha256/2:ced83f9ca1cc845f7c30c98a06a982843e39de4a9ebeb4c5b13df40b0885ed91",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -61,6 +61,9 @@
         },
         "path": {
           "type": "string"
+        },
+        "value_kind": {
+          "$ref": "#/$defs/cortex.instance.SchemaValueKind"
         }
       },
       "required": [
@@ -135,6 +138,19 @@
         "target_name"
       ],
       "additionalProperties": false
+    },
+    "cortex.instance.SchemaValueKind": {
+      "title": "SchemaValueKind",
+      "x-ess-name": "cortex.instance.SchemaValueKind",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "String",
+        "Integer",
+        "Decimal",
+        "Boolean",
+        "Timestamp"
+      ]
     },
     "cortex.instance.StructuredChild": {
       "title": "StructuredChild",
