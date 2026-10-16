@@ -40,8 +40,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "e78c4bc74cc74a7f9c33db865a399ccfe8e41b4c737b5c6d0666f35f5015613e",
-    "contract_digest": "slice-sha256/2:2a9240486d752aed5b843cb5f551e94e7cd743d192b9a662a4a6353fc2b98bb3",
+    "source_digest": "78ab6fc646647beb44f0f9bc60137c1313bb0b076d5fc4589c8d76d9bff126a2",
+    "contract_digest": "slice-sha256/2:1013e67333e24f54f71222767c9162f191f3616d57e943db4a736aaa25bf232f",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -642,6 +642,9 @@
         },
         "path": {
           "type": "string"
+        },
+        "value_kind": {
+          "$ref": "#/$defs/cortex.instance.SchemaValueKind"
         }
       },
       "required": [
@@ -870,6 +873,19 @@
         "command"
       ],
       "additionalProperties": false
+    },
+    "cortex.instance.SchemaValueKind": {
+      "title": "SchemaValueKind",
+      "x-ess-name": "cortex.instance.SchemaValueKind",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "String",
+        "Integer",
+        "Decimal",
+        "Boolean",
+        "Timestamp"
+      ]
     },
     "cortex.instance.SearchInput": {
       "title": "SearchInput",

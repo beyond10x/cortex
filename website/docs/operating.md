@@ -109,7 +109,7 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 1 | `no-such-source` | the home holds no such source |
 | 2 | none | an error before any outcome, on stderr as `cortex: <message>` (an unreadable registry, a home that cannot be locked) |
 | 3 | `disabled` | the source is disabled after two failed runs in a row; nothing ran. `cortex source enable` switches it back on |
-| 4 | `store-outcome-unknown` | EKR could not say whether a stage verb took effect (`publication outcome is unknown`); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage (see [Undoing a run](#undoing-a-run)) |
+| 4 | `store-outcome-unknown` | EKR could not say whether a store write of the run took effect (`publication outcome is unknown` from a stage verb, `apply-extraction` or a transaction's commit); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage or extracts the batch again, and a gated `sqlite` run that had kept its snapshot is undone from it (see [Undoing a run](#undoing-a-run)) |
 
 With `--fetch-only` (see [Counting what a run would extract](#counting-what-a-run-would-extract)),
 `fetched` exits 0 and a fetch that failed exits 1 as `fetch-failed`.
@@ -166,7 +166,14 @@ run's. A `store-outcome-unknown` run records no failure and prints no second lin
 A `structured` source skips steps 5 and 6: each batch of records is mapped to an extraction
 document by the source's `mapping` and applied without a model call, at a cost of 0 (see
 [the spec file](./spec-file.md#kind-structured)). It masks every string in a record rather than
-the text as a whole, and never cuts a record.
+the text as a whole, and never cuts a record. Each mapped property is written in the value kind
+its mapping names or the store declares, else `String`. A record whose value does not convert to
+that kind is left out of its batch alone and named in the run's `unconverted`, in its result and
+its `cortex.log` line: one entry per value, with the record's key (`document`), the `property` and
+its `value_kind`. The field is present only when there is one. The record is marked seen, so
+later runs skip it until its source text changes. A mapping whose `value_kind` differs from the kind the store declares
+fails the run as `apply-refused`, naming the node type, the property and both kinds, before
+anything is applied.
 
 The run stops starting batches when its `budget_usd` is spent, or when the instance's spend of
 the UTC day reaches `model.daily_ceiling_usd` (see
@@ -211,12 +218,21 @@ the source's seen state where it was. The timers pass `--record-failure`, so a f
 the second failure in a row disables the source and stops its timer. A successful run resets the
 count. `cortex source enable <instance>/<source>` switches it back on.
 
-A run that ends because EKR cannot say whether a stage verb took effect (`ekr stage begin` or
-`ekr stage publish` answering `publication outcome is unknown; resolve the exact retained
-occurrence`) fails as `store-outcome-unknown` and exits 4. The store failed, not the source:
-`--record-failure` counts nothing, so `consecutive_failures` does not move and the source is never
-disabled by it. Its status, metric and hook report it as any failed run's do. The next run settles
-the stage, as it settles the stage of a run that was killed (see [Undoing a run](#undoing-a-run)).
+A run that ends because EKR cannot say whether one of its store writes took effect (`ekr stage
+begin`, `ekr stage publish`, `ekr apply-extraction` or the commit of a transaction answering
+`publication outcome is unknown; resolve the exact retained occurrence`) fails as
+`store-outcome-unknown` and exits 4. The store failed, not the source: `--record-failure` counts
+nothing, so `consecutive_failures` does not move and the source is never disabled by it. Its
+status, metric and hook report it as any failed run's do. The next run settles the stage, as it
+settles the stage of a run that was killed (see [Undoing a run](#undoing-a-run)). A run in no
+stage and under no gate marks no document of the batch whose apply was unknown as seen, nor of any
+later batch, so the next run extracts that batch again. A `sqlite` run held to a `gate` that had
+already kept its snapshot is undone instead, as a run its gate refuses is: the snapshot is
+restored, `state/` is put back, and the `cortex.log` line says so; the run still fails as
+`store-outcome-unknown`, exits 4 and counts nothing. Nothing is lost; a batch that did land is written a
+second time, a second set of assertions and evidence for its documents, as any re-extraction
+writes (see [Adopting an existing store](#adopting-an-existing-store)). The batches the run
+applied before it stay applied and seen.
 
 A run that fails a check of the spec's `gate` fails as `apply-refused` and is counted the same
 way. Its `reason` names each failed check with its measure and value
@@ -361,6 +377,15 @@ Connectors launch passes on, so the run's reads see its own commits and its comm
 - A run whose `ekr stage begin` answers that its outcome is unknown fails as
   `store-outcome-unknown` before it applies anything; the stage EKR may hold as `Begun` is
   abandoned by the next run.
+- On a `sqlite` store, a run held to a `gate` whose later `apply-extraction`, or whose
+  dropped-values commit, answers that its outcome is unknown is undone from its snapshot as a
+  run that fails its gate is (see above): the store and `state/` are restored, so no batch stays
+  in the store without having been held to the gate. It fails as `store-outcome-unknown`, exits 4
+  and counts nothing; `cortex.log` records that the snapshot was restored.
+- A run whose `ekr apply-extraction`, or a transaction's commit, answers that its outcome is
+  unknown fails as `store-outcome-unknown` and leaves its stage in `stage.json`, neither published
+  nor abandoned, whatever it applied before: the next run abandons the stage and puts `state/`
+  back, so the run's documents are fetched and extracted again.
 - A run that fails its gate is abandoned (`ekr stage abandon`): `ekr head` answers the head from
   before the run, and `state/` is put back from `stage.json`.
 - A run that fails part-way, before its gate, keeps what it applied, as on `sqlite`: its stage

@@ -1,12 +1,12 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "e78c4bc74cc74a7f9c33db865a399ccfe8e41b4c737b5c6d0666f35f5015613e",
+  "source_digest": "78ab6fc646647beb44f0f9bc60137c1313bb0b076d5fc4589c8d76d9bff126a2",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:aa313ff3b393d8b7af16a14d6dde0baad2dad840254d1ae39ce14f4235d186e7",
-    "projection_digest": "0daa938e17693b83e29ee0198ba96d2fa5e401da07fb3ea364e130101e8fa89c"
+    "contract_digest": "slice-sha256/2:3e021cbb7762285bf6219e1a844b69588383a737426389416f6ffd8479c20d85",
+    "projection_digest": "d36f9c2897b6e567a72e3ca4195e6bf62fabefad15cd1d42b44cc301f252a6a9"
   },
   "generator_version": "0.60.0",
   "target": "rust",
@@ -49,6 +49,7 @@
     "cortex.instance.RelationMapping": "CortexInstanceRelationMapping",
     "cortex.instance.RunGate": "CortexInstanceRunGate",
     "cortex.instance.RunHook": "CortexInstanceRunHook",
+    "cortex.instance.SchemaValueKind": "CortexInstanceSchemaValueKind",
     "cortex.instance.SearchInput": "CortexInstanceSearchInput",
     "cortex.instance.SearchPolicy": "CortexInstanceSearchPolicy",
     "cortex.instance.SearchTopic": "CortexInstanceSearchTopic",
@@ -553,6 +554,21 @@
     },
     {
       "pointer": "/$defs/cortex.instance.RunHook/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.SchemaValueKind/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.SchemaValueKind/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.SchemaValueKind/x-ess-name",
       "rule": "x-ess-name",
       "detail": "model identity and wire mapping retained in source.schema.json"
     },

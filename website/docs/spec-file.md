@@ -476,7 +476,7 @@ and `$` alone is the answer itself.
 | `id` | path to the record's stable id |
 | `name` | path to the entity's name |
 | `aliases` | paths to further names; each holds a value or a list of values. A mapped alias resolves across records and sources (below) |
-| `properties` | `property` and `path` pairs: the value at the path is asserted for the property |
+| `properties` | `property`, `path` and an optional `value_kind`: the value at the path is asserted for the property, in the property's value kind (below) |
 | `relations` | `relation`, `target_type` and `target_name`: a relation from the record's entity to the entity of `target_type` named by the value at the `target_name` path, one per value when it holds a list |
 
 A record without an id or a name is skipped, and a record whose id was already read in the run
@@ -506,9 +506,32 @@ merge a record with nodes known by its plain name, map the name as an alias too
 mapped alias changes (a renamed path) keeps its node and its old alias, and the new value is not
 added as an alias; the property holding it is set as any changed value is.
 
-**Values.** A property's value is stored as text (a number or a boolean as written in JSON); a
-property whose value is absent, empty, null, a list or an object is not set. A changed value adds
-an assertion of the new value. With `dropped: Keep` the old one stays active beside it, so a
+**Values.** Each mapped property is declared and written in one value kind: the `value_kind` its
+mapping names (`String`, `Integer`, `Decimal`, `Boolean` or `Timestamp`), else the kind the
+store's ontology already declares for that property of the node type (`ekr ontology`), else
+`String`. A record's value is converted to the kind:
+
+| kind | a value converts when it is |
+|---|---|
+| `String` | any scalar, stored as text (a number or a boolean as written in JSON) |
+| `Integer` | a JSON integer, or text of a decimal integer (`"4"`) |
+| `Decimal` | a JSON number, or text of a decimal number (`"12.50"`), stored as that text |
+| `Boolean` | `true` or `false`, in JSON or as text in any case (`"false"`, `"TRUE"`) |
+| `Timestamp` | RFC 3339 text (`2026-10-01T00:00:00Z`), stored in milliseconds since the epoch |
+
+A property whose value is absent, empty or null is not set, nor is a `String` property whose
+value is a list or an object. A record with a value that does not convert (`"12a"` for an
+`Integer`, `"maybe"` for a `Boolean`, a list for any kind but `String`) is left out of its batch
+alone: none of its values is applied, the rest of the batch is, and the run names the record's key
+and the property in `unconverted` (in its result and in `cortex.log`). The record is marked
+seen, like an applied one, so later runs skip it, and it does not count against the run's limit,
+until its source text changes. A `value_kind` that differs from the
+kind the store declares for that property is refused when the spec is read: `create` answers
+`seed-refused` and keeps no instance, `update` answers `seed-change-refused` and changes nothing,
+and a run, whose store came to declare another kind since, fails with `apply-refused` before it
+applies anything. Each names the source, the node type, the property and both kinds. Changing the
+kind of a property the store already holds is a schema change ([`cortex schema`](./commands.md)).
+A changed value adds an assertion of the new value. With `dropped: Keep` the old one stays active beside it, so a
 property can hold every value a record has had.
 
 **Dropped values.** With `dropped: Supersede`, after each run cortex reads the store

@@ -142,7 +142,7 @@ fn date(text: &str) -> Option<i64> {
 
 /// An RFC 3339 instant (`2026-03-04T01:00:00.5+01:00`; `T` or a space, `Z` or an offset) in
 /// milliseconds since the epoch.
-fn rfc3339_ms(text: &str) -> Option<i64> {
+pub(crate) fn rfc3339_ms(text: &str) -> Option<i64> {
     let b = text.as_bytes();
     if b.len() < 20 || !matches!(b[10], b'T' | b't' | b' ') || b[13] != b':' || b[16] != b':' {
         return None;

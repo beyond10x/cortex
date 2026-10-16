@@ -33,8 +33,9 @@ pub enum Failure {
     Fetch(String),
     Extract(String),
     Apply(String),
-    /// EKR could not say whether a stage verb took effect (`crate::ekr::outcome_unknown`): a fault
-    /// of the store, not of the source, which the next run settles.
+    /// EKR could not say whether a store write of the run took effect (a stage verb,
+    /// `apply-extraction` or a transaction; `crate::ekr::outcome_unknown`): a fault of the store,
+    /// not of the source, which the next run settles.
     StoreOutcomeUnknown(String),
 }
 
@@ -68,6 +69,10 @@ pub struct Report {
     pub skipped: Vec<String>,
     /// Applied documents a part EKR rejected belongs to, each with EKR's refusal.
     pub rejected: Vec<Rejected>,
+    /// Structured records left out because a mapped value does not convert to its property's
+    /// kind (`structured::convert`); neither applied nor marked seen, so the next run reads them
+    /// again.
+    pub unconverted: Vec<Unconverted>,
     /// Assertions of a structured source with `dropped: Supersede` this run superseded by a
     /// changed value, and retracted as no longer listed.
     pub superseded: usize,
@@ -92,6 +97,25 @@ pub struct Report {
 pub struct Rejected {
     pub document: String,
     pub refusal: String,
+}
+
+/// A structured record left out of its batch: its key, and the mapped property whose value does
+/// not convert to the kind the property is written in.
+#[derive(Debug)]
+pub struct Unconverted {
+    pub document: String,
+    pub property: String,
+    pub value_kind: m::SchemaValueKind,
+}
+
+impl Unconverted {
+    pub fn json(&self) -> serde_json::Value {
+        json!({
+            "document": self.document,
+            "property": self.property,
+            "value_kind": structured::kind_name(self.value_kind),
+        })
+    }
 }
 
 impl Rejected {
@@ -130,6 +154,7 @@ impl Default for Report {
             truncated: 0,
             skipped: Vec::new(),
             rejected: Vec::new(),
+            unconverted: Vec::new(),
             superseded: 0,
             retracted: 0,
             daily_ceiling_reached: false,
@@ -460,7 +485,7 @@ fn process(
         &mut before,
         None,
     );
-    settle(ran, before)
+    settle(layout, spec, label, ran, before)
 }
 
 /// [`process`], with the run's snapshot and stage in `before`, which [`settle`] settles once the
@@ -504,7 +529,7 @@ fn process_in(
     let mut keys: HashSet<String> = HashSet::new();
     // A record's matches of the irreversible rules, counted when the record is applied.
     let mut record_scrubbed: HashMap<String, BTreeMap<String, usize>> = HashMap::new();
-    let structured = structured_source.map(|st| structured::Source::new(st, redactor.as_ref()));
+    let mut structured = structured_source.map(|st| structured::Source::new(st, redactor.as_ref()));
     // A child call that failed for one parent: the run names the parent, by its identity, and the
     // operation in `skipped`, and keeps the values of that parent's records of the operation.
     let mut held: Vec<structured::Held> = Vec::new();
@@ -707,6 +732,14 @@ fn process_in(
     }
 
     let mut store = layout.store_handle(spec);
+    // Each mapped property is written in the kind its mapping names, else the one the store
+    // declares; a mapping whose kind differs from the store's is refused before anything is
+    // written.
+    if let (Some(s), Some(st)) = (structured.as_mut(), structured_source) {
+        let ontology = store.ontology().map_err(Failure::Apply)?;
+        s.kinds = structured::kinds(st, &ontology)
+            .map_err(|e| Failure::Apply(format!("source {label}: {e}")))?;
+    }
     // A run into a live store copies the store and `state/` once, before its first
     // `apply-extraction`, and keeps the copy, named by the run's start and label, once that apply
     // commits; the seed of a new store takes none.
@@ -916,6 +949,7 @@ fn process_in(
         before.take()?;
         let applied = match store.apply(&path) {
             Ok(r) => r,
+            Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown_write(e, before)),
             Err(e) if report.documents_applied == 0 => return Err(Failure::Apply(e)),
             Err(e) => {
                 report.stopped = Some(e);
@@ -1012,11 +1046,29 @@ impl Undo {
 /// or one that committed nothing. A run that committed something keeps what it applied, as on
 /// SQLite: its stage is published, and a publish that is refused is said in the run's reason. A
 /// run that committed nothing has its stage abandoned, and `state/` stays as the run left it, as a
-/// SQLite run's does.
-fn settle(ran: Result<Report, Failure>, mut before: Undo) -> Result<Report, Failure> {
+/// SQLite run's does. A run that failed because EKR could not say whether one of its writes took
+/// effect ([`unknown_write`]) leaves its stage in `stage.json`, neither published nor abandoned:
+/// the next run abandons it and puts `state/` back ([`Staged::recover`]).
+fn settle(
+    layout: &Layout,
+    spec: &m::InstanceSpec,
+    label: &str,
+    ran: Result<Report, Failure>,
+    mut before: Undo,
+) -> Result<Report, Failure> {
     let Some(staged) = before.staged.take() else {
-        return ran;
+        return match ran {
+            // A gated run outside a stage whose write was unknown: an earlier batch committed
+            // and the run never reached its gate, so it is undone as a run its gate refuses is.
+            Err(Failure::StoreOutcomeUnknown(why)) if gated(spec) && before.kept.is_some() => {
+                Err(undo_unknown(layout, spec, label, why, &before))
+            }
+            ran => ran,
+        };
     };
+    if matches!(ran, Err(Failure::StoreOutcomeUnknown(_))) {
+        return ran;
+    }
     if !before.applied {
         if let Err(e) = staged.discard() {
             eprintln!("cortex: {e}");
@@ -1030,6 +1082,60 @@ fn settle(ran: Result<Report, Failure>, mut before: Undo) -> Result<Report, Fail
         (Ok(_), Err(e)) => Err(e),
         (Err(failed), Err(e)) => Err(failed.and(e.reason())),
     }
+}
+
+/// The failure of a store write of the run whose outcome EKR could not say
+/// ([`crate::ekr::outcome_unknown`]): `apply-extraction`, or the commit of a transaction. The run
+/// fails as `store-outcome-unknown` before it marks the batch seen. In a stage, the stage is left
+/// to the next run ([`settle`]), which abandons it and puts `state/` back, so the run's documents
+/// are fetched again; outside one, the next run extracts the batch again, so nothing is lost, and
+/// a batch that did land is written a second time: a second set of assertions and evidence, as
+/// any re-extraction writes. A gated run that kept its snapshot is undone from it instead
+/// ([], from []).
+fn unknown_write(error: String, before: &Undo) -> Failure {
+    let next = match &before.staged {
+        Some(staged) => format!(
+            "its stage {} is kept in stage.json, and the next run abandons it and fetches the \
+             run's documents again",
+            staged.record.stage
+        ),
+        None => "the batch was not marked seen, so the next run extracts it again".to_string(),
+    };
+    Failure::StoreOutcomeUnknown(format!("{error}; {next}"))
+}
+
+/// The failure of a gated run outside a stage that ended on an unknown store write after an earlier
+/// batch committed: the run's snapshot is restored and `state/` put back with [`undo`], the code
+/// that undoes a run its gate refused, so no batch stays in the store without being held to the
+/// gate. The run still fails as `store-outcome-unknown`; its reason and its `cortex.log` line say
+/// what was done to the snapshot.
+fn undo_unknown(
+    layout: &Layout,
+    spec: &m::InstanceSpec,
+    label: &str,
+    why: String,
+    before: &Undo,
+) -> Failure {
+    let home = layout
+        .dir
+        .parent()
+        .and_then(std::path::Path::parent)
+        .unwrap_or(&layout.dir);
+    let (restored, undone) = undo(
+        layout,
+        &spec.name.0,
+        before.kept.as_deref(),
+        &Systemd::from_env(home),
+    );
+    let reason = format!("{why}; {undone}");
+    layout.log_line(&json!({
+        "at": now_ms(),
+        "source": label,
+        "outcome": "store-outcome-unknown",
+        "restored": restored,
+        "reason": reason,
+    }));
+    Failure::StoreOutcomeUnknown(reason)
 }
 
 /// The failure a stage verb's error is: [`Failure::StoreOutcomeUnknown`] when EKR could not say
@@ -1410,7 +1516,9 @@ struct Records<'a> {
 /// read and tried again. Each record's evidence leads with its mapped values
 /// ([`structured::Source::lead`]) before the cut at [`evidence::PAYLOAD_MAX_BYTES`]; a record whose
 /// mapped values alone are over that bound is not applied, but named in `skipped` and recorded as
-/// seen, as its next run would refuse it again.
+/// seen, as its next run would refuse it again. A record with a mapped value that does not convert
+/// to its property's kind ([`structured::Source::unconverted`]) is left out of its batch, named in
+/// `unconverted`, and marked seen like an applied one, so it is skipped until its text changes.
 fn apply_records(
     layout: &Layout,
     r: &Records<'_>,
@@ -1423,6 +1531,22 @@ fn apply_records(
     let mut entities = load_entities(layout);
     let mut issued = Vec::new();
     for d in selected {
+        let unconverted = r.source.unconverted(&d);
+        if !unconverted.is_empty() {
+            report
+                .unconverted
+                .extend(
+                    unconverted
+                        .into_iter()
+                        .map(|(property, value_kind)| Unconverted {
+                            document: d.key.clone(),
+                            property,
+                            value_kind,
+                        }),
+                );
+            seen.record(&d, r.applied_at);
+            continue;
+        }
         let lead = r.source.lead(&d);
         let bytes = evidence::lead_bytes(&d, &lead);
         if bytes > evidence::PAYLOAD_MAX_BYTES {
@@ -1453,6 +1577,7 @@ fn apply_records(
         before.take()?;
         let applied = match r.store.apply(&path) {
             Ok(applied) => applied,
+            Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown_write(e, before)),
             Err(e) if report.documents_applied == 0 => return Err(Failure::Apply(e)),
             Err(e) => {
                 report.stopped = Some(e);
@@ -1553,6 +1678,7 @@ fn end_dropped(
         let path = r.run_dir.join(format!("ends-{n}.yaml"));
         match r.store.transact(&path, r.operator, chunk) {
             Ok(_) => before.committed(),
+            Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown_write(e, before)),
             Err(e) if !before.applied => return Err(Failure::Apply(e)),
             Err(e) => {
                 report.stopped = Some(match report.stopped.take() {
@@ -1705,6 +1831,14 @@ fn log_line(label: &str, report: &Report, started: i64) -> serde_json::Value {
             .rejected
             .iter()
             .map(Rejected::json)
+            .collect::<Vec<_>>());
+    }
+    // Present only when a record's value did not convert: a run that had none logs as before.
+    if !report.unconverted.is_empty() {
+        line["unconverted"] = json!(report
+            .unconverted
+            .iter()
+            .map(Unconverted::json)
             .collect::<Vec<_>>());
     }
     // Present only when the policy pseudonymises: a spec file without one logs what it did before.

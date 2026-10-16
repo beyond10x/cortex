@@ -36,6 +36,36 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+## 0.5.2 — 2026-10-16
+
+### Fixed
+
+- A `structured` source writes each mapped property in the value kind the store holds for it.
+  Before, cortex declared and wrote every mapped property as a `String`, so a batch mapping a
+  property the store declared `Integer` or `Boolean` was refused whole on a PostgreSQL store, and
+  on a SQLite store the property was redeclared `String`. A property mapping takes an optional
+  `value_kind` (`String`, `Integer`, `Decimal`, `Boolean`, `Timestamp`); without one, cortex uses
+  the kind the store's ontology declares for that property of the node type, and `String` when it
+  declares none. Each value is converted to the kind (`"4"` to `4`, `"false"` to `false`, RFC 3339
+  text to a `Timestamp`). A record whose value does not convert is left out of its batch alone and
+  named, with its key and the property, in the run's new `unconverted` field and in `cortex.log`;
+  the rest of the batch is applied. The record is marked seen, so later runs skip it (and it no
+  longer counts against `max_documents_per_run`) until its source text changes. A `value_kind` that differs from the kind the store declares is
+  refused when the spec is read (`create`, `update`, a run), naming the node type, the property
+  and both kinds.
+
+- A run whose `ekr apply-extraction`, or the commit of the transaction that ends dropped values,
+  answers that its outcome is unknown ("publication outcome is unknown") no longer counts against
+  the source: it fails as `store-outcome-unknown` with exit status 4, as an unknown stage verb has
+  since 0.5.1. In a stage (a gated run on `postgres`) the run leaves its stage in `stage.json`, and
+  the next run abandons it and puts `state/` back; a gated `sqlite` run that had kept its snapshot
+  is undone: the snapshot is restored and `state/` put back, as for a run its gate refuses, and
+  the run's `cortex.log` line says so, so no batch stays in the store without being held to the
+  gate; outside these (an ungated run) the batch is not marked seen, so the next run extracts it again: nothing is
+  lost, and a batch that did land is written a second time, a second set of assertions and
+  evidence, as any re-extraction writes it. Before, such a
+  run was `apply-refused` and counted, and a second one disabled the source.
+
 ## 0.5.1 — 2026-10-16
 
 ### Fixed

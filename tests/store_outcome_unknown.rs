@@ -4,6 +4,11 @@
 //! recorded as a failure of the source; the next run settles the stage. No database is needed: as
 //! in `postgres_run_undo_adv.rs`, a stand-in `ekr` answers a `postgres` store from a SQLite file
 //! through the real `ekr` (stages work on SQLite too).
+//!
+//! `story:apply-outcome-unknown-not-counted`: the same answer from `apply-extraction` is the same
+//! outcome. In a stage the run leaves the stage, which the next run abandons; outside one it marks
+//! nothing of the batch seen, so the next run extracts it again: nothing is lost, and a batch that
+//! did land is written again, a second set of assertions and evidence, as a re-extraction writes.
 
 mod common;
 
@@ -26,6 +31,10 @@ const UNKNOWN: &str = "ekr: publication outcome is unknown; resolve the exact re
 /// - `unknown-publish`: `stage publish` publishes nothing and answers the unknown outcome; on
 ///   every publish while it exists.
 /// - `fail-begin`: `stage begin` fails with an ordinary fault; on every begin while it exists.
+/// - `unknown-after-apply`: `apply-extraction` applies, then answers the unknown outcome; on every
+///   apply while it exists (`story:apply-outcome-unknown-not-counted`).
+/// - `unknown-before-apply`: `apply-extraction` applies nothing and answers the unknown outcome;
+///   on every apply while it exists.
 fn unknown_ekr(w: &World) -> PathBuf {
     let path = w.bin.join("ekr-pg");
     let body = r#"R="@R@"; EKR="@EKR@"; DB="$R/pg-as-sqlite.sqlite"; UNKNOWN="@UNKNOWN@"
@@ -44,6 +53,10 @@ case "$1 $2" in
     if [ -e "$R/unknown-before-publish" ]; then rm "$R/unknown-before-publish"; echo "$UNKNOWN" >&2; exit 1; fi
     if [ -e "$R/unknown-after-publish" ]; then rm "$R/unknown-after-publish"; "$EKR" "$@" > /dev/null; echo "$UNKNOWN" >&2; exit 1; fi ;;
 esac
+if [ "$1" = apply-extraction ]; then
+  if [ -e "$R/unknown-before-apply" ]; then echo "$UNKNOWN" >&2; exit 1; fi
+  if [ -e "$R/unknown-after-apply" ]; then "$EKR" "$@" > /dev/null || exit 1; echo "$UNKNOWN" >&2; exit 1; fi
+fi
 exec "$EKR" "$@"
 "#
     .replace("@R@", &w.root.display().to_string())
@@ -66,6 +79,12 @@ fn hook(w: &World) -> PathBuf {
 /// A spec over `docs/` on a direct `postgres` store answered by `bin`, held to a gate (so its runs
 /// are staged), with the metric file and `hook`.
 fn spec(w: &World, bin: &Path, hook: &Path) -> PathBuf {
+    spec_held(w, bin, hook, true)
+}
+
+/// [`spec`], held to its gate (`gated`, so its runs are staged) or to none (so they run in no
+/// stage, as an ungated `postgres` store's do).
+fn spec_held(w: &World, bin: &Path, hook: &Path, gated: bool) -> PathBuf {
     let config = w.root.join("pg/app.json");
     let held = w.root.join("pg/password.txt");
     std::fs::create_dir_all(held.parent().unwrap()).unwrap();
@@ -113,6 +132,9 @@ monitoring:
         config = config.display(),
         hook = hook.display(),
     );
+    let gate = "gate:\n  checks:\n    - {measure: facts_refused, max: \"1\"}\n";
+    assert!(text.contains(gate));
+    let text = if gated { text } else { text.replace(gate, "") };
     let path = w.root.join("pg.yaml");
     std::fs::write(&path, text).unwrap();
     path
@@ -428,4 +450,173 @@ fn any_other_stage_begin_failure_is_still_counted_and_the_second_disables_the_so
         w.lines("hook.log"),
         ["pg/docs apply-refused", "pg/docs disabled"]
     );
+}
+
+/// How many nodes, assertions and evidence records the store holds at its head.
+fn held(w: &World, dir: &Path) -> (usize, usize, usize) {
+    let graph = store_ekr(w, dir, &["snapshot"]);
+    let count = |key: &str| {
+        graph["graph"]["graph"][key]
+            .as_object()
+            .map_or(0, |m| m.len())
+    };
+    (count("nodes"), count("assertions"), count("evidence"))
+}
+
+/// What one run with no fault leaves in the store: the batch, held once.
+fn held_once() -> (usize, usize, usize) {
+    let w = World::new();
+    let hook = hook(&w);
+    let dir = create(&w, &spec_held(&w, &unknown_ekr(&w), &hook, false));
+    let (code, line, all) = run(&w);
+    assert_eq!(
+        (code, line["outcome"].as_str()),
+        (Some(0), Some("ran")),
+        "{all}"
+    );
+    let held = held(&w, &dir);
+    assert!(held.1 > 0, "the run applied nothing: {all}");
+    held
+}
+
+/// Asserts the run exited 4 as `store-outcome-unknown`, naming EKR's answer, and that the source
+/// stays enabled with `consecutive_failures` 0.
+fn unknown_not_counted(w: &World, n: usize, (code, line, all): (Option<i32>, Value, String)) {
+    assert_eq!(
+        (code, line["outcome"].as_str()),
+        (Some(4), Some("store-outcome-unknown")),
+        "run {n}: {all}"
+    );
+    let reason = line["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.contains("publication outcome is unknown"),
+        "run {n}: {reason}"
+    );
+    let row = docs_row(w);
+    assert_eq!(row["state"], "Enabled", "run {n}: {row}");
+    assert_eq!(row["consecutive_failures"], 0, "run {n}: {row}");
+}
+
+/// `story:apply-outcome-unknown-not-counted`, acceptance 2: on an ungated `postgres` store (no
+/// stage), `apply-extraction` commits, then answers the unknown outcome. Two runs with
+/// `--record-failure` exit 4 as `store-outcome-unknown` and leave `consecutive_failures` 0; neither
+/// marks the batch seen, so the third run, with no fault, extracts it again and marks it seen:
+/// nothing is lost. Each run whose apply landed wrote the batch's assertions and evidence, so the
+/// store holds one set per such run, as re-extracting a document writes a second set
+/// (`cortex adopt`'s help); its nodes are held once.
+#[test]
+fn an_unknown_apply_outcome_outside_a_stage_is_not_counted_and_the_batch_is_extracted_again() {
+    let once = held_once();
+    let w = World::new();
+    let hook = hook(&w);
+    let dir = create(&w, &spec_held(&w, &unknown_ekr(&w), &hook, false));
+
+    std::fs::write(w.root.join("unknown-after-apply"), "").unwrap();
+    for n in 1..=2 {
+        unknown_not_counted(&w, n, run(&w));
+        assert!(!seen_a(&dir), "run {n} marked the unknown batch seen");
+        assert!(!dir.join("stage.json").exists(), "run {n}");
+    }
+    let sets = |k: usize| (once.0, k * once.1, k * once.2);
+    assert_eq!(
+        held(&w, &dir),
+        sets(2),
+        "the batch landed under the fault, once per run"
+    );
+    let systemctl = std::fs::read_to_string(w.root.join("systemctl.log")).unwrap_or_default();
+    assert!(!systemctl.contains("disable"), "{systemctl}");
+    assert_eq!(
+        w.lines("hook.log"),
+        [
+            "pg/docs store-outcome-unknown",
+            "pg/docs store-outcome-unknown"
+        ]
+    );
+
+    std::fs::remove_file(w.root.join("unknown-after-apply")).unwrap();
+    let (code, line, all) = run(&w);
+    assert_eq!(
+        (code, line["outcome"].as_str()),
+        (Some(0), Some("ran")),
+        "{all}"
+    );
+    assert_eq!(
+        model_calls(&w),
+        3,
+        "the third run did not extract the batch again"
+    );
+    assert!(seen_a(&dir), "{all}");
+    assert_eq!(
+        held(&w, &dir),
+        sets(3),
+        "the third run's re-extraction is a further set: {all}"
+    );
+    assert_eq!(docs_row(&w)["consecutive_failures"], 0);
+}
+
+/// Acceptance 3: in a stage (a gated `postgres` run), `apply-extraction` commits, then answers the
+/// unknown outcome. The run exits 4 and leaves its stage in `stage.json`, not publishing; the next
+/// run abandons that stage, puts `state/` back, extracts the batch again and applies it once.
+#[test]
+fn an_unknown_apply_outcome_in_a_stage_leaves_the_stage_for_the_next_run() {
+    let once = held_once();
+    let w = World::new();
+    let hook = hook(&w);
+    let dir = create(&w, &spec_held(&w, &unknown_ekr(&w), &hook, true));
+    let before = head(&w, &dir);
+
+    std::fs::write(w.root.join("unknown-after-apply"), "").unwrap();
+    unknown_not_counted(&w, 1, run(&w));
+    let record = stage_record(&dir);
+    // A record holds `publishing` only once a run set it; absent reads as not publishing
+    // (`StageRecord::read`).
+    assert_eq!(record["publishing"].as_bool(), None, "{record}");
+    assert_eq!(head(&w, &dir), before, "the stage was published");
+    assert!(stages_in(&w, &dir, "Abandoned").is_empty(), "abandoned now");
+    assert!(!seen_a(&dir));
+
+    std::fs::remove_file(w.root.join("unknown-after-apply")).unwrap();
+    let (code, line, all) = run(&w);
+    assert_eq!(
+        (code, line["outcome"].as_str()),
+        (Some(0), Some("ran")),
+        "{all}"
+    );
+    let abandoned = stages_in(&w, &dir, "Abandoned");
+    assert_eq!(abandoned.len(), 1, "{abandoned:?}");
+    assert_eq!(abandoned[0]["stage_id"], record["stage_id"]);
+    assert!(!dir.join("stage.json").exists(), "{all}");
+    assert_eq!(model_calls(&w), 2);
+    assert!(seen_a(&dir), "{all}");
+    assert_eq!(held(&w, &dir), once, "{all}");
+}
+
+/// Acceptance 4: `apply-extraction` answers the unknown outcome before committing anything, in a
+/// stage and outside one: the run exits 4 uncounted, and the next run applies the batch once.
+#[test]
+fn an_unknown_apply_outcome_before_committing_is_applied_once_by_the_next_run() {
+    let once = held_once();
+    for gated in [false, true] {
+        let w = World::new();
+        let hook = hook(&w);
+        let dir = create(&w, &spec_held(&w, &unknown_ekr(&w), &hook, gated));
+        let before = held(&w, &dir);
+
+        std::fs::write(w.root.join("unknown-before-apply"), "").unwrap();
+        unknown_not_counted(&w, 1, run(&w));
+        assert_eq!(held(&w, &dir), before, "gated {gated}");
+        assert!(!seen_a(&dir), "gated {gated}");
+        assert_eq!(dir.join("stage.json").exists(), gated, "gated {gated}");
+
+        std::fs::remove_file(w.root.join("unknown-before-apply")).unwrap();
+        let (code, line, all) = run(&w);
+        assert_eq!(
+            (code, line["outcome"].as_str()),
+            (Some(0), Some("ran")),
+            "gated {gated}: {all}"
+        );
+        assert!(!dir.join("stage.json").exists(), "gated {gated}: {all}");
+        assert_eq!(model_calls(&w), 2, "gated {gated}");
+        assert_eq!(held(&w, &dir), once, "gated {gated}: {all}");
+    }
 }

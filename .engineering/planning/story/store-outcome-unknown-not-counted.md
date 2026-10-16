@@ -2,16 +2,17 @@
 format: aep.planning-md/3
 id: story:store-outcome-unknown-not-counted
 kind: story
-status: active
+status: implemented
 title: An unknown store outcome fails a run without counting against the source
 summary: An EKR stage verb whose outcome is unknown fails the run as store-outcome-unknown, exit 4, and is not recorded as a source failure
 relations:
 - decomposes: epic:organisation-scale-instance
 - serves: vision:self-updating-instances
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-16T11:50:40Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-16T11:50:41Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-10-16T13:47:02Z", actor: "human:timo", revision: 5, decided_on: {"asserted":{"test_result":700}}, correlation: "wave-20261016a"}
 ---
 ## Outcome
 
