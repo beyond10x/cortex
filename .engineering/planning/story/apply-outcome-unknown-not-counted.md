@@ -2,13 +2,16 @@
 format: aep.planning-md/3
 id: story:apply-outcome-unknown-not-counted
 kind: story
-status: draft
+status: active
 title: An unknown outcome of a store write fails a run without counting against the source
 summary: An apply-extraction (or other store write) whose outcome is unknown fails the run as store-outcome-unknown, uncounted, and the next run neither loses nor doubles the batch
 relations:
 - decomposes: epic:organisation-scale-instance
 - serves: vision:self-updating-instances
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-16T13:49:47Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-10-16T13:49:47Z", actor: "human:timo", revision: 4}
 ---
 ## Outcome
 
