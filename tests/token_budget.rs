@@ -315,7 +315,7 @@ fn a_spend_file_without_tokens_reads_as_zero_and_a_bad_count_fails_closed() {
     let model = cortex_model::instance::ModelSpec {
         model: "m".into(),
         backend: None,
-        budget_usd: cortex_model::primitives::Decimal("5".into()),
+        budget_usd: Some(cortex_model::primitives::Decimal("5".into())),
         daily_ceiling_usd: None,
         budget_tokens: None,
         daily_ceiling_tokens: Some(100),

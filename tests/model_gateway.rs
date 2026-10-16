@@ -57,7 +57,11 @@ fn spec_with(w: &World, name: &str, gateway: Option<&str>) -> PathBuf {
         assert!(text.contains(from), "{text}");
         std::fs::write(
             &spec,
-            text.replacen(from, &format!("timeout_s: 60, gateway: {gateway}}}"), 1),
+            text.replacen(
+                from,
+                &format!("timeout_s: 60, budget_tokens: 1000000, gateway: {gateway}}}"),
+                1,
+            ),
         )
         .unwrap();
     }
