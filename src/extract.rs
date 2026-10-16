@@ -251,14 +251,23 @@ impl Unfit {
     }
 }
 
-/// Whether claude's error text says the request did not fit the model's window, as `claude -p`
-/// 2.1 words it: `Prompt is too long` or `Input is too long` for a request over the window;
-/// `output token maximum` (`Claude's response exceeded the N output token maximum`) or
-/// `reached its context window limit` for an answer cut off at the output limit. Any other error
-/// is not.
+/// Whether claude's error text says the request did not fit the model's window, in any case:
+/// `Prompt is too long` or `Input is too long`, as `claude -p` 2.1 words it, and
+/// `maximum context length` or `context_length_exceeded`, as an OpenAI-compatible server behind a
+/// gateway does (vLLM, a LiteLLM proxy), for a request over the window; `output token maximum`
+/// (`Claude's response exceeded the N output token maximum`) or `reached its context window
+/// limit` for an answer cut off at the output limit. Any other error is not.
 pub fn unfit(text: &str) -> Option<Unfit> {
     let text = text.to_lowercase();
-    if text.contains("prompt is too long") || text.contains("input is too long") {
+    if [
+        "prompt is too long",
+        "input is too long",
+        "maximum context length",
+        "context_length_exceeded",
+    ]
+    .iter()
+    .any(|s| text.contains(s))
+    {
         Some(Unfit::TooLong)
     } else if text.contains("output token maximum")
         || text.contains("reached its context window limit")

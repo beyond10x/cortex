@@ -391,7 +391,9 @@ types:
   # tests them.
   #
   # `batch_chars`, when given, is the most characters of document text one extraction request
-  # carries (a longer document goes alone); at least 1,000. Without it, behind a gateway that
+  # carries (a longer document goes alone); at least 1,000. A character is counted as its UTF-8
+  # bytes, as before this field: a Latin letter counts 1, a non-Latin character 2 to 3, for the
+  # given size, the derived one and the default alike. Without it, behind a gateway that
   # gives `max_context_tokens`, it is derived from the model's window: the input room is
   # `max_context_tokens` less the output reserve (`gateway.max_output_tokens` when given, else a
   # quarter of `max_context_tokens`); the size is 1.5 characters per token of that room, less the
@@ -399,13 +401,16 @@ types:
   # up to the documents) as the run starts, at least 4,000 and at most 60,000. Otherwise it is
   # 60,000. A run states the size it used (`cortex.instance.SourceRan.batch_chars`). A request
   # `claude` answers as too long for the model's window (an error answer whose text holds
-  # `Prompt is too long` or `Input is too long`) or as cut off at the output limit (one holding
+  # `Prompt is too long`, `Input is too long`, `maximum context length` or
+  # `context_length_exceeded`, in any case) or as cut off at the output limit (one holding
   # `output token maximum` or `reached its context window limit`) is split in two halves by
   # documents and each half asked again, at most 3 splits deep (a batch becomes at most 8 parts);
   # a part of one document is not split. Such an answer is not asked again after a wait, and its
-  # calls count against the token and dollar limits as any call does. A part that still does not
-  # fit ends the run as `batch-too-large` (`cortex.instance.RunSource`), which is not counted
-  # against the source. `cortex quality` and `cortex schema` keep their own batch sizes.
+  # calls count against the token and dollar limits as any call does. A part of one document that
+  # still does not fit is left out alone and the run goes on (`cortex.instance.RunSource`, `ran`);
+  # a part of several documents that still does not fit after 3 splits ends the run as
+  # `batch-too-large`, which is not counted against the source. `cortex quality` and
+  # `cortex schema` keep their own batch sizes.
   # UNMAPPED: the refusal of a `batch_chars` below 1,000 (exit 2, naming the field, for `create`,
   # `update` and `adopt`) is a check on an Integer the specification has no construct for;
   # `spec::check` holds it and `tests/batch_fits_model_window.rs` tests it.
@@ -1022,9 +1027,11 @@ errors:
 
   - name: cortex.instance.BatchTooLarge
     summary: >-
-      A part of an extraction batch was still too long for the model's window, or its answer still
-      cut off at the output limit, after the batch was split as far as it may be. Nothing about the
-      source was wrong; a later run, with a smaller `model.batch_chars`, extracts that part.
+      A part of several documents of an extraction batch was still too long for the model's
+      window, or its answer still cut off at the output limit, after the batch was split 3 deep.
+      Nothing about the source was wrong; a later run extracts that part, and a smaller
+      `model.batch_chars` makes its batches smaller. A single document that alone does not fit is
+      not this error: the run leaves it out and goes on.
     fields:
       - {name: reason, type: String}
 
@@ -1529,14 +1536,15 @@ commands:
       # UNMAPPED: `batch-too-large` exits 6, and like `store-outcome-unknown` its status, metric
       # and hook report it while the scheduler counts nothing. What the run leaves: the batches
       # before the part that did not fit are applied, held to the gate and seen; that part and
-      # every later batch are not marked seen, so a later run extracts them. ESS declares no exit
-      # status and no effect on files outside the model's records;
-      # tests/batch_fits_model_window.rs holds it.
+      # every later batch are not marked seen, so a later run extracts them. A gated run that
+      # fails its gate ends `apply-refused` as any gated run does, its reason also naming the part
+      # that did not fit. ESS declares no exit status and no effect on files outside the model's
+      # records; tests/batch_fits_model_window.rs holds it.
       - name: batch-too-large
         external: >-
-          `claude` answers that a part of an extraction batch is too long for the model's window,
-          or that its answer was cut off at the output limit, after the batch was split 3 deep or
-          down to one document
+          `claude` answers that a part of several documents of an extraction batch is too long for
+          the model's window, or that its answer was cut off at the output limit, after the batch
+          was split 3 deep
         error: cortex.instance.BatchTooLarge
         compensates: true
         updates: cortex.instance.Source
@@ -1553,7 +1561,14 @@ commands:
           part that did not fit and the batch size used, and the scheduler sends no RecordFailure:
           the batch, not the source, failed, so the failure is not counted and never disables the
           source. The batches before it stay applied; the rest are extracted by a later run.
+          A part of one document is not this outcome: the run leaves it out and goes on.
 
+      # UNMAPPED: a part of one document that still does not fit the model's window is left out
+      # alone, as a record whose value does not convert is: it is named, by its key, in the run's
+      # report (`too_large`) and its `cortex.log` line, and marked seen with its content hash, so it
+      # is not asked again until its text changes; the run goes on with the following batches and
+      # ends `ran`. The specification has no construct for the report's list of documents left
+      # out; tests/batch_fits_model_window.rs and tests/batch_fits_model_window_adv.rs hold it.
       - name: ran
         updates: cortex.instance.Source
         instance: source_id
@@ -1956,9 +1971,10 @@ events:
   # The two add up to `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`.
   # `cost_counted` is false when the instance's model is behind a gateway: `cost_usd` is then what
   # `claude` reported, counted against no dollar limit (`cortex.instance.ModelSpec`).
-  # `batch_chars` is the most characters of document text the run put in one extraction request
-  # (`cortex.instance.ModelSpec.batch_chars`, given or derived); `splits` counts the batches it
-  # split in two because a request was too long for the model's window or its answer was cut off.
+  # `batch_chars` is the most characters of document text, counted as UTF-8 bytes, the run put in
+  # one extraction request (`cortex.instance.ModelSpec.batch_chars`, given or derived); `splits`
+  # counts the batches it split in two because a request was too long for the model's window or
+  # its answer was cut off.
   - name: cortex.instance.SourceRan
     fields:
       - {name: source_id, type: cortex.instance.SourceId}

@@ -185,13 +185,14 @@ fn parts(prompt: &str) -> (&str, Vec<&str>) {
     (fixed, docs)
 }
 
-/// Every request holds at most `size` characters of document text, or one document.
+/// Every request holds at most `size` characters of document text, counted as UTF-8 bytes, or
+/// one document.
 fn assert_within(w: &World, size: usize) {
     let requests = requests(w);
     assert!(!requests.is_empty());
     for (i, r) in requests.iter().enumerate() {
         let (_, docs) = parts(r);
-        let chars: usize = docs.iter().map(|d| d.chars().count()).sum();
+        let chars: usize = docs.iter().map(|d| d.len()).sum();
         assert!(
             chars <= size || docs.len() == 1,
             "request {i}: {} documents, {chars} characters, over {size}",
@@ -283,14 +284,10 @@ fn behind_a_gateway_the_size_is_derived_from_the_window_less_the_output_and_the_
     assert_eq!(ran["detail"]["documents_applied"], 5, "{ran}");
     // The fixed part as `claude` received it: the system prompt, the schema and the prompt up to
     // the documents.
-    let chars = |f: &str| {
-        std::fs::read_to_string(w.root.join(f))
-            .unwrap()
-            .chars()
-            .count()
-    };
+    // Counted as UTF-8 bytes, as the batch is.
+    let chars = |f: &str| std::fs::read_to_string(w.root.join(f)).unwrap().len();
     let first = &requests(&w)[0];
-    let fixed = chars("sys.txt") + chars("schema.txt") + parts(first).0.chars().count();
+    let fixed = chars("sys.txt") + chars("schema.txt") + parts(first).0.len();
     // (65,536 - 24,000) tokens of input room, 1.5 characters each.
     let derived = (62_304 - fixed as i64).clamp(4_000, 60_000);
     assert!(
@@ -388,35 +385,41 @@ fn after_3_splits_the_run_ends_batch_too_large_counted_against_nothing() {
     assert_eq!(ran["detail"]["documents_applied"], 16, "{ran}");
 }
 
+/// A part of one document that does not fit is not split and does not end the run: it is left
+/// out alone, named in `too_large` in the report and `cortex.log`, and marked seen until its text
+/// changes; the batches before and after it are applied and the run ends `ran`.
 #[test]
-fn a_one_document_part_is_not_split_and_the_batches_before_it_stay_applied() {
+fn a_one_document_part_is_not_split_but_left_out_alone_and_the_run_goes_on() {
     let mut docs = texts(5, 600);
     docs[2] = format!("HUGE {}", text(2, 590));
     let w = world(&docs, ", batch_chars: 1000", 5000);
     answers_too_long(&w, "marker", TOO_LONG);
     let (code, ran) = run(&w, true);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 4, "{ran}");
     assert_eq!(
-        (code, ran["outcome"].as_str()),
-        (6, Some("batch-too-large")),
+        ran["detail"]["too_large"],
+        json!(["https://example.org/d2"]),
         "{ran}"
     );
-    let reason = ran["detail"]["reason"].as_str().unwrap_or_default();
-    assert!(reason.contains("https://example.org/d2"), "{reason}");
-    assert!(reason.contains("1000"), "the size used: {reason}");
+    assert_eq!(last_log(&w)["too_large"], json!(["https://example.org/d2"]));
     let mut seen_keys = seen(&w);
     seen_keys.sort();
     assert_eq!(
         seen_keys,
-        ["https://example.org/d0", "https://example.org/d1"],
-        "the batches before it applied and seen, that part and the rest not"
+        (0..5)
+            .map(|i| format!("https://example.org/d{i}"))
+            .collect::<Vec<_>>(),
+        "the document left out is seen with the applied ones"
     );
-    assert_eq!(requests(&w).len(), 3, "a one-document part is not split");
+    assert_eq!(requests(&w).len(), 5, "a one-document part is not split");
     assert_eq!(consecutive_failures(&w), 0);
-    // A later run, with a stand-in that answers, extracts the rest.
+    // A later run asks nothing: the document left out is unchanged.
     std::fs::write(w.root.join("mode"), "ok").unwrap();
     let (code, ran) = run(&w, true);
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
-    assert_eq!(ran["detail"]["documents_applied"], 3, "{ran}");
+    assert_eq!(ran["detail"]["documents_new"], 0, "{ran}");
+    assert_eq!(requests(&w).len(), 5, "{ran}");
 }
 
 #[test]

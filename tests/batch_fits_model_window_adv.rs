@@ -200,9 +200,7 @@ fn seen(w: &World) -> Vec<String> {
 }
 
 fn keys(range: std::ops::Range<usize>) -> Vec<String> {
-    let mut k: Vec<String> = range
-        .map(|i| format!("https://example.org/d{i}"))
-        .collect();
+    let mut k: Vec<String> = range.map(|i| format!("https://example.org/d{i}")).collect();
     k.sort();
     k
 }
@@ -218,8 +216,11 @@ fn last_log(w: &World) -> Value {
 /// of one document is never split and no size makes it smaller, so every later run ends
 /// `batch-too-large` on the same document before any other, counted against nothing: the other
 /// documents are never extracted and the source never says it is stuck.
+///
+/// Corrected: that document is left out alone, named in the run's `too_large` and its `cortex.log`
+/// line, and marked seen until its text changes; the run goes on and ends `ran`. It is seen, so
+/// it is among the keys of the source's state, and a later run does not ask it again.
 #[test]
-#[ignore = "adversary finding: one document over the window blocks every later document of the source forever"]
 fn a_single_document_over_the_window_does_not_block_the_documents_after_it() {
     let mut docs = texts(4, 600);
     docs[0] = format!("HUGE {}", text(0, 590));
@@ -239,11 +240,22 @@ fn a_single_document_over_the_window_does_not_block_the_documents_after_it() {
     }
     assert_eq!(
         seen(&w),
-        keys(1..4),
+        keys(0..4),
         "after three runs at the smallest batch_chars, the documents after the one that can never \
          fit are extracted; requests per run: {:?}",
         sizes(&w)
     );
+    // One run did it: d0 asked once and left out, d1..d3 applied.
+    assert_eq!(sizes(&w), [1, 1, 1, 1]);
+    let log = last_log(&w);
+    assert_eq!(log["documents_applied"], 3, "{log}");
+    assert_eq!(log["too_large"], json!(["https://example.org/d0"]), "{log}");
+    // d0's text is unchanged: the next run does not ask it again.
+    let asked = requests(&w).len();
+    let (code, ran) = run(&w, true);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_new"], 0, "{ran}");
+    assert_eq!(requests(&w).len(), asked, "d0 is asked again: {ran}");
 }
 
 /// 16 documents, the 10th of which (d9) never fits: 16 -> 8 + 8; the first 8 apply; 8 -> 4 + 4;
@@ -281,7 +293,10 @@ fn a_split_three_deep_that_applies_half_keeps_that_half_and_leaves_the_rest_for_
         "{log}"
     );
     let st = state(&w);
-    assert!(st["pending_since"].is_i64(), "the window stays pending: {st}");
+    assert!(
+        st["pending_since"].is_i64(),
+        "the window stays pending: {st}"
+    );
     assert!(st["last_success_started_at"].is_null(), "{st}");
 
     std::fs::write(w.root.join("mode"), "ok").unwrap();
@@ -329,7 +344,6 @@ fn every_wording_the_spec_names_splits_the_batch() {
 /// model behind `model.gateway`. `extract::unfit` does not know it, so the run fails as before and
 /// is counted.
 #[test]
-#[ignore = "adversary finding: an OpenAI-compatible gateway's context-length error is not split and is counted"]
 fn an_openai_compatible_context_length_error_splits_the_batch() {
     let w = world(&texts(5, 3000), "", 5000);
     answers_too_long(
@@ -397,7 +411,6 @@ fn a_huge_window_derives_the_most_size_60000() {
 /// document of two-byte text (Cyrillic, Greek, umlauts) or three-byte text (CJK) goes to the
 /// model in a batch two or three times as large as before, on every instance with no gateway.
 #[test]
-#[ignore = "adversary finding: the default batch is 60,000 characters now, not 60,000 bytes as before"]
 fn without_a_gateway_a_batch_of_multibyte_text_is_as_large_as_before() {
     // Two-byte text; the fetch cuts each to about 8,000 characters (16,000 bytes).
     let docs: Vec<String> = (0..5)
@@ -435,9 +448,9 @@ fn a_token_budget_spent_by_a_failed_attempt_asks_no_half() {
     assert_eq!(consecutive_failures(&w), 0, "{ran}");
 }
 
-/// A gated run that split, applied a part and then ended on a part that did not fit, and failed
-/// its gate: the run is undone, nothing it applied stays seen, and a later run extracts every
-/// document.
+/// A gated run that split, applied a part, left out a one-document part that did not fit, and
+/// failed its gate: the run is undone, nothing it applied stays seen, the gate's reason names the
+/// document left out, and a later run extracts every document.
 #[test]
 fn a_gated_run_that_split_and_failed_its_gate_is_undone_and_loses_nothing() {
     let mut docs = texts(8, 200);
@@ -446,14 +459,20 @@ fn a_gated_run_that_split_and_failed_its_gate_is_undone_and_loses_nothing() {
         &docs,
         "",
         5000,
-        "gate:\n  checks:\n    - {measure: documents_applied, min: \"6\"}\n",
+        "gate:\n  checks:\n    - {measure: documents_applied, min: \"8\"}\n",
     );
     answers_too_long(&w, "marker", TOO_LONG);
     let (code, ran) = run(&w, false);
-    // 8 -> 4 + 4; the first 4 apply; 4 -> 2 + 2; (d4, d5) -> 1 + 1; d4 applies; d5 at depth 3.
-    assert_eq!(sizes(&w), [8, 4, 4, 2, 1, 1], "{ran}");
+    // 8 -> 4 + 4; the first 4 apply; 4 -> 2 + 2; (d4, d5) -> 1 + 1; d4 applies; d5 at depth 3 is
+    // left out alone; (d6, d7) apply. 7 applied, under the gate's 8.
+    assert_eq!(sizes(&w), [8, 4, 4, 2, 1, 1, 2], "{ran}");
     assert_ne!(code, 0, "{ran}");
-    assert!(seen(&w).is_empty(), "the undone run leaves nothing seen: {ran}");
+    let reason = ran["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(reason.contains("https://example.org/d5"), "{reason}");
+    assert!(
+        seen(&w).is_empty(),
+        "the undone run leaves nothing seen: {ran}"
+    );
     std::fs::write(w.root.join("mode"), "ok").unwrap();
     let (code, ran) = run(&w, false);
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
