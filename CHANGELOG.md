@@ -7,7 +7,7 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### What 1.0 holds
 
-1.0 is the first release whose interface is stable. It adds no feature over 0.4.0; it is 0.4.0's
+1.0 is the first release whose interface is stable. It adds no feature over 0.5.0; it is 0.5.0's
 feature set after a real instance ran for 7 days with nobody at the keyboard.
 
 - **Instances.** One spec file makes an instance: an EKR store on SQLite or PostgreSQL, a viewer,
@@ -35,6 +35,25 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - `model.backend: Codex` is accepted and fails every run; extraction uses `claude -p` only.
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
+
+## 0.5.0 — 2026-10-16
+
+### Added
+
+- `model.gateway` sends the model calls through a gateway: `base_url` (an http:// or https://
+  URL) is passed to `claude` as `ANTHROPIC_BASE_URL`, the value of the environment variable that
+  `token_env` names as `ANTHROPIC_AUTH_TOKEN`, read when each call is made, and the optional
+  `max_context_tokens` as `CLAUDE_CODE_MAX_CONTEXT_TOKENS`. A source's timer unit names the
+  variable with `PassEnvironment=` and never holds the token. `ANTHROPIC_API_KEY` is always
+  removed, and without a gateway the three gateway variables are removed as well. A `token_env`
+  that is not a variable name, or names a variable cortex writes into a unit, any `XDG_*`, any
+  `ANTHROPIC_*` or any `CORTEX_*` variable, is refused, as is a `max_context_tokens` of 0 or less.
+- Limits in tokens, for models whose cost `claude` cannot state: `model.budget_tokens` bounds a
+  run, a quality measurement and a schema proposal, and `model.daily_ceiling_tokens` bounds an
+  instance per UTC day across its sources and commands (`spend.json` gains `spent_tokens`). A
+  call's tokens are its answer's input, cache and output tokens together. An answer whose tokens
+  cannot be counted (no `usage`, a count below 0, a sum that does not fit) stops the run before its
+  next batch under either limit, without reporting the daily ceiling reached.
 
 ## 0.4.0 — 2026-10-15
 
