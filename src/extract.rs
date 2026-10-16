@@ -416,7 +416,7 @@ impl Model {
         dir: &Path,
         schema: &Value,
         prompt: &str,
-        budget_usd: f64,
+        budget_usd: Option<f64>,
     ) -> Result<Answer, Refused> {
         match self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd) {
             Err(first) if first.free_error_answer() => {
@@ -440,14 +440,15 @@ impl Model {
 
     /// One model call with `system_prompt`, through the spec's backend, run in `dir`: the answer
     /// is held to `schema`, and the call isolated as an extraction is. A failed call states what
-    /// it cost, so a caller adding up several calls counts the failed one too.
+    /// it cost, so a caller adding up several calls counts the failed one too. `budget_usd` is the
+    /// call's dollar bound, `None` when none applies (behind a model gateway).
     pub fn ask_with(
         &self,
         system_prompt: &str,
         dir: &Path,
         schema: &Value,
         prompt: &str,
-        budget_usd: f64,
+        budget_usd: Option<f64>,
     ) -> Result<Answer, Refused> {
         match self.backend {
             ModelBackend::Claude => self.ask_claude(system_prompt, dir, schema, prompt, budget_usd),
@@ -465,7 +466,7 @@ impl Model {
         dir: &Path,
         schema: &Value,
         prompt: &str,
-        budget_usd: f64,
+        budget_usd: Option<f64>,
     ) -> Result<Answer, Refused> {
         let gateway = gateway_environment(self.gateway.as_ref()).map_err(Refused::free)?;
         std::fs::create_dir_all(dir)
@@ -490,14 +491,13 @@ impl Model {
             .args(["--model", &self.model])
             .args(["--system-prompt", system_prompt])
             .args(["--json-schema", &schema.to_string()])
-            // Behind a gateway `claude` prices an answer at its default model's rate, not at what
-            // the gateway's model costs, so no dollar budget bounds the call: its caller gives
-            // `f64::INFINITY` (`spend::dollar_budget` is `None`), and no `--max-budget-usd` is
-            // passed. The instance is bounded in tokens (`spend::counts_dollars`).
-            .args(if budget_usd.is_finite() {
-                vec!["--max-budget-usd".to_string(), format!("{budget_usd:.4}")]
-            } else {
-                vec![]
+            // `budget_usd` is `None` only when no dollar budget bounds the call: behind a gateway,
+            // where `claude` prices an answer at its default model's rate, not at what the
+            // gateway's model costs (`spend::counts_dollars`), and no ceiling applies. Then no
+            // `--max-budget-usd` is passed, and the instance is bounded in tokens.
+            .args(match budget_usd {
+                Some(usd) => vec!["--max-budget-usd".to_string(), format!("{usd:.4}")],
+                None => vec![],
             })
             .args(["--output-format", "json"])
             .env_remove("ANTHROPIC_API_KEY")
@@ -968,7 +968,7 @@ mod tests {
             gateway: None,
         };
         let err = model
-            .ask(&dir, &json!({}), "prompt", 1.0)
+            .ask(&dir, &json!({}), "prompt", Some(1.0))
             .err()
             .expect("an extraction failure")
             .message;

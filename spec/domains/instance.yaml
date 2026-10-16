@@ -381,14 +381,17 @@ types:
   # (exit 2, naming the field, before anything is written, for `create`, `update` and `adopt`
   # alike) a spec that breaks either rule. A gateway spec that still gives `budget_usd` or
   # `daily_ceiling_usd` is accepted, and `create`, `update` and `adopt` print one line on stderr
-  # saying the dollar limits bound nothing behind a gateway. An instance's frozen spec is not held
-  # to the `budget_tokens` rule, so an instance created with a gateway before the rule keeps
-  # running: with no `budget_tokens` its answers' costs count against its dollar limits as before,
-  # until an `update` gives it one.
-  # UNMAPPED: a field required or optional by the presence of another has no construct in the
-  # specification; `spec::check` (`budget_usd`) and `spec::load_given` (`budget_tokens`) hold the
-  # two rules, `spend::counts_dollars` the frozen-spec case, and `tests/gateway_dollar_limits.rs`
-  # tests them.
+  # saying the dollar limits bound nothing behind a gateway, naming a run gate's `cost_usd` check
+  # too when the spec has one (`cortex.instance.GateCheck`). `create`, `update` and `adopt` also
+  # refuse a `budget_usd` or `daily_ceiling_usd` too large to be read as a finite number, naming
+  # the field. An instance's frozen spec is held to neither of these two rules, so an instance
+  # created with a gateway before them keeps running: with no `budget_tokens` its answers' costs
+  # count against its dollar limits as before, until an `update` gives it one.
+  # UNMAPPED: a field required or optional by the presence of another, and a decimal bounded to
+  # what a finite number holds, have no construct in the specification; `spec::check`
+  # (`budget_usd`) and `spec::load_given` (`budget_tokens`, the finite dollar limits) hold the
+  # rules, `spend::counts_dollars` the frozen-spec case, and `tests/gateway_dollar_limits.rs` and
+  # `tests/gateway_dollar_limits_adv.rs` test them.
   - name: cortex.instance.ModelSpec
     kind: struct
     fields:
@@ -532,6 +535,13 @@ types:
       - {name: rare_limit, type: Optional<Integer>}
       - {name: refuse_if_left, type: Optional<List<cortex.instance.RedactionClass>>}
 
+  # One check of the run gate (`cortex.instance.RunGate`): `measure` names a number of the run's
+  # report (`documents_new`, `documents_applied`, `facts_refused`, `parts_rejected`, `masked`,
+  # `truncated`, `unrestored`, `cost_usd`) or, by its dotted path, of the store's quality document,
+  # held to `min`, `max` or both. Behind a model gateway, where a run's cost is not counted
+  # (`cortex.instance.SourceRan.cost_counted` false), a `cost_usd` check checks nothing: the
+  # reported cost bounds nothing, and `create`, `update` and `adopt` name such a check in the line
+  # that says the dollar limits bound nothing (`cortex.instance.ModelSpec`).
   - name: cortex.instance.GateCheck
     kind: struct
     fields:

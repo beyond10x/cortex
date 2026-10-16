@@ -844,20 +844,21 @@ fn process_in(
         }
     }
     for (n, batch) in batches.into_iter().enumerate() {
-        // Behind a gateway no dollar amount bounds the call, and none is passed to `claude`.
+        // `None` behind a gateway: no dollar amount bounds the call, and none is passed to
+        // `claude`.
         let remaining = match budget {
             Some(budget) if budget - spent <= 0.0 => {
                 report.stopped = Some(format!("budget of {budget} USD spent"));
                 break;
             }
-            Some(budget) => budget - spent,
-            None => f64::INFINITY,
+            Some(budget) => Some(budget - spent),
+            None => None,
         };
         if let Err(why) = tokens.check() {
             report.stopped = Some(why);
             break;
         }
-        let remaining = match daily.check(remaining) {
+        let remaining = match daily.check_bound(remaining) {
             Ok(usd) => usd,
             Err(refusal) => {
                 // Only a ceiling the day reached; not an uncounted answer or an unknown spend.

@@ -36,6 +36,8 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+## 0.5.3 — 2026-10-16
+
 ### Fixed
 
 - Behind a model gateway (`model.gateway`), runs are bounded in tokens only, and no run stops
@@ -43,8 +45,9 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   model's rate, so `budget_usd` and `daily_ceiling_usd` could stop runs of a self-hosted or
   otherwise unpriced model. Now, with a gateway, the cost `claude` reports counts against no
   `budget_usd`, no `daily_ceiling_usd` and no dollar budget of `cortex quality` or
-  `cortex schema`, and `--max-budget-usd` is not passed to `claude`. The cost is still recorded
-  as reported, marked as not counted: a run's report and `cortex.log` line carry
+  `cortex schema`, `--max-budget-usd` is not passed to `claude`, and a run gate check on
+  `cost_usd` checks nothing, so it no longer undoes a run over that cost. The cost is still
+  recorded as reported, marked as not counted: a run's report and `cortex.log` line carry
   `cost_counted: false`, the `SourceRan` event `cost_counted`, and `spend.json` sums it in
   `uncounted_usd`.
 - A capitalised word with hyphens that a batch holds more than `rare_limit` times is kept whole
@@ -60,10 +63,13 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   `create`, `update` and `adopt` refuse a gateway spec without it (exit status 2, naming
   `model.budget_tokens`, before anything is written). Without a gateway `model.budget_usd` stays
   required, and a spec without it is refused naming `model.budget_usd`. A gateway spec that still
-  gives `budget_usd` or `daily_ceiling_usd` is accepted, and `create`, `update` and `adopt` print
-  one line on stderr saying they bound nothing behind the gateway. An instance created with a
-  gateway by an earlier release, whose spec has no `budget_tokens`, keeps running with its dollar
-  limits counted as before, until an `update` gives it one.
+  gives `budget_usd`, `daily_ceiling_usd` or a gate check on `cost_usd` is accepted, and
+  `create`, `update` and `adopt` print one line on stderr saying they bound nothing behind the
+  gateway. `create`, `update` and `adopt` also refuse a `budget_usd` or `daily_ceiling_usd` with
+  more digits than a finite number holds (exit status 2, naming the field); before, such a value
+  was read as an infinite budget. An instance created with a gateway by an earlier release, whose
+  spec has no `budget_tokens`, keeps running with its dollar limits counted as before, until an
+  `update` gives it one; an instance's own spec is not held to the finite rule either.
 
 ## 0.5.2 — 2026-10-16
 
