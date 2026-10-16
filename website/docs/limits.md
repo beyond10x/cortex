@@ -115,12 +115,28 @@ stand; [Status](./status.mdx) lists what is planned.
 ## The model
 
 - **Extraction uses `claude -p`.** There is no other working model runner. The model needs a
-  signed-in `claude`; an `ANTHROPIC_API_KEY` in the environment is ignored. The spec accepts
+  signed-in `claude`, or a `model.gateway` in the spec, whose token is read from the variable it
+  names; an `ANTHROPIC_API_KEY` in the environment is ignored either way. The spec accepts
   `model.backend: Codex`, but that backend extracts nothing in this release: every run, quality
   measurement and schema round of such an instance fails, naming `story:codex-model-backend`.
 - **The daily ceiling is per instance.** `daily_ceiling_usd` bounds what one instance's model calls
   spend in a UTC day; nothing bounds the instances of a home together. An answer that states no
   cost adds nothing to the spend of the day.
+- **The dollar limits do not bound a model `claude` cannot price.** An answer's cost is the
+  `total_cost_usd` `claude` states, worked out from its own price table. For a model id that table
+  does not know (a model behind a gateway, for one), what `claude` reports is unverified: no
+  `total_cost_usd` at all, or a figure that is not what the gateway charges. An answer with no
+  cost spends none of `budget_usd` and adds nothing to `daily_ceiling_usd`, so neither stops such a
+  run. Bound it in tokens instead, with `budget_tokens` and `daily_ceiling_tokens` (see
+  [the spec file](./spec-file.md#limits-in-tokens)).
+- **A token limit is checked between calls, not within one.** `claude` takes no token limit, so a
+  run, quality measurement or schema round can pass `budget_tokens` or `daily_ceiling_tokens` by
+  the tokens of its last call, and commands running at once can each pass the daily one by a
+  call, as with the dollar ceiling.
+- **Token counts are what the answer reports.** cortex trusts the counts in an answer's `usage`
+  as the gateway or `claude` reports them. A count it cannot use (missing, below 0, or a sum past
+  a signed 64-bit integer) is treated as uncounted, which under a token limit stops the run
+  before its next call; it is never taken as zero.
 - **Commands running at once can each overshoot the daily ceiling by one call.** A call's
   allowance is read from `spend.json` without the home's lock, and its cost is added only after
   the answer. A run, a `cortex quality` and a `cortex schema` of one instance can run at the same

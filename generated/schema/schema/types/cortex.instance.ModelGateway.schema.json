@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.ModelGateway",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "4ae7016a234132e571b7abed384e164e18cd472f2a8f3e07b3d7860f9d294f49",
+    "contract_digest": "slice-sha256/2:077d3d76868167f43ad14fdd5fac203a74c80c042fe522b1bb42968cd272caba",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.ModelGateway": {
+      "title": "ModelGateway",
+      "x-ess-name": "cortex.instance.ModelGateway",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "base_url": {
+          "type": "string"
+        },
+        "token_env": {
+          "type": "string"
+        },
+        "max_context_tokens": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "base_url",
+        "token_env"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

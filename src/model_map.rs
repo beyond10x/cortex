@@ -79,6 +79,23 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
             }),
             budget_usd: Decimal(spec.model.budget_usd.clone()),
             daily_ceiling_usd: opt(&spec.model.daily_ceiling_usd).map(Decimal),
+            budget_tokens: opt(&spec.model.budget_tokens)
+                .map(|n| int(&n, "model.budget_tokens"))
+                .transpose()?,
+            daily_ceiling_tokens: opt(&spec.model.daily_ceiling_tokens)
+                .map(|n| int(&n, "model.daily_ceiling_tokens"))
+                .transpose()?,
+            gateway: opt(&spec.model.gateway)
+                .map(|g| -> Result<m::ModelGateway, MapError> {
+                    Ok(m::ModelGateway {
+                        base_url: g.base_url.clone(),
+                        token_env: g.token_env.clone(),
+                        max_context_tokens: opt(&g.max_context_tokens)
+                            .map(|n| int(&n, "model.gateway.max_context_tokens"))
+                            .transpose()?,
+                    })
+                })
+                .transpose()?,
             timeout_s: int(&spec.model.timeout_s, "model.timeout_s")?,
             instructions: opt(&spec.model.instructions),
         },

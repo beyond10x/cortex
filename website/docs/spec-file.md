@@ -71,8 +71,11 @@ different seed files answers `seed-change-refused`.
 | `backend` | optional: `Claude` (the default) runs `claude -p`. `Codex` is accepted by `create` and `update` but extracts nothing in this release: every run fails as `extraction-failed`, naming `story:codex-model-backend` (see [Commands](./commands.md#global-options)) |
 | `budget_usd` | the spending limit of one run, in US dollars, as a decimal string; above 0. A run stops starting new batches once it is spent |
 | `daily_ceiling_usd` | optional: the most the instance's model calls spend in one UTC calendar day, in US dollars, as a decimal string; above 0. Absent means no ceiling. See [The daily ceiling](#the-daily-ceiling) |
+| `budget_tokens` | optional: the most tokens one run's model calls use, a whole number above 0. Absent means no limit in tokens. See [Limits in tokens](#limits-in-tokens) |
+| `daily_ceiling_tokens` | optional: the most tokens the instance's model calls use in one UTC calendar day, a whole number above 0. Absent means no ceiling in tokens. See [Limits in tokens](#limits-in-tokens) |
 | `timeout_s` | the time limit of one model call, in seconds; above 0 |
 | `instructions` | optional text file whose content is added to every extraction prompt |
+| `gateway` | optional: a model gateway every `claude` call goes through, with no interactive sign-in. See [A model gateway](#a-model-gateway) |
 
 ### The daily ceiling
 
@@ -100,6 +103,72 @@ The spend of the day is `spend.json` in the instance directory (see
 [Operating](./operating.md#where-things-live)); it is kept whether or not the spec names a ceiling,
 and `cortex restore` leaves it as it is. A ceiling changed with `cortex update` holds from the next
 run or command, against what the day has spent so far.
+
+### A model gateway
+
+```yaml
+model:
+  model: my-open-model
+  budget_usd: "1"
+  timeout_s: 900
+  gateway: {base_url: "https://gateway.example", token_env: GW_TOKEN, max_context_tokens: 128000}
+```
+
+| field | meaning |
+|---|---|
+| `base_url` | the gateway's URL, passed to `claude` as `ANTHROPIC_BASE_URL`. It starts with `http://` or `https://`; `create`, `update` and `adopt` refuse an empty one or another scheme |
+| `token_env` | the name of the environment variable holding the gateway's token, never the token itself. Its value is read when each call is made and passed as `ANTHROPIC_AUTH_TOKEN`. A variable name (letters, digits and `_`, not starting with a digit), and not one cortex writes into a unit by value (`PATH`, `HOME`, a `CONNECTORS_*` or a `CORTEX_*` variable), nor any `XDG_*` or `ANTHROPIC_*` variable; `create`, `update` and `adopt` refuse another |
+| `max_context_tokens` | optional: passed as `CLAUDE_CODE_MAX_CONTEXT_TOKENS`; a whole number above 0, `create`, `update` and `adopt` refuse another |
+
+cortex passes exactly that set to `claude`, from a run in your shell, a timer unit and a runner that
+calls `cortex run` directly alike; `model` names the gateway's model (`--model`). An
+`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` or `CLAUDE_CODE_MAX_CONTEXT_TOKENS` in cortex's own
+environment is replaced by the spec's, or removed when the spec does not set it, and
+`ANTHROPIC_API_KEY` is always removed. A missing or empty `token_env` fails the call before
+`claude` starts, with a reason naming the variable: a run answers `extraction-failed`. Without a
+`gateway`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and `CLAUDE_CODE_MAX_CONTEXT_TOKENS` are
+removed as well, so an instance never reaches a gateway by accident.
+
+A source's timer unit names the variable with `PassEnvironment=`, so the token reaches a scheduled
+run from the systemd user manager's environment (see
+[Operating](./operating.md#systemd-units)). The gateway applies to the `Claude` backend; the
+`Codex` backend fails every call before starting anything in this release, so it reaches no gateway.
+
+### Limits in tokens
+
+```yaml
+model: {model: claude-sonnet-5-5, budget_usd: "1", budget_tokens: 200000, daily_ceiling_tokens: 2000000, timeout_s: 900}
+```
+
+The dollar limits rely on the cost `claude` states in each answer, and for a model `claude` cannot
+price that figure is missing or not the real cost (see [Limits](./limits.md#the-model)). The
+token limits bound the same runs and calls by what each answer reports in its `usage`: input
+tokens, cache reads, cache writes and output tokens, added together.
+
+- `budget_tokens` bounds one run: before each batch, a run whose calls have used `budget_tokens`
+  or more stops, `stopped` naming the token budget (`token budget of 200000 tokens spent: 201500
+  tokens used`). It bounds each `cortex quality` measurement and each `cortex schema` round the
+  same way, as `budget_usd` does: before a further call, one whose calls have used
+  `budget_tokens` or more fails with that reason.
+- `daily_ceiling_tokens` bounds the instance's calls in one UTC calendar day, across the runs of
+  all its sources, the seed extraction, `cortex quality` and `cortex schema`, as
+  `daily_ceiling_usd` does. Every answer that reports a `usage` adds its tokens to the day's, a
+  failed answer included. Once the day's tokens reach the ceiling, a run stops before its next
+  batch with `daily_ceiling_reached: true` and `stopped` naming it (`daily ceiling of 2000000
+  tokens reached: 2001500 tokens used on 2026-10-15 (UTC)`); `cortex quality` and `cortex schema`
+  are refused with that reason.
+- Under either token limit, an answer whose tokens cannot be counted stops the run before its
+  next batch, `stopped` saying its tokens could not be counted; the batches before it stay
+  applied. That is an answer that reports no `usage`, or a count in it below 0, or counts whose
+  sum (with the tokens already used) does not fit a signed 64-bit integer. Such a stop is not a
+  reached ceiling: `daily_ceiling_reached` is not set. `cortex quality` and `cortex schema` are
+  refused the same way under either limit.
+
+A token limit cannot be passed to `claude` the way `--max-budget-usd` is, so a single call is not
+cut short: a run can pass its limit by the tokens of its last call. The token limits apply beside
+the dollar limits; whichever is reached first stops the run. Without a token limit, runs behave as
+before. The day's tokens are `spent_tokens` in `spend.json`; a file written without it counts as
+no tokens used.
 
 ## `sources`
 

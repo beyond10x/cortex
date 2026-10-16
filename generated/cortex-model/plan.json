@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "17e09111e8b07b05de318bdb51a95149ecca7a5002497fc00341b27224aad8e8",
-    "contract_digest": "0166cbe548974dfabcad41333301694ac564bae5ee942ef2545595cb53e8a6e0"
+    "source_digest": "4ae7016a234132e571b7abed384e164e18cd472f2a8f3e07b3d7860f9d294f49",
+    "contract_digest": "26132d405a23c83a5737eb1c814a3d29d646abff53eb4c3c99e6298956066bda"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -139,6 +139,13 @@
     {
       "kind": "domain_type",
       "source": "cortex.instance.ModelBackend",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.ModelGateway",
       "disposition": {
         "disposition": "generated"
       }

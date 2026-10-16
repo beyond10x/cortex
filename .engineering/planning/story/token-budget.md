@@ -2,13 +2,16 @@
 format: aep.planning-md/3
 id: story:token-budget
 kind: story
-status: draft
+status: active
 title: A run budget and a daily ceiling in tokens, for a model whose cost is unknown
 summary: budget_tokens and daily_ceiling_tokens bound runs by the token counts a run reports
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - serves: vision:self-updating-instances
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-15T15:50:11Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-10-15T15:50:11Z", actor: "human:timo", revision: 4}
 ---
 ## Outcome
 

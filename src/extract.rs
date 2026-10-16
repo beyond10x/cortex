@@ -6,11 +6,12 @@
 //! issue, adds the evidence items itself, and records each web page as a `WebPage` node.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsString;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use cortex_model::instance::ModelBackend;
+use cortex_model::instance::{ModelBackend, ModelGateway};
 use serde_json::{json, Value};
 use serde_yaml_ng::value::{Tag, TaggedValue};
 use serde_yaml_ng::{Mapping, Value as Yaml};
@@ -49,6 +50,43 @@ pub struct Model {
     pub codex: PathBuf,
     pub model: String,
     pub timeout_s: i64,
+    /// The gateway the `claude` calls go through (`model.gateway`), when the spec names one.
+    pub gateway: Option<ModelGateway>,
+}
+
+/// The variables a gateway sets on `claude`: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and
+/// `CLAUDE_CODE_MAX_CONTEXT_TOKENS`. Each one the spec does not set is removed, so cortex passes
+/// exactly the spec's set and an instance without a gateway never reaches one by accident.
+pub const GATEWAY_VARIABLES: [&str; 3] = [
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+];
+
+/// Each of [`GATEWAY_VARIABLES`] with the value `gateway` gives it, or `None` to remove it. The
+/// token is the value of `token_env` in this process's environment now; a missing or empty one is
+/// refused with a reason naming the variable, never its value.
+pub fn gateway_environment(
+    gateway: Option<&ModelGateway>,
+) -> Result<[(&'static str, Option<OsString>); 3], String> {
+    let [url, token, context] = GATEWAY_VARIABLES;
+    let Some(g) = gateway else {
+        return Ok([(url, None), (token, None), (context, None)]);
+    };
+    let value = std::env::var_os(&g.token_env)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| {
+            format!(
+                "model.gateway.token_env names {}, which is unset or empty in cortex's \
+                 environment; the gateway's token is read from it when claude is called",
+                g.token_env
+            )
+        })?;
+    Ok([
+        (url, Some(g.base_url.clone().into())),
+        (token, Some(value)),
+        (context, g.max_context_tokens.map(|n| n.to_string().into())),
+    ])
 }
 
 pub struct Answer {
@@ -78,7 +116,8 @@ pub struct Refused {
 
 /// The token counts of one or more model calls, as `claude` reports each in its answer's `usage`
 /// (`input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`).
-/// A count an answer did not carry is `None`, and a sum with it too: a missing count is never `0`.
+/// A count an answer did not carry, or carried below 0, is `None`, and a sum with it too, as is a
+/// sum that does not fit an `i64`: a missing count is never `0`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Usage {
     pub input_tokens: Option<i64>,
@@ -104,20 +143,23 @@ impl Usage {
         output_tokens: None,
     };
 
-    /// The `usage` of a JSON answer; a field it lacks is `None`.
+    /// The `usage` of a JSON answer; a field it lacks, or holds as no whole number of 0 or more,
+    /// is `None`.
     fn read(answer: &Value) -> Self {
         let usage = &answer["usage"];
+        let count = |field: &str| usage[field].as_i64().filter(|n| *n >= 0);
         Self {
-            input_tokens: usage["input_tokens"].as_i64(),
-            cache_creation_input_tokens: usage["cache_creation_input_tokens"].as_i64(),
-            cache_read_input_tokens: usage["cache_read_input_tokens"].as_i64(),
-            output_tokens: usage["output_tokens"].as_i64(),
+            input_tokens: count("input_tokens"),
+            cache_creation_input_tokens: count("cache_creation_input_tokens"),
+            cache_read_input_tokens: count("cache_read_input_tokens"),
+            output_tokens: count("output_tokens"),
         }
     }
 
-    /// Both calls' tokens, field by field: the sum while both carry it, `None` otherwise.
+    /// Both calls' tokens, field by field: the sum while both carry it and it fits an `i64`,
+    /// `None` otherwise.
     pub fn plus(self, other: Usage) -> Usage {
-        let sum = |a: Option<i64>, b: Option<i64>| Some(a? + b?);
+        let sum = |a: Option<i64>, b: Option<i64>| a?.checked_add(b?);
         Usage {
             input_tokens: sum(self.input_tokens, other.input_tokens),
             cache_creation_input_tokens: sum(
@@ -132,9 +174,12 @@ impl Usage {
         }
     }
 
-    /// Every input token: the uncached input, cache reads and cache writes.
+    /// Every input token: the uncached input, cache reads and cache writes; `None` when one is
+    /// missing or the sum does not fit an `i64`.
     pub fn all_input(&self) -> Option<i64> {
-        Some(self.input_tokens? + self.cache_read_input_tokens? + self.cache_creation_input_tokens?)
+        self.input_tokens?
+            .checked_add(self.cache_read_input_tokens?)?
+            .checked_add(self.cache_creation_input_tokens?)
     }
 }
 
@@ -411,7 +456,9 @@ impl Model {
     }
 
     /// One isolated `claude -p` call, run in `dir`. `ANTHROPIC_API_KEY` is removed so the sign-in
-    /// is used; no user, project or local settings, MCP servers, skills or tools are loaded.
+    /// or the spec's gateway is used, and the gateway's variables are exactly the spec's
+    /// ([`gateway_environment`]); no user, project or local settings, MCP servers, skills or tools
+    /// are loaded. A gateway token that cannot be read fails the call before `claude` starts.
     fn ask_claude(
         &self,
         system_prompt: &str,
@@ -420,9 +467,17 @@ impl Model {
         prompt: &str,
         budget_usd: f64,
     ) -> Result<Answer, Refused> {
+        let gateway = gateway_environment(self.gateway.as_ref()).map_err(Refused::free)?;
         std::fs::create_dir_all(dir)
             .map_err(|e| Refused::free(format!("{}: {e}", dir.display())))?;
-        let mut child = Command::new("timeout")
+        let mut command = Command::new("timeout");
+        for (key, value) in gateway {
+            match value {
+                Some(value) => command.env(key, value),
+                None => command.env_remove(key),
+            };
+        }
+        let mut child = command
             .arg("--kill-after=30")
             .arg(self.timeout_s.to_string())
             .arg(&self.claude)
@@ -806,6 +861,24 @@ mod tests {
     }
 
     #[test]
+    fn a_count_below_0_is_none_and_a_sum_past_i64_is_none() {
+        let read = Usage::read(&json!({"usage": {"input_tokens": 10,
+            "cache_creation_input_tokens": 2, "cache_read_input_tokens": 3,
+            "output_tokens": -4}}));
+        assert_eq!(read.output_tokens, None);
+        assert_eq!(read.all_input(), Some(15));
+        let huge = Usage {
+            input_tokens: Some(i64::MAX),
+            cache_creation_input_tokens: Some(1),
+            cache_read_input_tokens: Some(0),
+            output_tokens: Some(i64::MAX),
+        };
+        assert_eq!(huge.all_input(), None);
+        assert_eq!(huge.plus(huge).output_tokens, None);
+        assert_eq!(huge.plus(Usage::ZERO), huge);
+    }
+
+    #[test]
     fn tokens_split_by_bytes_add_up_to_the_whole() {
         assert_eq!(split_tokens(1200, 1, 2), (400, 800));
         assert_eq!(split_tokens(1000, 1, 2), (333, 667));
@@ -884,6 +957,7 @@ mod tests {
             codex: "codex-must-not-run".into(),
             model: "m".into(),
             timeout_s: 1,
+            gateway: None,
         };
         let err = model
             .ask(&dir, &json!({}), "prompt", 1.0)

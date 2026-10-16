@@ -1,12 +1,12 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "17e09111e8b07b05de318bdb51a95149ecca7a5002497fc00341b27224aad8e8",
+  "source_digest": "4ae7016a234132e571b7abed384e164e18cd472f2a8f3e07b3d7860f9d294f49",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:418b946318f382211713bb6cc440482089d43637d73ec63b5d2989294b3ff5c8",
-    "projection_digest": "11ef95afbb436885695672260234d68b78cc12f2b59bba8c6e33e02cb6ab161b"
+    "contract_digest": "slice-sha256/2:edd218aefdbb8bca62e2959d0a3208f5bf3e922ce8c7147c9df29b178d9420de",
+    "projection_digest": "3ab1420445ced8e035a89d8923a53dd21245fb0f1be5341e7bca7c3f60b684d5"
   },
   "generator_version": "0.60.0",
   "target": "rust",
@@ -33,6 +33,7 @@
     "cortex.instance.InstanceName": "CortexInstanceInstanceName",
     "cortex.instance.InstanceSpec": "CortexInstanceInstanceSpec",
     "cortex.instance.ModelBackend": "CortexInstanceModelBackend",
+    "cortex.instance.ModelGateway": "CortexInstanceModelGateway",
     "cortex.instance.ModelSpec": "CortexInstanceModelSpec",
     "cortex.instance.MonitoringSpec": "CortexInstanceMonitoringSpec",
     "cortex.instance.PageStyle": "CortexInstancePageStyle",
@@ -302,6 +303,21 @@
     },
     {
       "pointer": "/$defs/cortex.instance.ModelBackend/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ModelGateway/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ModelGateway/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ModelGateway/x-ess-name",
       "rule": "x-ess-name",
       "detail": "model identity and wire mapping retained in source.schema.json"
     },
@@ -1018,9 +1034,39 @@
       "detail": "validate this constraint against the source schema at runtime"
     },
     {
+      "pointer": "/$defs/cortex.instance.ModelGateway/properties/max_context_tokens",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ModelGateway/properties/max_context_tokens",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ModelSpec/properties/budget_tokens",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ModelSpec/properties/budget_tokens",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
       "pointer": "/$defs/cortex.instance.ModelSpec/properties/budget_usd/pattern",
       "rule": "pattern",
       "detail": "validate this constraint against the source schema at runtime"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ModelSpec/properties/daily_ceiling_tokens",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ModelSpec/properties/daily_ceiling_tokens",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
     },
     {
       "pointer": "/$defs/cortex.instance.ModelSpec/properties/daily_ceiling_usd/pattern",

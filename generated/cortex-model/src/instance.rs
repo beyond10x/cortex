@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 17e09111e8b07b05de318bdb51a95149ecca7a5002497fc00341b27224aad8e8
-// contract digest 0166cbe548974dfabcad41333301694ac564bae5ee942ef2545595cb53e8a6e0
+// model digest 4ae7016a234132e571b7abed384e164e18cd472f2a8f3e07b3d7860f9d294f49
+// contract digest 26132d405a23c83a5737eb1c814a3d29d646abff53eb4c3c99e6298956066bda
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -127,6 +127,8 @@ pub struct DailySpend {
     pub day: String,
     /// `spent_usd` — `Decimal`.
     pub spent_usd: crate::primitives::Decimal,
+    /// `spent_tokens` — `Optional<Integer>`.
+    pub spent_tokens: Option<i64>,
 }
 
 /// DocumentId — `cortex.instance.DocumentId`: a distinct wrapper around `String`.
@@ -276,6 +278,17 @@ pub enum ModelBackend {
     Codex,
 }
 
+/// ModelGateway — `cortex.instance.ModelGateway`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelGateway {
+    /// `base_url` — `String`.
+    pub base_url: String,
+    /// `token_env` — `String`.
+    pub token_env: String,
+    /// `max_context_tokens` — `Optional<Integer>`.
+    pub max_context_tokens: Option<i64>,
+}
+
 /// ModelSpec — `cortex.instance.ModelSpec`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelSpec {
@@ -287,6 +300,12 @@ pub struct ModelSpec {
     pub budget_usd: crate::primitives::Decimal,
     /// `daily_ceiling_usd` — `Optional<Decimal>`.
     pub daily_ceiling_usd: Option<crate::primitives::Decimal>,
+    /// `budget_tokens` — `Optional<Integer>`.
+    pub budget_tokens: Option<i64>,
+    /// `daily_ceiling_tokens` — `Optional<Integer>`.
+    pub daily_ceiling_tokens: Option<i64>,
+    /// `gateway` — `Optional<cortex.instance.ModelGateway>`.
+    pub gateway: Option<ModelGateway>,
     /// `timeout_s` — `Integer`.
     pub timeout_s: i64,
     /// `instructions` — `Optional<String>`.
@@ -1999,7 +2018,7 @@ pub enum RunSourceOutcome {
     },
     /// `ran` — otherwise.
     ///
-    /// Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd`: the batches before it are applied, the rest are extracted by a run on a later day.
+    /// Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it.
     Ran {
         /// The `cortex.instance.SourceRan` this outcome publishes.
         source_ran: SourceRan,

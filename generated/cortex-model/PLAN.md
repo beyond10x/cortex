@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 17e09111e8b07b05de318bdb51a95149ecca7a5002497fc00341b27224aad8e8
-  contract digest 0166cbe548974dfabcad41333301694ac564bae5ee942ef2545595cb53e8a6e0
+  model digest 4ae7016a234132e571b7abed384e164e18cd472f2a8f3e07b3d7860f9d294f49
+  contract digest 26132d405a23c83a5737eb1c814a3d29d646abff53eb4c3c99e6298956066bda
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-144 capabilities: **140 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+145 capabilities: **141 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -33,6 +33,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.InstanceName` |
 | domain type | `cortex.instance.InstanceSpec` |
 | domain type | `cortex.instance.ModelBackend` |
+| domain type | `cortex.instance.ModelGateway` |
 | domain type | `cortex.instance.ModelSpec` |
 | domain type | `cortex.instance.MonitoringSpec` |
 | domain type | `cortex.instance.NewEdgeType` |

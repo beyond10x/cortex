@@ -221,18 +221,59 @@ fn environment() -> String {
 
 /// The variables [`environment`] writes, by name.
 fn environment_values() -> impl Iterator<Item = (String, String)> {
-    std::env::vars().filter_map(|(key, value)| {
-        let wanted = matches!(
-            key.as_str(),
-            "PATH"
-                | "HOME"
-                | "XDG_CONFIG_HOME"
-                | "XDG_STATE_HOME"
-                | "XDG_DATA_HOME"
-                | "XDG_RUNTIME_DIR"
-        ) || key.starts_with("CONNECTORS_");
-        wanted.then_some((key, value))
-    })
+    std::env::vars().filter(|(key, _)| copied(key))
+}
+
+/// Whether [`environment`] copies the variable `key` into a unit by value.
+fn copied(key: &str) -> bool {
+    matches!(
+        key,
+        "PATH"
+            | "HOME"
+            | "XDG_CONFIG_HOME"
+            | "XDG_STATE_HOME"
+            | "XDG_DATA_HOME"
+            | "XDG_RUNTIME_DIR"
+    ) || key.starts_with("CONNECTORS_")
+}
+
+/// Why `token_env`, the variable a spec's `model.gateway` names for its token, is refused: a
+/// source unit names it with `PassEnvironment=`, so it must be one variable name (letters, digits
+/// and `_`, not starting with a digit), and a unit must not hold its value, so it must be none a
+/// unit writes by value: those [`environment`] copies and every `CORTEX_*`
+/// ([`tool_environment`]). Nor may it be any `XDG_*` name (a unit copies some, and the session's
+/// base directories are no token) or any `ANTHROPIC_*` name (cortex sets or removes those for
+/// `claude` itself).
+pub fn token_env_refusal(token_env: &str) -> Option<String> {
+    let name = token_env
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && token_env
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if !name {
+        return Some(format!(
+            "model.gateway.token_env {token_env:?} is not a variable name: use letters, digits \
+             and `_`, not starting with a digit"
+        ));
+    }
+    if copied(token_env) || token_env.starts_with("CORTEX_") {
+        return Some(format!(
+            "model.gateway.token_env {token_env} is a variable cortex writes into a systemd \
+             unit by value, and a unit must not hold the gateway's token; name another variable"
+        ));
+    }
+    ["XDG_", "ANTHROPIC_"]
+        .into_iter()
+        .find(|prefix| token_env.starts_with(prefix))
+        .map(|prefix| {
+            format!(
+                "model.gateway.token_env {token_env} is a {prefix}* variable, which cortex \
+                 reserves (the session's base directories, and the variables it sets or removes \
+                 for claude); name another variable"
+            )
+        })
 }
 
 /// `CORTEX_CONNECTORS`, `CORTEX_CLAUDE` and `CORTEX_CODEX` for a source unit, so a scheduled run
@@ -454,16 +495,27 @@ impl Systemd {
     }
 
     /// The source's service runs the `tools` this process runs ([`tool_environment`]), and
-    /// `<home>/bin/cortex`, which [`Systemd::place_binary`] places.
+    /// `<home>/bin/cortex`, which [`Systemd::place_binary`] places. With a gateway token
+    /// variable `token_env` (`model.gateway.token_env`), the service names it with
+    /// `PassEnvironment=`, so a run reads it from the user manager's environment; the unit never
+    /// holds its value.
     pub fn install_source(
         &self,
         instance: &str,
         source: &str,
         schedule: &str,
         tools: &crate::run::Tools,
+        token_env: Option<&str>,
     ) -> Result<(), String> {
         let unit = source_unit(instance, source);
         let exe = binary_path(&self.home_root);
+        let passed = match token_env {
+            Some(name) => match token_env_refusal(name) {
+                Some(refusal) => return Err(refusal),
+                None => format!("PassEnvironment={name}\n"),
+            },
+            None => String::new(),
+        };
         single_line(
             [
                 ("the schedule", schedule.to_string()),
@@ -489,7 +541,7 @@ impl Systemd {
                 (
                     format!("{unit}.service"),
                     format!(
-                        "[Unit]\nDescription=cortex: run {instance}/{source}\n\n[Service]\nType=oneshot\n{}{tools}ExecStart={} --home {} run {instance}/{source} --record-failure\n",
+                        "[Unit]\nDescription=cortex: run {instance}/{source}\n\n[Service]\nType=oneshot\n{}{tools}{passed}ExecStart={} --home {} run {instance}/{source} --record-failure\n",
                         environment(),
                         exec_quote(&exe.display().to_string()),
                         exec_quote(&self.home_root.display().to_string())
@@ -712,7 +764,7 @@ mod tests {
             codex: "codex".into(),
         };
         systemd
-            .install_source("q", "news", "daily", &tools)
+            .install_source("q", "news", "daily", &tools, None)
             .unwrap();
         let unit = std::fs::read_to_string(units.join("cortex-q-news.service")).unwrap();
         let exec = format!(

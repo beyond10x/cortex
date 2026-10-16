@@ -442,21 +442,52 @@
       "x-ess-kind": "enum",
       "x-ess-name": "cortex.instance.ModelBackend"
     },
+    "cortex.instance.ModelGateway": {
+      "additionalProperties": false,
+      "properties": {
+        "base_url": {
+          "type": "string"
+        },
+        "max_context_tokens": {
+          "type": "integer"
+        },
+        "token_env": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_url",
+        "token_env"
+      ],
+      "title": "ModelGateway",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.ModelGateway"
+    },
     "cortex.instance.ModelSpec": {
       "additionalProperties": false,
       "properties": {
         "backend": {
           "$ref": "#/$defs/cortex.instance.ModelBackend"
         },
+        "budget_tokens": {
+          "type": "integer"
+        },
         "budget_usd": {
           "format": "decimal",
           "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
           "type": "string"
         },
+        "daily_ceiling_tokens": {
+          "type": "integer"
+        },
         "daily_ceiling_usd": {
           "format": "decimal",
           "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
           "type": "string"
+        },
+        "gateway": {
+          "$ref": "#/$defs/cortex.instance.ModelGateway"
         },
         "instructions": {
           "type": "string"
@@ -1382,8 +1413,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:418b946318f382211713bb6cc440482089d43637d73ec63b5d2989294b3ff5c8",
-    "source_digest": "17e09111e8b07b05de318bdb51a95149ecca7a5002497fc00341b27224aad8e8",
+    "contract_digest": "slice-sha256/2:edd218aefdbb8bca62e2959d0a3208f5bf3e922ce8c7147c9df29b178d9420de",
+    "source_digest": "4ae7016a234132e571b7abed384e164e18cd472f2a8f3e07b3d7860f9d294f49",
     "specification_version": "v1",
     "system": "cortex"
   }

@@ -27,7 +27,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
 | `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
 | `instances/<name>/cortex.log` | one JSON line per run: counts, cost, seconds, why it stopped |
-| `instances/<name>/spend.json` | the spend of the day (`cortex.daily-spend/1`): the UTC day and what the instance's model answers that day cost, held to `model.daily_ceiling_usd`. With a ceiling, a file cortex cannot read (not JSON or not `cortex.daily-spend/1`), or one of today whose `spent_usd` is not a number of 0 or more, stops every model call of the instance until it is deleted; deleting it counts the day as nothing spent |
+| `instances/<name>/spend.json` | the spend of the day (`cortex.daily-spend/1`): the UTC day, what the instance's model answers that day cost (`spent_usd`), held to `model.daily_ceiling_usd`, and the tokens they reported (`spent_tokens`, absent until an answer reported any), held to `model.daily_ceiling_tokens`. With a ceiling, a file cortex cannot read (not JSON or not `cortex.daily-spend/1`), or one of today whose `spent_usd` is not a number of 0 or more or whose `spent_tokens` is not a whole number of 0 or more, stops every model call of the instance until it is deleted; deleting it counts the day as nothing spent |
 | `instances/<name>/status/<source>.json` | the source's last run (outcome, time, reason) and its runs by outcome |
 | `instances/<name>/metrics.prom` | with `monitoring.metrics`, the runs of each source by outcome, in the Prometheus text format |
 
@@ -72,6 +72,12 @@ home directory. So the source services carry, from the shell that ran `cortex cr
   Codex model backend is not available in this release: an instance whose spec names
   `model.backend: Codex` fails every run without starting `codex` (see
   [Commands](./commands.md#global-options)).
+- for an instance whose spec names a `model.gateway`, `PassEnvironment=<token_env>`: the name of
+  the variable holding the gateway's token, never its value. systemd passes that variable from
+  the user manager's environment, so set it there, for example with
+  `systemctl --user set-environment GW_TOKEN=…` or a file under `~/.config/environment.d/`, and
+  restart nothing: the next run reads it. A run that finds it unset or empty fails naming it,
+  without starting `claude` (see [Spec file](./spec-file.md#a-model-gateway)).
 
 A relative `--home` or `$CORTEX_HOME` is made absolute, so the units name the same home from any
 directory. Run `cortex create` from a shell where `connectors` and `claude` work; after changing
@@ -163,7 +169,11 @@ the text as a whole, and never cuts a record.
 
 The run stops starting batches when its `budget_usd` is spent, or when the instance's spend of
 the UTC day reaches `model.daily_ceiling_usd` (see
-[the spec file](./spec-file.md#the-daily-ceiling)). When a batch fails after an earlier
+[the spec file](./spec-file.md#the-daily-ceiling)). With a limit in tokens, it also stops when its
+calls have used `model.budget_tokens`, when the instance's tokens of the UTC day reach
+`model.daily_ceiling_tokens`, or when an answer reported no `usage` or a count in it below 0, so
+its tokens could not be counted (see [the spec file](./spec-file.md#limits-in-tokens)). Each stop is checked before a
+batch, keeps the batches before it applied, and names the limit in `stopped`. When a batch fails after an earlier
 one was applied, the run ends as `ran` with `stopped` set; when the first batch fails, nothing was
 applied and the run fails.
 
@@ -432,7 +442,11 @@ seed belongs to the store's earlier life. The spec's sources are added, and the 
 Extraction runs `claude -p` in an empty directory under the run's directory, isolated from the
 user's configuration:
 
-- `ANTHROPIC_API_KEY` is removed from its environment, so the signed-in account is used;
+- `ANTHROPIC_API_KEY` is removed from its environment, so the signed-in account is used, or the
+  gateway the spec names: with a `model.gateway`, exactly `ANTHROPIC_BASE_URL`,
+  `ANTHROPIC_AUTH_TOKEN` (the value of `token_env`, read when the call is made) and, when given,
+  `CLAUDE_CODE_MAX_CONTEXT_TOKENS` are set from the spec; without one, those three are removed
+  too (see [Spec file](./spec-file.md#a-model-gateway));
 - `--tools ""`, `--setting-sources ""`, `--strict-mcp-config`, `--disable-slash-commands` and
   `--no-session-persistence`: no tools, no settings, no MCP servers, no slash commands;
 - `--json-schema` with EKR's extraction schema, and `--max-budget-usd` with what is left of the
@@ -450,7 +464,7 @@ Besides `cost_usd`, a run's result and its `cortex.log` line say how many model 
 `cache_read_input_tokens`, `cache_creation_input_tokens` and `output_tokens`, each summed over the
 calls. A call asked again after an error answer that cost zero counts as two calls, and a failed
 call counts. A count is `0` for a run with no model call and `null` as soon as one answer did not
-report it; it is never written as `0` for a count nobody reported.
+report it (or reported it below 0); it is never written as `0` for a count nobody reported.
 
 Each request has a fixed part, sent again with every batch: the system prompt, EKR's extraction
 schema, the instance's description and instructions, the store's ontology and the known entity
