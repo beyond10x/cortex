@@ -1887,6 +1887,11 @@ fn run_source(
             if !report.skipped.is_empty() {
                 detail["skipped"] = json!(report.skipped);
             }
+            // Present only when a document alone did not fit the model's window, and was left
+            // out: other runs report as before.
+            if !report.too_large.is_empty() {
+                detail["too_large"] = json!(report.too_large);
+            }
             // Present only when EKR rejected a part: a run that had none reports as before.
             if !report.rejected.is_empty() {
                 detail["rejected"] = json!(report

@@ -45,11 +45,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   gateway's `max_context_tokens` sets it, less the output reserve (the new
   `model.gateway.max_output_tokens`, passed to `claude` as `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, else
   a quarter of the window) and the request's fixed part. A batch `claude` answers as too long, or
-  whose answer was cut off, is split in two and asked again, at most 3 splits deep. A part that
-  still does not fit ends the run as the new outcome `batch-too-large`, exit status 6, which
+  whose answer was cut off (`Prompt is too long`, or an OpenAI-compatible server's `maximum
+  context length`), is split in two and asked again, at most 3 splits deep. One document that
+  alone still does not fit is left out, named in the run's new `too_large` field and `cortex.log`,
+  and marked seen until its text changes; the run goes on. A part of several documents that still
+  does not fit ends the run as the new outcome `batch-too-large`, exit status 6, which
   `--record-failure` does not count: the batches before it stay applied and a later run extracts
-  the rest. A run's report and `cortex.log` line state `batch_chars` and `splits`, as does the
-  `SourceRan` event.
+  the rest. The size counts UTF-8 bytes of document text, as the 60,000 before it did. A run's
+  report and `cortex.log` line state `batch_chars` and `splits`, as does the `SourceRan` event.
 - Behind a model gateway (`model.gateway`), runs are bounded in tokens only, and no run stops
   over a dollar spend that never happened. `claude` prices a gateway's answer at its default
   model's rate, so `budget_usd` and `daily_ceiling_usd` could stop runs of a self-hosted or

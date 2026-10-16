@@ -144,8 +144,11 @@ stand; [Status](./status.mdx) lists what is planned.
 - **The batch size is an estimate, not a token count.** Without `model.batch_chars`, a batch
   behind a gateway is sized at 1.5 characters per token of the model's window; dense text such as
   code can still be too long, or draw an answer cut off at the output limit. cortex then splits
-  the batch, at most 3 deep, and a part that still does not fit ends the run as `batch-too-large`
-  (see [The batch size](./spec-file.md#the-batch-size)). `cortex quality` and `cortex schema`
+  the batch, at most 3 deep; a part of several documents that still does not fit ends the run as
+  `batch-too-large`, and one document that alone does not fit is left out, named in `too_large`
+  and not extracted until its text changes (see
+  [The batch size](./spec-file.md#the-batch-size)). The size counts UTF-8 bytes, so text in a
+  non-Latin script fills a batch 2 to 3 times as fast. `cortex quality` and `cortex schema`
   keep their own batches of 20 facts.
 - **A token limit is checked between calls, not within one.** `claude` takes no token limit, so a
   run, quality measurement or schema round can pass `budget_tokens` or `daily_ceiling_tokens` by

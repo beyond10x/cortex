@@ -111,7 +111,7 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 3 | `disabled` | the source is disabled after two failed runs in a row; nothing ran. `cortex source enable` switches it back on |
 | 4 | `store-outcome-unknown` | EKR could not say whether a store write of the run took effect (`publication outcome is unknown` from a stage verb, `apply-extraction` or a transaction's commit); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage or extracts the batch again, and a gated `sqlite` run that had kept its snapshot is undone from it (see [Undoing a run](#undoing-a-run)) |
 | 5 | `connection-unavailable` | Connectors answered a retryable failure to every attempt of `connections revalidate` (or of the `connections list` read before it) before the run fetched anything; not a failure of the source, so `--record-failure` counts nothing, and the next scheduled run starts as usual (see [Failures](#failures)) |
-| 6 | `batch-too-large` | a part of an extraction batch was still too long for the model's window, or its answer still cut off, after the batch was split 3 deep or down to one document; the reason names that part's documents and the batch size used. Not a failure of the source, so `--record-failure` counts nothing; the batches before it stay applied, and a later run (with a smaller `model.batch_chars`) extracts the rest (see [The batch size](./spec-file.md#the-batch-size)) |
+| 6 | `batch-too-large` | a part of several documents of an extraction batch was still too long for the model's window, or its answer still cut off, after the batch was split 3 deep; the reason names that part's documents and the batch size used. Not a failure of the source, so `--record-failure` counts nothing; the batches before it stay applied, and a later run extracts the rest. A part of one document does not end the run: it is left out alone, named in `too_large` and marked seen (see [The batch size](./spec-file.md#the-batch-size)) |
 
 With `--fetch-only` (see [Counting what a run would extract](#counting-what-a-run-would-extract)),
 `fetched` exits 0 and a fetch that failed exits 1 as `fetch-failed`.
@@ -139,7 +139,7 @@ no second line.
    observed at the run's start. EKR dates each fact from the earliest observed time of the
    evidence it cites, so a fact is valid from when its source said it. Which documents a run
    keeps, and its window, still go by the run's own times.
-5. **Extract** in batches of up to `model.batch_chars` characters, 60,000 unless the spec gives a
+5. **Extract** in batches of up to `model.batch_chars` characters (UTF-8 bytes), 60,000 unless the spec gives a
    size or a gateway's window sets one (see [The batch size](./spec-file.md#the-batch-size)); a
    batch too long for the model's window is split and asked again. Each batch is one `claude -p` call that
    answers in the JSON form of `ekr schema ekr.extraction-document/1`. The prompt carries the
@@ -331,11 +331,15 @@ with a cost above zero, or with no cost reported, is not asked again.
 
 An error answer saying the request is too long for the model's window, or that the answer was
 cut off at the output limit, is neither asked again after a wait nor a failure: the batch is split
-in two and each half asked (see [The batch size](./spec-file.md#the-batch-size)). A part that still
-does not fit after 3 splits, or of one document, ends the run as `batch-too-large` with exit
-status 6. The batches before it stay applied and seen; that part and the batches after it are not
-marked seen, so a later run extracts them. No failure is recorded, so it never disables the
-source; its status, metric and hook report it as for `store-outcome-unknown`.
+in two and each half asked (see [The batch size](./spec-file.md#the-batch-size)). A part of one
+document that still does not fit is left out alone: the run names it in `too_large`, marks it seen
+so it is not asked again until its text changes, and goes on with the batches after it. A part of
+several documents that still does not fit after 3 splits ends the run as `batch-too-large` with
+exit status 6. The batches before it stay applied and seen; that part and the batches after it are
+not marked seen, so a later run extracts them. No failure is recorded, so it never disables the
+source; its status, metric and hook report it as for `store-outcome-unknown`. A gated run that
+fails its gate ends `apply-refused` as any other, and its reason also names the part that did not
+fit.
 
 ## Undoing a run
 

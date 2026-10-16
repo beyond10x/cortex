@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "BatchTooLarge payload",
-  "description": "A part of an extraction batch was still too long for the model's window, or its answer still cut off at the output limit, after the batch was split as far as it may be. Nothing about the source was wrong; a later run, with a smaller `model.batch_chars`, extracts that part.",
+  "description": "A part of several documents of an extraction batch was still too long for the model's window, or its answer still cut off at the output limit, after the batch was split 3 deep. Nothing about the source was wrong; a later run extracts that part, and a smaller `model.batch_chars` makes its batches smaller. A single document that alone does not fit is not this error: the run leaves it out and goes on.",
   "x-ess-name": "cortex.instance.BatchTooLarge",
   "x-ess-kind": "error-payload",
   "type": "object",
@@ -17,8 +17,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "4f67d485d3f511f1486cfde0aa63dbc01b243139aeea5c2e9814ae5593be08b5",
-    "contract_digest": "slice-sha256/2:733af9ca6aced1e24fad845a397be6838bba5c98d3aed1a446484759497c1b36",
+    "source_digest": "fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58",
+    "contract_digest": "slice-sha256/2:afbf0fcb30aa2c20a9b0477095afb9fdf3e6e8814c29e0d5d7ceb2a6d2e2c4ca",
     "regenerate": "ess generate"
   }
 }
