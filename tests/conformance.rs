@@ -290,9 +290,7 @@ impl Scenario {
         let app = Cortex::new(Generated::new(Ports {
             home: Home::new(std::env::temp_dir().join("cortex-conformance-unused")),
             tools: Tools {
-                connectors: Connectors {
-                    bin: "connectors-unused".into(),
-                },
+                connectors: Connectors::new("connectors-unused".into()),
                 claude: "claude-unused".into(),
                 codex: "codex-unused".into(),
             },
@@ -493,6 +491,10 @@ impl Scenario {
                 m::RunSourceOutcome::StoreOutcomeUnknown { error } => (
                     "store-outcome-unknown",
                     Some(("StoreOutcomeUnknown", json!({"reason": error.reason}))),
+                ),
+                m::RunSourceOutcome::ConnectionUnavailable { error } => (
+                    "connection-unavailable",
+                    Some(("ConnectionUnavailable", json!({"reason": error.reason}))),
                 ),
                 m::RunSourceOutcome::Ran { .. } => ("ran", None),
                 m::RunSourceOutcome::FetchOnlyFailed { error } => (
@@ -910,7 +912,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        63,
+        65,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

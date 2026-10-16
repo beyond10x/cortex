@@ -294,6 +294,11 @@ impl Ports {
             Err(Failure::StoreOutcomeUnknown(reason)) => m::RunSourceOutcome::StoreOutcomeUnknown {
                 error: m::StoreOutcomeUnknown { reason },
             },
+            Err(Failure::ConnectionUnavailable(reason)) => {
+                m::RunSourceOutcome::ConnectionUnavailable {
+                    error: m::ConnectionUnavailable { reason },
+                }
+            }
             Ok(report) => {
                 let ran = source_ran(source_id, &report);
                 self.shared.borrow_mut().last_run = Some(report);
@@ -366,7 +371,8 @@ impl Ports {
                 Failure::Fetch(reason)
                 | Failure::Extract(reason)
                 | Failure::Apply(reason)
-                | Failure::StoreOutcomeUnknown(reason),
+                | Failure::StoreOutcomeUnknown(reason)
+                | Failure::ConnectionUnavailable(reason),
             ) => failed(reason),
             Ok(c) => m::RunSourceOutcome::Fetched {
                 source_fetched: m::SourceFetched {
@@ -419,6 +425,7 @@ impl RunSourceBehavior for Ports {
             ("extraction-failed", Failure::Extract),
             ("apply-refused", Failure::Apply),
             ("store-outcome-unknown", Failure::StoreOutcomeUnknown),
+            ("connection-unavailable", Failure::ConnectionUnavailable),
         ]
         .into_iter()
         .find(|(outcome, _)| self.decided(RUN, outcome));
@@ -461,6 +468,17 @@ impl RunSourceBehavior for Ports {
                 );
                 return Ok(m::RunSourceOutcome::StoreOutcomeUnknown {
                     error: m::StoreOutcomeUnknown { reason },
+                });
+            }
+            // Recorded on the source like a failure; the scheduler counts none for it (main.rs).
+            Err(Failure::ConnectionUnavailable(reason)) => {
+                self.note(
+                    found,
+                    m::RunOutcome::ConnectionUnavailable,
+                    Some(reason.clone()),
+                );
+                return Ok(m::RunSourceOutcome::ConnectionUnavailable {
+                    error: m::ConnectionUnavailable { reason },
                 });
             }
             Ok(report) => report,

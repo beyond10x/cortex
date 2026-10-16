@@ -37,6 +37,10 @@ pub enum Failure {
     /// `apply-extraction` or a transaction; `crate::ekr::outcome_unknown`): a fault of the store,
     /// not of the source, which the next run settles.
     StoreOutcomeUnknown(String),
+    /// Connectors answered a retryable failure to every attempt of the connection's revalidation
+    /// before the run fetched anything ([`crate::connectors::InvokeError::Unavailable`]): a fault
+    /// of Connectors, not of the source, which the next run starts over.
+    ConnectionUnavailable(String),
 }
 
 #[derive(Debug)]
@@ -322,6 +326,7 @@ impl Planned {
         )
         .map_err(|e| match e {
             FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
+            FetchError::Unavailable(m) => Failure::ConnectionUnavailable(m),
         })
     }
 }
@@ -430,6 +435,7 @@ fn seed_documents(layout: &Layout, tools: &Tools, undoable: bool) -> Result<Repo
     )
     .map_err(|e| match e {
         FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
+        FetchError::Unavailable(m) => Failure::ConnectionUnavailable(m),
     })?;
     process(
         layout,
@@ -1168,6 +1174,9 @@ impl Failure {
             Failure::Extract(m) => Failure::Extract(format!("{m}; {more}")),
             Failure::Apply(m) => Failure::Apply(format!("{m}; {more}")),
             Failure::StoreOutcomeUnknown(m) => Failure::StoreOutcomeUnknown(format!("{m}; {more}")),
+            Failure::ConnectionUnavailable(m) => {
+                Failure::ConnectionUnavailable(format!("{m}; {more}"))
+            }
         }
     }
 
@@ -1177,7 +1186,8 @@ impl Failure {
             Failure::Fetch(m)
             | Failure::Extract(m)
             | Failure::Apply(m)
-            | Failure::StoreOutcomeUnknown(m) => m,
+            | Failure::StoreOutcomeUnknown(m)
+            | Failure::ConnectionUnavailable(m) => m,
         }
     }
 }

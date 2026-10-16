@@ -110,13 +110,15 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 2 | none | an error before any outcome, on stderr as `cortex: <message>` (an unreadable registry, a home that cannot be locked) |
 | 3 | `disabled` | the source is disabled after two failed runs in a row; nothing ran. `cortex source enable` switches it back on |
 | 4 | `store-outcome-unknown` | EKR could not say whether a store write of the run took effect (`publication outcome is unknown` from a stage verb, `apply-extraction` or a transaction's commit); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage or extracts the batch again, and a gated `sqlite` run that had kept its snapshot is undone from it (see [Undoing a run](#undoing-a-run)) |
+| 5 | `connection-unavailable` | Connectors answered a retryable failure to every attempt of `connections revalidate` (or of the `connections list` read before it) before the run fetched anything; not a failure of the source, so `--record-failure` counts nothing, and the next scheduled run starts as usual (see [Failures](#failures)) |
 
 With `--fetch-only` (see [Counting what a run would extract](#counting-what-a-run-would-extract)),
 `fetched` exits 0 and a fetch that failed exits 1 as `fetch-failed`.
 
 The JSON line on stdout says the same, with its `detail`. With `--record-failure`, a failed run
 prints a second line, the recorded failure's (`counted` or `disabled`); the exit status is the
-run's. A `store-outcome-unknown` run records no failure and prints no second line.
+run's. A `store-outcome-unknown` or `connection-unavailable` run records no failure and prints
+no second line.
 
 ## What one run does
 
@@ -234,6 +236,21 @@ second time, a second set of assertions and evidence for its documents, as any r
 writes (see [Adopting an existing store](#adopting-an-existing-store)). The batches the run
 applied before it stay applied and seen.
 
+Before a source's first read through Connectors, cortex lists its connection and revalidates it
+when it is not `ready`. When Connectors answers either with a failure it marks retryable
+(`error.data.kind: operational` and `next_action: retry_explicitly`, such as `unavailable` at
+`dispatch`), cortex tries again: at most 4 attempts in all, pausing 5 s, 10 s, then 20 s between
+them. `CORTEX_REVALIDATE_ATTEMPTS` (default 4, at least 1) and `CORTEX_REVALIDATE_PAUSE_MS`
+(default 5000, the first pause, doubled after each attempt) change the bound. A refusal (a
+missing, revoked or not-granted connection, an authentication or scope failure) is not retried
+and fails the run as `fetch-failed`. A revalidation still failing after the last attempt, before
+the run fetched anything, fails the run as `connection-unavailable` and exits 5, its `reason`
+naming the last error. Connectors failed, not the source: `--record-failure` counts nothing, so
+`consecutive_failures` does not move and the source is never disabled by it; its status, metric
+and hook report it as any failed run's do, and the next scheduled run starts as usual. A
+revalidation that fails after the run fetched documents (a lapse renewed mid-run) is retried the
+same way and, if it still fails, fails the run as `fetch-failed`, counted.
+
 A run that fails a check of the spec's `gate` fails as `apply-refused` and is counted the same
 way. Its `reason` names each failed check with its measure and value
 (`facts_refused = 1 (max 0)`). On a `sqlite` store the run is undone first: the store and
@@ -273,14 +290,16 @@ cortex_source_last_run_timestamp_seconds{source="example/news"} 1791962441.269
 ```
 
 `cortex_source_runs_total` counts the source's runs under each outcome (`ran`,
-`fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `disabled`),
+`fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`,
+`connection-unavailable`, `disabled`),
 every outcome written, 0 for
 one that never happened. The counts are kept in the status file and start from the first run
 cortex recorded one for.
 
 With [`monitoring.hook`](./spec-file.md#monitoring), each run that fails calls the hook once,
 after its line is printed and its failure recorded: `<command…> <instance>/<source> <outcome>`, with
-the outcome `fetch-failed`, `extraction-failed`, `apply-refused` or `store-outcome-unknown`, or
+the outcome `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown` or
+`connection-unavailable`, or
 `disabled` when that run's
 recorded failure disabled the source. A run that ran or found the source disabled calls no
 hook. The hook runs in the instance directory, in a process group of its own, with cortex's
@@ -296,7 +315,7 @@ or `timed-out`. Neither a failed hook nor a metric file that cannot be written c
 outcome or its exit status; the latter is recorded in `cortex.log` as `metrics.failed`.
 
 If Connectors refuses a read because a connection's validation lapsed, cortex revalidates the
-connection once and retries.
+connection once and retries; that revalidation is itself retried as above.
 
 When `claude` answers an error, the `extraction-failed` reason keeps the error text it gave
 (`claude answered an error (success), cost 0.0000 USD: Not logged in …`), and the batch's
