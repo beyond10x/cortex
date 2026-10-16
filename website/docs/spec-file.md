@@ -69,9 +69,9 @@ different seed files answers `seed-change-refused`.
 |---|---|
 | `model` | the model name passed to `claude --model` |
 | `backend` | optional: `Claude` (the default) runs `claude -p`. `Codex` is accepted by `create` and `update` but extracts nothing in this release: every run fails as `extraction-failed`, naming `story:codex-model-backend` (see [Commands](./commands.md#global-options)) |
-| `budget_usd` | the spending limit of one run, in US dollars, as a decimal string; above 0. A run stops starting new batches once it is spent |
-| `daily_ceiling_usd` | optional: the most the instance's model calls spend in one UTC calendar day, in US dollars, as a decimal string; above 0. Absent means no ceiling. See [The daily ceiling](#the-daily-ceiling) |
-| `budget_tokens` | optional: the most tokens one run's model calls use, a whole number above 0. Absent means no limit in tokens. See [Limits in tokens](#limits-in-tokens) |
+| `budget_usd` | the spending limit of one run, in US dollars, as a decimal string; above 0. A run stops starting new batches once it is spent. Required without a `gateway`; with one it may be omitted, and bounds nothing (see [A model gateway](#a-model-gateway)) |
+| `daily_ceiling_usd` | optional: the most the instance's model calls spend in one UTC calendar day, in US dollars, as a decimal string; above 0. Absent means no ceiling. See [The daily ceiling](#the-daily-ceiling). Bounds nothing behind a `gateway` |
+| `budget_tokens` | optional: the most tokens one run's model calls use, a whole number above 0. Absent means no limit in tokens. Required with a `gateway`. See [Limits in tokens](#limits-in-tokens) |
 | `daily_ceiling_tokens` | optional: the most tokens the instance's model calls use in one UTC calendar day, a whole number above 0. Absent means no ceiling in tokens. See [Limits in tokens](#limits-in-tokens) |
 | `timeout_s` | the time limit of one model call, in seconds; above 0 |
 | `instructions` | optional text file whose content is added to every extraction prompt |
@@ -109,7 +109,8 @@ run or command, against what the day has spent so far.
 ```yaml
 model:
   model: my-open-model
-  budget_usd: "1"
+  budget_tokens: 200000
+  daily_ceiling_tokens: 2000000
   timeout_s: 900
   gateway: {base_url: "https://gateway.example", token_env: GW_TOKEN, max_context_tokens: 128000}
 ```
@@ -133,6 +134,25 @@ A source's timer unit names the variable with `PassEnvironment=`, so the token r
 run from the systemd user manager's environment (see
 [Operating](./operating.md#systemd-units)). The gateway applies to the `Claude` backend; the
 `Codex` backend fails every call before starting anything in this release, so it reaches no gateway.
+
+Behind a gateway the instance is bounded in tokens only. `claude` prices each answer at its
+default model's rate, from its own price table, not at what the gateway's model costs, so that
+figure bounds nothing:
+
+- `budget_tokens` is required: `create`, `update` and `adopt` refuse a gateway spec without it
+  (exit status 2, naming `model.budget_tokens`, before anything is written). `budget_usd` may be
+  omitted. An instance created with a gateway by an earlier release, whose spec has no
+  `budget_tokens`, keeps running with its dollar limits counted as before, until an `update`
+  gives it one.
+- The cost an answer reports counts against no `budget_usd`, no `daily_ceiling_usd` and no
+  dollar budget of a `cortex quality` measurement or a `cortex schema` round, and no
+  `--max-budget-usd` is passed to `claude`. The token limits ([Limits in
+  tokens](#limits-in-tokens)) hold as without a gateway.
+- A gateway spec that still gives `budget_usd` or `daily_ceiling_usd` is accepted, and `create`,
+  `update` and `adopt` print one line on stderr saying they bound nothing behind the gateway.
+- The reported cost is still recorded, as not counted: a run's report and its `cortex.log` line
+  carry `cost_usd` as reported and `cost_counted: false`, and `spend.json` sums it in
+  `uncounted_usd`, leaving `spent_usd` as it is.
 
 ### Limits in tokens
 
@@ -166,8 +186,8 @@ tokens, cache reads, cache writes and output tokens, added together.
 
 A token limit cannot be passed to `claude` the way `--max-budget-usd` is, so a single call is not
 cut short: a run can pass its limit by the tokens of its last call. The token limits apply beside
-the dollar limits; whichever is reached first stops the run. Without a token limit, runs behave as
-before. The day's tokens are `spent_tokens` in `spend.json`; a file written without it counts as
+the dollar limits; whichever is reached first stops the run. Behind a `gateway` they are the only
+limits ([A model gateway](#a-model-gateway)). Without a token limit, runs behave as before. The day's tokens are `spent_tokens` in `spend.json`; a file written without it counts as
 no tokens used.
 
 ## `sources`

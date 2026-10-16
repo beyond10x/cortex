@@ -36,6 +36,29 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Fixed
+
+- Behind a model gateway (`model.gateway`), runs are bounded in tokens only, and no run stops
+  over a dollar spend that never happened. `claude` prices a gateway's answer at its default
+  model's rate, so `budget_usd` and `daily_ceiling_usd` could stop runs of a self-hosted or
+  otherwise unpriced model. Now, with a gateway, the cost `claude` reports counts against no
+  `budget_usd`, no `daily_ceiling_usd` and no dollar budget of `cortex quality` or
+  `cortex schema`, and `--max-budget-usd` is not passed to `claude`. The cost is still recorded
+  as reported, marked as not counted: a run's report and `cortex.log` line carry
+  `cost_counted: false`, the `SourceRan` event `cost_counted`, and `spend.json` sums it in
+  `uncounted_usd`.
+
+### Added
+
+- With `model.gateway`, `model.budget_usd` may be omitted, and `model.budget_tokens` is required:
+  `create`, `update` and `adopt` refuse a gateway spec without it (exit status 2, naming
+  `model.budget_tokens`, before anything is written). Without a gateway `model.budget_usd` stays
+  required, and a spec without it is refused naming `model.budget_usd`. A gateway spec that still
+  gives `budget_usd` or `daily_ceiling_usd` is accepted, and `create`, `update` and `adopt` print
+  one line on stderr saying they bound nothing behind the gateway. An instance created with a
+  gateway by an earlier release, whose spec has no `budget_tokens`, keeps running with its dollar
+  limits counted as before, until an `update` gives it one.
+
 ## 0.5.2 — 2026-10-16
 
 ### Fixed

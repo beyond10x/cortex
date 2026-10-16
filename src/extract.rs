@@ -490,7 +490,15 @@ impl Model {
             .args(["--model", &self.model])
             .args(["--system-prompt", system_prompt])
             .args(["--json-schema", &schema.to_string()])
-            .args(["--max-budget-usd", &format!("{budget_usd:.4}")])
+            // Behind a gateway `claude` prices an answer at its default model's rate, not at what
+            // the gateway's model costs, so no dollar budget bounds the call: its caller gives
+            // `f64::INFINITY` (`spend::dollar_budget` is `None`), and no `--max-budget-usd` is
+            // passed. The instance is bounded in tokens (`spend::counts_dollars`).
+            .args(if budget_usd.is_finite() {
+                vec!["--max-budget-usd".to_string(), format!("{budget_usd:.4}")]
+            } else {
+                vec![]
+            })
             .args(["--output-format", "json"])
             .env_remove("ANTHROPIC_API_KEY")
             .current_dir(dir)

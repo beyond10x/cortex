@@ -19,6 +19,9 @@
       "format": "decimal",
       "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
     },
+    "cost_counted": {
+      "type": "boolean"
+    },
     "daily_ceiling_reached": {
       "type": "boolean"
     },
@@ -48,6 +51,7 @@
     "source_id",
     "documents_new",
     "documents_applied",
+    "cost_counted",
     "daily_ceiling_reached",
     "model_calls"
   ],
@@ -55,8 +59,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "78ab6fc646647beb44f0f9bc60137c1313bb0b076d5fc4589c8d76d9bff126a2",
-    "contract_digest": "slice-sha256/2:84847768d37b08456c488546ac209492b1b1acde4801a6d256189d6d9bfdd5bc",
+    "source_digest": "4d78dbc9fefa8ec583bfc00d89d8a461b37b910b77d90cf3b69c991fd6b95086",
+    "contract_digest": "slice-sha256/2:06542e08351a7361ee1d9b6a8f28b9d1e64281fa879dd874b1ec163c75c8de55",
     "regenerate": "ess generate"
   },
   "$defs": {

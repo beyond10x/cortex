@@ -174,6 +174,7 @@ fn source_ran(source_id: m::SourceId, report: &Report) -> m::SourceRan {
         documents_new: report.documents_new,
         documents_applied: report.documents_applied,
         cost_usd: cost_decimal(report.cost_usd),
+        cost_counted: report.cost_counted,
         daily_ceiling_reached: report.daily_ceiling_reached,
         model_calls: report.model_calls,
         input_tokens: report.usage.input_tokens,

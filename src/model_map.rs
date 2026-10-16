@@ -77,7 +77,7 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
                 s::CortexInstanceModelBackend::V0 => m::ModelBackend::Claude,
                 s::CortexInstanceModelBackend::V1 => m::ModelBackend::Codex,
             }),
-            budget_usd: Decimal(spec.model.budget_usd.clone()),
+            budget_usd: opt(&spec.model.budget_usd).map(Decimal),
             daily_ceiling_usd: opt(&spec.model.daily_ceiling_usd).map(Decimal),
             budget_tokens: opt(&spec.model.budget_tokens)
                 .map(|n| int(&n, "model.budget_tokens"))

@@ -50,12 +50,55 @@ pub fn load(path: &Path) -> Result<Loaded, String> {
 /// refusal of a source named after a state file cortex keeps for itself
 /// ([`crate::instance::RESERVED_STATE_NAMES`]). An instance's frozen copy is read with [`load`]
 /// alone, so an instance created before the rule keeps loading and can be updated to a new name.
+///
+/// A spec it accepts with a dollar limit behind a model gateway gets one warning line on stderr
+/// ([`dollar_limits_warning`]).
 pub fn load_given(path: &Path) -> Result<Loaded, String> {
     let loaded = load(path)?;
-    if let Some(reason) = reserved_refusal(&loaded.model) {
+    if let Some(reason) = reserved_refusal(&loaded.model).or_else(|| gateway_refusal(&loaded.model))
+    {
         return Err(format!("{}: {reason}", path.display()));
     }
+    if let Some(warning) = dollar_limits_warning(&loaded.model) {
+        eprintln!("cortex: {}: {warning}", path.display());
+    }
     Ok(loaded)
+}
+
+/// Why a spec with a model gateway cannot be given: it names no `model.budget_tokens`. Behind a
+/// gateway the dollar limits bound nothing, so the tokens must. Held for `create`, `update` and
+/// `adopt` ([`load_given`]); an instance's frozen copy, read with [`load`], is not held to it, and
+/// one created before the rule keeps counting dollars ([`crate::spend::counts_dollars`]).
+pub fn gateway_refusal(spec: &m::InstanceSpec) -> Option<String> {
+    (spec.model.gateway.is_some() && spec.model.budget_tokens.is_none()).then(|| {
+        "model.budget_tokens is required with model.gateway: behind a gateway the cost claude \
+         reports is not counted, and the instance is bounded in tokens only"
+            .into()
+    })
+}
+
+/// The warning for a spec that gives `model.budget_usd` or `model.daily_ceiling_usd` behind a
+/// model gateway, where they bound nothing; `None` for any other spec.
+pub fn dollar_limits_warning(spec: &m::InstanceSpec) -> Option<String> {
+    spec.model.gateway.as_ref()?;
+    let given: Vec<&str> = [
+        ("model.budget_usd", spec.model.budget_usd.is_some()),
+        (
+            "model.daily_ceiling_usd",
+            spec.model.daily_ceiling_usd.is_some(),
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(field, given)| given.then_some(field))
+    .collect();
+    (!given.is_empty()).then(|| {
+        format!(
+            "{} bound nothing behind model.gateway: the cost claude reports there is not \
+             counted; the instance is bounded by model.budget_tokens and \
+             model.daily_ceiling_tokens",
+            given.join(" and ")
+        )
+    })
 }
 
 /// Why a source name of `spec` cannot be used: it is one of the state file names cortex keeps.
@@ -200,14 +243,23 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
             }
         }
     }
-    let budget: f64 = spec.model.budget_usd.0.parse().map_err(|_| {
-        format!(
-            "model.budget_usd {:?} is not a number",
-            spec.model.budget_usd.0
-        )
-    })?;
-    if budget.is_nan() || budget <= 0.0 {
-        return Err("model.budget_usd must be above 0".into());
+    // UNMAPPED in `spec/domains/instance.yaml` (`cortex.instance.ModelSpec`): `budget_usd` is
+    // required without a gateway; `budget_tokens` with one, which `load_given` holds
+    // ([`gateway_refusal`]).
+    match &spec.model.budget_usd {
+        None if spec.model.gateway.is_none() => {
+            return Err("model.budget_usd is required without model.gateway".into());
+        }
+        None => {}
+        Some(budget_usd) => {
+            let budget: f64 = budget_usd
+                .0
+                .parse()
+                .map_err(|_| format!("model.budget_usd {:?} is not a number", budget_usd.0))?;
+            if budget.is_nan() || budget <= 0.0 {
+                return Err("model.budget_usd must be above 0".into());
+            }
+        }
     }
     if let Some(ceiling) = &spec.model.daily_ceiling_usd {
         let usd: f64 = ceiling

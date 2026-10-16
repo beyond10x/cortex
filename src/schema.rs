@@ -451,7 +451,8 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn, home: &Home) -> Result<
         timeout_s: spec.model.timeout_s,
         gateway: spec.model.gateway.clone(),
     };
-    let budget: f64 = spec.model.budget_usd.0.parse().unwrap_or(0.0);
+    // `None` behind a model gateway: the proposal is bounded in tokens only.
+    let budget = spend::dollar_budget(&spec.model);
     let schema = answer_schema();
     let shown_ontology = ontology_text(&ontology);
     let mut spent = 0.0;
@@ -462,13 +463,16 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn, home: &Home) -> Result<
     let mut proposals: Vec<Cited> = Vec::new();
     let mut dropped = 0;
     for (n, batch) in batches.iter().enumerate() {
-        let remaining = budget - spent;
-        if remaining <= 0.0 {
-            return Err(Failure::Propose(format!(
-                "budget of {budget} USD spent; {}",
-                so_far(proposals.len(), n, batches.len(), cost_usd)
-            )));
-        }
+        let remaining = match budget {
+            Some(budget) if budget - spent <= 0.0 => {
+                return Err(Failure::Propose(format!(
+                    "budget of {budget} USD spent; {}",
+                    so_far(proposals.len(), n, batches.len(), cost_usd)
+                )));
+            }
+            Some(budget) => budget - spent,
+            None => f64::INFINITY,
+        };
         if let Err(why) = tokens.check() {
             return Err(Failure::Propose(format!(
                 "{why}; {}",
