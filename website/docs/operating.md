@@ -109,7 +109,7 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 1 | `no-such-source` | the home holds no such source |
 | 2 | none | an error before any outcome, on stderr as `cortex: <message>` (an unreadable registry, a home that cannot be locked) |
 | 3 | `disabled` | the source is disabled after two failed runs in a row; nothing ran. `cortex source enable` switches it back on |
-| 4 | `store-outcome-unknown` | EKR could not say whether a store write of the run took effect (`publication outcome is unknown` from a stage verb, `apply-extraction` or a transaction's commit); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage or extracts the batch again (see [Undoing a run](#undoing-a-run)) |
+| 4 | `store-outcome-unknown` | EKR could not say whether a store write of the run took effect (`publication outcome is unknown` from a stage verb, `apply-extraction` or a transaction's commit); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage or extracts the batch again, and a gated `sqlite` run that had kept its snapshot is undone from it (see [Undoing a run](#undoing-a-run)) |
 
 With `--fetch-only` (see [Counting what a run would extract](#counting-what-a-run-would-extract)),
 `fetched` exits 0 and a fetch that failed exits 1 as `fetch-failed`.
@@ -225,8 +225,11 @@ begin`, `ekr stage publish`, `ekr apply-extraction` or the commit of a transacti
 nothing, so `consecutive_failures` does not move and the source is never disabled by it. Its
 status, metric and hook report it as any failed run's do. The next run settles the stage, as it
 settles the stage of a run that was killed (see [Undoing a run](#undoing-a-run)). A run in no
-stage marks no document of the batch whose apply was unknown as seen, nor of any later batch, so
-the next run extracts that batch again. Nothing is lost; a batch that did land is written a
+stage and under no gate marks no document of the batch whose apply was unknown as seen, nor of any
+later batch, so the next run extracts that batch again. A `sqlite` run held to a `gate` that had
+already kept its snapshot is undone instead, as a run its gate refuses is: the snapshot is
+restored, `state/` is put back, and the `cortex.log` line says so; the run still fails as
+`store-outcome-unknown`, exits 4 and counts nothing. Nothing is lost; a batch that did land is written a
 second time, a second set of assertions and evidence for its documents, as any re-extraction
 writes (see [Adopting an existing store](#adopting-an-existing-store)). The batches the run
 applied before it stay applied and seen.
@@ -374,6 +377,11 @@ Connectors launch passes on, so the run's reads see its own commits and its comm
 - A run whose `ekr stage begin` answers that its outcome is unknown fails as
   `store-outcome-unknown` before it applies anything; the stage EKR may hold as `Begun` is
   abandoned by the next run.
+- On a `sqlite` store, a run held to a `gate` whose later `apply-extraction`, or whose
+  dropped-values commit, answers that its outcome is unknown is undone from its snapshot as a
+  run that fails its gate is (see above): the store and `state/` are restored, so no batch stays
+  in the store without having been held to the gate. It fails as `store-outcome-unknown`, exits 4
+  and counts nothing; `cortex.log` records that the snapshot was restored.
 - A run whose `ekr apply-extraction`, or a transaction's commit, answers that its outcome is
   unknown fails as `store-outcome-unknown` and leaves its stage in `stage.json`, neither published
   nor abandoned, whatever it applied before: the next run abandons the stage and puts `state/`

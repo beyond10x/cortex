@@ -485,7 +485,7 @@ fn process(
         &mut before,
         None,
     );
-    settle(ran, before)
+    settle(layout, spec, label, ran, before)
 }
 
 /// [`process`], with the run's snapshot and stage in `before`, which [`settle`] settles once the
@@ -1049,9 +1049,22 @@ impl Undo {
 /// SQLite run's does. A run that failed because EKR could not say whether one of its writes took
 /// effect ([`unknown_write`]) leaves its stage in `stage.json`, neither published nor abandoned:
 /// the next run abandons it and puts `state/` back ([`Staged::recover`]).
-fn settle(ran: Result<Report, Failure>, mut before: Undo) -> Result<Report, Failure> {
+fn settle(
+    layout: &Layout,
+    spec: &m::InstanceSpec,
+    label: &str,
+    ran: Result<Report, Failure>,
+    mut before: Undo,
+) -> Result<Report, Failure> {
     let Some(staged) = before.staged.take() else {
-        return ran;
+        return match ran {
+            // A gated run outside a stage whose write was unknown: an earlier batch committed
+            // and the run never reached its gate, so it is undone as a run its gate refuses is.
+            Err(Failure::StoreOutcomeUnknown(why)) if gated(spec) && before.kept.is_some() => {
+                Err(undo_unknown(layout, spec, label, why, &before))
+            }
+            ran => ran,
+        };
     };
     if matches!(ran, Err(Failure::StoreOutcomeUnknown(_))) {
         return ran;
@@ -1077,7 +1090,8 @@ fn settle(ran: Result<Report, Failure>, mut before: Undo) -> Result<Report, Fail
 /// to the next run ([`settle`]), which abandons it and puts `state/` back, so the run's documents
 /// are fetched again; outside one, the next run extracts the batch again, so nothing is lost, and
 /// a batch that did land is written a second time: a second set of assertions and evidence, as
-/// any re-extraction writes.
+/// any re-extraction writes. A gated run that kept its snapshot is undone from it instead
+/// ([], from []).
 fn unknown_write(error: String, before: &Undo) -> Failure {
     let next = match &before.staged {
         Some(staged) => format!(
@@ -1088,6 +1102,40 @@ fn unknown_write(error: String, before: &Undo) -> Failure {
         None => "the batch was not marked seen, so the next run extracts it again".to_string(),
     };
     Failure::StoreOutcomeUnknown(format!("{error}; {next}"))
+}
+
+/// The failure of a gated run outside a stage that ended on an unknown store write after an earlier
+/// batch committed: the run's snapshot is restored and `state/` put back with [`undo`], the code
+/// that undoes a run its gate refused, so no batch stays in the store without being held to the
+/// gate. The run still fails as `store-outcome-unknown`; its reason and its `cortex.log` line say
+/// what was done to the snapshot.
+fn undo_unknown(
+    layout: &Layout,
+    spec: &m::InstanceSpec,
+    label: &str,
+    why: String,
+    before: &Undo,
+) -> Failure {
+    let home = layout
+        .dir
+        .parent()
+        .and_then(std::path::Path::parent)
+        .unwrap_or(&layout.dir);
+    let (restored, undone) = undo(
+        layout,
+        &spec.name.0,
+        before.kept.as_deref(),
+        &Systemd::from_env(home),
+    );
+    let reason = format!("{why}; {undone}");
+    layout.log_line(&json!({
+        "at": now_ms(),
+        "source": label,
+        "outcome": "store-outcome-unknown",
+        "restored": restored,
+        "reason": reason,
+    }));
+    Failure::StoreOutcomeUnknown(reason)
 }
 
 /// The failure a stage verb's error is: [`Failure::StoreOutcomeUnknown`] when EKR could not say
