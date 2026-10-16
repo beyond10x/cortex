@@ -141,6 +141,12 @@ stand; [Status](./status.mdx) lists what is planned.
   gateway instance created by an earlier release with no `budget_tokens` keeps running, and its
   dollar limits still count the reported cost, as before, until `cortex update` gives it a
   `budget_tokens`.
+- **The batch size is an estimate, not a token count.** Without `model.batch_chars`, a batch
+  behind a gateway is sized at 1.5 characters per token of the model's window; dense text such as
+  code can still be too long, or draw an answer cut off at the output limit. cortex then splits
+  the batch, at most 3 deep, and a part that still does not fit ends the run as `batch-too-large`
+  (see [The batch size](./spec-file.md#the-batch-size)). `cortex quality` and `cortex schema`
+  keep their own batches of 20 facts.
 - **A token limit is checked between calls, not within one.** `claude` takes no token limit, so a
   run, quality measurement or schema round can pass `budget_tokens` or `daily_ceiling_tokens` by
   the tokens of its last call, and commands running at once can each pass the daily one by a

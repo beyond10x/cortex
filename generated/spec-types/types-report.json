@@ -1,12 +1,12 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "3361792daac4811c8a1b819ea95d090cdeba43683bf758dfa55daf3adf425d54",
+  "source_digest": "4f67d485d3f511f1486cfde0aa63dbc01b243139aeea5c2e9814ae5593be08b5",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:0e05526b5e236a5dd4521336c1b6cb09064cdc6595cccfacb67925f21b23e5b1",
-    "projection_digest": "1e32beb8faf1e78be095e806ae7865be24603cbda7d32d0bacfc3c5b48623d69"
+    "contract_digest": "slice-sha256/2:e2aff03e7c7ef676ff3356b6033a729e0b101367210780a9043d632820980280",
+    "projection_digest": "64c621d8d496903cf484bf50a4519eb737de7b206e00da495fcbcf8163f3f22f"
   },
   "generator_version": "0.60.0",
   "target": "rust",
@@ -1056,6 +1056,26 @@
     },
     {
       "pointer": "/$defs/cortex.instance.ModelGateway/properties/max_context_tokens",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ModelGateway/properties/max_output_tokens",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ModelGateway/properties/max_output_tokens",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ModelSpec/properties/batch_chars",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.ModelSpec/properties/batch_chars",
       "rule": "rust_exact_numbers",
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
     },

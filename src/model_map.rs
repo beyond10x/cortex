@@ -93,11 +93,17 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
                         max_context_tokens: opt(&g.max_context_tokens)
                             .map(|n| int(&n, "model.gateway.max_context_tokens"))
                             .transpose()?,
+                        max_output_tokens: opt(&g.max_output_tokens)
+                            .map(|n| int(&n, "model.gateway.max_output_tokens"))
+                            .transpose()?,
                     })
                 })
                 .transpose()?,
             timeout_s: int(&spec.model.timeout_s, "model.timeout_s")?,
             instructions: opt(&spec.model.instructions),
+            batch_chars: opt(&spec.model.batch_chars)
+                .map(|n| int(&n, "model.batch_chars"))
+                .transpose()?,
         },
         sources: spec
             .sources

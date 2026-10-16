@@ -45,6 +45,12 @@
     },
     "documents_input_tokens": {
       "type": "integer"
+    },
+    "batch_chars": {
+      "type": "integer"
+    },
+    "splits": {
+      "type": "integer"
     }
   },
   "required": [
@@ -53,14 +59,16 @@
     "documents_applied",
     "cost_counted",
     "daily_ceiling_reached",
-    "model_calls"
+    "model_calls",
+    "batch_chars",
+    "splits"
   ],
   "additionalProperties": false,
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "3361792daac4811c8a1b819ea95d090cdeba43683bf758dfa55daf3adf425d54",
-    "contract_digest": "slice-sha256/2:6f738706d5bbdb38144cfbdfe57664b82603f098b66c7fb10d57e0b7ee98090d",
+    "source_digest": "4f67d485d3f511f1486cfde0aa63dbc01b243139aeea5c2e9814ae5593be08b5",
+    "contract_digest": "slice-sha256/2:c53fd89b44ce248ed8b1f15caea9b5a1106583d3a7abbbb7e747e448a93f19bb",
     "regenerate": "ess generate"
   },
   "$defs": {

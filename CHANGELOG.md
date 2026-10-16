@@ -38,6 +38,27 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 ### Fixed
 
+- An extraction batch fits the model it is sent to (issue #72). Behind a gateway with a 64k-token
+  window, 60,000 characters of merge-request text were too long for the model (`Prompt is too
+  long`) or drew an answer cut off at the output limit, and each such run counted as a failure
+  of the source. Now `model.batch_chars` (at least 1,000) sets the batch size, and without it a
+  gateway's `max_context_tokens` sets it, less the output reserve (the new
+  `model.gateway.max_output_tokens`, passed to `claude` as `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, else
+  a quarter of the window) and the request's fixed part. A batch `claude` answers as too long, or
+  whose answer was cut off, is split in two and asked again, at most 3 splits deep. A part that
+  still does not fit ends the run as the new outcome `batch-too-large`, exit status 6, which
+  `--record-failure` does not count: the batches before it stay applied and a later run extracts
+  the rest. A run's report and `cortex.log` line state `batch_chars` and `splits`, as does the
+  `SourceRan` event.
+- Behind a model gateway (`model.gateway`), runs are bounded in tokens only, and no run stops
+  over a dollar spend that never happened. `claude` prices a gateway's answer at its default
+  model's rate, so `budget_usd` and `daily_ceiling_usd` could stop runs of a self-hosted or
+  otherwise unpriced model. Now, with a gateway, the cost `claude` reports counts against no
+  `budget_usd`, no `daily_ceiling_usd` and no dollar budget of `cortex quality` or
+  `cortex schema`, and `--max-budget-usd` is not passed to `claude`. The cost is still recorded
+  as reported, marked as not counted: a run's report and `cortex.log` line carry
+  `cost_counted: false`, the `SourceRan` event `cost_counted`, and `spend.json` sums it in
+  `uncounted_usd`.
 - A capitalised word with hyphens that a batch holds more than `rare_limit` times is kept whole
   by `RareName` (issue #71). Before, the part after its first hyphen was replaced as a rare name
   (`Co-[Name-1]` for a frequent `Co-Authored-By` trailer), and with `refuse_if_left: [RareName]`
