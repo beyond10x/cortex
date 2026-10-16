@@ -56,8 +56,10 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   answers that its outcome is unknown ("publication outcome is unknown") no longer counts against
   the source: it fails as `store-outcome-unknown` with exit status 4, as an unknown stage verb has
   since 0.5.1. In a stage (a gated run on `postgres`) the run leaves its stage in `stage.json`, and
-  the next run abandons it and puts `state/` back; outside one (`sqlite`, or an ungated
-  `postgres` store) the batch is not marked seen, so the next run extracts it again: nothing is
+  the next run abandons it and puts `state/` back; a gated `sqlite` run that had kept its snapshot
+  is undone: the snapshot is restored and `state/` put back, as for a run its gate refuses, and
+  the run's `cortex.log` line says so, so no batch stays in the store without being held to the
+  gate; outside these (an ungated run) the batch is not marked seen, so the next run extracts it again: nothing is
   lost, and a batch that did land is written a second time, a second set of assertions and
   evidence, as any re-extraction writes it. Before, such a
   run was `apply-refused` and counted, and a second one disabled the source.

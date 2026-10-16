@@ -1787,9 +1787,11 @@ fn split(source_id: &str) -> (&str, &str) {
 /// scheduler tells "switched off" from "broken".
 const EXIT_DISABLED: u8 = 3;
 
-/// The exit status of a `run` that ended because EKR could not say whether a stage verb took
-/// effect: distinct from a failed run's 1, so a scheduler tells a store fault, which the next run
-/// settles and which is not counted against the source, from a broken source.
+/// The exit status of a `run` that ended because EKR could not say whether a store write took
+/// effect (a stage verb, `apply-extraction` or a transaction's commit; a gated `sqlite` run that
+/// kept a snapshot is undone from it first): distinct from a failed run's 1, so a scheduler tells
+/// a store fault, which the next run settles and which is not counted against the source, from a
+/// broken source.
 const EXIT_STORE_OUTCOME_UNKNOWN: u8 = 4;
 
 /// The exit status of each `run` outcome, which an external scheduler reads instead of the line.

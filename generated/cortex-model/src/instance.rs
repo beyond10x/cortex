@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest dbacd32ea9b177c3754478f65c36a9ea7dab17516423166e01ae6aa4be6dc431
-// contract digest 21c3c7ee0e3acd1d5068d167b02c0c22d6b84670151a21c961418741a063800e
+// model digest 78ab6fc646647beb44f0f9bc60137c1313bb0b076d5fc4589c8d76d9bff126a2
+// contract digest 8f85053b338ed6f7b51b9c6ac3dbdf641e203109e89d13d349bdad04b88f2200
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -2022,7 +2022,7 @@ pub enum RunSourceOutcome {
     },
     /// `store-outcome-unknown` — externally decided (EKR answers that the publication outcome of a store write of the run (a stage verb or `apply-extraction`) is unknown).
     ///
-    /// The source's status records the outcome and its reason, and the scheduler sends no RecordFailure: the store, not the source, failed, so the failure is not counted and never disables the source. The next run settles the stage, or, outside a stage, extracts the batch whose apply was unknown again.
+    /// The source's status records the outcome and its reason, and the scheduler sends no RecordFailure: the store, not the source, failed, so the failure is not counted and never disables the source. The next run settles the stage; a gated `sqlite` run that kept a snapshot is undone from it; otherwise the next run extracts the batch whose apply was unknown again.
     StoreOutcomeUnknown {
         /// Why it was refused: `cortex.instance.StoreOutcomeUnknown`.
         error: StoreOutcomeUnknown,
