@@ -36,6 +36,19 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+## 0.5.1 — 2026-10-16
+
+### Fixed
+
+- A run on a `postgres` store whose `ekr stage begin` or `ekr stage publish` answers that its
+  outcome is unknown ("publication outcome is unknown") no longer counts against the source. It
+  fails as `store-outcome-unknown` with exit status 4; `--record-failure` records nothing, so a
+  store fault never disables a source, and the status file, metric and failure hook name the
+  outcome. A publish with an unknown outcome keeps `stage.json` and `state/` as they are, and the
+  next run publishes that stage at the same head; a stage whose begin was unknown is abandoned by
+  the next run. Before, such a run was `apply-refused` and counted, and a second one disabled the
+  source.
+
 ## 0.5.0 — 2026-10-16
 
 ### Added

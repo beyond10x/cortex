@@ -116,7 +116,7 @@ With `--fetch-only` (see [Counting what a run would extract](#counting-what-a-ru
 
 The JSON line on stdout says the same, with its `detail`. With `--record-failure`, a failed run
 prints a second line, the recorded failure's (`counted` or `disabled`); the exit status is the
-run's.
+run's. A `store-outcome-unknown` run records no failure and prints no second line.
 
 ## What one run does
 
@@ -364,7 +364,9 @@ Connectors launch passes on, so the run's reads see its own commits and its comm
 - A run that fails its gate is abandoned (`ekr stage abandon`): `ekr head` answers the head from
   before the run, and `state/` is put back from `stage.json`.
 - A run that fails part-way, before its gate, keeps what it applied, as on `sqlite`: its stage
-  is published; a refused publish is said in the run's `reason`, and `state/` is put back.
+  is published; a refused publish is said in the run's `reason`, and `state/` is put back. A
+  publish whose outcome is unknown keeps `stage.json` and `state/` as they are instead, and the
+  next run publishes the stage at the same head; the run keeps its own outcome.
 - A run that committed nothing in its stage, whatever its end, has the stage abandoned and
   keeps `state/` as it left it, as on `sqlite`.
 
