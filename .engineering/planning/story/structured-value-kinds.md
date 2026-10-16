@@ -2,16 +2,17 @@
 format: aep.planning-md/3
 id: story:structured-value-kinds
 kind: story
-status: active
+status: implemented
 title: A structured mapping writes each property in the value kind the store holds
 summary: PropertyMapping gains an optional value_kind; without it cortex reuses the store's declared kind and refuses only a record whose value does not convert
 relations:
 - decomposes: epic:organisation-scale-instance
 - serves: vision:self-updating-instances
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-16T13:33:20Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-16T13:33:21Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-10-16T15:58:58Z", actor: "human:timo", revision: 5, decided_on: {"asserted":{"test_result":723}}, correlation: "wave-20261016c"}
 ---
 ## Outcome
 

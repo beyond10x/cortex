@@ -124,11 +124,19 @@ stand; [Status](./status.mdx) lists what is planned.
   cost adds nothing to the spend of the day.
 - **The dollar limits do not bound a model `claude` cannot price.** An answer's cost is the
   `total_cost_usd` `claude` states, worked out from its own price table. For a model id that table
-  does not know (a model behind a gateway, for one), what `claude` reports is unverified: no
-  `total_cost_usd` at all, or a figure that is not what the gateway charges. An answer with no
-  cost spends none of `budget_usd` and adds nothing to `daily_ceiling_usd`, so neither stops such a
-  run. Bound it in tokens instead, with `budget_tokens` and `daily_ceiling_tokens` (see
+  does not know, what `claude` reports is unverified: no `total_cost_usd` at all, or a figure that
+  is not what the model costs. An answer with no cost spends none of `budget_usd` and adds nothing
+  to `daily_ceiling_usd`, so neither stops such a run. Bound it in tokens instead, with
+  `budget_tokens` and `daily_ceiling_tokens` (see
   [the spec file](./spec-file.md#limits-in-tokens)).
+- **Behind a model gateway, only tokens bound a run.** `claude` prices a gateway's answer at its
+  default model's rate, so cortex counts that cost against no dollar limit: `budget_tokens` is
+  required, `budget_usd` and `daily_ceiling_usd` bound nothing, and the reported cost is recorded
+  as not counted (`cost_counted: false`, `uncounted_usd` in `spend.json`). cortex does not price a
+  gateway model's tokens in dollars (see [A model gateway](./spec-file.md#a-model-gateway)). A
+  gateway instance created by an earlier release with no `budget_tokens` keeps running, and its
+  dollar limits still count the reported cost, as before, until `cortex update` gives it a
+  `budget_tokens`.
 - **A token limit is checked between calls, not within one.** `claude` takes no token limit, so a
   run, quality measurement or schema round can pass `budget_tokens` or `daily_ceiling_tokens` by
   the tokens of its last call, and commands running at once can each pass the daily one by a

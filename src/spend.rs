@@ -40,6 +40,30 @@ pub fn tokens(usage: &Usage) -> Option<i64> {
     .try_fold(0i64, |sum, n| sum.checked_add(n.filter(|n| *n >= 0)?))
 }
 
+/// Whether the cost `claude` reports for an answer of `model` counts against its dollar limits:
+/// not behind a model gateway (`model.gateway`), where it is priced at `claude`'s default model's
+/// rate rather than observed, and the instance is bounded in tokens only. An instance created with
+/// a gateway before `model.budget_tokens` was required for one (`spec::gateway_refusal`) has no
+/// token budget in its frozen spec: its dollar limits count as before, so it is never unbounded.
+pub fn counts_dollars(model: &m::ModelSpec) -> bool {
+    model.gateway.is_none() || model.budget_tokens.is_none()
+}
+
+/// The dollar budget of one source run, quality measurement or schema proposal
+/// (`model.budget_usd`): `None` behind a model gateway ([`counts_dollars`]), where no dollar limit
+/// bounds anything. A spec without a gateway always names one (`spec::check`).
+pub fn dollar_budget(model: &m::ModelSpec) -> Option<f64> {
+    if !counts_dollars(model) {
+        return None;
+    }
+    Some(
+        model
+            .budget_usd
+            .as_ref()
+            .map_or(0.0, |b| b.0.parse().unwrap_or(0.0)),
+    )
+}
+
 /// The why of an answer whose tokens could not be counted ([`tokens`]), after the limit's name.
 const UNCOUNTED: &str = "the tokens of an answer could not be counted: its usage reported no \
                          count, a count below 0, or more than can be summed";
@@ -129,11 +153,26 @@ struct Spent {
     tokens: i64,
     /// Whether the file of that day carried `spent_tokens`.
     counts_tokens: bool,
+    /// `uncounted_usd` in whole micro-dollars, `None` when absent: the costs answers reported
+    /// behind a model gateway, which count against no dollar limit.
+    uncounted: Option<i64>,
+}
+
+/// A decimal string field of `spend.json` in whole micro-dollars: an error unless it is a finite
+/// number of 0 or more.
+fn usd_field(value: &Value, field: &str, path: &std::path::Path) -> Result<i64, String> {
+    value[field]
+        .as_str()
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|s| s.is_finite() && *s >= 0.0)
+        .map(micros)
+        .ok_or_else(|| format!("{}: {field} is not a number of 0 or more", path.display()))
 }
 
 /// [`spent_on`] and [`tokens_on`] together. A `spent_usd` of today that is not a finite number of
 /// 0 or more, or a `spent_tokens` that is not a whole number of 0 or more, is an error, so a
-/// ceiling it would lift fails closed.
+/// ceiling it would lift fails closed; so is an `uncounted_usd` that is not a finite number of 0
+/// or more.
 fn spent(layout: &Layout, day: &str) -> Result<Spent, String> {
     let path = path(layout);
     let text = match std::fs::read_to_string(&path) {
@@ -149,12 +188,11 @@ fn spent(layout: &Layout, day: &str) -> Result<Spent, String> {
     if value["day"].as_str() != Some(day) {
         return Ok(Spent::default());
     }
-    let micros = value["spent_usd"]
-        .as_str()
-        .and_then(|s| s.parse::<f64>().ok())
-        .filter(|s| s.is_finite() && *s >= 0.0)
-        .map(micros)
-        .ok_or_else(|| format!("{}: spent_usd is not a number of 0 or more", path.display()))?;
+    let micros = usd_field(&value, "spent_usd", &path)?;
+    let uncounted = match value.get("uncounted_usd") {
+        None => None,
+        Some(_) => Some(usd_field(&value, "uncounted_usd", &path)?),
+    };
     let (tokens, counts_tokens) = match value.get("spent_tokens") {
         None => (0, false),
         Some(n) => (
@@ -171,6 +209,7 @@ fn spent(layout: &Layout, day: &str) -> Result<Spent, String> {
         micros,
         tokens,
         counts_tokens,
+        uncounted,
     })
 }
 
@@ -188,23 +227,30 @@ pub struct Daily<'a> {
     /// An answer's tokens could not be counted: with a ceiling in tokens, no further call is
     /// allowed.
     uncounted: bool,
+    /// Whether an answer's cost adds to `spent_usd`; behind a model gateway it adds to
+    /// `uncounted_usd` instead ([`counts_dollars`]).
+    counts_dollars: bool,
 }
 
 impl<'a> Daily<'a> {
     /// The ceilings `model` names, for a command that holds the home's lock (`home` `None`) or
-    /// takes it for each record (`home` the home).
+    /// takes it for each record (`home` the home). Behind a model gateway the ceiling in dollars
+    /// bounds nothing ([`counts_dollars`]): only the ceiling in tokens is held.
     pub fn new(layout: &'a Layout, model: &m::ModelSpec, home: Option<&'a Home>) -> Self {
+        let counts_dollars = counts_dollars(model);
         Self {
             layout,
             ceiling: model
                 .daily_ceiling_usd
                 .as_ref()
+                .filter(|_| counts_dollars)
                 .and_then(|c| c.0.parse::<f64>().ok())
                 .map(micros),
             token_ceiling: model.daily_ceiling_tokens,
             home,
             unrecorded: None,
             uncounted: false,
+            counts_dollars,
         }
     }
 
@@ -223,6 +269,25 @@ impl<'a> Daily<'a> {
     /// under the ceiling in tokens, an answer's tokens could not be counted.
     pub fn allow(&self, left: f64) -> Result<f64, String> {
         self.check(left).map_err(|refusal| refusal.reason)
+    }
+
+    /// [`Daily::check`] for a command's dollar bound `left` ([`dollar_budget`] less what it
+    /// spent): `None` when no dollar budget applies (behind a model gateway, see
+    /// [`counts_dollars`]), and then the call is bounded in dollars only by a ceiling, when there
+    /// is one. The answer is the call's dollar bound, `None` when nothing bounds it in dollars.
+    pub fn check_bound(&self, left: Option<f64>) -> Result<Option<f64>, Refusal> {
+        match left {
+            Some(left) => self.check(left).map(Some),
+            None => {
+                let allowed = self.check(f64::MAX)?;
+                Ok(self.ceiling.is_some().then_some(allowed))
+            }
+        }
+    }
+
+    /// [`Daily::check_bound`], its refusal the reason alone, as [`Daily::allow`] gives it.
+    pub fn allow_bound(&self, left: Option<f64>) -> Result<Option<f64>, String> {
+        self.check_bound(left).map_err(|refusal| refusal.reason)
     }
 
     /// [`Daily::allow`], its refusal saying whether a ceiling was reached.
@@ -285,7 +350,8 @@ impl<'a> Daily<'a> {
     /// or a negative one, adds no dollars, and one whose tokens could not be counted no tokens. A
     /// spend that cannot be recorded is said on stderr and, with a ceiling, allows no further
     /// call; so does, with a ceiling in tokens, an answer whose tokens could not be counted
-    /// ([`Daily::allow`]).
+    /// ([`Daily::allow`]). Behind a model gateway the cost adds to `uncounted_usd`, not to
+    /// `spent_usd`.
     pub fn add_answer(&mut self, cost_usd: Option<f64>, usage: &Usage) {
         let tokens = tokens(usage);
         if tokens.is_none() {
@@ -314,9 +380,23 @@ impl<'a> Daily<'a> {
         };
         let today = day(now_ms());
         let before = spent(self.layout, &today)?;
-        let spent = before.micros + micros(cost.max(0.0));
+        let cost = micros(cost.max(0.0));
+        // Behind a model gateway the cost is recorded as reported, in `uncounted_usd`, and adds
+        // nothing to `spent_usd`; `uncounted_usd` is written from the day's first such answer and
+        // kept with the day.
+        let (spent, uncounted) = if self.counts_dollars {
+            (before.micros + cost, before.uncounted)
+        } else {
+            (
+                before.micros,
+                Some(before.uncounted.unwrap_or(0).saturating_add(cost)),
+            )
+        };
         let usd = (spent as f64 / MICROS).to_string();
         let mut document = json!({"format": FORMAT, "day": today, "spent_usd": usd});
+        if let Some(uncounted) = uncounted {
+            document["uncounted_usd"] = json!((uncounted as f64 / MICROS).to_string());
+        }
         // `spent_tokens` is written from the day's first answer that reported a `usage`.
         if before.counts_tokens || tokens.is_some() {
             let sum = before
@@ -348,7 +428,7 @@ mod tests {
         m::ModelSpec {
             model: "m".into(),
             backend: None,
-            budget_usd: cortex_model::primitives::Decimal("1".into()),
+            budget_usd: Some(cortex_model::primitives::Decimal("1".into())),
             daily_ceiling_usd: ceiling.map(|c| cortex_model::primitives::Decimal(c.into())),
             budget_tokens: None,
             daily_ceiling_tokens: None,
@@ -356,6 +436,63 @@ mod tests {
             timeout_s: 60,
             instructions: None,
         }
+    }
+
+    #[test]
+    fn behind_a_gateway_the_cost_is_uncounted_bounds_nothing_and_is_kept_with_the_day() {
+        let tmp = tempfile::tempdir().unwrap();
+        let layout = Layout::new(tmp.path().to_path_buf());
+        let mut gateway = model(Some("1"));
+        gateway.gateway = Some(m::ModelGateway {
+            base_url: "http://gw.test".into(),
+            token_env: "GW".into(),
+            max_context_tokens: None,
+        });
+        // A frozen spec from before the token budget was required behind a gateway counts
+        // dollars as before.
+        assert!(counts_dollars(&gateway));
+        assert_eq!(dollar_budget(&gateway), Some(1.0));
+        gateway.budget_tokens = Some(1000);
+        assert!(!counts_dollars(&gateway));
+        assert_eq!(dollar_budget(&gateway), None);
+        assert_eq!(dollar_budget(&model(None)), Some(1.0));
+        let mut daily = Daily::new(&layout, &gateway, None);
+        daily.add(Some(5.0));
+        daily.add(Some(0.25));
+        assert_eq!(spent_on(&layout, &day(now_ms())), Ok(0.0));
+        assert_eq!(
+            daily.allow(f64::INFINITY),
+            Ok(f64::INFINITY),
+            "no dollar ceiling"
+        );
+        assert_eq!(
+            daily.check_bound(None),
+            Ok(None),
+            "no dollar bound reaches claude"
+        );
+        let mut plain_model = model(None);
+        plain_model.budget_tokens = Some(1000);
+        let plain_daily = Daily::new(&layout, &plain_model, None);
+        assert_eq!(plain_daily.check_bound(Some(0.5)), Ok(Some(0.5)));
+        let read = || -> Value {
+            serde_json::from_str(&std::fs::read_to_string(path(&layout)).unwrap()).unwrap()
+        };
+        assert_eq!(read()["uncounted_usd"], "5.25");
+        // The same day without a gateway (an update dropped it): counted again, the uncounted
+        // sum kept.
+        let mut plain = Daily::new(&layout, &model(Some("1")), None);
+        plain.add(Some(0.5));
+        assert_eq!(spent_on(&layout, &day(now_ms())), Ok(0.5));
+        assert_eq!(read()["uncounted_usd"], "5.25");
+        // An unreadable `uncounted_usd` fails closed, as `spent_usd` does.
+        std::fs::write(
+            path(&layout),
+            json!({"format": FORMAT, "day": day(now_ms()), "spent_usd": "0",
+                "uncounted_usd": "-1"})
+            .to_string(),
+        )
+        .unwrap();
+        assert!(spent_on(&layout, &day(now_ms())).is_err());
     }
 
     #[test]

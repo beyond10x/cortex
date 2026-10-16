@@ -369,13 +369,35 @@ types:
   # limits apply beside them unchanged.
   #
   # `gateway`, when given, sends the model calls through a model gateway
-  # (`cortex.instance.ModelGateway`).
+  # (`cortex.instance.ModelGateway`), and the instance is bounded in tokens only: the cost `claude`
+  # reports for an answer behind a gateway is priced at its default model's rate, not observed, so
+  # it counts against no `budget_usd`, no `daily_ceiling_usd` and no budget of a quality
+  # measurement or a schema proposal, and `--max-budget-usd` is not passed to `claude`. Such a
+  # cost is still reported, as not counted (`cortex.instance.SourceRan.cost_counted`,
+  # `cortex.instance.DailySpend.uncounted_usd`).
+  #
+  # `budget_usd` is required without a gateway and may be omitted with one; `budget_tokens` is
+  # required with a gateway, so a gateway instance is never unbounded. The spec check refuses
+  # (exit 2, naming the field, before anything is written, for `create`, `update` and `adopt`
+  # alike) a spec that breaks either rule. A gateway spec that still gives `budget_usd` or
+  # `daily_ceiling_usd` is accepted, and `create`, `update` and `adopt` print one line on stderr
+  # saying the dollar limits bound nothing behind a gateway, naming a run gate's `cost_usd` check
+  # too when the spec has one (`cortex.instance.GateCheck`). `create`, `update` and `adopt` also
+  # refuse a `budget_usd` or `daily_ceiling_usd` too large to be read as a finite number, naming
+  # the field. An instance's frozen spec is held to neither of these two rules, so an instance
+  # created with a gateway before them keeps running: with no `budget_tokens` its answers' costs
+  # count against its dollar limits as before, until an `update` gives it one.
+  # UNMAPPED: a field required or optional by the presence of another, and a decimal bounded to
+  # what a finite number holds, have no construct in the specification; `spec::check`
+  # (`budget_usd`) and `spec::load_given` (`budget_tokens`, the finite dollar limits) hold the
+  # rules, `spend::counts_dollars` the frozen-spec case, and `tests/gateway_dollar_limits.rs` and
+  # `tests/gateway_dollar_limits_adv.rs` test them.
   - name: cortex.instance.ModelSpec
     kind: struct
     fields:
       - {name: model, type: String}
       - {name: backend, type: Optional<cortex.instance.ModelBackend>}
-      - {name: budget_usd, type: Decimal}
+      - {name: budget_usd, type: Optional<Decimal>}
       - {name: daily_ceiling_usd, type: Optional<Decimal>}
       - {name: budget_tokens, type: Optional<Integer>}
       - {name: daily_ceiling_tokens, type: Optional<Integer>}
@@ -401,7 +423,9 @@ types:
   # variable. Without a gateway, `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` are removed from
   # `claude`'s environment, so no instance reaches a gateway by accident; `ANTHROPIC_API_KEY` is
   # removed always. A unit file cortex writes names `token_env`, never its value. The model is
-  # named by `model`, passed as `--model`.
+  # named by `model`, passed as `--model`. Behind a gateway the instance is bounded in tokens only
+  # (`cortex.instance.ModelSpec`): `model.budget_tokens` is required, `model.budget_usd` may be
+  # omitted, and no dollar limit counts the cost `claude` reports.
   - name: cortex.instance.ModelGateway
     kind: struct
     fields:
@@ -421,6 +445,9 @@ types:
   # a count below 0, or a sum past a signed 64-bit integer) adds nothing, and a file written
   # before it was counted reads as `0`. A day's sum that would pass a signed 64-bit integer is not
   # recorded: as for any spend that could not be recorded, a ceiling then allows no further call.
+  # `uncounted_usd` sums, the same way, the costs the day's answers reported behind a model gateway
+  # (`cortex.instance.ModelSpec.gateway`), as reported; they count against no dollar limit and add
+  # nothing to `spent_usd`. It is written from the day's first such answer and kept with the day.
   - name: cortex.instance.DailySpend
     kind: struct
     fields:
@@ -428,6 +455,7 @@ types:
       - {name: day, type: String}
       - {name: spent_usd, type: Decimal}
       - {name: spent_tokens, type: Optional<Integer>}
+      - {name: uncounted_usd, type: Optional<Decimal>}
 
   - name: cortex.instance.SqliteStore
     kind: struct
@@ -499,6 +527,13 @@ types:
       - {name: rare_limit, type: Optional<Integer>}
       - {name: refuse_if_left, type: Optional<List<cortex.instance.RedactionClass>>}
 
+  # One check of the run gate (`cortex.instance.RunGate`): `measure` names a number of the run's
+  # report (`documents_new`, `documents_applied`, `facts_refused`, `parts_rejected`, `masked`,
+  # `truncated`, `unrestored`, `cost_usd`) or, by its dotted path, of the store's quality document,
+  # held to `min`, `max` or both. Behind a model gateway, where a run's cost is not counted
+  # (`cortex.instance.SourceRan.cost_counted` false), a `cost_usd` check checks nothing: the
+  # reported cost bounds nothing, and `create`, `update` and `adopt` name such a check in the line
+  # that says the dollar limits bound nothing (`cortex.instance.ModelSpec`).
   - name: cortex.instance.GateCheck
     kind: struct
     fields:
@@ -1479,6 +1514,7 @@ commands:
             documents_new: {generated: true}
             documents_applied: {generated: true}
             cost_usd: {generated: true}
+            cost_counted: {generated: true}
             daily_ceiling_reached: {generated: true}
             model_calls: {generated: true}
             input_tokens: {generated: true}
@@ -1494,7 +1530,8 @@ commands:
           because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its
           tokens reached `model.daily_ceiling_tokens`: the
           batches before it are applied, the rest are extracted by a run on a later day. A run
-          stopped because an answer's tokens could not be counted does not set it.
+          stopped because an answer's tokens could not be counted does not set it. `cost_counted`
+          is false behind a model gateway, where `cost_usd` is as reported and bounded nothing.
 
       - name: no-such-source
         unknown_instance: true
@@ -1664,8 +1701,8 @@ commands:
     # directory, and spends at most the spec's `model.budget_usd` and what is left of its
     # `model.daily_ceiling_usd` for the UTC day; in tokens, it stops before a further call once
     # its answers' tokens reach `model.budget_tokens` or the day's reach
-    # `model.daily_ceiling_tokens`. It reads the store and writes
-    # nothing to it, so a removed instance's store, which stays, is measured too.
+    # `model.daily_ceiling_tokens`; behind a model gateway, in tokens only. It reads the store and
+    # writes nothing to it, so a removed instance's store, which stays, is measured too.
     input:
       - {name: name, type: cortex.instance.InstanceName}
       - {name: sample, type: Integer}
@@ -1739,7 +1776,7 @@ commands:
     # under the instance directory. Spends at most the spec's `model.budget_usd` and what is left
     # of its `model.daily_ceiling_usd` for the UTC day; in tokens, it stops before a further call
     # once its answers' tokens reach `model.budget_tokens` or the day's reach
-    # `model.daily_ceiling_tokens`.
+    # `model.daily_ceiling_tokens`; behind a model gateway, in tokens only.
     input:
       - {name: name, type: cortex.instance.InstanceName}
       - {name: sample, type: Integer}
@@ -1858,12 +1895,15 @@ events:
   # (the system prompt, the answer's schema, and the prompt up to the documents: the instance's
   # description and instructions, the ontology and the known entity names) and the documents.
   # The two add up to `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`.
+  # `cost_counted` is false when the instance's model is behind a gateway: `cost_usd` is then what
+  # `claude` reported, counted against no dollar limit (`cortex.instance.ModelSpec`).
   - name: cortex.instance.SourceRan
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: documents_new, type: Integer}
       - {name: documents_applied, type: Integer}
       - {name: cost_usd, type: Optional<Decimal>}
+      - {name: cost_counted, type: Boolean}
       - {name: daily_ceiling_reached, type: Boolean}
       - {name: model_calls, type: Integer}
       - {name: input_tokens, type: Optional<Integer>}

@@ -593,7 +593,8 @@ pub fn judge(
         timeout_s: spec.model.timeout_s,
         gateway: spec.model.gateway.clone(),
     };
-    let budget: f64 = spec.model.budget_usd.0.parse().unwrap_or(0.0);
+    // `None` behind a model gateway: the measurement is bounded in tokens only.
+    let budget = spend::dollar_budget(&spec.model);
     let schema = answer_schema();
     let mut spent = 0.0;
     let mut daily = spend::Daily::new(layout, &spec.model, Some(home));
@@ -602,20 +603,23 @@ pub fn judge(
     let mut cost_usd = Some(0.0);
     let mut all: Vec<m::QualityVerdict> = Vec::new();
     for (n, batch) in batches.iter().enumerate() {
-        let remaining = budget - spent;
-        if remaining <= 0.0 {
-            return Err(Failure::Judge(format!(
-                "budget of {budget} USD spent; {}",
-                so_far(all.len(), items.len(), cost_usd)
-            )));
-        }
+        let remaining = match budget {
+            Some(budget) if budget - spent <= 0.0 => {
+                return Err(Failure::Judge(format!(
+                    "budget of {budget} USD spent; {}",
+                    so_far(all.len(), items.len(), cost_usd)
+                )));
+            }
+            Some(budget) => Some(budget - spent),
+            None => None,
+        };
         if let Err(why) = tokens.check() {
             return Err(Failure::Judge(format!(
                 "{why}; {}",
                 so_far(all.len(), items.len(), cost_usd)
             )));
         }
-        let remaining = daily.allow(remaining).map_err(|why| {
+        let remaining = daily.allow_bound(remaining).map_err(|why| {
             Failure::Judge(format!(
                 "{why}; {}",
                 so_far(all.len(), items.len(), cost_usd)

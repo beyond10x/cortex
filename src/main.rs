@@ -912,6 +912,10 @@ fn create(
                             "documents_applied": r.documents_applied,
                             "cost_usd": r.cost_usd,
                         });
+                        // As `cortex run` reports it: present only behind a model gateway.
+                        if !r.cost_counted {
+                            seed["cost_counted"] = json!(false);
+                        }
                         // A seed that stopped early says what it left and why; one that finished
                         // reports as before.
                         if partial {
@@ -1853,6 +1857,11 @@ fn run_source(
                 ("documents_input_tokens", source_ran.documents_input_tokens),
             ] {
                 detail[key] = json!(value);
+            }
+            // Present only behind a model gateway, where `cost_usd` is what `claude` reported and
+            // counted against no dollar limit: other runs report as before.
+            if !source_ran.cost_counted {
+                detail["cost_counted"] = json!(false);
             }
             // Present only when a document was cut: a run that cut nothing reports as before.
             if report.truncated > 0 {

@@ -55,7 +55,7 @@ fn placeholder_spec() -> m::InstanceSpec {
         model: m::ModelSpec {
             model: "m".into(),
             backend: None,
-            budget_usd: cortex_model::primitives::Decimal("1".into()),
+            budget_usd: Some(cortex_model::primitives::Decimal("1".into())),
             daily_ceiling_usd: None,
             budget_tokens: None,
             daily_ceiling_tokens: None,
@@ -154,6 +154,7 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "documents_new": e.documents_new,
                 "documents_applied": e.documents_applied,
                 "cost_usd": e.cost_usd.map(|c| c.0),
+                "cost_counted": e.cost_counted,
                 "daily_ceiling_reached": e.daily_ceiling_reached,
                 "model_calls": e.model_calls,
                 "input_tokens": e.input_tokens,

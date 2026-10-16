@@ -49,6 +49,9 @@ pub struct Report {
     /// `0` when no model was asked, the sum when every answer carried a cost, `None` as soon as
     /// one answer carried none: a missing cost is never written as `0`.
     pub cost_usd: Option<f64>,
+    /// Whether `cost_usd` counted against the instance's dollar limits: false behind a model
+    /// gateway, where it is what `claude` reported and bounded nothing (`spend::counts_dollars`).
+    pub cost_counted: bool,
     pub facts_refused: usize,
     /// Parts of applied documents EKR rejected (`rejected` in its report).
     pub parts_rejected: usize,
@@ -145,6 +148,7 @@ impl Default for Report {
             hashed: 0,
             documents_applied: 0,
             cost_usd: Some(0.0),
+            cost_counted: true,
             facts_refused: 0,
             parts_rejected: 0,
             masked: 0,
@@ -517,6 +521,7 @@ fn process_in(
             .iter()
             .map(|s| masked_key(redactor.as_ref(), s))
             .collect(),
+        cost_counted: spend::counts_dollars(&spec.model),
         ..Report::default()
     };
     // The keys of documents cut at `max_chars_per_document`: counted as they reach the model.
@@ -809,7 +814,9 @@ fn process_in(
         ),
         None => None,
     };
-    let budget: f64 = spec.model.budget_usd.0.parse().unwrap_or(0.0);
+    // `None` behind a model gateway: the run is bounded in tokens only, and the cost its answers
+    // report is recorded as not counted.
+    let budget = spend::dollar_budget(&spec.model);
     // Dollars the costed answers spent. An answer with no cost spends none; such a run is bounded
     // by `policy.max_documents_per_run` and `model.timeout_s`.
     let mut spent = 0.0;
@@ -837,16 +844,21 @@ fn process_in(
         }
     }
     for (n, batch) in batches.into_iter().enumerate() {
-        let remaining = budget - spent;
-        if remaining <= 0.0 {
-            report.stopped = Some(format!("budget of {budget} USD spent"));
-            break;
-        }
+        // `None` behind a gateway: no dollar amount bounds the call, and none is passed to
+        // `claude`.
+        let remaining = match budget {
+            Some(budget) if budget - spent <= 0.0 => {
+                report.stopped = Some(format!("budget of {budget} USD spent"));
+                break;
+            }
+            Some(budget) => Some(budget - spent),
+            None => None,
+        };
         if let Err(why) = tokens.check() {
             report.stopped = Some(why);
             break;
         }
-        let remaining = match daily.check(remaining) {
+        let remaining = match daily.check_bound(remaining) {
             Ok(usd) => usd,
             Err(refusal) => {
                 // Only a ceiling the day reached; not an uncounted answer or an unknown spend.
@@ -1812,6 +1824,11 @@ fn log_line(label: &str, report: &Report, started: i64) -> serde_json::Value {
         (line.as_object_mut(), report.calls_json())
     {
         line.extend(calls);
+    }
+    // Present only behind a model gateway, where `cost_usd` is as reported and counted against no
+    // dollar limit: other runs log what they did before.
+    if !report.cost_counted {
+        line["cost_counted"] = json!(false);
     }
     // Present only when a document was cut: a run that cut nothing logs what it did before.
     if report.truncated > 0 {

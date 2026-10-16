@@ -175,6 +175,11 @@ pub fn evaluate(
     let mut doc: Option<Result<Value, String>> = None;
     let mut failed = Vec::new();
     for check in &gate.checks {
+        // Behind a model gateway the run's cost is what `claude` reported, priced at its default
+        // model's rate; it bounds nothing, so a check on it checks nothing.
+        if check.measure == "cost_usd" && !report.cost_counted {
+            continue;
+        }
         let min = check.min.as_ref().map(|d| d.0.clone());
         let max = check.max.as_ref().map(|d| d.0.clone());
         let value: Result<f64, String> = match report_measure(report, &check.measure) {
@@ -294,6 +299,26 @@ mod tests {
         let failed = evaluate(&checks, &uncosted, no_quality);
         assert_eq!(failed.len(), 1);
         assert_eq!(failed[0].value, None);
+    }
+
+    #[test]
+    fn behind_a_gateway_a_cost_check_checks_nothing_and_the_others_still_hold() {
+        // A cost not counted (behind a model gateway) bounds nothing, reported or absent.
+        let checks = gate(vec![
+            check("cost_usd", None, Some("1")),
+            check("facts_refused", None, Some("0")),
+        ]);
+        for cost_usd in [Some(50.5), None] {
+            let report = Report {
+                cost_usd,
+                cost_counted: false,
+                facts_refused: 1,
+                ..Report::default()
+            };
+            let failed = evaluate(&checks, &report, no_quality);
+            assert_eq!(failed.len(), 1, "{failed:?}");
+            assert_eq!(failed[0].measure, "facts_refused");
+        }
     }
 
     #[test]

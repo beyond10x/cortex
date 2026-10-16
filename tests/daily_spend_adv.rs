@@ -10,7 +10,7 @@ fn model(ceiling: &str) -> m::ModelSpec {
     m::ModelSpec {
         model: "m".into(),
         backend: None,
-        budget_usd: cortex_model::primitives::Decimal("5".into()),
+        budget_usd: Some(cortex_model::primitives::Decimal("5".into())),
         daily_ceiling_usd: Some(cortex_model::primitives::Decimal(ceiling.into())),
         budget_tokens: None,
         daily_ceiling_tokens: None,
