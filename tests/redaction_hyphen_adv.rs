@@ -65,7 +65,6 @@ fn the_rare_half_of_a_name_hyphenated_to_a_known_name_is_not_shown() {
 /// whole word not standalone, and the fix now skips it whole, so `Luc`, which the base replaced,
 /// is shown, and the gate, reading words the same way, does not see it either.
 #[test]
-#[ignore = "adversary finding: a hyphenated name glued to an underscore is skipped whole and shown"]
 fn a_hyphenated_name_in_underscore_italics_is_not_shown() {
     let r = redactor(&[], None, true);
     let out = shown(&r, &["Thanks to _Jean-Luc_ for the review."]);
@@ -94,7 +93,6 @@ fn a_name_in_underscore_italics_is_not_shown() {
 /// before it makes the whole word not standalone; the fix skips it whole, so `Luc`, which the
 /// base replaced, is shown.
 #[test]
-#[ignore = "adversary finding: a hyphenated name glued to CJK letters is skipped whole and shown"]
 fn a_hyphenated_latin_name_glued_to_cjk_text_is_not_shown() {
     let r = redactor(&[], None, true);
     let out = shown(&r, &["会议上Jean-Luc发言了。"]);
@@ -126,7 +124,6 @@ fn a_latin_name_glued_to_cjk_text_is_not_shown() {
 /// it on its own), and the gate then reads `Co`, never counted, as a rare name and refuses the
 /// batch: the shape of issue #71, through a known name.
 #[test]
-#[ignore = "adversary finding: the gate refuses the head Co of Co-<known name>, which the replacement kept"]
 fn the_gate_finds_nothing_left_beside_a_known_name_the_replacement_kept() {
     let r = redactor(&["Jane"], None, true);
     let texts = ["Pairing with Co-Jane today."];
@@ -143,7 +140,6 @@ fn the_gate_finds_nothing_left_beside_a_known_name_the_replacement_kept() {
 /// `Co-Authored-By` three times in the uncut texts, the model is shown `Co-Auth`, and the gate
 /// reads that fragment, never counted, as a rare name and refuses the batch.
 #[test]
-#[ignore = "adversary finding: the gate refuses a fragment of a frequent word cut by max_chars (Co-Auth)"]
 fn the_gate_finds_nothing_left_of_a_frequent_word_the_cut_splits() {
     let r = redactor(&[], Some(1), true);
     let trailer = "Co-Authored-By: Example Person <person@example.org>";
@@ -290,7 +286,12 @@ fn a_rare_name_at_a_hyphen_that_joins_nothing_is_still_replaced() {
 #[test]
 fn a_known_name_at_the_head_of_a_hyphenated_word_leaves_nothing_for_the_gate() {
     let r = redactor(&["Jane"], Some(1), true);
-    let texts = ["Jane-Rowan joined.", "Jane-Street", "Jane-Street", "Jane-Street"];
+    let texts = [
+        "Jane-Rowan joined.",
+        "Jane-Street",
+        "Jane-Street",
+        "Jane-Street",
+    ];
     for (text, left) in shown(&r, &texts) {
         assert!(!text.contains("Jane"), "{text}");
         assert!(!text.contains("Rowan"), "{text}");
@@ -346,7 +347,6 @@ fn a_cut_at_the_end_of_a_frequent_word_leaves_nothing() {
 /// A cut right after a hyphen of the frequent word: the model is shown `Co-`, and the gate reads
 /// `Co`, never counted, as a rare name and refuses the batch.
 #[test]
-#[ignore = "adversary finding: the gate refuses a frequent word cut after its hyphen (Co-)"]
 fn a_cut_after_a_hyphen_of_a_frequent_word_leaves_nothing() {
     let r = redactor(&[], Some(1), true);
     let (shown, left) = cut_trailer_batch(&r, "Co-");

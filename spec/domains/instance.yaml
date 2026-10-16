@@ -519,7 +519,13 @@ types:
   # the batch's document texts hold at most `rare_limit` times (default 1). A word, hyphenated or
   # not (`Jean-Luc`, `Co-Authored-By`), is replaced whole or not at all: no part of a word seen
   # more than `rare_limit` times is a rare name, and the `refuse_if_left` check reads words the
-  # same way, so it finds nothing left of a word that was kept.
+  # same way, so it finds nothing left of a word that was kept. A word glued to a lower-case
+  # letter before it (`useFoo-Bar`) is part of an identifier and skipped whole; one glued to an
+  # underscore or a letter of a script without case (`_Jean-Luc_`, CJK text) is read again from
+  # its next letter, so its rare tail is replaced. The part of a word before a span another class
+  # hides (`Co` of `Co-Jane`, `Jane` a known name) is read alone, as the check reads it beside
+  # that span's placeholder. A text cut at `max_chars` inside a word kept whole ends in a prefix of
+  # that word, which the check does not read as a rare name.
   # UNMAPPED: how a text splits into words and how often a batch holds each is a rule on String
   # values the specification has no construct for; `src/redact.rs` holds it and its tests and
   # `tests/redaction_gate.rs` test it.
