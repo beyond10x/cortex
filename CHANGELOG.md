@@ -36,6 +36,8 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+## 0.5.2 — 2026-10-16
+
 ### Fixed
 
 - A `structured` source writes each mapped property in the value kind the store holds for it.
