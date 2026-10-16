@@ -290,6 +290,9 @@ impl Ports {
             Err(Failure::Apply(reason)) => m::RunSourceOutcome::ApplyRefused {
                 error: m::ApplyRefused { reason },
             },
+            Err(Failure::StoreOutcomeUnknown(reason)) => m::RunSourceOutcome::StoreOutcomeUnknown {
+                error: m::StoreOutcomeUnknown { reason },
+            },
             Ok(report) => {
                 let ran = source_ran(source_id, &report);
                 self.shared.borrow_mut().last_run = Some(report);
@@ -358,9 +361,12 @@ impl Ports {
             None => run::count(&layout, &self.tools, &found.data),
         };
         match counted {
-            Err(Failure::Fetch(reason) | Failure::Extract(reason) | Failure::Apply(reason)) => {
-                failed(reason)
-            }
+            Err(
+                Failure::Fetch(reason)
+                | Failure::Extract(reason)
+                | Failure::Apply(reason)
+                | Failure::StoreOutcomeUnknown(reason),
+            ) => failed(reason),
             Ok(c) => m::RunSourceOutcome::Fetched {
                 source_fetched: m::SourceFetched {
                     source_id,
@@ -411,6 +417,7 @@ impl RunSourceBehavior for Ports {
             ("fetch-failed", Failure::Fetch as fn(String) -> Failure),
             ("extraction-failed", Failure::Extract),
             ("apply-refused", Failure::Apply),
+            ("store-outcome-unknown", Failure::StoreOutcomeUnknown),
         ]
         .into_iter()
         .find(|(outcome, _)| self.decided(RUN, outcome));
@@ -442,6 +449,17 @@ impl RunSourceBehavior for Ports {
                 self.note(found, m::RunOutcome::ApplyRefused, Some(reason.clone()));
                 return Ok(m::RunSourceOutcome::ApplyRefused {
                     error: m::ApplyRefused { reason },
+                });
+            }
+            // Recorded on the source like a failure; the scheduler counts none for it (main.rs).
+            Err(Failure::StoreOutcomeUnknown(reason)) => {
+                self.note(
+                    found,
+                    m::RunOutcome::StoreOutcomeUnknown,
+                    Some(reason.clone()),
+                );
+                return Ok(m::RunSourceOutcome::StoreOutcomeUnknown {
+                    error: m::StoreOutcomeUnknown { reason },
                 });
             }
             Ok(report) => report,

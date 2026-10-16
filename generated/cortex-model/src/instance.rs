@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 4ae7016a234132e571b7abed384e164e18cd472f2a8f3e07b3d7860f9d294f49
-// contract digest 26132d405a23c83a5737eb1c814a3d29d646abff53eb4c3c99e6298956066bda
+// model digest e78c4bc74cc74a7f9c33db865a399ccfe8e41b4c737b5c6d0666f35f5015613e
+// contract digest c9c4e2f7a7733189636825d8466957a08e7cf300034972dc3006eaa856184186
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -566,6 +566,8 @@ pub enum RunOutcome {
     ExtractionFailed,
     /// `apply-refused`.
     ApplyRefused,
+    /// `store-outcome-unknown`.
+    StoreOutcomeUnknown,
     /// `disabled`.
     Disabled,
 }
@@ -2016,6 +2018,13 @@ pub enum RunSourceOutcome {
         /// Why it was refused: `cortex.instance.ApplyRefused`.
         error: ApplyRefused,
     },
+    /// `store-outcome-unknown` — externally decided (EKR answers that the publication outcome of a stage verb is unknown).
+    ///
+    /// The source's status records the outcome and its reason, and the scheduler sends no RecordFailure: the store, not the source, failed, so the failure is not counted and never disables the source. The next run settles the stage.
+    StoreOutcomeUnknown {
+        /// Why it was refused: `cortex.instance.StoreOutcomeUnknown`.
+        error: StoreOutcomeUnknown,
+    },
     /// `ran` — otherwise.
     ///
     /// Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it.
@@ -2465,6 +2474,15 @@ pub struct StoreHeld {
     pub name: String,
 }
 
+/// The declared error `cortex.instance.StoreOutcomeUnknown`.
+///
+/// EKR could not say whether a stage verb took effect (`ekr stage begin`, `ekr stage publish` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreOutcomeUnknown {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
 /// The declared error `cortex.instance.StoreUnreadable`.
 ///
 /// The store named for adoption cannot be read, or EKR cannot open it under the instance's host document (another tenant or authority than the store was seeded under, or no seed).
@@ -2637,7 +2655,7 @@ pub mod obligations {
     ///
     /// Why it is not generated: kept an obligation by a refusal that compensates (`compensates: true`), on `fetch-failed`.
     ///
-    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)`, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-only-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents in a fetch-only run) when eligible ((defined(fetch_only) and fetch_only == true)), error `cortex.instance.FetchFailed`; `fetched` when `(defined(fetch_only) and fetch_only == true)`, updates `cortex.instance.Source`, emits `cortex.instance.SourceFetched`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
+    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)`, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-only-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents in a fetch-only run) when eligible ((defined(fetch_only) and fetch_only == true)), error `cortex.instance.FetchFailed`; `fetched` when `(defined(fetch_only) and fetch_only == true)`, updates `cortex.instance.Source`, emits `cortex.instance.SourceFetched`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `store-outcome-unknown` externally decided (EKR answers that the publication outcome of a stage verb is unknown), updates `cortex.instance.Source`, error `cortex.instance.StoreOutcomeUnknown`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
     pub trait RunSourceBehavior {
         /// Decides and enacts exactly one declared outcome of `cortex.instance.RunSource`.
         ///

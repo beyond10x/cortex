@@ -516,10 +516,11 @@ types:
   # (`cortex sources`) and the metric file report.
   - name: cortex.instance.RunOutcome
     kind: enum
-    variants: [ran, fetch-failed, extraction-failed, apply-refused, disabled]
+    variants: [ran, fetch-failed, extraction-failed, apply-refused, store-outcome-unknown, disabled]
 
   # A command cortex calls once for each run of a source that answers `fetch-failed`,
-  # `extraction-failed` or `apply-refused`: `command` is its argument vector (no shell), started in
+  # `extraction-failed`, `apply-refused` or `store-outcome-unknown`: `command` is its argument
+  # vector (no shell), started in
   # the instance directory, in a process group of its own, with the source id and the outcome
   # appended as its last two arguments. A relative program path holding a `/` is read against the
   # spec file's directory, as seed paths are; a bare name is looked up on `PATH`. The outcome is
@@ -939,6 +940,14 @@ errors:
     fields:
       - {name: reason, type: String}
 
+  - name: cortex.instance.StoreOutcomeUnknown
+    summary: >-
+      EKR could not say whether a stage verb took effect (`ekr stage begin`, `ekr stage publish`
+      or the settling of an earlier run's stage answered that the publication outcome is
+      unknown). Nothing about the source was wrong; the next run settles the stage.
+    fields:
+      - {name: reason, type: String}
+
   - name: cortex.instance.SampleFailed
     summary: >-
       EKR could not draw the sample (`ekr sample`): the size is outside 1 to 1000, or the store
@@ -1253,8 +1262,9 @@ commands:
     outcomes:
       # UNMAPPED: the exit status of each outcome, which an external scheduler reads instead of
       # the printed line: `ran` 0; `fetch-failed`, `extraction-failed`, `apply-refused` and
-      # `no-such-source` 1; `disabled` 3; and 2 for an error before any outcome. ESS declares no
-      # exit status for a command line's outcomes; tests/e2e.rs and tests/run_status.rs hold it.
+      # `no-such-source` 1; `disabled` 3; `store-outcome-unknown` 4; and 2 for an error before any
+      # outcome. ESS declares no exit status for a command line's outcomes; tests/e2e.rs,
+      # tests/run_status.rs and tests/store_outcome_unknown.rs hold it.
       # UNMAPPED: `<instance>/seed`, when the instance is active and has no source named `seed`,
       # names the instance's seed documents: it extracts those no seed extraction applied yet (what
       # a `partial` create left) and answers these outcomes with no Source to update. Like a source
@@ -1279,9 +1289,10 @@ commands:
       # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.
       # UNMAPPED: after every outcome that names a source, the instance's `monitoring` reports it:
       # `metrics.prom` is rewritten with the source's run counted under its outcome, and for
-      # `fetch-failed`, `extraction-failed` and `apply-refused` the hook is called once, with
-      # `disabled` instead when the recorded failure disabled the source. ESS declares no effect
-      # outside the model's records; tests/run_status.rs holds it.
+      # `fetch-failed`, `extraction-failed`, `apply-refused` and `store-outcome-unknown` the hook
+      # is called once, with `disabled` instead when the recorded failure disabled the source.
+      # ESS declares no effect outside the model's records; tests/run_status.rs and
+      # tests/store_outcome_unknown.rs hold it.
       # UNMAPPED: with `fetch_only` (`cortex run --fetch-only`), `fetched` exits 0 and
       # `fetch-only-failed` exits 1 and prints `fetch-failed`. Neither writes the source's status
       # file, `metrics.prom`, `cortex.log`, the seen documents or the window (`pending_since`),
@@ -1400,6 +1411,29 @@ commands:
         summary: >-
           Nothing was applied; the source's status records the outcome and its reason, and the
           scheduler then sends RecordFailure.
+
+      # UNMAPPED: what the run leaves for the next one. An unknown outcome at `stage begin` leaves
+      # a stage EKR may hold as begun, which the next run abandons; at `stage publish` the run
+      # keeps `stage.json` with `publishing` set and neither puts `state/` back nor abandons the
+      # stage, so the next run completes the publish at the same head. ESS declares no effect on
+      # files outside the model's records; tests/store_outcome_unknown.rs holds it.
+      - name: store-outcome-unknown
+        external: EKR answers that the publication outcome of a stage verb is unknown
+        error: cortex.instance.StoreOutcomeUnknown
+        compensates: true
+        updates: cortex.instance.Source
+        instance: source_id
+        sets:
+          last_outcome: store-outcome-unknown
+          last_run_at: {generated: true}
+          last_reason: {generated: true}
+        payload:
+          cortex.instance.StoreOutcomeUnknown:
+            reason: {generated: true}
+        summary: >-
+          The source's status records the outcome and its reason, and the scheduler sends no
+          RecordFailure: the store, not the source, failed, so the failure is not counted and
+          never disables the source. The next run settles the stage.
 
       - name: ran
         updates: cortex.instance.Source
