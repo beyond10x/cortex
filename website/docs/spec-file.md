@@ -523,8 +523,9 @@ A property whose value is absent, empty or null is not set, nor is a `String` pr
 value is a list or an object. A record with a value that does not convert (`"12a"` for an
 `Integer`, `"maybe"` for a `Boolean`, a list for any kind but `String`) is left out of its batch
 alone: none of its values is applied, the rest of the batch is, and the run names the record's key
-and the property in `unconverted` (in its result and in `cortex.log`). The record is not marked
-seen, so later runs read it again until its value converts. A `value_kind` that differs from the
+and the property in `unconverted` (in its result and in `cortex.log`). The record is marked
+seen, like an applied one, so later runs skip it, and it does not count against the run's limit,
+until its source text changes. A `value_kind` that differs from the
 kind the store declares for that property is refused when the spec is read: `create` answers
 `seed-refused` and keeps no instance, `update` answers `seed-change-refused` and changes nothing,
 and a run, whose store came to declare another kind since, fails with `apply-refused` before it

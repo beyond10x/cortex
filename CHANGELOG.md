@@ -47,7 +47,8 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   declares none. Each value is converted to the kind (`"4"` to `4`, `"false"` to `false`, RFC 3339
   text to a `Timestamp`). A record whose value does not convert is left out of its batch alone and
   named, with its key and the property, in the run's new `unconverted` field and in `cortex.log`;
-  the rest of the batch is applied. A `value_kind` that differs from the kind the store declares is
+  the rest of the batch is applied. The record is marked seen, so later runs skip it (and it no
+  longer counts against `max_documents_per_run`) until its source text changes. A `value_kind` that differs from the kind the store declares is
   refused when the spec is read (`create`, `update`, a run), naming the node type, the property
   and both kinds.
 

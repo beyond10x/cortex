@@ -170,8 +170,8 @@ the text as a whole, and never cuts a record. Each mapped property is written in
 its mapping names or the store declares, else `String`. A record whose value does not convert to
 that kind is left out of its batch alone and named in the run's `unconverted`, in its result and
 its `cortex.log` line: one entry per value, with the record's key (`document`), the `property` and
-its `value_kind`. The field is present only when there is one. The record is not marked seen, so
-later runs read it again. A mapping whose `value_kind` differs from the kind the store declares
+its `value_kind`. The field is present only when there is one. The record is marked seen, so
+later runs skip it until its source text changes. A mapping whose `value_kind` differs from the kind the store declares
 fails the run as `apply-refused`, naming the node type, the property and both kinds, before
 anything is applied.
 
