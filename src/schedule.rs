@@ -757,9 +757,7 @@ mod tests {
             taken_over: Default::default(),
         };
         let tools = crate::run::Tools {
-            connectors: crate::connectors::Connectors {
-                bin: tmp.path().join("c%h/connectors"),
-            },
+            connectors: crate::connectors::Connectors::new(tmp.path().join("c%h/connectors")),
             claude: "claude".into(),
             codex: "codex".into(),
         };

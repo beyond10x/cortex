@@ -3,12 +3,17 @@
 
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
+use std::time::Duration;
 
 use serde_json::Value;
 
 pub struct Connectors {
     pub bin: PathBuf,
+    /// Whether an invocation answered: from then on a revalidation that stays unavailable fails
+    /// the read as [`InvokeError::Failed`], since the run has fetched documents.
+    answered: AtomicBool,
 }
 
 static BIN: OnceLock<PathBuf> = OnceLock::new();
@@ -110,6 +115,9 @@ pub enum InvokeError {
     Lapsed(String),
     /// Anything else: an outage, a refused or failed provider call, an unreadable answer.
     Failed(String),
+    /// Connectors answered a retryable failure (`kind` `operational`, `next_action`
+    /// `retry_explicitly`) to every attempt of a revalidation, before any invocation answered.
+    Unavailable(String),
 }
 
 impl std::fmt::Display for InvokeError {
@@ -118,6 +126,7 @@ impl std::fmt::Display for InvokeError {
             Self::Missing(m) => write!(f, "connection missing: {m}"),
             Self::Lapsed(m) => write!(f, "connection evidence lapsed: {m}"),
             Self::Failed(m) => write!(f, "connectors failed: {m}"),
+            Self::Unavailable(m) => write!(f, "connection unavailable: {m}"),
         }
     }
 }
@@ -144,9 +153,53 @@ fn envelope(doc: Value, what: &str) -> Result<Value, InvokeError> {
     }
 }
 
+/// Error codes that refuse an operation, whatever else the envelope says: never retried.
+const REFUSALS: [&str; 5] = [
+    "not_found",
+    "not_granted",
+    "revoked",
+    "unauthenticated",
+    "forbidden",
+];
+
+/// Whether `doc` is a failure Connectors asks the caller to repeat: `kind` `operational` with
+/// `next_action` `retry_explicitly` (such as `unavailable` at `dispatch`), and no refusal.
+fn retryable(doc: &Value) -> bool {
+    let data = &doc["error"]["data"];
+    doc["ok"] != Value::Bool(true)
+        && data["kind"].as_str() == Some("operational")
+        && data["next_action"].as_str() == Some("retry_explicitly")
+        && !REFUSALS.contains(&data["code"].as_str().unwrap_or_default())
+}
+
+/// A whole-number setting from the environment, `default` when it is unset or unreadable.
+fn setting(name: &str, default: u64) -> u64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
+
 impl Connectors {
+    pub fn new(bin: PathBuf) -> Self {
+        Self {
+            bin,
+            answered: AtomicBool::new(false),
+        }
+    }
+
     fn json(&self, args: &[&str], what: &str) -> Result<Value, InvokeError> {
         envelope(self.answer(args, what)?, what)
+    }
+
+    /// [`Self::json`], with a [`retryable`] failure answered as [`InvokeError::Unavailable`].
+    fn json_or_unavailable(&self, args: &[&str], what: &str) -> Result<Value, InvokeError> {
+        let doc = self.answer(args, what)?;
+        let again = retryable(&doc);
+        match envelope(doc, what) {
+            Err(InvokeError::Failed(message)) if again => Err(InvokeError::Unavailable(message)),
+            other => other,
+        }
     }
 
     /// The JSON document `connectors` answered, success or refusal.
@@ -220,9 +273,40 @@ impl Connectors {
         self.revalidate(adapter, connection, false)
     }
 
-    /// Revalidates `connection`; unless `force`, only when it is not `ready`.
+    /// Revalidates `connection`; unless `force`, only when it is not `ready`. A retryable failure
+    /// of the revalidation or of the list read before it ([`retryable`]) is tried again, at most
+    /// `CORTEX_REVALIDATE_ATTEMPTS` attempts in all (4, at least 1), pausing
+    /// `CORTEX_REVALIDATE_PAUSE_MS` (5000) before the second and doubling after it; one that
+    /// remains is [`InvokeError::Unavailable`], naming the last error. A refusal is not retried.
     fn revalidate(&self, adapter: &str, connection: &str, force: bool) -> Result<(), InvokeError> {
-        let listed = self.json(
+        let attempts = setting("CORTEX_REVALIDATE_ATTEMPTS", 4).max(1);
+        let mut pause = Duration::from_millis(setting("CORTEX_REVALIDATE_PAUSE_MS", 5000));
+        let mut attempt = 1;
+        loop {
+            match self.revalidate_once(adapter, connection, force) {
+                Err(InvokeError::Unavailable(_)) if attempt < attempts => {
+                    std::thread::sleep(pause);
+                    pause = pause.saturating_mul(2);
+                    attempt += 1;
+                }
+                Err(InvokeError::Unavailable(m)) => {
+                    return Err(InvokeError::Unavailable(format!(
+                        "{m}, after {attempts} attempts"
+                    )))
+                }
+                other => return other,
+            }
+        }
+    }
+
+    /// One attempt of [`Self::revalidate`].
+    fn revalidate_once(
+        &self,
+        adapter: &str,
+        connection: &str,
+        force: bool,
+    ) -> Result<(), InvokeError> {
+        let listed = self.json_or_unavailable(
             &["connections", "list", "--adapter", adapter],
             "connections list",
         )?;
@@ -257,10 +341,12 @@ impl Connectors {
         // Connectors can apply a revalidation and still be unable to confirm it
         // (`outcome_unknown` at publication); it then names reading the status as the next step.
         let unconfirmed = doc["error"]["data"]["next_action"].as_str() == Some("retry_status");
+        let again = retryable(&doc);
         match envelope(doc, what) {
             Err(InvokeError::Failed(message)) if unconfirmed => {
                 self.await_ready(adapter, connection, &message)
             }
+            Err(InvokeError::Failed(message)) if again => Err(InvokeError::Unavailable(message)),
             other => other.map(|_| ()),
         }
     }
@@ -268,14 +354,8 @@ impl Connectors {
     /// Reads `connection`'s status until it is `ready`, up to `CORTEX_STATUS_POLLS` reads (12)
     /// `CORTEX_STATUS_POLL_MS` apart (5000); otherwise fails naming `cause` and the last state.
     fn await_ready(&self, adapter: &str, connection: &str, cause: &str) -> Result<(), InvokeError> {
-        let setting = |name: &str, default: u64| {
-            std::env::var(name)
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(default)
-        };
         let polls = setting("CORTEX_STATUS_POLLS", 12).max(1);
-        let pause = std::time::Duration::from_millis(setting("CORTEX_STATUS_POLL_MS", 5000));
+        let pause = Duration::from_millis(setting("CORTEX_STATUS_POLL_MS", 5000));
         let mut state = String::from("unknown");
         for read in 0..polls {
             if read > 0 {
@@ -308,6 +388,9 @@ impl Connectors {
     /// Invokes `operation` and answers the adapter's own result; a lapse is renewed and a timeout
     /// at admission retried, each at most once. The CLI wraps it as
     /// `{adapter, operation, revision, result}`, with `result` a JSON document in a string.
+    /// A revalidation still unavailable after its retries is [`InvokeError::Unavailable`] until an
+    /// invocation of this process answered, and [`InvokeError::Failed`] after it: a run that has
+    /// fetched documents fails as it always did.
     pub fn invoke(
         &self,
         adapter: &str,
@@ -315,7 +398,8 @@ impl Connectors {
         operation: &str,
         input: &Value,
     ) -> Result<Value, InvokeError> {
-        self.ensure_ready(adapter, connection)?;
+        self.ensure_ready(adapter, connection)
+            .map_err(|e| self.after_fetch(e))?;
         // Evidence listed as ready can lapse before the read is admitted; renew once and retry.
         // A timeout at admission is Connectors' deadline running out on a read; retry that once
         // too. Each retry is spent at most once, so the loop runs at most three invocations.
@@ -324,7 +408,8 @@ impl Connectors {
             match self.invoke_once(adapter, connection, operation, input) {
                 Err(InvokeError::Lapsed(_)) if renew => {
                     renew = false;
-                    self.revalidate(adapter, connection, true)?;
+                    self.revalidate(adapter, connection, true)
+                        .map_err(|e| self.after_fetch(e))?;
                 }
                 Err(InvokeError::Failed(m)) if timeout && m.ends_with(TIMEOUT_AT_ADMISSION) => {
                     timeout = false;
@@ -332,12 +417,24 @@ impl Connectors {
                 other => break other?,
             }
         };
+        self.answered.store(true, Ordering::Relaxed);
         match answer.get("result") {
             Some(Value::String(text)) => serde_json::from_str(text).map_err(|e| {
                 InvokeError::Failed(format!("{adapter}.{operation}: result is not JSON: {e}"))
             }),
             Some(inner) if inner.is_object() => Ok(inner.clone()),
             _ => Ok(answer),
+        }
+    }
+
+    /// `error`, an [`InvokeError::Unavailable`] made [`InvokeError::Failed`] once an invocation
+    /// answered.
+    fn after_fetch(&self, error: InvokeError) -> InvokeError {
+        match error {
+            InvokeError::Unavailable(m) if self.answered.load(Ordering::Relaxed) => {
+                InvokeError::Failed(m)
+            }
+            other => other,
         }
     }
 
@@ -497,7 +594,7 @@ mod tests {
             .status()
             .unwrap();
         assert!(status.success());
-        let connectors = Connectors { bin };
+        let connectors = Connectors::new(bin);
         assert_eq!(
             connectors
                 .resolve("tavily", &Reference::from("conn_test"))
@@ -532,5 +629,42 @@ mod tests {
             "tavily:profile p"
         );
         assert_eq!(Reference::from("conn_A").named("tavily"), "tavily:conn_A");
+    }
+
+    /// `story:connections-revalidate-retry`: only an operational failure Connectors asks to repeat
+    /// is retried; a refusal never is, whatever its `next_action`.
+    #[test]
+    fn only_an_operational_failure_to_retry_explicitly_is_retryable() {
+        let failure = |code: &str, kind: &str, next: &str| {
+            json!({"ok": false, "error": {"code": "failure", "data": {
+                "code": code, "kind": kind, "next_action": next, "stage": "dispatch"}}})
+        };
+        assert!(retryable(&failure(
+            "unavailable",
+            "operational",
+            "retry_explicitly"
+        )));
+        assert!(!retryable(&failure(
+            "unavailable",
+            "operational",
+            "retry_status"
+        )));
+        assert!(!retryable(&failure(
+            "unauthenticated",
+            "operational",
+            "repair_connection"
+        )));
+        assert!(!retryable(&failure(
+            "unavailable",
+            "policy",
+            "retry_explicitly"
+        )));
+        for refusal in REFUSALS {
+            assert!(
+                !retryable(&failure(refusal, "operational", "retry_explicitly")),
+                "{refusal}"
+            );
+        }
+        assert!(!retryable(&json!({"ok": true, "result": {}})));
     }
 }

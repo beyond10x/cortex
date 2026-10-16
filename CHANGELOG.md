@@ -47,6 +47,16 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   as reported, marked as not counted: a run's report and `cortex.log` line carry
   `cost_counted: false`, the `SourceRan` event `cost_counted`, and `spend.json` sums it in
   `uncounted_usd`.
+- A transient Connectors failure of `connections revalidate` no longer counts against a source.
+  A container that started a run within a minute of its own start saw `connections revalidate`
+  answer `unavailable` at `dispatch` (`kind: operational`, `next_action: retry_explicitly`); the
+  run failed as `fetch-failed`, was counted, and two such runs disabled the source
+  (beyond10x/connectors#174). Now a failure Connectors marks retryable, from the revalidation or
+  the `connections list` read before it, is tried again: at most 4 attempts, pausing 5 s, 10 s,
+  then 20 s (`CORTEX_REVALIDATE_ATTEMPTS`, `CORTEX_REVALIDATE_PAUSE_MS`). One that remains before
+  the run fetched anything fails the run as the new outcome `connection-unavailable`, exit
+  status 5, which `--record-failure` does not count and which never disables the source; its
+  status, metric and hook report it. A refusal is not retried and is counted as before.
 
 ### Added
 
