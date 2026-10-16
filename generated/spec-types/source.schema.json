@@ -451,6 +451,9 @@
         "max_context_tokens": {
           "type": "integer"
         },
+        "max_output_tokens": {
+          "type": "integer"
+        },
         "token_env": {
           "type": "string"
         }
@@ -469,6 +472,9 @@
       "properties": {
         "backend": {
           "$ref": "#/$defs/cortex.instance.ModelBackend"
+        },
+        "batch_chars": {
+          "type": "integer"
         },
         "budget_tokens": {
           "type": "integer"
@@ -1428,8 +1434,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:5373a9a6ec848d0724307eb3da2fbb84513c8add97563c21b5816145638d21d6",
-    "source_digest": "4d78dbc9fefa8ec583bfc00d89d8a461b37b910b77d90cf3b69c991fd6b95086",
+    "contract_digest": "slice-sha256/2:e2aff03e7c7ef676ff3356b6033a729e0b101367210780a9043d632820980280",
+    "source_digest": "fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58",
     "specification_version": "v1",
     "system": "cortex"
   }

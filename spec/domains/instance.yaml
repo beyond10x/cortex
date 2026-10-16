@@ -392,6 +392,31 @@ types:
   # (`budget_usd`) and `spec::load_given` (`budget_tokens`, the finite dollar limits) hold the
   # rules, `spend::counts_dollars` the frozen-spec case, and `tests/gateway_dollar_limits.rs` and
   # `tests/gateway_dollar_limits_adv.rs` test them.
+  #
+  # `batch_chars`, when given, is the most characters of document text one extraction request
+  # carries (a longer document goes alone); at least 1,000. A character is counted as its UTF-8
+  # bytes, as before this field: a Latin letter counts 1, a non-Latin character 2 to 3, for the
+  # given size, the derived one and the default alike. Without it, behind a gateway that
+  # gives `max_context_tokens`, it is derived from the model's window: the input room is
+  # `max_context_tokens` less the output reserve (`gateway.max_output_tokens` when given, else a
+  # quarter of `max_context_tokens`); the size is 1.5 characters per token of that room, less the
+  # characters of the request's fixed part (the system prompt, the answer's schema, and the prompt
+  # up to the documents) as the run starts, at least 4,000 and at most 60,000. Otherwise it is
+  # 60,000. A run states the size it used (`cortex.instance.SourceRan.batch_chars`). A request
+  # `claude` answers as too long for the model's window (an error answer whose text holds
+  # `Prompt is too long`, `Input is too long`, `maximum context length` or
+  # `context_length_exceeded`, in any case) or as cut off at the output limit (one holding
+  # `output token maximum` or `reached its context window limit`) is split in two halves by
+  # documents and each half asked again, at most 3 splits deep (a batch becomes at most 8 parts);
+  # a part of one document is not split. Such an answer is not asked again after a wait, and its
+  # calls count against the token and dollar limits as any call does. A part of one document that
+  # still does not fit is left out alone and the run goes on (`cortex.instance.RunSource`, `ran`);
+  # a part of several documents that still does not fit after 3 splits ends the run as
+  # `batch-too-large`, which is not counted against the source. `cortex quality` and
+  # `cortex schema` keep their own batch sizes.
+  # UNMAPPED: the refusal of a `batch_chars` below 1,000 (exit 2, naming the field, for `create`,
+  # `update` and `adopt`) is a check on an Integer the specification has no construct for;
+  # `spec::check` holds it and `tests/batch_fits_model_window.rs` tests it.
   - name: cortex.instance.ModelSpec
     kind: struct
     fields:
@@ -404,12 +429,14 @@ types:
       - {name: gateway, type: Optional<cortex.instance.ModelGateway>}
       - {name: timeout_s, type: Integer}
       - {name: instructions, type: Optional<String>}
+      - {name: batch_chars, type: Optional<Integer>}
 
   # A model gateway the `claude` backend's calls go through, with no interactive sign-in.
   # `base_url` is the gateway's URL; `token_env` the name of the environment variable that holds
   # its token, never the token itself. The spec check refuses (exit 2, naming the field, before
   # anything is written, for `create`, `update` and `adopt` alike) a `base_url` that is empty or
-  # does not start with `http://` or `https://`; a `max_context_tokens` of 0 or less; and a
+  # does not start with `http://` or `https://`; a `max_context_tokens` of 0 or less; a
+  # `max_output_tokens` of 0 or less, or not below `max_context_tokens` when both are given; and a
   # `token_env` that is not a variable name (letters, digits and `_`, not starting with a digit),
   # that a unit cortex writes holds by value (`PATH`, `HOME`, every `CONNECTORS_*` and `CORTEX_*`),
   # or that is any `XDG_*` or `ANTHROPIC_*` name.
@@ -417,8 +444,8 @@ types:
   # construct for; `spec::check` holds them and `tests/security_20261015c.rs` tests them.
   # cortex passes exactly this set to `claude`:
   # `ANTHROPIC_BASE_URL` (`base_url`), `ANTHROPIC_AUTH_TOKEN` (the value of `token_env`, read
-  # when the call is made) and `CLAUDE_CODE_MAX_CONTEXT_TOKENS` (`max_context_tokens`, when
-  # given), from an interactive run, a timer unit and a runner that calls `cortex run` alike. A
+  # when the call is made), `CLAUDE_CODE_MAX_CONTEXT_TOKENS` (`max_context_tokens`, when given)
+  # and `CLAUDE_CODE_MAX_OUTPUT_TOKENS` (`max_output_tokens`, when given), from an interactive run, a timer unit and a runner that calls `cortex run` alike. A
   # missing or empty `token_env` fails the call before `claude` starts, with a reason naming the
   # variable. Without a gateway, `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` are removed from
   # `claude`'s environment, so no instance reaches a gateway by accident; `ANTHROPIC_API_KEY` is
@@ -432,6 +459,7 @@ types:
       - {name: base_url, type: String}
       - {name: token_env, type: String}
       - {name: max_context_tokens, type: Optional<Integer>}
+      - {name: max_output_tokens, type: Optional<Integer>}
 
   # The spend of the day of one instance: `spend.json` in the instance directory, `format`
   # `cortex.daily-spend/1`. `day` is the UTC calendar day it counts, `YYYY-MM-DD`; `spent_usd` the
@@ -518,6 +546,20 @@ types:
       - {name: pattern, type: String}
       - {name: replacement, type: String}
 
+  # `RareName` replaces a capitalised word (one capital and at least one lower-case letter) that
+  # the batch's document texts hold at most `rare_limit` times (default 1). A word, hyphenated or
+  # not (`Jean-Luc`, `Co-Authored-By`), is replaced whole or not at all: no part of a word seen
+  # more than `rare_limit` times is a rare name, and the `refuse_if_left` check reads words the
+  # same way, so it finds nothing left of a word that was kept. A word glued to a lower-case
+  # letter before it (`useFoo-Bar`) is part of an identifier and skipped whole; one glued to an
+  # underscore or a letter of a script without case (`_Jean-Luc_`, CJK text) is read again from
+  # its next letter, so its rare tail is replaced. The part of a word before a span another class
+  # hides (`Co` of `Co-Jane`, `Jane` a known name) is read alone, as the check reads it beside
+  # that span's placeholder. A text cut at `max_chars` inside a word kept whole ends in a prefix of
+  # that word, which the check does not read as a rare name.
+  # UNMAPPED: how a text splits into words and how often a batch holds each is a rule on String
+  # values the specification has no construct for; `src/redact.rs` holds it and its tests and
+  # `tests/redaction_gate.rs` test it.
   - name: cortex.instance.RedactionPolicy
     kind: struct
     fields:
@@ -566,11 +608,11 @@ types:
   # (`cortex sources`) and the metric file report.
   - name: cortex.instance.RunOutcome
     kind: enum
-    variants: [ran, fetch-failed, extraction-failed, apply-refused, store-outcome-unknown, disabled]
+    variants: [ran, fetch-failed, extraction-failed, apply-refused, store-outcome-unknown, connection-unavailable, batch-too-large, disabled]
 
   # A command cortex calls once for each run of a source that answers `fetch-failed`,
-  # `extraction-failed`, `apply-refused` or `store-outcome-unknown`: `command` is its argument
-  # vector (no shell), started in
+  # `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable` or `batch-too-large`:
+  # `command` is its argument vector (no shell), started in
   # the instance directory, in a process group of its own, with the source id and the outcome
   # appended as its last two arguments. A relative program path holding a `/` is read against the
   # spec file's directory, as seed paths are; a bare name is looked up on `PATH`. The outcome is
@@ -999,6 +1041,27 @@ errors:
     fields:
       - {name: reason, type: String}
 
+  - name: cortex.instance.ConnectionUnavailable
+    summary: >-
+      Connectors answered a retryable operational failure (`kind` `operational`, `next_action`
+      `retry_explicitly`) to every attempt of the run's revalidation of its connection, or of the `connections list` read that
+      resolves a profile-named connection, at most 4
+      attempts with pauses of 5 s, 10 s and 20 s, before the run fetched any document. Nothing about
+      the source was wrong: the failure is not counted against it, and the next run starts as
+      usual.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.BatchTooLarge
+    summary: >-
+      A part of several documents of an extraction batch was still too long for the model's
+      window, or its answer still cut off at the output limit, after the batch was split 3 deep.
+      Nothing about the source was wrong; a later run extracts that part, and a smaller
+      `model.batch_chars` makes its batches smaller. A single document that alone does not fit is
+      not this error: the run leaves it out and goes on.
+    fields:
+      - {name: reason, type: String}
+
   - name: cortex.instance.SampleFailed
     summary: >-
       EKR could not draw the sample (`ekr sample`): the size is outside 1 to 1000, or the store
@@ -1313,9 +1376,10 @@ commands:
     outcomes:
       # UNMAPPED: the exit status of each outcome, which an external scheduler reads instead of
       # the printed line: `ran` 0; `fetch-failed`, `extraction-failed`, `apply-refused` and
-      # `no-such-source` 1; `disabled` 3; `store-outcome-unknown` 4; and 2 for an error before any
-      # outcome. ESS declares no exit status for a command line's outcomes; tests/e2e.rs,
-      # tests/run_status.rs and tests/store_outcome_unknown.rs hold it.
+      # `no-such-source` 1; `disabled` 3; `store-outcome-unknown` 4; `connection-unavailable` 5; `batch-too-large` 6;
+      # and 2 for an error before any outcome. ESS declares no exit status for a command line's
+      # outcomes; tests/e2e.rs, tests/run_status.rs, tests/store_outcome_unknown.rs and
+      # tests/connections_revalidate_retry.rs hold it.
       # UNMAPPED: `<instance>/seed`, when the instance is active and has no source named `seed`,
       # names the instance's seed documents: it extracts those no seed extraction applied yet (what
       # a `partial` create left) and answers these outcomes with no Source to update. Like a source
@@ -1340,10 +1404,11 @@ commands:
       # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.
       # UNMAPPED: after every outcome that names a source, the instance's `monitoring` reports it:
       # `metrics.prom` is rewritten with the source's run counted under its outcome, and for
-      # `fetch-failed`, `extraction-failed`, `apply-refused` and `store-outcome-unknown` the hook
-      # is called once, with `disabled` instead when the recorded failure disabled the source.
-      # ESS declares no effect outside the model's records; tests/run_status.rs and
-      # tests/store_outcome_unknown.rs hold it.
+      # `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`,
+      # `connection-unavailable` and `batch-too-large` the hook is called once, with `disabled` instead when the
+      # recorded failure disabled the source. ESS declares no effect outside the model's records;
+      # tests/run_status.rs, tests/store_outcome_unknown.rs and
+      # tests/connections_revalidate_retry.rs hold it.
       # UNMAPPED: with `fetch_only` (`cortex run --fetch-only`), `fetched` exits 0 and
       # `fetch-only-failed` exits 1 and prints `fetch-failed`. Neither writes the source's status
       # file, `metrics.prom`, `cortex.log`, the seen documents or the window (`pending_since`),
@@ -1497,6 +1562,74 @@ commands:
           a snapshot is undone from it; otherwise the next run extracts the batch whose apply was
           unknown again.
 
+      # UNMAPPED: the bound of the retry. Before a Connectors read, cortex lists the connection and
+      # revalidates it when it is not `ready`; an answer to either that Connectors marks retryable
+      # (`error.data.kind` `operational` with `next_action` `retry_explicitly`, such as
+      # `unavailable` at `dispatch`) is tried again, at most `CORTEX_REVALIDATE_ATTEMPTS` attempts
+      # in all (4), pausing `CORTEX_REVALIDATE_PAUSE_MS` (5000) before the second and doubling
+      # after it (5 s, 10 s, 20 s). A refusal (a missing, revoked or not-granted connection, an
+      # authentication or scope failure) is not retried. A revalidation still failing after the
+      # run fetched documents (a lapse renewed mid-run) is retried the same way and then answers
+      # `fetch-failed`. ESS has no retry or backoff construct;
+      # tests/connections_revalidate_retry.rs holds it.
+      - name: connection-unavailable
+        external: >-
+          Connectors answers a retryable operational failure to every attempt of `connections
+          revalidate` (or of the `connections list` read before it, which for a source naming a profile is
+          also the read that resolves the profile) before the run's first fetch
+        error: cortex.instance.ConnectionUnavailable
+        compensates: true
+        updates: cortex.instance.Source
+        instance: source_id
+        sets:
+          last_outcome: connection-unavailable
+          last_run_at: {generated: true}
+          last_reason: {generated: true}
+        payload:
+          cortex.instance.ConnectionUnavailable:
+            reason: {generated: true}
+        summary: >-
+          Nothing was fetched or applied; the source's status records the outcome and its reason,
+          naming the last error, and the scheduler sends no RecordFailure: Connectors, not the
+          source, failed, so the failure is not counted and never disables the source. The next
+          scheduled run starts as usual.
+
+      # UNMAPPED: `batch-too-large` exits 6, and like `store-outcome-unknown` its status, metric
+      # and hook report it while the scheduler counts nothing. What the run leaves: the batches
+      # before the part that did not fit are applied, held to the gate and seen; that part and
+      # every later batch are not marked seen, so a later run extracts them. A gated run that
+      # fails its gate ends `apply-refused` as any gated run does, its reason also naming the part
+      # that did not fit. ESS declares no exit status and no effect on files outside the model's
+      # records; tests/batch_fits_model_window.rs holds it.
+      - name: batch-too-large
+        external: >-
+          `claude` answers that a part of several documents of an extraction batch is too long for
+          the model's window, or that its answer was cut off at the output limit, after the batch
+          was split 3 deep
+        error: cortex.instance.BatchTooLarge
+        compensates: true
+        updates: cortex.instance.Source
+        instance: source_id
+        sets:
+          last_outcome: batch-too-large
+          last_run_at: {generated: true}
+          last_reason: {generated: true}
+        payload:
+          cortex.instance.BatchTooLarge:
+            reason: {generated: true}
+        summary: >-
+          The source's status records the outcome and its reason, which names the documents of the
+          part that did not fit and the batch size used, and the scheduler sends no RecordFailure:
+          the batch, not the source, failed, so the failure is not counted and never disables the
+          source. The batches before it stay applied; the rest are extracted by a later run.
+          A part of one document is not this outcome: the run leaves it out and goes on.
+
+      # UNMAPPED: a part of one document that still does not fit the model's window is left out
+      # alone, as a record whose value does not convert is: it is named, by its key, in the run's
+      # report (`too_large`) and its `cortex.log` line, and marked seen with its content hash, so it
+      # is not asked again until its text changes; the run goes on with the following batches and
+      # ends `ran`. The specification has no construct for the report's list of documents left
+      # out; tests/batch_fits_model_window.rs and tests/batch_fits_model_window_adv.rs hold it.
       - name: ran
         updates: cortex.instance.Source
         instance: source_id
@@ -1523,6 +1656,8 @@ commands:
             output_tokens: {generated: true}
             fixed_input_tokens: {generated: true}
             documents_input_tokens: {generated: true}
+            batch_chars: {generated: true}
+            splits: {generated: true}
         summary: >-
           Every new or changed document within the policy's limits was extracted and applied, in
           batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no
@@ -1897,6 +2032,10 @@ events:
   # The two add up to `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`.
   # `cost_counted` is false when the instance's model is behind a gateway: `cost_usd` is then what
   # `claude` reported, counted against no dollar limit (`cortex.instance.ModelSpec`).
+  # `batch_chars` is the most characters of document text, counted as UTF-8 bytes, the run put in
+  # one extraction request (`cortex.instance.ModelSpec.batch_chars`, given or derived); `splits`
+  # counts the batches it split in two because a request was too long for the model's window or
+  # its answer was cut off.
   - name: cortex.instance.SourceRan
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
@@ -1912,6 +2051,8 @@ events:
       - {name: output_tokens, type: Optional<Integer>}
       - {name: fixed_input_tokens, type: Optional<Integer>}
       - {name: documents_input_tokens, type: Optional<Integer>}
+      - {name: batch_chars, type: Integer}
+      - {name: splits, type: Integer}
 
   # A run of a disabled source, which ran nothing.
   - name: cortex.instance.RunSkipped

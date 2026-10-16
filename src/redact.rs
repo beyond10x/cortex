@@ -12,7 +12,14 @@
 //! `known_names` are names replaced wherever they appear as whole words, however often, in any case
 //! and either Unicode normal form. `RareName` replaces a capitalised word (one capital and at least
 //! one lower-case letter) seen at most `rare_limit` times (default 1) in the batch's document texts,
-//! unless it is a stop word or a placeholder's label. Only what the model would see counts: words
+//! unless it is a stop word or a placeholder's label. A word, hyphenated or not, is replaced whole
+//! or not at all: no part of a word the batch holds more often is a rare name, in the replacement
+//! and in [`Batch::left`] alike. A word glued to a lower-case letter before it is part of an
+//! identifier and skipped whole; one glued to an underscore or an uncased letter is read again
+//! from its next letter. The part of a word before a span another step hides is read alone, as
+//! the check reads it beside the placeholder, and the check does not read a text's last word as
+//! a rare name when it begins a word the batch holds more often (a cut at `max_chars`). Only what
+//! the model would see counts: words
 //! inside a span another step hides, and the known entity names, are not counted. Both are counted
 //! apart: `known_names` and `RareName`.
 //!
@@ -914,19 +921,53 @@ impl Redactor {
                 (whole, c.get(step.group).map(|g| g.range()))
             };
             let retry = next_char(text, whole.start);
+            let hidden = taken
+                .iter()
+                .chain(found.iter())
+                .filter(|t| step.rare && t.start < whole.end && whole.start < t.end)
+                .min_by_key(|t| t.start)
+                .cloned();
+            if let Some(t) = hidden {
+                // The part of a word before a span another step hides is what the check reads
+                // beside that span's placeholder: it is a name when it stands alone and is rare.
+                let head =
+                    text[whole.start..t.start.max(whole.start)].trim_end_matches(['-', '\'', '’']);
+                let head = whole.start..whole.start + head.len();
+                let b = before(text, head.start);
+                if !alphanumeric(b)
+                    && b != Some('_')
+                    && text[head.clone()].chars().any(char::is_lowercase)
+                    && self.rare(&text[head.clone()], words)
+                {
+                    found.push(head);
+                }
+                pos = t.end.max(retry);
+                continue;
+            }
             let range = match (candidate, step.refine) {
                 (None, _) => None,
                 (Some(c), _) if c.is_empty() => None,
                 (Some(c), Some(refine)) => refine(text, c),
                 (Some(c), None) => Some(c),
             };
-            let Some(range) = range
-                .filter(|r| !r.is_empty())
-                .filter(|r| !step.rare || self.rare(&text[r.clone()], words))
-            else {
-                pos = retry;
+            let Some(range) = range.filter(|r| !r.is_empty()) else {
+                // A rare-name step skips a word glued to a lower-case letter before it whole
+                // (`useFoo-Bar` is an identifier); one glued to an underscore or a letter of a
+                // script without case (`_Jean-Luc_`, CJK text) is read again from its next
+                // letter, so its tail is still a name.
+                pos = if step.rare && before(text, whole.start).is_some_and(char::is_lowercase) {
+                    whole.end.max(retry)
+                } else {
+                    retry
+                };
                 continue;
             };
+            if step.rare && !self.rare(&text[range.clone()], words) {
+                // A word the batch holds more often is kept whole: no part of it is a name, as
+                // `Batch::reserve` counts it.
+                pos = whole.end.max(retry);
+                continue;
+            }
             if let Some(t) = taken
                 .iter()
                 .chain(found.iter())
@@ -1203,21 +1244,33 @@ impl Batch<'_> {
 
     /// The classes `refuse_if_left` names that are still detected in `text`, a text as the model
     /// would be shown it. A capitalised word counts as a rare name only when the batch's
-    /// originals hold it at most `rare_limit` times.
+    /// originals hold it at most `rare_limit` times, and not when it ends the text and begins a
+    /// word they hold more often: that is a word kept whole and cut at `max_chars`.
     pub fn left(&self, text: &str) -> BTreeSet<&'static str> {
         self.redactor
             .checks
             .iter()
             .filter(|(_, steps)| {
                 steps.iter().any(|step| {
-                    !self
-                        .redactor
+                    self.redactor
                         .scan(step, text, &[], Some(&self.words))
-                        .is_empty()
+                        .into_iter()
+                        .any(|r| !(step.rare && self.cut_fragment(text, r)))
                 })
             })
             .map(|(class, _)| *class)
             .collect()
+    }
+
+    /// Whether the capitalised word at `r` ends `text` (a hyphen or an apostrophe after it at
+    /// most) and, with that, is a proper prefix of a word the batch's originals hold more than
+    /// `rare_limit` times.
+    fn cut_fragment(&self, text: &str, r: Range<usize>) -> bool {
+        let tail = &text[r.start..];
+        text[r.end..].chars().all(|c| matches!(c, '-' | '\'' | '’'))
+            && self.words.iter().any(|(word, n)| {
+                *n > self.redactor.rare_limit && word.len() > tail.len() && word.starts_with(tail)
+            })
     }
 }
 
@@ -1991,6 +2044,121 @@ mod tests {
         let out = batch.replace(text);
         assert!(!out.contains("Rowan"), "{out}");
         assert!(out.contains("Widget, Widget, Widget."), "{out}");
+    }
+
+    /// Issue #71: a hyphenated word the batch holds three times is kept whole, no part of it is
+    /// a rare name, and the gate finds nothing left of it. A rare word beside it is still replaced
+    /// and a hyphenated word seen once is replaced whole by one placeholder.
+    #[test]
+    fn a_frequent_hyphenated_word_is_kept_whole_and_not_left_for_the_gate() {
+        let r = compiled(&full_policy(
+            &[m::RedactionClass::RareName],
+            &[],
+            Some(1),
+            &[m::RedactionClass::RareName],
+        ));
+        let trailer = "Co-Authored-By: Example Person <person@example.org>";
+        let texts = [
+            format!("fix: parse the header.\n\n{trailer}"),
+            format!("feat: Rowan added a flag.\n\n{trailer}"),
+            format!("docs: Jean-Luc wrote the guide.\n\n{trailer}"),
+        ];
+        let mut batch = r.batch();
+        for t in &texts {
+            batch.reserve(t);
+        }
+        let shown: Vec<String> = texts.iter().map(|t| batch.replace(t)).collect();
+        for s in &shown {
+            assert!(s.ends_with(trailer), "the trailer is shown as written: {s}");
+            assert_eq!(batch.left(s), BTreeSet::new(), "nothing is left: {s}");
+        }
+        assert_eq!(
+            shown[1],
+            format!("feat: [Name-1] added a flag.\n\n{trailer}")
+        );
+        assert_eq!(
+            shown[2],
+            format!("docs: [Name-2] wrote the guide.\n\n{trailer}"),
+            "a hyphenated word seen once is one placeholder"
+        );
+        let mut answer = json!("[Name-2]");
+        assert_eq!(batch.restore(&mut answer), 0);
+        assert_eq!(answer, json!("Jean-Luc"));
+        assert_eq!(batch.counts()["RareName"], 2);
+        assert_eq!(
+            batch.left("Rowan and Co-Authored-By"),
+            BTreeSet::from(["RareName"]),
+            "a rare name left beside the frequent word still refuses"
+        );
+    }
+
+    /// The class of issue #71: a word the batch counted is never read in parts. A capitalised
+    /// match glued to a lower-case letter before it (an identifier) is skipped whole, as the
+    /// count skips it, so its tail is not a rare name either.
+    #[test]
+    fn no_part_of_a_word_that_is_not_a_name_is_a_rare_name() {
+        let r = compiled(&full_policy(
+            &[m::RedactionClass::RareName],
+            &[],
+            Some(1),
+            &[m::RedactionClass::RareName],
+        ));
+        let text = "set useFoo-Bar and keep O'Neil-Smith-Jones out.";
+        let mut batch = r.batch();
+        batch.reserve(text);
+        let out = batch.replace(text);
+        assert_eq!(out, "set useFoo-Bar and keep [Name-1] out.");
+        assert_eq!(batch.left(&out), BTreeSet::new(), "{out}");
+    }
+
+    /// The gate and the replacement read the same words: the head of a word before a span
+    /// another step hides (here a rule's, glued without a hyphen) is replaced when it is rare, as
+    /// the gate reads it beside the placeholder; a fragment ending a text is not left when it
+    /// begins a word the batch holds more often, and is left when it does not, or does not end
+    /// the text.
+    #[test]
+    fn the_gate_reads_a_head_and_a_cut_fragment_as_the_replacement_does() {
+        let r = compiled(&m::RedactionPolicy {
+            rules: vec![m::RedactionRule {
+                name: "Ticket".to_string(),
+                pattern: r"tkt\d+".to_string(),
+                replacement: String::new(),
+            }],
+            ..full_policy(
+                &[m::RedactionClass::RareName],
+                &[],
+                Some(1),
+                &[m::RedactionClass::RareName],
+            )
+        });
+        let text = "see Notetkt42 now";
+        let mut batch = r.batch();
+        batch.reserve(text);
+        let out = batch.replace(text);
+        assert_eq!(out, "see [Name-1][Ticket-1] now");
+        assert_eq!(batch.left(&out), BTreeSet::new(), "{out}");
+
+        let mut batch = r.batch();
+        for _ in 0..3 {
+            batch.reserve("by Co-Authored-By");
+        }
+        let none = BTreeSet::new();
+        let rare = BTreeSet::from(["RareName"]);
+        assert_eq!(batch.left("by Co-Auth"), none);
+        assert_eq!(batch.left("by Co-"), none);
+        assert_eq!(batch.left("by Co"), none);
+        assert_eq!(batch.left("by Co-Authored-By"), none);
+        assert_eq!(batch.left("by Rowan"), rare, "a rare name ending a text");
+        assert_eq!(
+            batch.left("by Co-Auth here"),
+            rare,
+            "a fragment not at a cut"
+        );
+        assert_eq!(
+            batch.left("Rowan by Co-Auth"),
+            rare,
+            "a rare name before a cut"
+        );
     }
 
     #[test]

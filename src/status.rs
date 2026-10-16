@@ -30,12 +30,14 @@ pub const HOOK_TIMEOUT_S: u64 = 10;
 pub const METRICS: &str = "metrics.prom";
 
 /// Every outcome a source's run records, in the order the spec declares them.
-pub const OUTCOMES: [m::RunOutcome; 6] = [
+pub const OUTCOMES: [m::RunOutcome; 8] = [
     m::RunOutcome::Ran,
     m::RunOutcome::FetchFailed,
     m::RunOutcome::ExtractionFailed,
     m::RunOutcome::ApplyRefused,
     m::RunOutcome::StoreOutcomeUnknown,
+    m::RunOutcome::ConnectionUnavailable,
+    m::RunOutcome::BatchTooLarge,
     m::RunOutcome::Disabled,
 ];
 
@@ -46,6 +48,8 @@ pub fn outcome_name(outcome: m::RunOutcome) -> &'static str {
         m::RunOutcome::ExtractionFailed => "extraction-failed",
         m::RunOutcome::ApplyRefused => "apply-refused",
         m::RunOutcome::StoreOutcomeUnknown => "store-outcome-unknown",
+        m::RunOutcome::ConnectionUnavailable => "connection-unavailable",
+        m::RunOutcome::BatchTooLarge => "batch-too-large",
         m::RunOutcome::Disabled => "disabled",
     }
 }
@@ -121,7 +125,9 @@ pub fn hook_outcome(outcome: m::RunOutcome, disabled: bool) -> Option<m::RunOutc
         m::RunOutcome::FetchFailed
         | m::RunOutcome::ExtractionFailed
         | m::RunOutcome::ApplyRefused
-        | m::RunOutcome::StoreOutcomeUnknown => Some(if disabled {
+        | m::RunOutcome::StoreOutcomeUnknown
+        | m::RunOutcome::ConnectionUnavailable
+        | m::RunOutcome::BatchTooLarge => Some(if disabled {
             m::RunOutcome::Disabled
         } else {
             outcome

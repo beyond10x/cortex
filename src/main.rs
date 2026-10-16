@@ -275,9 +275,7 @@ fn main() -> ExitCode {
                 Err(e) => return fail(e),
             };
             let tools = || run::Tools {
-                connectors: Connectors {
-                    bin: cli.connectors.clone(),
-                },
+                connectors: Connectors::new(cli.connectors.clone()),
                 claude: cli.claude.clone(),
                 codex: cli.codex.clone(),
             };
@@ -1798,12 +1796,24 @@ const EXIT_DISABLED: u8 = 3;
 /// broken source.
 const EXIT_STORE_OUTCOME_UNKNOWN: u8 = 4;
 
+/// The exit status of a `run` that ended because Connectors answered a retryable failure to every
+/// attempt of the connection's revalidation before the run fetched anything: distinct from a
+/// failed run's 1, so a scheduler tells a Connectors fault, which is not counted against the
+/// source, from a broken source.
+const EXIT_CONNECTION_UNAVAILABLE: u8 = 5;
+
+/// The exit status of a `run` that ended because a part of an extraction batch still did not fit
+/// the model's window after it was split as far as it may be: not counted against the source.
+const EXIT_BATCH_TOO_LARGE: u8 = 6;
+
 /// The exit status of each `run` outcome, which an external scheduler reads instead of the line.
 fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
     match outcome {
         m::RunSourceOutcome::Ran { .. } | m::RunSourceOutcome::Fetched { .. } => 0,
         m::RunSourceOutcome::Disabled { .. } => EXIT_DISABLED,
         m::RunSourceOutcome::StoreOutcomeUnknown { .. } => EXIT_STORE_OUTCOME_UNKNOWN,
+        m::RunSourceOutcome::ConnectionUnavailable { .. } => EXIT_CONNECTION_UNAVAILABLE,
+        m::RunSourceOutcome::BatchTooLarge { .. } => EXIT_BATCH_TOO_LARGE,
         m::RunSourceOutcome::FetchOnlyFailed { .. }
         | m::RunSourceOutcome::FetchFailed { .. }
         | m::RunSourceOutcome::ExtractionFailed { .. }
@@ -1855,6 +1865,8 @@ fn run_source(
                 ("output_tokens", source_ran.output_tokens),
                 ("fixed_input_tokens", source_ran.fixed_input_tokens),
                 ("documents_input_tokens", source_ran.documents_input_tokens),
+                ("batch_chars", Some(source_ran.batch_chars)),
+                ("splits", Some(source_ran.splits)),
             ] {
                 detail[key] = json!(value);
             }
@@ -1874,6 +1886,11 @@ fn run_source(
             // Present only when a parent was skipped: a run that skipped none reports as before.
             if !report.skipped.is_empty() {
                 detail["skipped"] = json!(report.skipped);
+            }
+            // Present only when a document alone did not fit the model's window, and was left
+            // out: other runs report as before.
+            if !report.too_large.is_empty() {
+                detail["too_large"] = json!(report.too_large);
             }
             // Present only when EKR rejected a part: a run that had none reports as before.
             if !report.rejected.is_empty() {
@@ -1973,6 +1990,26 @@ fn run_source(
         m::RunSourceOutcome::StoreOutcomeUnknown { error } => (
             Done {
                 outcome: "store-outcome-unknown",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            None,
+        ),
+        // Not a failure of the source either: Connectors could not revalidate its connection
+        // before anything was fetched. No `RecordFailure`; status, metric and hook report it.
+        m::RunSourceOutcome::ConnectionUnavailable { error } => (
+            Done {
+                outcome: "connection-unavailable",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            None,
+        ),
+        // Not a failure of the source either: no `RecordFailure`; status, metric and hook report
+        // it.
+        m::RunSourceOutcome::BatchTooLarge { error } => (
+            Done {
+                outcome: "batch-too-large",
                 ok: false,
                 detail: json!({"reason": error.reason}),
             },

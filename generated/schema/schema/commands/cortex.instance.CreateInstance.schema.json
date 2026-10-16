@@ -36,8 +36,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "4d78dbc9fefa8ec583bfc00d89d8a461b37b910b77d90cf3b69c991fd6b95086",
-    "contract_digest": "slice-sha256/2:571d9dfd7fd12e6770a83c80a498a2f636b9b0276ab0449f40ea2d6b6d696852",
+    "source_digest": "fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58",
+    "contract_digest": "slice-sha256/2:2a88335bc9e0a49f795bd6d21ea4bb27511bcd498a619bd1937eb78471a5142a",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -497,6 +497,9 @@
         },
         "max_context_tokens": {
           "type": "integer"
+        },
+        "max_output_tokens": {
+          "type": "integer"
         }
       },
       "required": [
@@ -541,6 +544,9 @@
         },
         "instructions": {
           "type": "string"
+        },
+        "batch_chars": {
+          "type": "integer"
         }
       },
       "required": [

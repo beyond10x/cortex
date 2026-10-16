@@ -42,6 +42,9 @@ pub struct Document {
 pub enum FetchError {
     Missing(String),
     Failed(String),
+    /// [`InvokeError::Unavailable`]: Connectors could not revalidate the connection before the run
+    /// fetched anything.
+    Unavailable(String),
 }
 
 impl From<InvokeError> for FetchError {
@@ -49,6 +52,7 @@ impl From<InvokeError> for FetchError {
         match e {
             InvokeError::Missing(m) => FetchError::Missing(m),
             InvokeError::Failed(m) | InvokeError::Lapsed(m) => FetchError::Failed(m),
+            InvokeError::Unavailable(m) => FetchError::Unavailable(m),
         }
     }
 }
@@ -56,7 +60,7 @@ impl From<InvokeError> for FetchError {
 impl std::fmt::Display for FetchError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Missing(m) | Self::Failed(m) => f.write_str(m),
+            Self::Missing(m) | Self::Failed(m) | Self::Unavailable(m) => f.write_str(m),
         }
     }
 }

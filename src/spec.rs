@@ -307,6 +307,9 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
             return Err(format!("model.{field} must be above 0"));
         }
     }
+    if spec.model.batch_chars.is_some_and(|n| n < 1_000) {
+        return Err("model.batch_chars must be at least 1000".into());
+    }
     if spec.model.timeout_s <= 0 {
         return Err("model.timeout_s must be above 0".into());
     }
@@ -338,6 +341,20 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
         }
         if gateway.max_context_tokens.is_some_and(|n| n <= 0) {
             return Err("model.gateway.max_context_tokens must be above 0".into());
+        }
+        if let Some(output) = gateway.max_output_tokens {
+            if output <= 0 {
+                return Err("model.gateway.max_output_tokens must be above 0".into());
+            }
+            if gateway
+                .max_context_tokens
+                .is_some_and(|context| output >= context)
+            {
+                return Err(
+                    "model.gateway.max_output_tokens must be below model.gateway.max_context_tokens"
+                        .into(),
+                );
+            }
         }
         if let Some(refusal) = crate::schedule::token_env_refusal(&gateway.token_env) {
             return Err(refusal);

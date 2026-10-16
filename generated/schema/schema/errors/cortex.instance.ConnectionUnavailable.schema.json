@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ConnectionUnavailable payload",
+  "description": "Connectors answered a retryable operational failure (`kind` `operational`, `next_action` `retry_explicitly`) to every attempt of the run's revalidation of its connection, or of the `connections list` read that resolves a profile-named connection, at most 4 attempts with pauses of 5 s, 10 s and 20 s, before the run fetched any document. Nothing about the source was wrong: the failure is not counted against it, and the next run starts as usual.",
+  "x-ess-name": "cortex.instance.ConnectionUnavailable",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58",
+    "contract_digest": "slice-sha256/2:860b508634236b00e5491dd64b9e19c54c5994f55e617a1a077fb0a33fa73eb2",
+    "regenerate": "ess generate"
+  }
+}

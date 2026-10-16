@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 4d78dbc9fefa8ec583bfc00d89d8a461b37b910b77d90cf3b69c991fd6b95086
-contract digest slice-sha256/2:b98224683038bea6025b88e470b066c0af9026784c7f98f40c3a3080c018d431
+model digest fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58
+contract digest slice-sha256/2:b1983b6adc7d8842e9db4813bfcf4a4607ea84f282db7184e5764a85fa9b152c
 do not edit: regenerate with `ess generate`
 -->
 
@@ -180,15 +180,16 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 
 ### `ModelGateway`
 
-`cortex.instance.ModelGateway` is a record of three fields:
+`cortex.instance.ModelGateway` is a record of four fields:
 
 - `base_url` — `String`
 - `token_env` — `String`
 - `max_context_tokens` — `Optional<Integer>`, which may be absent
+- `max_output_tokens` — `Optional<Integer>`, which may be absent
 
 ### `ModelSpec`
 
-`cortex.instance.ModelSpec` is a record of nine fields:
+`cortex.instance.ModelSpec` is a record of 10 fields:
 
 - `model` — `String`
 - `backend` — `Optional<cortex.instance.ModelBackend>`, which may be absent
@@ -199,6 +200,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 - `gateway` — `Optional<cortex.instance.ModelGateway>`, which may be absent
 - `timeout_s` — `Integer`
 - `instructions` — `Optional<String>`, which may be absent
+- `batch_chars` — `Optional<Integer>`, which may be absent
 
 ### `MonitoringSpec`
 
@@ -356,7 +358,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 
 ### `RunOutcome`
 
-`cortex.instance.RunOutcome` is one of `ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown` and `disabled`.
+`cortex.instance.RunOutcome` is one of `ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable`, `batch-too-large` and `disabled`.
 
 ### `SchemaCardinality`
 
@@ -973,7 +975,7 @@ It takes:
 - `source_id` — `cortex.instance.SourceId`
 - `fetch_only` — `Optional<Boolean>`, which may be absent
 
-It has nine outcomes.
+It has 11 outcomes.
 
 **`disabled`** — The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome. Taken when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)` holds of the input. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.RunSkipped`. It sets `last_outcome` from `"disabled"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test establishes the declared subject state and constructs input selecting this branch in that state.
 
@@ -988,6 +990,10 @@ It has nine outcomes.
 **`apply-refused`** — Nothing was applied; the source's status records the outcome and its reason, and the scheduler then sends RecordFailure. Decided outside the input: EKR refuses the merged extraction document. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.ApplyRefused`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"apply-refused"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
 **`store-outcome-unknown`** — The source's status records the outcome and its reason, and the scheduler sends no RecordFailure: the store, not the source, failed, so the failure is not counted and never disables the source. The next run settles the stage; a gated `sqlite` run that kept a snapshot is undone from it; otherwise the next run extracts the batch whose apply was unknown again. Decided outside the input: EKR answers that the publication outcome of a store write of the run (a stage verb or `apply-extraction`) is unknown. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.StoreOutcomeUnknown`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"store-outcome-unknown"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
+
+**`connection-unavailable`** — Nothing was fetched or applied; the source's status records the outcome and its reason, naming the last error, and the scheduler sends no RecordFailure: Connectors, not the source, failed, so the failure is not counted and never disables the source. The next scheduled run starts as usual. Decided outside the input: Connectors answers a retryable operational failure to every attempt of `connections revalidate` (or of the `connections list` read before it, which for a source naming a profile is also the read that resolves the profile) before the run's first fetch. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.ConnectionUnavailable`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"connection-unavailable"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
+
+**`batch-too-large`** — The source's status records the outcome and its reason, which names the documents of the part that did not fit and the batch size used, and the scheduler sends no RecordFailure: the batch, not the source, failed, so the failure is not counted and never disables the source. The batches before it stay applied; the rest are extracted by a later run. A part of one document is not this outcome: the run leaves it out and goes on. Decided outside the input: `claude` answers that a part of several documents of an extraction batch is too long for the model's window, or that its answer was cut off at the output limit, after the batch was split 3 deep. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.BatchTooLarge`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"batch-too-large"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
 **`ran`** — Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it. `cost_counted` is false behind a model gateway, where `cost_usd` is as reported and bounded nothing. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceRan`. It sets `runs` from `its previous value plus 1`, `consecutive_failures` from `"0"`, `last_outcome` from `"ran"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -1226,6 +1232,8 @@ It carries:
 - `output_tokens` — `Optional<Integer>`, which may be absent
 - `fixed_input_tokens` — `Optional<Integer>`, which may be absent
 - `documents_input_tokens` — `Optional<Integer>`, which may be absent
+- `batch_chars` — `Integer`
+- `splits` — `Integer`
 
 Emitted by `cortex.instance.RunSource` on its `ran` outcome.
 
@@ -1253,6 +1261,16 @@ It carries:
 
 Reported by `cortex.instance.AdoptInstance` on its `backend-mismatch` outcome.
 
+### `BatchTooLarge`
+
+A part of several documents of an extraction batch was still too long for the model's window, or its answer still cut off at the output limit, after the batch was split 3 deep. Nothing about the source was wrong; a later run extracts that part, and a smaller `model.batch_chars` makes its batches smaller. A single document that alone does not fit is not this error: the run leaves it out and goes on.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.RunSource` on its `batch-too-large` outcome.
+
 ### `ConnectionMissing`
 
 Connectors lists no live connection with the id a source or the postgres store names, or not exactly one live connection with the profile it names. Run `connectors connections connect` for it, or revoke the extra ones, then try again.
@@ -1263,6 +1281,16 @@ It carries:
 - `reason` — `String`
 
 Reported by `cortex.instance.CreateInstance` on its `connection-missing` outcome.
+
+### `ConnectionUnavailable`
+
+Connectors answered a retryable operational failure (`kind` `operational`, `next_action` `retry_explicitly`) to every attempt of the run's revalidation of its connection, or of the `connections list` read that resolves a profile-named connection, at most 4 attempts with pauses of 5 s, 10 s and 20 s, before the run fetched any document. Nothing about the source was wrong: the failure is not counted against it, and the next run starts as usual.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.RunSource` on its `connection-unavailable` outcome.
 
 ### `ExtractionFailed`
 
@@ -1501,4 +1529,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `4d78dbc9fefa8ec583bfc00d89d8a461b37b910b77d90cf3b69c991fd6b95086` · contract digest `slice-sha256/2:b98224683038bea6025b88e470b066c0af9026784c7f98f40c3a3080c018d431`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58` · contract digest `slice-sha256/2:b1983b6adc7d8842e9db4813bfcf4a4607ea84f282db7184e5764a85fa9b152c`. Do not edit this file; change the specification and regenerate it with `ess generate`.

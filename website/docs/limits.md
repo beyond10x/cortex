@@ -57,7 +57,11 @@ stand; [Status](./status.mdx) lists what is planned.
   person the store already knows is hidden in the prompt's known entities too. Common sentence
   openers (`The`, `This`, `We` and the like) are never taken. A rare product or place name, and
   a capitalised word such as `Thanks` or `Subject`, is hidden from the model too, and restored; a
-  person named often in the batch and not listed in `known_names` is not hidden.
+  person named often in the batch and not listed in `known_names` is not hidden. A word with
+  hyphens, such as `Jean-Luc` or `Co-Authored-By`, is one word: it is hidden whole or kept
+  whole, and no part of a word seen more than `rare_limit` times is taken. A name glued to a
+  lower-case letter (`useFoo-Bar`) is read as part of an identifier and not taken; one glued to an
+  underscore or to CJK text has its tail taken (`_Jean-Luc_`), but not its head.
 - **Known names are matched in any case.** A name in `known_names` is matched as a whole word,
   in any upper or lower case, and in either Unicode form (composed `ë` or `e` with a combining
   mark).
@@ -137,6 +141,15 @@ stand; [Status](./status.mdx) lists what is planned.
   gateway instance created by an earlier release with no `budget_tokens` keeps running, and its
   dollar limits still count the reported cost, as before, until `cortex update` gives it a
   `budget_tokens`.
+- **The batch size is an estimate, not a token count.** Without `model.batch_chars`, a batch
+  behind a gateway is sized at 1.5 characters per token of the model's window; dense text such as
+  code can still be too long, or draw an answer cut off at the output limit. cortex then splits
+  the batch, at most 3 deep; a part of several documents that still does not fit ends the run as
+  `batch-too-large`, and one document that alone does not fit is left out, named in `too_large`
+  and not extracted until its text changes (see
+  [The batch size](./spec-file.md#the-batch-size)). The size counts UTF-8 bytes, so text in a
+  non-Latin script fills a batch 2 to 3 times as fast. `cortex quality` and `cortex schema`
+  keep their own batches of 20 facts.
 - **A token limit is checked between calls, not within one.** `claude` takes no token limit, so a
   run, quality measurement or schema round can pass `budget_tokens` or `daily_ceiling_tokens` by
   the tokens of its last call, and commands running at once can each pass the daily one by a

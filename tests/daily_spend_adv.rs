@@ -17,6 +17,7 @@ fn model(ceiling: &str) -> m::ModelSpec {
         gateway: None,
         timeout_s: 60,
         instructions: None,
+        batch_chars: None,
     }
 }
 

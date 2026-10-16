@@ -62,6 +62,7 @@ fn placeholder_spec() -> m::InstanceSpec {
             gateway: None,
             timeout_s: 1,
             instructions: None,
+            batch_chars: None,
         },
         sources: vec![],
         serve: m::ServeSpec { view_port: None },
@@ -163,6 +164,8 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "output_tokens": e.output_tokens,
                 "fixed_input_tokens": e.fixed_input_tokens,
                 "documents_input_tokens": e.documents_input_tokens,
+                "batch_chars": e.batch_chars,
+                "splits": e.splits,
             }),
         ),
     };
@@ -290,9 +293,7 @@ impl Scenario {
         let app = Cortex::new(Generated::new(Ports {
             home: Home::new(std::env::temp_dir().join("cortex-conformance-unused")),
             tools: Tools {
-                connectors: Connectors {
-                    bin: "connectors-unused".into(),
-                },
+                connectors: Connectors::new("connectors-unused".into()),
                 claude: "claude-unused".into(),
                 codex: "codex-unused".into(),
             },
@@ -493,6 +494,14 @@ impl Scenario {
                 m::RunSourceOutcome::StoreOutcomeUnknown { error } => (
                     "store-outcome-unknown",
                     Some(("StoreOutcomeUnknown", json!({"reason": error.reason}))),
+                ),
+                m::RunSourceOutcome::ConnectionUnavailable { error } => (
+                    "connection-unavailable",
+                    Some(("ConnectionUnavailable", json!({"reason": error.reason}))),
+                ),
+                m::RunSourceOutcome::BatchTooLarge { error } => (
+                    "batch-too-large",
+                    Some(("BatchTooLarge", json!({"reason": error.reason}))),
                 ),
                 m::RunSourceOutcome::Ran { .. } => ("ran", None),
                 m::RunSourceOutcome::FetchOnlyFailed { error } => (
@@ -910,7 +919,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        63,
+        67,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

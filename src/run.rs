@@ -1,7 +1,7 @@
 //! `RunSource`, the obligation `generated/cortex-model/PLAN.md` leaves to the implementation:
 //! fetch, keep what is new or changed, extract in batches within the run's budget, apply.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 
 use cortex_model::instance as m;
@@ -37,6 +37,13 @@ pub enum Failure {
     /// `apply-extraction` or a transaction; `crate::ekr::outcome_unknown`): a fault of the store,
     /// not of the source, which the next run settles.
     StoreOutcomeUnknown(String),
+    /// Connectors answered a retryable failure to every attempt of the connection's revalidation
+    /// before the run fetched anything ([`crate::connectors::InvokeError::Unavailable`]): a fault
+    /// of Connectors, not of the source, which the next run starts over.
+    ConnectionUnavailable(String),
+    /// A part of an extraction batch still did not fit the model's window after the batch was
+    /// split as far as it may be: not a fault of the source, so it is not counted.
+    BatchTooLarge(String),
 }
 
 #[derive(Debug)]
@@ -93,6 +100,15 @@ pub struct Report {
     /// of each request and to its documents ([`extract::split_tokens`]); `None` as the input is.
     pub fixed_input_tokens: Option<i64>,
     pub documents_input_tokens: Option<i64>,
+    /// The most characters of document text, counted as UTF-8 bytes, the run put in one
+    /// extraction request (`model.batch_chars`, given or derived).
+    pub batch_chars: usize,
+    /// The batches the run split in two because a request did not fit the model's window.
+    pub splits: usize,
+    /// Documents left out because a part of that one document alone still did not fit the
+    /// model's window, by key (masked); each is marked seen, so it is not asked again until its
+    /// text changes.
+    pub too_large: Vec<String>,
 }
 
 /// An applied document a part EKR rejected belongs to: its key and EKR's refusals, joined.
@@ -166,6 +182,9 @@ impl Default for Report {
             usage: extract::Usage::ZERO,
             fixed_input_tokens: Some(0),
             documents_input_tokens: Some(0),
+            batch_chars: BATCH_CHARS,
+            splits: 0,
+            too_large: Vec::new(),
         }
     }
 }
@@ -204,8 +223,40 @@ pub fn add_cost(total: Option<f64>, answer: Option<f64>) -> Option<f64> {
     Some(total? + answer?)
 }
 
-/// Characters of document text per model call.
+/// Characters of document text per model call, when the spec neither gives nor lets cortex derive
+/// a size ([`batch_size`]), and the most a derived size is. Every size counts UTF-8 bytes.
 const BATCH_CHARS: usize = 60_000;
+/// The least a size derived from the model's window is.
+const DERIVED_MIN_CHARS: i64 = 4_000;
+/// How deep a batch that did not fit the model's window is split: at most 8 parts.
+const MAX_SPLITS: u32 = 3;
+
+/// The characters of document text, counted as UTF-8 bytes, one extraction request carries:
+/// `model.batch_chars` when given; else, behind a gateway that gives `max_context_tokens`, 1.5
+/// characters per token of the window less the output reserve (`max_output_tokens`, else a
+/// quarter of the window), less the request's fixed part (`fixed`, asked only then), between
+/// 4,000 and 60,000; else 60,000.
+fn batch_size(
+    model: &m::ModelSpec,
+    fixed: impl FnOnce() -> Result<usize, Failure>,
+) -> Result<usize, Failure> {
+    if let Some(n) = model.batch_chars {
+        return Ok(n.max(1) as usize);
+    }
+    let Some(gateway) = &model.gateway else {
+        return Ok(BATCH_CHARS);
+    };
+    let Some(context) = gateway.max_context_tokens else {
+        return Ok(BATCH_CHARS);
+    };
+    let reserve = gateway.max_output_tokens.unwrap_or(context / 4);
+    let room = context.saturating_sub(reserve).max(0);
+    let chars = room
+        .saturating_mul(3)
+        .saturating_div(2)
+        .saturating_sub(fixed()? as i64);
+    Ok(chars.clamp(DERIVED_MIN_CHARS, BATCH_CHARS as i64) as usize)
+}
 /// Known entity names per node type given to the model.
 const KNOWN_PER_TYPE: usize = 50;
 
@@ -322,6 +373,7 @@ impl Planned {
         )
         .map_err(|e| match e {
             FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
+            FetchError::Unavailable(m) => Failure::ConnectionUnavailable(m),
         })
     }
 }
@@ -430,6 +482,7 @@ fn seed_documents(layout: &Layout, tools: &Tools, undoable: bool) -> Result<Repo
     )
     .map_err(|e| match e {
         FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
+        FetchError::Unavailable(m) => Failure::ConnectionUnavailable(m),
     })?;
     process(
         layout,
@@ -787,7 +840,7 @@ fn process_in(
         }
         unread(&mut report, &fetched.unread, redactor.as_ref());
         if undoable {
-            held_to_gate(layout, spec, &store, label, &report, before, started)?;
+            held_to_gate(layout, spec, &store, label, &report, None, before, started)?;
         }
         let failures = fetched.child_failures.clone();
         finish(
@@ -827,11 +880,21 @@ fn process_in(
     let mut tokens = spend::TokenBudget::new(&spec.model);
     let mut entities = load_entities(layout);
 
+    // The fixed part as the first request will carry it: the system prompt and the answer's
+    // schema (both sent as flags) and the prompt up to the documents.
+    let size = batch_size(&spec.model, || {
+        let ontology = store.ontology().map_err(Failure::Apply)?;
+        let known = Known::from_ontology(&ontology, entities.clone());
+        let (_, fixed) =
+            extract::prompt_split(&spec.description, instructions.as_deref(), &known, &[]);
+        Ok(extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed)
+    })?;
+    report.batch_chars = size;
     let issued: Vec<_> = selected
         .into_iter()
         .map(|d| evidence::issue(d, &operator, started))
         .collect();
-    let batches = batches(issued);
+    let batches = batches(issued, size);
     // `refuse_if_left`: every batch is checked as the model would be shown it before the first
     // model call, so a refusal fails the run with nothing sent and nothing stored.
     if let Some(r) = redactor.as_ref().filter(|r| r.refuses()) {
@@ -843,9 +906,17 @@ fn process_in(
             }
         }
     }
-    for (n, batch) in batches.into_iter().enumerate() {
-        // `None` behind a gateway: no dollar amount bounds the call, and none is passed to
-        // `claude`.
+    // Each batch with how deep it was split; a part that did not fit is split in two and both
+    // halves are asked before the next batch.
+    let mut queue: VecDeque<(Vec<evidence::Issued>, u32)> =
+        batches.into_iter().map(|b| (b, 0)).collect();
+    let mut n = 0;
+    // Why the run ended `batch-too-large`, when a part still did not fit.
+    let mut too_large: Option<String> = None;
+    while let Some((batch, depth)) = queue.pop_front() {
+        let dir = run_dir.join(format!("batch-{n}"));
+        n += 1;
+        // Behind a gateway no dollar amount bounds the call, and none is passed to `claude`.
         let remaining = match budget {
             Some(budget) if budget - spent <= 0.0 => {
                 report.stopped = Some(format!("budget of {budget} USD spent"));
@@ -907,7 +978,6 @@ fn process_in(
                 (prompt, Some(p))
             }
         };
-        let dir = run_dir.join(format!("batch-{n}"));
         let asked = model.ask(&dir.join("claude"), &schema, &prompt, remaining);
         let (calls, usage) = match &asked {
             Ok(answer) => (answer.calls, answer.usage),
@@ -927,11 +997,47 @@ fn process_in(
         // the answer's schema (both sent as flags) and the prompt up to the documents.
         let fixed_bytes = extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed;
         report.add_calls(calls, usage, fixed_bytes, prompt.len() - fixed);
-        let answer = match asked.map_err(|refused| refused.message) {
+        let answer = match asked {
             Ok(answer) => answer,
-            Err(e) if report.documents_applied == 0 => return Err(Failure::Extract(e)),
-            Err(e) => {
-                report.stopped = Some(e);
+            // Too long for the model's window, or cut off at the output limit: split in two by
+            // documents and ask each half, down to one document and at most 3 splits deep. A part
+            // of one document is left out alone, as a record that does not convert is: named in
+            // `too_large` and marked seen, so it is not asked again until its text changes.
+            Err(refused) if refused.unfit.is_some() => {
+                if let [issued] = batch.as_slice() {
+                    report
+                        .too_large
+                        .push(masked_key(redactor.as_ref(), &issued.doc.key));
+                    seen.record(&issued.doc, applied_at);
+                    seen.save(&seen_path).map_err(Failure::Apply)?;
+                    continue;
+                }
+                if depth < MAX_SPLITS {
+                    let mut first = batch;
+                    let second = first.split_off(first.len() / 2);
+                    queue.push_front((second, depth + 1));
+                    queue.push_front((first, depth + 1));
+                    report.splits += 1;
+                    continue;
+                }
+                let keys: Vec<String> = batch
+                    .iter()
+                    .map(|i| masked_key(redactor.as_ref(), &i.doc.key))
+                    .collect();
+                too_large = Some(format!(
+                    "a batch part did not fit the model's window ({}) after {depth} splits \
+                     (batch_chars {size}); not extracted: {}; a later run extracts it and the \
+                     batches after it, and a smaller model.batch_chars makes its batches smaller",
+                    refused.unfit.map_or("", extract::Unfit::text),
+                    keys.join(", ")
+                ));
+                break;
+            }
+            Err(refused) if report.documents_applied == 0 => {
+                return Err(Failure::Extract(refused.message))
+            }
+            Err(refused) => {
+                report.stopped = Some(refused.message);
                 break;
             }
         };
@@ -1003,16 +1109,34 @@ fn process_in(
                 .as_bytes(),
         );
     }
+    if let Some(why) = &too_large {
+        if report.documents_applied == 0 {
+            return Err(Failure::BatchTooLarge(why.clone()));
+        }
+        report.stopped = Some(why.clone());
+    }
     unread(&mut report, &fetched.unread, redactor.as_ref());
     if undoable {
-        held_to_gate(layout, spec, &store, label, &report, before, started)?;
+        held_to_gate(
+            layout,
+            spec,
+            &store,
+            label,
+            &report,
+            too_large.as_deref(),
+            before,
+            started,
+        )?;
     }
     let failures = fetched.child_failures.clone();
     finish(
         &mut seen, &seen_path, &report, wanted, held_since, window, failures,
     )?;
     log(layout, label, &report, started);
-    Ok(report)
+    match too_large {
+        Some(why) => Err(Failure::BatchTooLarge(why)),
+        None => Ok(report),
+    }
 }
 
 /// The run's snapshot ([`BeforeApply`]), the name it was kept under, and whether an apply
@@ -1168,6 +1292,10 @@ impl Failure {
             Failure::Extract(m) => Failure::Extract(format!("{m}; {more}")),
             Failure::Apply(m) => Failure::Apply(format!("{m}; {more}")),
             Failure::StoreOutcomeUnknown(m) => Failure::StoreOutcomeUnknown(format!("{m}; {more}")),
+            Failure::ConnectionUnavailable(m) => {
+                Failure::ConnectionUnavailable(format!("{m}; {more}"))
+            }
+            Failure::BatchTooLarge(m) => Failure::BatchTooLarge(format!("{m}; {more}")),
         }
     }
 
@@ -1177,7 +1305,9 @@ impl Failure {
             Failure::Fetch(m)
             | Failure::Extract(m)
             | Failure::Apply(m)
-            | Failure::StoreOutcomeUnknown(m) => m,
+            | Failure::StoreOutcomeUnknown(m)
+            | Failure::ConnectionUnavailable(m)
+            | Failure::BatchTooLarge(m) => m,
         }
     }
 }
@@ -1385,13 +1515,17 @@ impl Staged {
 /// Holds a source run that applied something to the spec's `gate`. A failed check fails the run
 /// as `apply-refused`, so the scheduler counts it as a failed run of the source: the run is undone
 /// ([`undo`]), and `cortex.log` records each failed check with its measure and value, the snapshot
-/// restored, and the failure's reason.
+/// restored, and the failure's reason. A run that left a part unfit for the model's window (the
+/// documents in `report.too_large`, or `unfit`, why a part of several documents ended it) says so
+/// in that reason too; its counting is that of any run its gate refuses.
+#[allow(clippy::too_many_arguments)]
 fn held_to_gate(
     layout: &Layout,
     spec: &m::InstanceSpec,
     store: &crate::ekr::Store,
     label: &str,
     report: &Report,
+    unfit: Option<&str>,
     before: &mut Undo,
     started: i64,
 ) -> Result<(), Failure> {
@@ -1423,7 +1557,16 @@ fn held_to_gate(
             &Systemd::from_env(home),
         ),
     };
-    let why = format!("{}; {undone}", gate::reason(&failed));
+    let mut why = format!("{}; {undone}", gate::reason(&failed));
+    if !report.too_large.is_empty() {
+        why.push_str(&format!(
+            "; left out as too large for the model's window: {}",
+            report.too_large.join(", ")
+        ));
+    }
+    if let Some(unfit) = unfit {
+        why.push_str(&format!("; {unfit}"));
+    }
     let mut line = log_line(label, report, started);
     line["gate"] = json!({
         "failed": failed.iter().map(gate::Failed::json).collect::<Vec<_>>(),
@@ -1486,13 +1629,14 @@ fn undo(
     )
 }
 
-/// `issued` in batches of at most [`BATCH_CHARS`] characters of text, a longer document alone.
-fn batches(issued: Vec<evidence::Issued>) -> Vec<Vec<evidence::Issued>> {
+/// `issued` in batches of at most `size` characters of text, counted as UTF-8 bytes (as before
+/// `model.batch_chars`: a non-Latin character counts 2 to 3), a longer document alone.
+fn batches(issued: Vec<evidence::Issued>, size: usize) -> Vec<Vec<evidence::Issued>> {
     let mut batches: Vec<Vec<evidence::Issued>> = vec![Vec::new()];
     let mut chars = 0;
     for item in issued {
         let len = item.doc.text.len();
-        if chars + len > BATCH_CHARS && !batches.last().expect("one batch").is_empty() {
+        if chars + len > size && !batches.last().expect("one batch").is_empty() {
             batches.push(Vec::new());
             chars = 0;
         }
@@ -1577,7 +1721,7 @@ fn apply_records(
         return Ok(());
     }
     let index = r.source.index(&issued, r.parents);
-    for (n, batch) in batches(issued).into_iter().enumerate() {
+    for (n, batch) in batches(issued, BATCH_CHARS).into_iter().enumerate() {
         let mapped = r.source.document(&batch, &index);
         let (doc, refused) = extract::merge(&mapped.document, &batch);
         report.facts_refused += refused;
@@ -1819,7 +1963,16 @@ fn log_line(label: &str, report: &Report, started: i64) -> serde_json::Value {
         "cost_usd": report.cost_usd,
         "seconds": (now_ms() - started) as f64 / 1000.0,
         "stopped": report.stopped,
+        "batch_chars": report.batch_chars,
     });
+    // Present only when a batch was split: a run that split none logs what it did before.
+    if report.splits > 0 {
+        line["splits"] = json!(report.splits);
+    }
+    // Present only when a document alone did not fit the model's window: other runs log as before.
+    if !report.too_large.is_empty() {
+        line["too_large"] = json!(report.too_large);
+    }
     if let (Some(line), serde_json::Value::Object(calls)) =
         (line.as_object_mut(), report.calls_json())
     {

@@ -248,22 +248,18 @@ impl Launch {
     /// refused (`unavailable` at `readiness`).
     fn ready(&self, connection: &Connection) -> Result<(), String> {
         let id = self.resolve(connection)?;
-        crate::connectors::Connectors {
-            bin: self.connectors.clone(),
-        }
-        .ensure_ready(&connection.adapter, &id)
-        .map_err(|e| format!("{}:{id}: {e}", connection.adapter))
+        crate::connectors::Connectors::new(self.connectors.clone())
+            .ensure_ready(&connection.adapter, &id)
+            .map_err(|e| format!("{}:{id}: {e}", connection.adapter))
     }
 
     /// The id `connection` names: an id as given, a profile resolved through `connections list`
     /// once per process ([`crate::connectors::Connectors::resolve`]). A refusal names the adapter,
     /// the profile, the count and every matching id.
     pub fn resolve(&self, connection: &Connection) -> Result<String, String> {
-        crate::connectors::Connectors {
-            bin: self.connectors.clone(),
-        }
-        .resolve(&connection.adapter, &connection.connection)
-        .map_err(|e| e.to_string())
+        crate::connectors::Connectors::new(self.connectors.clone())
+            .resolve(&connection.adapter, &connection.connection)
+            .map_err(|e| e.to_string())
     }
 }
 

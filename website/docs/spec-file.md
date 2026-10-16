@@ -76,6 +76,38 @@ different seed files answers `seed-change-refused`.
 | `timeout_s` | the time limit of one model call, in seconds; above 0 |
 | `instructions` | optional text file whose content is added to every extraction prompt |
 | `gateway` | optional: a model gateway every `claude` call goes through, with no interactive sign-in. See [A model gateway](#a-model-gateway) |
+| `batch_chars` | optional: the most characters of document text in one extraction request, counted as UTF-8 bytes (a non-Latin character counts 2 to 3), a whole number of at least 1,000; `create`, `update` and `adopt` refuse a smaller one. Absent, it is derived from a gateway's window, else 60,000. See [The batch size](#the-batch-size) |
+
+### The batch size
+
+A run sends its documents to the model in batches, one `claude -p` call each, of at most
+`batch_chars` characters of document text; a longer document goes alone. A character is counted
+as its UTF-8 bytes, as before this setting: a Latin letter counts 1, a non-Latin character (Greek,
+Cyrillic, CJK) 2 to 3, for a given size, a derived one and the default alike. Without `batch_chars`,
+behind a `gateway` that gives `max_context_tokens`, the size follows the model's window: the input
+room is `max_context_tokens` less the output reserve (`max_output_tokens` when given, else a
+quarter of `max_context_tokens`), and the size is 1.5 characters per token of that room, less the
+characters of the request's fixed part (the system prompt, the answer's schema, the instance's
+description and instructions, the ontology and the known entity names), at least 4,000 and at most
+60,000. Otherwise it is 60,000. A gateway with `max_context_tokens: 65536` and
+`max_output_tokens: 24000` leaves 41,536 tokens of room, 62,304 characters before the fixed part.
+A run's report and its `cortex.log` line state the size it used as `batch_chars`.
+
+When `claude` answers that a request is too long for the model's window (`Prompt is too long`,
+or `maximum context length` from an OpenAI-compatible server behind a gateway),
+or that the answer was cut off at the output limit (`exceeded the … output token maximum`), the
+batch is split in two halves by documents and each half is asked again, at most 3 splits deep (a
+batch becomes at most 8 parts); a part of one document is not split. The report and `cortex.log`
+count the splits (`splits`). Such an answer is not asked again after a wait, and every call counts
+against the token and dollar limits as any call does.
+
+A part of one document that still does not fit is left out alone, and the run goes on with the
+batches after it and ends `ran`. The run's report and its `cortex.log` line name that document in
+`too_large`, and it is marked seen, so no later run asks it again until its text changes; no
+`batch_chars` makes one document smaller. A part of several documents that still does not fit
+after 3 splits ends the run as `batch-too-large`, exit status 6, which is not counted against the
+source (see [Operating](./operating.md#exit-statuses-of-cortex-run)); a later run extracts it, and
+a smaller `batch_chars` makes its batches smaller.
 
 ### The daily ceiling
 
@@ -119,16 +151,18 @@ model:
 |---|---|
 | `base_url` | the gateway's URL, passed to `claude` as `ANTHROPIC_BASE_URL`. It starts with `http://` or `https://`; `create`, `update` and `adopt` refuse an empty one or another scheme |
 | `token_env` | the name of the environment variable holding the gateway's token, never the token itself. Its value is read when each call is made and passed as `ANTHROPIC_AUTH_TOKEN`. A variable name (letters, digits and `_`, not starting with a digit), and not one cortex writes into a unit by value (`PATH`, `HOME`, a `CONNECTORS_*` or a `CORTEX_*` variable), nor any `XDG_*` or `ANTHROPIC_*` variable; `create`, `update` and `adopt` refuse another |
-| `max_context_tokens` | optional: passed as `CLAUDE_CODE_MAX_CONTEXT_TOKENS`; a whole number above 0, `create`, `update` and `adopt` refuse another |
+| `max_context_tokens` | optional: passed as `CLAUDE_CODE_MAX_CONTEXT_TOKENS`; a whole number above 0, `create`, `update` and `adopt` refuse another. Sets [the batch size](#the-batch-size) when `batch_chars` is absent |
+| `max_output_tokens` | optional: passed as `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, the most tokens of one answer; a whole number above 0 and below `max_context_tokens`, `create`, `update` and `adopt` refuse another. The output reserve of [the batch size](#the-batch-size) |
 
 cortex passes exactly that set to `claude`, from a run in your shell, a timer unit and a runner that
 calls `cortex run` directly alike; `model` names the gateway's model (`--model`). An
-`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` or `CLAUDE_CODE_MAX_CONTEXT_TOKENS` in cortex's own
-environment is replaced by the spec's, or removed when the spec does not set it, and
-`ANTHROPIC_API_KEY` is always removed. A missing or empty `token_env` fails the call before
-`claude` starts, with a reason naming the variable: a run answers `extraction-failed`. Without a
-`gateway`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and `CLAUDE_CODE_MAX_CONTEXT_TOKENS` are
-removed as well, so an instance never reaches a gateway by accident.
+`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_MAX_CONTEXT_TOKENS` or
+`CLAUDE_CODE_MAX_OUTPUT_TOKENS` in cortex's own environment is replaced by the spec's, or removed
+when the spec does not set it, and `ANTHROPIC_API_KEY` is always removed. A missing or empty
+`token_env` fails the call before `claude` starts, with a reason naming the variable: a run
+answers `extraction-failed`. Without a `gateway`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`,
+`CLAUDE_CODE_MAX_CONTEXT_TOKENS` and `CLAUDE_CODE_MAX_OUTPUT_TOKENS` are removed as well, so an
+instance never reaches a gateway by accident.
 
 A source's timer unit names the variable with `PassEnvironment=`, so the token reaches a scheduled
 run from the systemd user manager's environment (see

@@ -36,6 +36,46 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+## 0.5.4 — 2026-10-16
+
+### Fixed
+
+- An extraction batch fits the model it is sent to (issue #72). Behind a gateway with a 64k-token
+  window, 60,000 characters of merge-request text were too long for the model (`Prompt is too
+  long`) or drew an answer cut off at the output limit, and each such run counted as a failure
+  of the source. Now `model.batch_chars` (at least 1,000) sets the batch size, and without it a
+  gateway's `max_context_tokens` sets it, less the output reserve (the new
+  `model.gateway.max_output_tokens`, passed to `claude` as `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, else
+  a quarter of the window) and the request's fixed part. A batch `claude` answers as too long, or
+  whose answer was cut off (`Prompt is too long`, or an OpenAI-compatible server's `maximum
+  context length`), is split in two and asked again, at most 3 splits deep. One document that
+  alone still does not fit is left out, named in the run's new `too_large` field and `cortex.log`,
+  and marked seen until its text changes; the run goes on. A part of several documents that still
+  does not fit ends the run as the new outcome `batch-too-large`, exit status 6, which
+  `--record-failure` does not count: the batches before it stay applied and a later run extracts
+  the rest. The size counts UTF-8 bytes of document text, as the 60,000 before it did. A run's
+  report and `cortex.log` line state `batch_chars` and `splits`, as does the `SourceRan` event.
+- A capitalised word with hyphens that a batch holds more than `rare_limit` times is kept whole
+  by `RareName` (issue #71). Before, the part after its first hyphen was replaced as a rare name
+  (`Co-[Name-1]` for a frequent `Co-Authored-By` trailer), and with `refuse_if_left: [RareName]`
+  the part left standing (`Co`) was then found as a rare name, so the whole batch was refused.
+  Now no part of a word is a rare name unless the whole word is, and the `refuse_if_left` check
+  reads words the same way. A hyphenated name glued to an underscore or to CJK text
+  (`_Jean-Luc_`) still has its rare tail replaced; only a word glued to a lower-case letter, an
+  identifier such as `useFoo-Bar`, is skipped whole. The rare head of a word before a span another
+  class hides (`Co` of `Co-Jane`, `Jane` a known name) is replaced too, so the check does not
+  refuse it, and a text cut at `max_chars` inside a frequent word (`Co-Auth`) is not refused.
+- A transient Connectors failure of `connections revalidate` no longer counts against a source.
+  A container that started a run within a minute of its own start saw `connections revalidate`
+  answer `unavailable` at `dispatch` (`kind: operational`, `next_action: retry_explicitly`); the
+  run failed as `fetch-failed`, was counted, and two such runs disabled the source
+  (beyond10x/connectors#174). Now a failure Connectors marks retryable, from the revalidation or
+  the `connections list` read before it, is tried again: at most 4 attempts, pausing 5 s, 10 s,
+  then 20 s (`CORTEX_REVALIDATE_ATTEMPTS`, `CORTEX_REVALIDATE_PAUSE_MS`). One that remains before
+  the run fetched anything fails the run as the new outcome `connection-unavailable`, exit
+  status 5, which `--record-failure` does not count and which never disables the source; its
+  status, metric and hook report it. A refusal is not retried and is counted as before.
+
 ## 0.5.3 — 2026-10-16
 
 ### Fixed
