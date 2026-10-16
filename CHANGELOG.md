@@ -55,7 +55,11 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   (`Co-[Name-1]` for a frequent `Co-Authored-By` trailer), and with `refuse_if_left: [RareName]`
   the part left standing (`Co`) was then found as a rare name, so the whole batch was refused.
   Now no part of a word is a rare name unless the whole word is, and the `refuse_if_left` check
-  reads words the same way.
+  reads words the same way. A hyphenated name glued to an underscore or to CJK text
+  (`_Jean-Luc_`) still has its rare tail replaced; only a word glued to a lower-case letter, an
+  identifier such as `useFoo-Bar`, is skipped whole. The rare head of a word before a span another
+  class hides (`Co` of `Co-Jane`, `Jane` a known name) is replaced too, so the check does not
+  refuse it, and a text cut at `max_chars` inside a frequent word (`Co-Auth`) is not refused.
 
 ### Added
 
