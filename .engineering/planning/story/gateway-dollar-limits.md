@@ -2,16 +2,17 @@
 format: aep.planning-md/3
 id: story:gateway-dollar-limits
 kind: story
-status: active
+status: implemented
 title: Behind a model gateway, runs are bounded in tokens and the reported dollar cost bounds nothing
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - serves: vision:self-updating-instances
 - depends_on: story:token-budget
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-16T15:58:58Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-16T15:58:58Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-16T21:50:09Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 
