@@ -204,11 +204,24 @@ types:
       - {name: glob, type: String}
       - {name: records, type: Optional<cortex.instance.FileRecords>}
 
+  # One mapped property of a structured record. `value_kind` is the kind cortex declares the
+  # property in and converts each record's value to; without it, cortex reuses the kind the
+  # store's ontology declares for that property of the node type, and `String` when the store
+  # declares none.
+  # UNMAPPED: a record whose value does not convert to the kind (`Integer`: a JSON integer or a
+  # decimal integer string; `Decimal`: a number or a decimal string; `Boolean`: `true`/`false` in
+  # JSON or text; `Timestamp`: RFC 3339) is refused alone: it is left out of the batch and named
+  # with its key and the property in the run's report and `cortex.log`, and the rest of the batch
+  # is applied. A `value_kind` that differs from the kind the store declares is refused when the
+  # spec is read (`create`, `update`, a run), naming the node type, the property and both kinds.
+  # The specification has no construct for a conversion of a record's value or for the store's
+  # ontology; `src/structured.rs` holds them and `tests/structured_value_kinds.rs` tests them.
   - name: cortex.instance.PropertyMapping
     kind: struct
     fields:
       - {name: property, type: String}
       - {name: path, type: String}
+      - {name: value_kind, type: Optional<cortex.instance.SchemaValueKind>}
 
   - name: cortex.instance.RelationMapping
     kind: struct

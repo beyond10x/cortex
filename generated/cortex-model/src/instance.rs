@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest e78c4bc74cc74a7f9c33db865a399ccfe8e41b4c737b5c6d0666f35f5015613e
-// contract digest c9c4e2f7a7733189636825d8466957a08e7cf300034972dc3006eaa856184186
+// model digest 61c5316f20f1049ea080d95316e60af51163abfc0944180ebf8ad16dc2e9d091
+// contract digest c4695dc0e7e36a216ac6cb079a0e07cada4c879cac465d08c0c45a7327091d20
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -396,6 +396,8 @@ pub struct PropertyMapping {
     pub property: String,
     /// `path` — `String`.
     pub path: String,
+    /// `value_kind` — `Optional<cortex.instance.SchemaValueKind>`.
+    pub value_kind: Option<SchemaValueKind>,
 }
 
 /// PropertyRemoval — `cortex.instance.PropertyRemoval`.

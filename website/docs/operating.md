@@ -166,7 +166,14 @@ run's. A `store-outcome-unknown` run records no failure and prints no second lin
 A `structured` source skips steps 5 and 6: each batch of records is mapped to an extraction
 document by the source's `mapping` and applied without a model call, at a cost of 0 (see
 [the spec file](./spec-file.md#kind-structured)). It masks every string in a record rather than
-the text as a whole, and never cuts a record.
+the text as a whole, and never cuts a record. Each mapped property is written in the value kind
+its mapping names or the store declares, else `String`. A record whose value does not convert to
+that kind is left out of its batch alone and named in the run's `unconverted`, in its result and
+its `cortex.log` line: one entry per value, with the record's key (`document`), the `property` and
+its `value_kind`. The field is present only when there is one. The record is not marked seen, so
+later runs read it again. A mapping whose `value_kind` differs from the kind the store declares
+fails the run as `apply-refused`, naming the node type, the property and both kinds, before
+anything is applied.
 
 The run stops starting batches when its `budget_usd` is spent, or when the instance's spend of
 the UTC day reaches `model.daily_ceiling_usd` (see

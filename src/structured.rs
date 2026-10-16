@@ -267,8 +267,207 @@ fn clean_value(
     }
 }
 
-fn string_property(name: &str) -> Value {
-    json!({"name": name, "value": {"value_kind": "String"}, "cardinality": "One", "required": false})
+fn property(name: &str, kind: m::SchemaValueKind) -> Value {
+    json!({"name": name, "value": {"value_kind": kind_name(kind)}, "cardinality": "One",
+           "required": false})
+}
+
+/// The value kind of each mapped property, by node type and property ([`kinds`]). A property it
+/// does not name is a `String`.
+pub type Kinds = BTreeMap<(String, String), m::SchemaValueKind>;
+
+/// A kind as EKR and the spec file name it.
+pub fn kind_name(kind: m::SchemaValueKind) -> &'static str {
+    match kind {
+        m::SchemaValueKind::String => "String",
+        m::SchemaValueKind::Integer => "Integer",
+        m::SchemaValueKind::Decimal => "Decimal",
+        m::SchemaValueKind::Boolean => "Boolean",
+        m::SchemaValueKind::Timestamp => "Timestamp",
+    }
+}
+
+fn kind_of(name: &str) -> Option<m::SchemaValueKind> {
+    Some(match name {
+        "String" => m::SchemaValueKind::String,
+        "Integer" => m::SchemaValueKind::Integer,
+        "Decimal" => m::SchemaValueKind::Decimal,
+        "Boolean" => m::SchemaValueKind::Boolean,
+        "Timestamp" => m::SchemaValueKind::Timestamp,
+        _ => return None,
+    })
+}
+
+/// Every mapping of `st`: its own, then each child's.
+fn mappings(st: &m::StructuredSource) -> Vec<&m::RecordMapping> {
+    let children = match &st.input {
+        m::StructuredInput::Connectors(c) => c.children.iter().flatten().collect(),
+        m::StructuredInput::Files(_) => Vec::new(),
+    };
+    std::iter::once(&st.mapping)
+        .chain(
+            children
+                .into_iter()
+                .map(|c: &m::StructuredChild| &c.mapping),
+        )
+        .collect()
+}
+
+/// The kind of each property `st` maps: the `value_kind` its mapping names, else the kind
+/// `ontology` (`ekr ontology`) declares for that property of the node type, else `String`. Refused,
+/// naming the node type, the property and both kinds, when a named kind differs from the one the
+/// store declares, when two mappings name two kinds for one property, or when the store declares a
+/// kind a structured mapping cannot write and the mapping names none.
+pub fn kinds(st: &m::StructuredSource, ontology: &Value) -> Result<Kinds, String> {
+    let mut declared: BTreeMap<(String, String), String> = BTreeMap::new();
+    for t in ontology["node_types"].as_array().into_iter().flatten() {
+        let Some(node_type) = t["name"].as_str() else {
+            continue;
+        };
+        for p in t["properties"].as_array().into_iter().flatten() {
+            if let (Some(name), Some(kind)) =
+                (p["name"].as_str(), p["value_type"]["value_kind"].as_str())
+            {
+                declared.insert((node_type.to_string(), name.to_string()), kind.to_string());
+            }
+        }
+    }
+    let mut refusals: Vec<String> = Vec::new();
+    let mut named: Kinds = Kinds::new();
+    for mapping in mappings(st) {
+        for p in &mapping.properties {
+            let Some(kind) = p.value_kind else {
+                continue;
+            };
+            let key = (mapping.node_type.clone(), p.property.clone());
+            match named.get(&key) {
+                Some(&other) if other != kind => refusals.push(format!(
+                    "node type {}, property {}: the mappings name both value_kind {} and {}",
+                    key.0,
+                    key.1,
+                    kind_name(other),
+                    kind_name(kind)
+                )),
+                Some(_) => {}
+                None => {
+                    named.insert(key, kind);
+                }
+            }
+        }
+    }
+    let mut out = Kinds::new();
+    for mapping in mappings(st) {
+        for p in &mapping.properties {
+            let key = (mapping.node_type.clone(), p.property.clone());
+            if out.contains_key(&key) {
+                continue;
+            }
+            let held = declared.get(&key);
+            let kind = match (named.get(&key), held) {
+                (Some(&kind), Some(held)) if kind_name(kind) != held => {
+                    refusals.push(format!(
+                        "node type {}, property {}: the mapping names value_kind {}, and the \
+                         store declares {held}",
+                        key.0,
+                        key.1,
+                        kind_name(kind)
+                    ));
+                    continue;
+                }
+                (Some(&kind), _) => kind,
+                (None, Some(held)) => match kind_of(held) {
+                    Some(kind) => kind,
+                    None => {
+                        refusals.push(format!(
+                            "node type {}, property {}: the store declares {held}, which a \
+                             structured mapping cannot write",
+                            key.0, key.1
+                        ));
+                        continue;
+                    }
+                },
+                (None, None) => m::SchemaValueKind::String,
+            };
+            out.insert(key, kind);
+        }
+    }
+    if refusals.is_empty() {
+        Ok(out)
+    } else {
+        Err(refusals.join("; "))
+    }
+}
+
+/// Why `spec` cannot be applied to a store whose ontology is `ontology` ([`kinds`]), naming the
+/// source; `None` when every structured source's mapping fits it.
+pub fn spec_refusal(spec: &m::InstanceSpec, ontology: &Value) -> Option<String> {
+    let refusals: Vec<String> = spec
+        .sources
+        .iter()
+        .filter_map(|s| match &s.settings {
+            m::SourceSettings::Structured(st) => kinds(st, ontology)
+                .err()
+                .map(|e| format!("source {}: {e}", s.name)),
+            _ => None,
+        })
+        .collect();
+    (!refusals.is_empty()).then(|| refusals.join("; "))
+}
+
+/// Whether `spec` has a structured source, whose mapping [`spec_refusal`] checks.
+pub fn has_structured(spec: &m::InstanceSpec) -> bool {
+    spec.sources
+        .iter()
+        .any(|s| matches!(s.settings, m::SourceSettings::Structured(_)))
+}
+
+/// A decimal number as text: an optional sign, digits, and an optional fraction of digits.
+fn decimal(text: &str) -> bool {
+    let digits = text.strip_prefix(['+', '-']).unwrap_or(text);
+    let (whole, fraction) = digits.split_once('.').unwrap_or((digits, "0"));
+    !whole.is_empty()
+        && !fraction.is_empty()
+        && whole.bytes().all(|b| b.is_ascii_digit())
+        && fraction.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// A record's value `v` in `kind`, as an EKR value of that kind writes it: `Ok(None)` for no value
+/// (none at the path, a null or an empty string, and for a `String` an array or an object, as
+/// before), `Err` for a value that does not convert. `Integer`: a JSON integer or a decimal integer
+/// string; `Decimal`: a number or a decimal string, written as text; `Boolean`: `true` or `false`
+/// in JSON or text, in any case; `Timestamp`: RFC 3339 text, written in milliseconds since the
+/// epoch.
+pub(crate) fn convert(kind: m::SchemaValueKind, v: Option<&Value>) -> Result<Option<Value>, ()> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    if kind == m::SchemaValueKind::String {
+        return Ok(scalar(v).map(Value::String));
+    }
+    let text = match v {
+        Value::Null => return Ok(None),
+        Value::String(t) if t.trim().is_empty() => return Ok(None),
+        Value::String(t) => Some(t.trim()),
+        _ => None,
+    };
+    let converted = match (kind, v, text) {
+        (m::SchemaValueKind::Integer, Value::Number(n), _) => n.as_i64().map(Value::from),
+        (m::SchemaValueKind::Integer, _, Some(t)) => t.parse::<i64>().ok().map(Value::from),
+        (m::SchemaValueKind::Decimal, Value::Number(n), _) => Some(Value::String(n.to_string())),
+        (m::SchemaValueKind::Decimal, _, Some(t)) => decimal(t).then(|| Value::String(t.into())),
+        (m::SchemaValueKind::Boolean, Value::Bool(b), _) => Some(Value::Bool(*b)),
+        (m::SchemaValueKind::Boolean, _, Some(t)) if t.eq_ignore_ascii_case("true") => {
+            Some(Value::Bool(true))
+        }
+        (m::SchemaValueKind::Boolean, _, Some(t)) if t.eq_ignore_ascii_case("false") => {
+            Some(Value::Bool(false))
+        }
+        (m::SchemaValueKind::Timestamp, _, Some(t)) => {
+            crate::evidence::rfc3339_ms(t).map(Value::from)
+        }
+        _ => None,
+    };
+    converted.map(Some).ok_or(())
 }
 
 /// Node types by name, each with its properties, in the order first declared.
@@ -356,6 +555,9 @@ pub struct Source<'a> {
     /// source's, so its values still end, and are kept as the record they name today is kept
     /// ([`Source::ended`]).
     pub earlier: Vec<String>,
+    /// The value kind of each mapped property ([`kinds`]), set from the store's ontology before
+    /// the run maps a record; a property it does not name is a `String`.
+    pub kinds: Kinds,
 }
 
 /// What one record of a source is mapped by: the source's own mapping, or a child's.
@@ -463,7 +665,32 @@ impl<'a> Source<'a> {
             children,
             links,
             earlier,
+            kinds: Kinds::new(),
         }
+    }
+
+    /// The kind property `property` of node type `node_type` is written in ([`Source::kinds`]).
+    fn kind(&self, node_type: &str, property: &str) -> m::SchemaValueKind {
+        self.kinds
+            .get(&(node_type.to_string(), property.to_string()))
+            .copied()
+            .unwrap_or(m::SchemaValueKind::String)
+    }
+
+    /// Each mapped property of `doc`'s record whose value does not convert to its kind
+    /// ([`convert`]), with that kind, in the mapping's order. A run leaves such a record out.
+    pub fn unconverted(&self, doc: &Document) -> Vec<(String, m::SchemaValueKind)> {
+        let Ok(record) = serde_json::from_str::<Value>(&doc.text) else {
+            return Vec::new();
+        };
+        let mapping = self.scope(&doc.key).mapping;
+        mapping
+            .properties
+            .iter()
+            .map(|p| (p, self.kind(&mapping.node_type, &p.property)))
+            .filter(|(p, kind)| convert(*kind, at(&record, &p.path)).is_err())
+            .map(|(p, kind)| (p.property.clone(), kind))
+            .collect()
     }
 
     /// Whether masking or an irreversible rule would change `text`.
@@ -784,7 +1011,9 @@ impl<'a> Source<'a> {
             let scope = self.scope(&doc.key);
             let mut l = Listed::default();
             for p in &scope.mapping.properties {
-                if let Some(value) = text_at(&record, &p.path) {
+                let kind = self.kind(&scope.mapping.node_type, &p.property);
+                let converted = convert(kind, at(&record, &p.path));
+                if let Some(value) = converted.ok().flatten().as_ref().and_then(scalar) {
                     l.properties.insert((p.property.clone(), value));
                 }
             }
@@ -1124,7 +1353,7 @@ impl<'a> Source<'a> {
     }
 
     /// The ontology the source's mappings write: the source's node type with every mapped property
-    /// as a `String`, each relation's target type, and each relation as an edge type from the node
+    /// in its kind ([`Source::kinds`]), each relation's target type, and each relation as an edge type from the node
     /// type to its target; then each child's node type, relations and relation to the parent's
     /// node type, and each link's relation from its changes' node type to its tags', an edge type
     /// of one name declared once ([`join`]). `apply-extraction` adds only what the store does not
@@ -1170,7 +1399,10 @@ impl<'a> Source<'a> {
                     "name": name,
                     "parents": [],
                     "abstract_type": false,
-                    "properties": properties.iter().map(|p| string_property(p)).collect::<Vec<_>>(),
+                    "properties": properties
+                        .iter()
+                        .map(|p| property(p, self.kind(name, p)))
+                        .collect::<Vec<_>>(),
                 })
             })
             .collect();
@@ -1180,8 +1412,8 @@ impl<'a> Source<'a> {
     /// The `ekr.extraction-document/1` of one batch of records, in the JSON form the model path
     /// answers in (`"!Property"` keys), without its evidence: `extract::merge` adds the items `batch`
     /// was issued. Each record whose text is JSON and has a name at its mapping's `name` is one
-    /// entity of the mapping's node type, named by its aliases; each mapped property with a scalar
-    /// value is a `String` property; each relation target named at `target_name` (a scalar, or
+    /// entity of the mapping's node type, named by its aliases; each mapped property with a value
+    /// that converts to its kind ([`convert`]) is a property of that kind; each relation target named at `target_name` (a scalar, or
     /// each scalar of an array) is a relation to the named thing [`Source::target`] answers; a
     /// child record has one relation, named by its child's `parent`, to its parent's entity, named
     /// by all the parent's aliases ([`Index::parent`]); and a change has one relation, named by the
@@ -1216,11 +1448,12 @@ impl<'a> Source<'a> {
             let subject = json!({"node_type": mapping.node_type, "aliases": aliases});
             entity(subject.clone(), &issued.id);
             for p in &mapping.properties {
-                if let Some(value) = text_at(&record, &p.path) {
+                let kind = self.kind(&mapping.node_type, &p.property);
+                if let Ok(Some(value)) = convert(kind, at(&record, &p.path)) {
                     facts.push(json!({"!Property": {
                         "subject": subject,
                         "property": p.property,
-                        "value": {"value_kind": "String", "value": value},
+                        "value": {"value_kind": kind_name(kind), "value": value},
                         "evidence": [issued.id],
                     }}));
                 }
@@ -1339,6 +1572,7 @@ mod tests {
             properties: vec![m::PropertyMapping {
                 property: "age".into(),
                 path: "$.age".into(),
+                value_kind: None,
             }],
             relations: vec![m::RelationMapping {
                 relation: "MEMBER_OF".into(),
@@ -1356,6 +1590,7 @@ mod tests {
             children: Vec::new(),
             links: Vec::new(),
             earlier: Vec::new(),
+            kinds: Kinds::new(),
         }
     }
 
@@ -1653,6 +1888,7 @@ mod tests {
             redactor: None,
             links: Vec::new(),
             earlier: Vec::new(),
+            kinds: Kinds::new(),
         }
     }
 
@@ -1852,6 +2088,7 @@ mod tests {
             redactor: None,
             links: vec![&link],
             earlier: Vec::new(),
+            kinds: Kinds::new(),
         };
         let tag_id = s.child_identity("tags.list", "7", "v1").expect("a child");
         assert_eq!(tag_id, "forge:projects.list/tags.list:7:v1");
@@ -1972,5 +2209,118 @@ mod tests {
         );
         let v: Value = serde_json::from_str(&cleaned).unwrap();
         assert_eq!(v["n"], 1);
+    }
+
+    #[test]
+    fn each_kind_converts_its_forms_and_refuses_the_rest() {
+        use m::SchemaValueKind::*;
+        let c = |kind, v: Value| convert(kind, Some(&v));
+        assert_eq!(c(Integer, json!(3)), Ok(Some(json!(3))));
+        assert_eq!(c(Integer, json!(" -4 ")), Ok(Some(json!(-4))));
+        assert_eq!(c(Integer, json!("12a")), Err(()));
+        assert_eq!(c(Integer, json!(1.5)), Err(()));
+        assert_eq!(c(Integer, json!(true)), Err(()));
+        assert_eq!(c(Decimal, json!("12.50")), Ok(Some(json!("12.50"))));
+        assert_eq!(c(Decimal, json!(2)), Ok(Some(json!("2"))));
+        assert_eq!(c(Decimal, json!("1e3")), Err(()));
+        assert_eq!(c(Decimal, json!("1.")), Err(()));
+        assert_eq!(c(Boolean, json!(false)), Ok(Some(json!(false))));
+        assert_eq!(c(Boolean, json!("TRUE")), Ok(Some(json!(true))));
+        assert_eq!(c(Boolean, json!("maybe")), Err(()));
+        assert_eq!(c(Boolean, json!(1)), Err(()));
+        assert_eq!(
+            c(Timestamp, json!("2026-10-01T00:00:00Z")),
+            Ok(Some(json!(1_790_812_800_000_i64)))
+        );
+        assert_eq!(c(Timestamp, json!("2026-10-01")), Err(()));
+        assert_eq!(c(Timestamp, json!(1_790_812_800)), Err(()));
+        assert_eq!(c(String, json!(7)), Ok(Some(json!("7"))));
+        assert_eq!(c(String, json!(["a"])), Ok(None));
+        // No value is no fact, in every kind.
+        for kind in [String, Integer, Decimal, Boolean, Timestamp] {
+            assert_eq!(c(kind, Value::Null), Ok(None));
+            assert_eq!(c(kind, json!(" ")), Ok(None));
+            assert_eq!(convert(kind, None), Ok(None));
+        }
+        assert_eq!(c(Integer, json!({"a": 1})), Err(()));
+    }
+
+    fn structured(mapping: m::RecordMapping) -> m::StructuredSource {
+        m::StructuredSource {
+            input: m::StructuredInput::Files(m::StructuredFiles {
+                paths: vec![],
+                glob: "*.json".into(),
+            }),
+            records: "$".into(),
+            mapping,
+            dropped: None,
+        }
+    }
+
+    #[test]
+    fn a_kind_is_the_mappings_else_the_stores_else_string_and_a_conflict_is_refused() {
+        let ontology = json!({"node_types": [{"name": "Person", "properties": [
+            {"name": "age", "value_type": {"value_kind": "Integer"}},
+            {"name": "ratio", "value_type": {"value_kind": "Float"}}]}]});
+        let key = |p: &str| ("Person".to_string(), p.to_string());
+        let mut map = mapping();
+        let held = kinds(&structured(map.clone()), &ontology).unwrap();
+        assert_eq!(held[&key("age")], m::SchemaValueKind::Integer);
+
+        map.properties.push(m::PropertyMapping {
+            property: "size".into(),
+            path: "$.size".into(),
+            value_kind: Some(m::SchemaValueKind::Boolean),
+        });
+        map.properties.push(m::PropertyMapping {
+            property: "team".into(),
+            path: "$.team".into(),
+            value_kind: None,
+        });
+        let held = kinds(&structured(map.clone()), &ontology).unwrap();
+        assert_eq!(held[&key("size")], m::SchemaValueKind::Boolean);
+        assert_eq!(held[&key("team")], m::SchemaValueKind::String);
+
+        map.properties[0].value_kind = Some(m::SchemaValueKind::String);
+        let refused = kinds(&structured(map.clone()), &ontology).unwrap_err();
+        for name in ["Person", "age", "String", "Integer"] {
+            assert!(refused.contains(name), "{refused}");
+        }
+
+        map.properties[0].value_kind = None;
+        map.properties.push(m::PropertyMapping {
+            property: "ratio".into(),
+            path: "$.ratio".into(),
+            value_kind: None,
+        });
+        let refused = kinds(&structured(map), &ontology).unwrap_err();
+        assert!(
+            refused.contains("ratio") && refused.contains("Float"),
+            "{refused}"
+        );
+    }
+
+    #[test]
+    fn the_document_declares_and_writes_each_property_in_its_kind() {
+        let mapping = mapping();
+        let mut s = source(&mapping);
+        s.kinds
+            .insert(("Person".into(), "age".into()), m::SchemaValueKind::Integer);
+        let a = issued(&s, "e1", json!({"id": "1", "name": "Ada", "age": "36"}));
+        let index = s.index(std::slice::from_ref(&a), &Parents::new());
+        let doc = s.document(&[a], &index).document;
+        assert_eq!(
+            doc["ontology"]["node_types"][0]["properties"][0]["value"],
+            json!({"value_kind": "Integer"})
+        );
+        assert_eq!(
+            doc["facts"][0]["!Property"]["value"],
+            json!({"value_kind": "Integer", "value": 36})
+        );
+        let bad = issued(&s, "e2", json!({"id": "2", "name": "Bo", "age": "x"}));
+        assert_eq!(
+            s.unconverted(&bad.doc),
+            [("age".to_string(), m::SchemaValueKind::Integer)]
+        );
     }
 }
