@@ -515,6 +515,14 @@ types:
       - {name: pattern, type: String}
       - {name: replacement, type: String}
 
+  # `RareName` replaces a capitalised word (one capital and at least one lower-case letter) that
+  # the batch's document texts hold at most `rare_limit` times (default 1). A word, hyphenated or
+  # not (`Jean-Luc`, `Co-Authored-By`), is replaced whole or not at all: no part of a word seen
+  # more than `rare_limit` times is a rare name, and the `refuse_if_left` check reads words the
+  # same way, so it finds nothing left of a word that was kept.
+  # UNMAPPED: how a text splits into words and how often a batch holds each is a rule on String
+  # values the specification has no construct for; `src/redact.rs` holds it and its tests and
+  # `tests/redaction_gate.rs` test it.
   - name: cortex.instance.RedactionPolicy
     kind: struct
     fields:

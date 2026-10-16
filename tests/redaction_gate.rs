@@ -292,6 +292,49 @@ fn a_credential_is_neither_sent_nor_stored() {
     assert_eq!(last_log_line(&w)["redacted"]["Credential"], 1);
 }
 
+/// Issue #71: three commit messages in one batch, each ending with the same `Co-Authored-By`
+/// trailer, under `RareName` with `refuse_if_left: [RareName]`. The trailer is seen three times,
+/// so no part of it is a rare name: the model is shown it as written and the batch is applied.
+#[test]
+fn a_frequent_hyphenated_trailer_is_shown_whole_and_the_batch_applied() {
+    let policy = concat!(
+        "redaction:\n  classes: [RareName]\n  rules: []\n  rare_limit: 1\n",
+        "  refuse_if_left: [RareName]\n",
+    );
+    let trailer = "Co-Authored-By: Example Person <person@example.org>";
+    let result = |page: &str, subject: &str| {
+        serde_json::json!({"url": format!("https://example.org/{page}"), "title": page,
+            "description": "a commit.", "content": format!("{subject}\n\n{trailer}"),
+            "content_truncated": false, "published": null, "score": "0.5"})
+    };
+    let pages = serde_json::json!({
+        "results": [
+            result("a", "fix: parse the header."),
+            result("b", "feat: add a flag."),
+            result("c", "docs: explain the flag."),
+        ],
+        "complete": false, "truncation": ["provider_limit"],
+        "provenance": {"instance": "t", "profile": "tavily/2026-10",
+            "received_at": "2026-10-05T00:00:00.000Z"},
+    })
+    .to_string();
+    let w = world(&pages, policy);
+    let before = w.head("r");
+    let (code, ran) = w.cortex(&["run", "r/news"]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 3, "{ran}");
+    assert!(w.head("r") > before);
+    let all = prompt_list(&w);
+    assert_eq!(all.len(), 1, "one batch: {all:?}");
+    assert_eq!(
+        all[0].matches(trailer).count(),
+        3,
+        "the trailer is shown as written: {}",
+        all[0]
+    );
+    assert!(!all[0].contains("[Name-"), "{}", all[0]);
+}
+
 /// Every prompt the stand-in model received, in order.
 fn prompt_list(w: &World) -> Vec<String> {
     prompts(w)
