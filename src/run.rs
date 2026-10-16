@@ -33,6 +33,9 @@ pub enum Failure {
     Fetch(String),
     Extract(String),
     Apply(String),
+    /// EKR could not say whether a stage verb took effect (`crate::ekr::outcome_unknown`): a fault
+    /// of the store, not of the source, which the next run settles.
+    StoreOutcomeUnknown(String),
 }
 
 #[derive(Debug)]
@@ -1020,10 +1023,22 @@ fn settle(ran: Result<Report, Failure>, mut before: Undo) -> Result<Report, Fail
         }
         return ran;
     }
+    // A run that failed part-way keeps its own outcome when the publish fails too, an unknown
+    // publish outcome included: the run's failure is the source's, and `stage.json` is kept.
     match (ran, staged.publish()) {
         (ran, Ok(())) => ran,
-        (Ok(_), Err(e)) => Err(Failure::Apply(e)),
-        (Err(failed), Err(e)) => Err(failed.and(&e)),
+        (Ok(_), Err(e)) => Err(e),
+        (Err(failed), Err(e)) => Err(failed.and(e.reason())),
+    }
+}
+
+/// The failure a stage verb's error is: [`Failure::StoreOutcomeUnknown`] when EKR could not say
+/// whether it took effect ([`crate::ekr::outcome_unknown`]), [`Failure::Apply`] otherwise.
+fn stage_failure(error: String) -> Failure {
+    if crate::ekr::outcome_unknown(&error) {
+        Failure::StoreOutcomeUnknown(error)
+    } else {
+        Failure::Apply(error)
     }
 }
 
@@ -1034,6 +1049,17 @@ impl Failure {
             Failure::Fetch(m) => Failure::Fetch(format!("{m}; {more}")),
             Failure::Extract(m) => Failure::Extract(format!("{m}; {more}")),
             Failure::Apply(m) => Failure::Apply(format!("{m}; {more}")),
+            Failure::StoreOutcomeUnknown(m) => Failure::StoreOutcomeUnknown(format!("{m}; {more}")),
+        }
+    }
+
+    /// The failure's reason, whatever its outcome.
+    fn reason(&self) -> &str {
+        match self {
+            Failure::Fetch(m)
+            | Failure::Extract(m)
+            | Failure::Apply(m)
+            | Failure::StoreOutcomeUnknown(m) => m,
         }
     }
 }
@@ -1058,12 +1084,13 @@ struct Staged {
 impl Staged {
     /// On a `postgres` store: begins a stage at the store's head, records it and that head (the
     /// stage's base) with a copy of `state/`, and puts `store` in the stage. A SQLite store runs
-    /// in none.
+    /// in none. A begin whose outcome is unknown fails the run as `store-outcome-unknown`: a stage
+    /// EKR may hold as begun is recorded nowhere, and the next run abandons it ([`Self::recover`]).
     fn begin(layout: &Layout, store: &mut crate::ekr::Store) -> Result<Option<Self>, Failure> {
         if store.backend != crate::ekr::Backend::Postgres {
             return Ok(None);
         }
-        let (stage, head) = store.begin_stage().map_err(Failure::Apply)?;
+        let (stage, head) = store.begin_stage().map_err(stage_failure)?;
         let record = match snapshot::StageRecord::write(layout, &stage, head) {
             Ok(record) => record,
             Err(e) => {
@@ -1087,11 +1114,13 @@ impl Staged {
     /// the copy from before that run, so its documents are fetched again. Then every stage of a
     /// `postgres` store still `Begun` (`ekr stage list`), such as one begun by a run killed before
     /// it wrote `stage.json`, is abandoned: nothing records it, and it holds a copy of the store.
+    /// A stage that cannot be settled keeps `stage.json` for the run after; when EKR could not say
+    /// whether the settling verb took effect, the run fails as `store-outcome-unknown`.
     fn recover(layout: &Layout, spec: &m::InstanceSpec) -> Result<(), Failure> {
         let store = layout.store_handle(spec);
         if let Some(record) = snapshot::StageRecord::read(layout).map_err(Failure::Apply)? {
             let not_settled = |e: String| {
-                Failure::Apply(format!(
+                stage_failure(format!(
                     "stage {} of a run that did not finish is not settled: {e}",
                     record.stage
                 ))
@@ -1129,8 +1158,11 @@ impl Staged {
     /// Publishes the stage at the head the run began from, recorded in `stage.json` first so a
     /// run killed while publishing is completed by the next. A refusal (the store's head moved
     /// since, `stage-head-moved`) publishes nothing: the stage is abandoned and `state/` is put
-    /// back.
-    fn publish(mut self) -> Result<(), String> {
+    /// back, and the run fails as `apply-refused`. A publish whose outcome is unknown may have
+    /// landed: `stage.json` stays with `publishing` set, `state/` is not put back and the stage is
+    /// not abandoned, so the next run publishes it at the same head ([`Self::recover`]); the run
+    /// fails as `store-outcome-unknown`.
+    fn publish(mut self) -> Result<(), Failure> {
         let published = match self.record.set_publishing(&self.layout, true) {
             Ok(()) => self
                 .store
@@ -1143,6 +1175,13 @@ impl Staged {
                     eprintln!("cortex: {e}");
                 }
                 Ok(())
+            }
+            Err(e) if crate::ekr::outcome_unknown(&e) => {
+                Err(Failure::StoreOutcomeUnknown(format!(
+                    "the run's publish has an unknown outcome: {e}; its stage {} is kept in \
+                     stage.json, and the next run publishes it at head {} or settles it",
+                    self.record.stage, self.record.head
+                )))
             }
             Err(e) => {
                 let state = self.rewind();
@@ -1164,10 +1203,10 @@ impl Staged {
                         )
                     }
                 };
-                Err(format!(
+                Err(Failure::Apply(format!(
                     "the run was not published, so nothing of it is in the store: {e}; \
                      {abandoned}; {state}"
-                ))
+                )))
             }
         }
     }
@@ -1247,7 +1286,7 @@ fn held_to_gate(
     let failed = gate::evaluate(checks, report, || gate::quality(store));
     if failed.is_empty() {
         return match before.staged.take() {
-            Some(staged) => staged.publish().map_err(Failure::Apply),
+            Some(staged) => staged.publish(),
             None => Ok(()),
         };
     }

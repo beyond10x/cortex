@@ -1768,11 +1768,17 @@ fn split(source_id: &str) -> (&str, &str) {
 /// scheduler tells "switched off" from "broken".
 const EXIT_DISABLED: u8 = 3;
 
+/// The exit status of a `run` that ended because EKR could not say whether a stage verb took
+/// effect: distinct from a failed run's 1, so a scheduler tells a store fault, which the next run
+/// settles and which is not counted against the source, from a broken source.
+const EXIT_STORE_OUTCOME_UNKNOWN: u8 = 4;
+
 /// The exit status of each `run` outcome, which an external scheduler reads instead of the line.
 fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
     match outcome {
         m::RunSourceOutcome::Ran { .. } | m::RunSourceOutcome::Fetched { .. } => 0,
         m::RunSourceOutcome::Disabled { .. } => EXIT_DISABLED,
+        m::RunSourceOutcome::StoreOutcomeUnknown { .. } => EXIT_STORE_OUTCOME_UNKNOWN,
         m::RunSourceOutcome::FetchOnlyFailed { .. }
         | m::RunSourceOutcome::FetchFailed { .. }
         | m::RunSourceOutcome::ExtractionFailed { .. }
@@ -1922,6 +1928,16 @@ fn run_source(
                 detail: json!({"reason": error.reason}),
             },
             Some(error.reason),
+        ),
+        // Not a failure of the source: no `RecordFailure`, so it is never counted and never
+        // disables the source. Its status, metric and hook still report it (`report_run`).
+        m::RunSourceOutcome::StoreOutcomeUnknown { error } => (
+            Done {
+                outcome: "store-outcome-unknown",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            None,
         ),
         m::RunSourceOutcome::Disabled { run_skipped } => (
             Done {

@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 4ae7016a234132e571b7abed384e164e18cd472f2a8f3e07b3d7860f9d294f49
-  contract digest 26132d405a23c83a5737eb1c814a3d29d646abff53eb4c3c99e6298956066bda
+  model digest e78c4bc74cc74a7f9c33db865a399ccfe8e41b4c737b5c6d0666f35f5015613e
+  contract digest c9c4e2f7a7733189636825d8466957a08e7cf300034972dc3006eaa856184186
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-145 capabilities: **141 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+146 capabilities: **142 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -149,6 +149,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | error type | `cortex.instance.SourceNotDisabled` |
 | error type | `cortex.instance.SourceNotFound` |
 | error type | `cortex.instance.StoreHeld` |
+| error type | `cortex.instance.StoreOutcomeUnknown` |
 | error type | `cortex.instance.StoreUnreadable` |
 | view type | `cortex.instance.Instances` |
 | view query | `cortex.instance.Instances` |
@@ -170,7 +171,7 @@ What the specification fully determines is generated; what it cannot determine i
 | capability | source | why not generated | contract |
 | --- | --- | --- | --- |
 | command behaviour | `cortex.instance.RecordFailure` | kept an obligation by a subject predicate choosing between a move and an update | given `cortex.instance.RecordFailure` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject's stored fields satisfy `consecutive_failures >= 1`, takes `disable` of `cortex.instance.Source`, emits `cortex.instance.SourceDisabled`; `counted` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.RunFailed`; `already-disabled` from a state no declared move starts in, error `cortex.instance.SourceDisabledError`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound` |
-| command behaviour | `cortex.instance.RunSource` | kept an obligation by a refusal that compensates (`compensates: true`), on `fetch-failed` | given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)`, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-only-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents in a fetch-only run) when eligible ((defined(fetch_only) and fetch_only == true)), error `cortex.instance.FetchFailed`; `fetched` when `(defined(fetch_only) and fetch_only == true)`, updates `cortex.instance.Source`, emits `cortex.instance.SourceFetched`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound` |
+| command behaviour | `cortex.instance.RunSource` | kept an obligation by a refusal that compensates (`compensates: true`), on `fetch-failed` | given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)`, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-only-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents in a fetch-only run) when eligible ((defined(fetch_only) and fetch_only == true)), error `cortex.instance.FetchFailed`; `fetched` when `(defined(fetch_only) and fetch_only == true)`, updates `cortex.instance.Source`, emits `cortex.instance.SourceFetched`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `store-outcome-unknown` externally decided (EKR answers that the publication outcome of a stage verb is unknown), updates `cortex.instance.Source`, error `cortex.instance.StoreOutcomeUnknown`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound` |
 
 ## Refused — not represented by this synthesis
 

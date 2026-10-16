@@ -97,6 +97,17 @@ fn run(mut cmd: Command, what: &str) -> Result<Vec<u8>, String> {
     }
 }
 
+/// What EKR prints when it cannot say whether a publication took effect (`StoreError::UnknownCommit`
+/// in EKR 0.0.34, `crates/ekr-store/src/lib.rs`). EKR gives it no refusal name and no exit status
+/// of its own (a fault: `ekr: <message>`, exit 1), so the message is what tells it apart.
+const OUTCOME_UNKNOWN: &str = "publication outcome is unknown";
+
+/// Whether `error`, as a store verb answered it, says the verb's outcome is unknown: it may or may
+/// not have taken effect, and the store, not the caller, is at fault.
+pub fn outcome_unknown(error: &str) -> bool {
+    error.contains(OUTCOME_UNKNOWN)
+}
+
 fn json(bytes: &[u8], what: &str) -> Result<Value, String> {
     serde_json::from_slice(bytes).map_err(|e| format!("ekr {what} printed no JSON: {e}"))
 }
@@ -798,9 +809,25 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{
-        remove_inherited_ekr, transaction_document, Backend, Connection, Launch, Operation,
-        PropertyDecl, Store,
+        outcome_unknown, remove_inherited_ekr, transaction_document, Backend, Connection, Launch,
+        Operation, PropertyDecl, Store,
     };
+
+    /// EKR 0.0.34 has no refusal name or exit status of its own for an unknown publication outcome
+    /// (`StoreError::UnknownCommit` is a fault, exit 1): its message is what tells it apart.
+    #[test]
+    fn an_unknown_publication_outcome_is_told_from_a_refusal_by_its_message() {
+        let unknown = "ekr stage begin failed: ekr: publication outcome is unknown; resolve the \
+                       exact retained occurrence";
+        assert!(outcome_unknown(unknown));
+        for other in [
+            "ekr stage publish failed: ekr: stage-head-moved: the head is 9, not 7",
+            "ekr stage begin failed: ekr: the store is unavailable: connection refused",
+            "ekr stage abandon failed: ekr: stage-already-published: st-1",
+        ] {
+            assert!(!outcome_unknown(other), "{other}");
+        }
+    }
 
     #[test]
     fn a_transaction_document_names_its_format_first_and_tags_each_operation() {

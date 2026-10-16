@@ -30,11 +30,12 @@ pub const HOOK_TIMEOUT_S: u64 = 10;
 pub const METRICS: &str = "metrics.prom";
 
 /// Every outcome a source's run records, in the order the spec declares them.
-pub const OUTCOMES: [m::RunOutcome; 5] = [
+pub const OUTCOMES: [m::RunOutcome; 6] = [
     m::RunOutcome::Ran,
     m::RunOutcome::FetchFailed,
     m::RunOutcome::ExtractionFailed,
     m::RunOutcome::ApplyRefused,
+    m::RunOutcome::StoreOutcomeUnknown,
     m::RunOutcome::Disabled,
 ];
 
@@ -44,6 +45,7 @@ pub fn outcome_name(outcome: m::RunOutcome) -> &'static str {
         m::RunOutcome::FetchFailed => "fetch-failed",
         m::RunOutcome::ExtractionFailed => "extraction-failed",
         m::RunOutcome::ApplyRefused => "apply-refused",
+        m::RunOutcome::StoreOutcomeUnknown => "store-outcome-unknown",
         m::RunOutcome::Disabled => "disabled",
     }
 }
@@ -112,12 +114,14 @@ pub fn record(
 }
 
 /// The outcome a hook is called with for a run that answered `outcome`: the failures only, and
-/// `disabled` instead when the run's recorded failure disabled the source.
+/// `disabled` instead when the run's recorded failure disabled the source. An unknown store
+/// outcome is reported too, though no failure is recorded for it.
 pub fn hook_outcome(outcome: m::RunOutcome, disabled: bool) -> Option<m::RunOutcome> {
     match outcome {
         m::RunOutcome::FetchFailed
         | m::RunOutcome::ExtractionFailed
-        | m::RunOutcome::ApplyRefused => Some(if disabled {
+        | m::RunOutcome::ApplyRefused
+        | m::RunOutcome::StoreOutcomeUnknown => Some(if disabled {
             m::RunOutcome::Disabled
         } else {
             outcome
@@ -448,5 +452,33 @@ mod tests {
         assert!(!text.contains("last_run_timestamp_seconds{source=\"t/other\"}"));
         let status = load(&layout, "news");
         assert_eq!(status.last_reason.as_deref(), Some("y"));
+    }
+
+    /// `story:store-outcome-unknown-not-counted`: the hook is called for an unknown store outcome,
+    /// and the metric file counts it, though the scheduler records no failure for it.
+    #[test]
+    fn an_unknown_store_outcome_is_reported_to_the_hook_and_the_metric_file() {
+        assert_eq!(
+            hook_outcome(m::RunOutcome::StoreOutcomeUnknown, false),
+            Some(m::RunOutcome::StoreOutcomeUnknown)
+        );
+        assert_eq!(
+            outcome_of("store-outcome-unknown"),
+            Some(m::RunOutcome::StoreOutcomeUnknown)
+        );
+        let tmp = tempfile::tempdir().unwrap();
+        let layout = Layout::new(tmp.path().to_path_buf());
+        record(
+            &layout,
+            "news",
+            m::RunOutcome::StoreOutcomeUnknown,
+            1_500,
+            Some("x"),
+        )
+        .unwrap();
+        let text = metrics_text(&layout, &["t/news".into()]);
+        assert!(text.contains(
+            "cortex_source_runs_total{source=\"t/news\",outcome=\"store-outcome-unknown\"} 1\n"
+        ));
     }
 }

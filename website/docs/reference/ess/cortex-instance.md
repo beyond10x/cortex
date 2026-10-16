@@ -353,7 +353,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 
 ### `RunOutcome`
 
-`cortex.instance.RunOutcome` is one of `ran`, `fetch-failed`, `extraction-failed`, `apply-refused` and `disabled`.
+`cortex.instance.RunOutcome` is one of `ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown` and `disabled`.
 
 ### `SchemaCardinality`
 
@@ -970,7 +970,7 @@ It takes:
 - `source_id` — `cortex.instance.SourceId`
 - `fetch_only` — `Optional<Boolean>`, which may be absent
 
-It has eight outcomes.
+It has nine outcomes.
 
 **`disabled`** — The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome. Taken when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)` holds of the input. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.RunSkipped`. It sets `last_outcome` from `"disabled"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test establishes the declared subject state and constructs input selecting this branch in that state.
 
@@ -983,6 +983,8 @@ It has eight outcomes.
 **`extraction-failed`** — Nothing was applied; the source's status records the outcome and its reason, and the scheduler then sends RecordFailure. When the model answered an error, `reason` holds the error text it gave, masked for credential shapes as fetched text is and cut at a character boundary to a bound, and the batch's `claude/error.txt` holds the same text. An error answer with a cost above zero, or with no cost reported, is not asked again. Decided outside the input: The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.ExtractionFailed`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"extraction-failed"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
 **`apply-refused`** — Nothing was applied; the source's status records the outcome and its reason, and the scheduler then sends RecordFailure. Decided outside the input: EKR refuses the merged extraction document. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.ApplyRefused`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"apply-refused"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
+
+**`store-outcome-unknown`** — The source's status records the outcome and its reason, and the scheduler sends no RecordFailure: the store, not the source, failed, so the failure is not counted and never disables the source. The next run settles the stage. Decided outside the input: EKR answers that the publication outcome of a stage verb is unknown. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.StoreOutcomeUnknown`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"store-outcome-unknown"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
 **`ran`** — Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceRan`. It sets `runs` from `its previous value plus 1`, `consecutive_failures` from `"0"`, `last_outcome` from `"ran"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -1456,6 +1458,16 @@ It carries:
 
 Reported by `cortex.instance.AdoptInstance` on its `store-held` outcome.
 
+### `StoreOutcomeUnknown`
+
+EKR could not say whether a stage verb took effect (`ekr stage begin`, `ekr stage publish` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.RunSource` on its `store-outcome-unknown` outcome.
+
 ### `StoreUnreadable`
 
 The store named for adoption cannot be read, or EKR cannot open it under the instance's host document (another tenant or authority than the store was seeded under, or no seed).
@@ -1485,4 +1497,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `4ae7016a234132e571b7abed384e164e18cd472f2a8f3e07b3d7860f9d294f49` · contract digest `slice-sha256/2:26132d405a23c83a5737eb1c814a3d29d646abff53eb4c3c99e6298956066bda`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `e78c4bc74cc74a7f9c33db865a399ccfe8e41b4c737b5c6d0666f35f5015613e` · contract digest `slice-sha256/2:c9c4e2f7a7733189636825d8466957a08e7cf300034972dc3006eaa856184186`. Do not edit this file; change the specification and regenerate it with `task generate`.
