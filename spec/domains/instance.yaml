@@ -942,9 +942,10 @@ errors:
 
   - name: cortex.instance.StoreOutcomeUnknown
     summary: >-
-      EKR could not say whether a stage verb took effect (`ekr stage begin`, `ekr stage publish`
-      or the settling of an earlier run's stage answered that the publication outcome is
-      unknown). Nothing about the source was wrong; the next run settles the stage.
+      EKR could not say whether a store write of the run took effect (`ekr stage begin`,
+      `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage
+      answered that the publication outcome is unknown). Nothing about the source was wrong; the
+      next run settles the stage, or extracts the batch again.
     fields:
       - {name: reason, type: String}
 
@@ -1415,10 +1416,17 @@ commands:
       # UNMAPPED: what the run leaves for the next one. An unknown outcome at `stage begin` leaves
       # a stage EKR may hold as begun, which the next run abandons; at `stage publish` the run
       # keeps `stage.json` with `publishing` set and neither puts `state/` back nor abandons the
-      # stage, so the next run completes the publish at the same head. ESS declares no effect on
-      # files outside the model's records; tests/store_outcome_unknown.rs holds it.
+      # stage, so the next run completes the publish at the same head. At `apply-extraction`
+      # inside a stage the run leaves the stage, which the next run abandons, putting `state/`
+      # back; outside a stage the run marks no document of the unknown batch, or of any later
+      # one, as seen, so the next run extracts that batch again: nothing is lost, and a batch
+      # that did land is written a second time, as any re-extraction writes a second set of
+      # assertions and evidence. ESS declares no
+      # effect on files outside the model's records; tests/store_outcome_unknown.rs holds it.
       - name: store-outcome-unknown
-        external: EKR answers that the publication outcome of a stage verb is unknown
+        external: >-
+          EKR answers that the publication outcome of a store write of the run (a stage verb or
+          `apply-extraction`) is unknown
         error: cortex.instance.StoreOutcomeUnknown
         compensates: true
         updates: cortex.instance.Source
@@ -1433,7 +1441,8 @@ commands:
         summary: >-
           The source's status records the outcome and its reason, and the scheduler sends no
           RecordFailure: the store, not the source, failed, so the failure is not counted and
-          never disables the source. The next run settles the stage.
+          never disables the source. The next run settles the stage, or, outside a stage,
+          extracts the batch whose apply was unknown again.
 
       - name: ran
         updates: cortex.instance.Source

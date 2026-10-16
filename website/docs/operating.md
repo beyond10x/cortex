@@ -109,7 +109,7 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 1 | `no-such-source` | the home holds no such source |
 | 2 | none | an error before any outcome, on stderr as `cortex: <message>` (an unreadable registry, a home that cannot be locked) |
 | 3 | `disabled` | the source is disabled after two failed runs in a row; nothing ran. `cortex source enable` switches it back on |
-| 4 | `store-outcome-unknown` | EKR could not say whether a stage verb took effect (`publication outcome is unknown`); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage (see [Undoing a run](#undoing-a-run)) |
+| 4 | `store-outcome-unknown` | EKR could not say whether a store write of the run took effect (`publication outcome is unknown` from a stage verb, `apply-extraction` or a transaction's commit); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage or extracts the batch again (see [Undoing a run](#undoing-a-run)) |
 
 With `--fetch-only` (see [Counting what a run would extract](#counting-what-a-run-would-extract)),
 `fetched` exits 0 and a fetch that failed exits 1 as `fetch-failed`.
@@ -211,12 +211,18 @@ the source's seen state where it was. The timers pass `--record-failure`, so a f
 the second failure in a row disables the source and stops its timer. A successful run resets the
 count. `cortex source enable <instance>/<source>` switches it back on.
 
-A run that ends because EKR cannot say whether a stage verb took effect (`ekr stage begin` or
-`ekr stage publish` answering `publication outcome is unknown; resolve the exact retained
-occurrence`) fails as `store-outcome-unknown` and exits 4. The store failed, not the source:
-`--record-failure` counts nothing, so `consecutive_failures` does not move and the source is never
-disabled by it. Its status, metric and hook report it as any failed run's do. The next run settles
-the stage, as it settles the stage of a run that was killed (see [Undoing a run](#undoing-a-run)).
+A run that ends because EKR cannot say whether one of its store writes took effect (`ekr stage
+begin`, `ekr stage publish`, `ekr apply-extraction` or the commit of a transaction answering
+`publication outcome is unknown; resolve the exact retained occurrence`) fails as
+`store-outcome-unknown` and exits 4. The store failed, not the source: `--record-failure` counts
+nothing, so `consecutive_failures` does not move and the source is never disabled by it. Its
+status, metric and hook report it as any failed run's do. The next run settles the stage, as it
+settles the stage of a run that was killed (see [Undoing a run](#undoing-a-run)). A run in no
+stage marks no document of the batch whose apply was unknown as seen, nor of any later batch, so
+the next run extracts that batch again. Nothing is lost; a batch that did land is written a
+second time, a second set of assertions and evidence for its documents, as any re-extraction
+writes (see [Adopting an existing store](#adopting-an-existing-store)). The batches the run
+applied before it stay applied and seen.
 
 A run that fails a check of the spec's `gate` fails as `apply-refused` and is counted the same
 way. Its `reason` names each failed check with its measure and value
@@ -361,6 +367,10 @@ Connectors launch passes on, so the run's reads see its own commits and its comm
 - A run whose `ekr stage begin` answers that its outcome is unknown fails as
   `store-outcome-unknown` before it applies anything; the stage EKR may hold as `Begun` is
   abandoned by the next run.
+- A run whose `ekr apply-extraction`, or a transaction's commit, answers that its outcome is
+  unknown fails as `store-outcome-unknown` and leaves its stage in `stage.json`, neither published
+  nor abandoned, whatever it applied before: the next run abandons the stage and puts `state/`
+  back, so the run's documents are fetched and extracted again.
 - A run that fails its gate is abandoned (`ekr stage abandon`): `ekr head` answers the head from
   before the run, and `state/` is put back from `stage.json`.
 - A run that fails part-way, before its gate, keeps what it applied, as on `sqlite`: its stage

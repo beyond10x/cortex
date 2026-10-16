@@ -33,8 +33,9 @@ pub enum Failure {
     Fetch(String),
     Extract(String),
     Apply(String),
-    /// EKR could not say whether a stage verb took effect (`crate::ekr::outcome_unknown`): a fault
-    /// of the store, not of the source, which the next run settles.
+    /// EKR could not say whether a store write of the run took effect (a stage verb,
+    /// `apply-extraction` or a transaction; `crate::ekr::outcome_unknown`): a fault of the store,
+    /// not of the source, which the next run settles.
     StoreOutcomeUnknown(String),
 }
 
@@ -916,6 +917,7 @@ fn process_in(
         before.take()?;
         let applied = match store.apply(&path) {
             Ok(r) => r,
+            Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown_write(e, before)),
             Err(e) if report.documents_applied == 0 => return Err(Failure::Apply(e)),
             Err(e) => {
                 report.stopped = Some(e);
@@ -1012,11 +1014,16 @@ impl Undo {
 /// or one that committed nothing. A run that committed something keeps what it applied, as on
 /// SQLite: its stage is published, and a publish that is refused is said in the run's reason. A
 /// run that committed nothing has its stage abandoned, and `state/` stays as the run left it, as a
-/// SQLite run's does.
+/// SQLite run's does. A run that failed because EKR could not say whether one of its writes took
+/// effect ([`unknown_write`]) leaves its stage in `stage.json`, neither published nor abandoned:
+/// the next run abandons it and puts `state/` back ([`Staged::recover`]).
 fn settle(ran: Result<Report, Failure>, mut before: Undo) -> Result<Report, Failure> {
     let Some(staged) = before.staged.take() else {
         return ran;
     };
+    if matches!(ran, Err(Failure::StoreOutcomeUnknown(_))) {
+        return ran;
+    }
     if !before.applied {
         if let Err(e) = staged.discard() {
             eprintln!("cortex: {e}");
@@ -1030,6 +1037,25 @@ fn settle(ran: Result<Report, Failure>, mut before: Undo) -> Result<Report, Fail
         (Ok(_), Err(e)) => Err(e),
         (Err(failed), Err(e)) => Err(failed.and(e.reason())),
     }
+}
+
+/// The failure of a store write of the run whose outcome EKR could not say
+/// ([`crate::ekr::outcome_unknown`]): `apply-extraction`, or the commit of a transaction. The run
+/// fails as `store-outcome-unknown` before it marks the batch seen. In a stage, the stage is left
+/// to the next run ([`settle`]), which abandons it and puts `state/` back, so the run's documents
+/// are fetched again; outside one, the next run extracts the batch again, so nothing is lost, and
+/// a batch that did land is written a second time: a second set of assertions and evidence, as
+/// any re-extraction writes.
+fn unknown_write(error: String, before: &Undo) -> Failure {
+    let next = match &before.staged {
+        Some(staged) => format!(
+            "its stage {} is kept in stage.json, and the next run abandons it and fetches the \
+             run's documents again",
+            staged.record.stage
+        ),
+        None => "the batch was not marked seen, so the next run extracts it again".to_string(),
+    };
+    Failure::StoreOutcomeUnknown(format!("{error}; {next}"))
 }
 
 /// The failure a stage verb's error is: [`Failure::StoreOutcomeUnknown`] when EKR could not say
@@ -1453,6 +1479,7 @@ fn apply_records(
         before.take()?;
         let applied = match r.store.apply(&path) {
             Ok(applied) => applied,
+            Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown_write(e, before)),
             Err(e) if report.documents_applied == 0 => return Err(Failure::Apply(e)),
             Err(e) => {
                 report.stopped = Some(e);
@@ -1553,6 +1580,7 @@ fn end_dropped(
         let path = r.run_dir.join(format!("ends-{n}.yaml"));
         match r.store.transact(&path, r.operator, chunk) {
             Ok(_) => before.committed(),
+            Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown_write(e, before)),
             Err(e) if !before.applied => return Err(Failure::Apply(e)),
             Err(e) => {
                 report.stopped = Some(match report.stopped.take() {
