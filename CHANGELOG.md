@@ -47,6 +47,12 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   as reported, marked as not counted: a run's report and `cortex.log` line carry
   `cost_counted: false`, the `SourceRan` event `cost_counted`, and `spend.json` sums it in
   `uncounted_usd`.
+- A capitalised word with hyphens that a batch holds more than `rare_limit` times is kept whole
+  by `RareName` (issue #71). Before, the part after its first hyphen was replaced as a rare name
+  (`Co-[Name-1]` for a frequent `Co-Authored-By` trailer), and with `refuse_if_left: [RareName]`
+  the part left standing (`Co`) was then found as a rare name, so the whole batch was refused.
+  Now no part of a word is a rare name unless the whole word is, and the `refuse_if_left` check
+  reads words the same way.
 
 ### Added
 
