@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BatchTooLarge payload",
+  "description": "A part of an extraction batch was still too long for the model's window, or its answer still cut off at the output limit, after the batch was split as far as it may be. Nothing about the source was wrong; a later run, with a smaller `model.batch_chars`, extracts that part.",
+  "x-ess-name": "cortex.instance.BatchTooLarge",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "6e921ccf66a47a5d2d10bda7670e6789b8add9801ba315f1ae0bd20d1b7803e3",
+    "contract_digest": "slice-sha256/2:bd6aef4d52fc90d34df825ecab0e3fc383b0fb0557c9103ffa29f6d6834fcfd3",
+    "regenerate": "ess generate"
+  }
+}

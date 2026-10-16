@@ -416,6 +416,7 @@ mod tests {
             gateway: None,
             timeout_s: 60,
             instructions: None,
+            batch_chars: None,
         }
     }
 
@@ -428,6 +429,7 @@ mod tests {
             base_url: "http://gw.test".into(),
             token_env: "GW".into(),
             max_context_tokens: None,
+            max_output_tokens: None,
         });
         // A frozen spec from before the token budget was required behind a gateway counts
         // dollars as before.

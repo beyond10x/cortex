@@ -54,13 +54,15 @@ pub struct Model {
     pub gateway: Option<ModelGateway>,
 }
 
-/// The variables a gateway sets on `claude`: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and
-/// `CLAUDE_CODE_MAX_CONTEXT_TOKENS`. Each one the spec does not set is removed, so cortex passes
-/// exactly the spec's set and an instance without a gateway never reaches one by accident.
-pub const GATEWAY_VARIABLES: [&str; 3] = [
+/// The variables a gateway sets on `claude`: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`,
+/// `CLAUDE_CODE_MAX_CONTEXT_TOKENS` and `CLAUDE_CODE_MAX_OUTPUT_TOKENS`. Each one the spec does not
+/// set is removed, so cortex passes exactly the spec's set and an instance without a gateway never
+/// reaches one by accident.
+pub const GATEWAY_VARIABLES: [&str; 4] = [
     "ANTHROPIC_BASE_URL",
     "ANTHROPIC_AUTH_TOKEN",
     "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
 ];
 
 /// Each of [`GATEWAY_VARIABLES`] with the value `gateway` gives it, or `None` to remove it. The
@@ -68,10 +70,10 @@ pub const GATEWAY_VARIABLES: [&str; 3] = [
 /// refused with a reason naming the variable, never its value.
 pub fn gateway_environment(
     gateway: Option<&ModelGateway>,
-) -> Result<[(&'static str, Option<OsString>); 3], String> {
-    let [url, token, context] = GATEWAY_VARIABLES;
+) -> Result<[(&'static str, Option<OsString>); 4], String> {
+    let [url, token, context, output] = GATEWAY_VARIABLES;
     let Some(g) = gateway else {
-        return Ok([(url, None), (token, None), (context, None)]);
+        return Ok([(url, None), (token, None), (context, None), (output, None)]);
     };
     let value = std::env::var_os(&g.token_env)
         .filter(|v| !v.is_empty())
@@ -86,6 +88,7 @@ pub fn gateway_environment(
         (url, Some(g.base_url.clone().into())),
         (token, Some(value)),
         (context, g.max_context_tokens.map(|n| n.to_string().into())),
+        (output, g.max_output_tokens.map(|n| n.to_string().into())),
     ])
 }
 
@@ -108,6 +111,8 @@ pub struct Refused {
     pub cost_usd: Option<f64>,
     /// The backend answered, and its answer was an error (`is_error`).
     pub error_answer: bool,
+    /// The error answer said the request did not fit the model's window ([`unfit`]).
+    pub unfit: Option<Unfit>,
     /// The model calls made: `0` when no model was asked.
     pub calls: i64,
     /// The tokens those calls reported.
@@ -202,6 +207,7 @@ impl Refused {
             message,
             cost_usd: Some(0.0),
             error_answer: false,
+            unfit: None,
             calls: 0,
             usage: Usage::ZERO,
         }
@@ -213,6 +219,7 @@ impl Refused {
             message,
             cost_usd: None,
             error_answer: false,
+            unfit: None,
             calls: 1,
             usage: Usage::UNKNOWN,
         }
@@ -221,7 +228,44 @@ impl Refused {
     /// An error answer that cost zero: the shape of an answer given before any model was asked
     /// (a sign-in or a usage limit), worth asking once more. A missing cost is not zero.
     fn free_error_answer(&self) -> bool {
-        self.error_answer && self.cost_usd == Some(0.0)
+        self.error_answer && self.cost_usd == Some(0.0) && self.unfit.is_none()
+    }
+}
+
+/// How a request did not fit the model's window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unfit {
+    /// The request was over the window.
+    TooLong,
+    /// The answer was cut off at the output limit.
+    CutOff,
+}
+
+impl Unfit {
+    /// As a reason states it.
+    pub fn text(self) -> &'static str {
+        match self {
+            Unfit::TooLong => "too long",
+            Unfit::CutOff => "cut off at the output limit",
+        }
+    }
+}
+
+/// Whether claude's error text says the request did not fit the model's window, as `claude -p`
+/// 2.1 words it: `Prompt is too long` or `Input is too long` for a request over the window;
+/// `output token maximum` (`Claude's response exceeded the N output token maximum`) or
+/// `reached its context window limit` for an answer cut off at the output limit. Any other error
+/// is not.
+pub fn unfit(text: &str) -> Option<Unfit> {
+    let text = text.to_lowercase();
+    if text.contains("prompt is too long") || text.contains("input is too long") {
+        Some(Unfit::TooLong)
+    } else if text.contains("output token maximum")
+        || text.contains("reached its context window limit")
+    {
+        Some(Unfit::CutOff)
+    } else {
+        None
     }
 }
 
@@ -407,7 +451,8 @@ pub fn prompt_split(
 impl Model {
     /// One extraction call for one batch, through the spec's backend, run in `dir`: [`ask_with`]
     /// and the extraction prompt [`SYSTEM_PROMPT`]. An error answer that cost zero is asked once
-    /// more after [`RETRY_WAIT_MS`]; a second refusal is the call's. The first answer cost
+    /// more after [`RETRY_WAIT_MS`], unless it said the request did not fit the model's window
+    /// ([`unfit`]), which a caller splits instead; a second refusal is the call's. The first answer cost
     /// nothing, so a refusal's cost is the whole call's; its model call and tokens count too.
     ///
     /// [`ask_with`]: Model::ask_with
@@ -535,6 +580,7 @@ impl Model {
         if answer["is_error"] == Value::Bool(true) {
             // Claude's own text says why (a sign-in, a usage limit); kept masked and bounded in
             // the reason and in `error.txt`, where nothing else of the failed call is written.
+            let unfit = unfit(answer["result"].as_str().unwrap_or_default());
             let said = error_text(answer["result"].as_str().unwrap_or_default());
             let _ = std::fs::write(dir.join("error.txt"), &said);
             let mut message = format!(
@@ -550,6 +596,7 @@ impl Model {
                 message,
                 cost_usd,
                 error_answer: true,
+                unfit,
                 calls: 1,
                 usage,
             });
@@ -568,6 +615,7 @@ impl Model {
                 ),
                 cost_usd,
                 error_answer: false,
+                unfit: None,
                 calls: 1,
                 usage,
             }),

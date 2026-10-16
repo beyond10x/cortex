@@ -183,6 +183,8 @@ fn source_ran(source_id: m::SourceId, report: &Report) -> m::SourceRan {
         output_tokens: report.usage.output_tokens,
         fixed_input_tokens: report.fixed_input_tokens,
         documents_input_tokens: report.documents_input_tokens,
+        batch_chars: report.batch_chars as i64,
+        splits: report.splits as i64,
     }
 }
 
@@ -294,6 +296,9 @@ impl Ports {
             Err(Failure::StoreOutcomeUnknown(reason)) => m::RunSourceOutcome::StoreOutcomeUnknown {
                 error: m::StoreOutcomeUnknown { reason },
             },
+            Err(Failure::BatchTooLarge(reason)) => m::RunSourceOutcome::BatchTooLarge {
+                error: m::BatchTooLarge { reason },
+            },
             Ok(report) => {
                 let ran = source_ran(source_id, &report);
                 self.shared.borrow_mut().last_run = Some(report);
@@ -366,7 +371,8 @@ impl Ports {
                 Failure::Fetch(reason)
                 | Failure::Extract(reason)
                 | Failure::Apply(reason)
-                | Failure::StoreOutcomeUnknown(reason),
+                | Failure::StoreOutcomeUnknown(reason)
+                | Failure::BatchTooLarge(reason),
             ) => failed(reason),
             Ok(c) => m::RunSourceOutcome::Fetched {
                 source_fetched: m::SourceFetched {
@@ -419,6 +425,7 @@ impl RunSourceBehavior for Ports {
             ("extraction-failed", Failure::Extract),
             ("apply-refused", Failure::Apply),
             ("store-outcome-unknown", Failure::StoreOutcomeUnknown),
+            ("batch-too-large", Failure::BatchTooLarge),
         ]
         .into_iter()
         .find(|(outcome, _)| self.decided(RUN, outcome));
@@ -461,6 +468,13 @@ impl RunSourceBehavior for Ports {
                 );
                 return Ok(m::RunSourceOutcome::StoreOutcomeUnknown {
                     error: m::StoreOutcomeUnknown { reason },
+                });
+            }
+            // Recorded on the source like a failure; the scheduler counts none for it (main.rs).
+            Err(Failure::BatchTooLarge(reason)) => {
+                self.note(found, m::RunOutcome::BatchTooLarge, Some(reason.clone()));
+                return Ok(m::RunSourceOutcome::BatchTooLarge {
+                    error: m::BatchTooLarge { reason },
                 });
             }
             Ok(report) => report,

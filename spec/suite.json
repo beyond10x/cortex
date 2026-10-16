@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "4d78dbc9fefa8ec583bfc00d89d8a461b37b910b77d90cf3b69c991fd6b95086",
-    "contract_digest": "b98224683038bea6025b88e470b066c0af9026784c7f98f40c3a3080c018d431",
+    "spec_digest": "6e921ccf66a47a5d2d10bda7670e6789b8add9801ba315f1ae0bd20d1b7803e3",
+    "contract_digest": "3385a36f464f5d77a1daf1182eec2bda2289795ecacd97acd3adc733134454a7",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
@@ -50,6 +50,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -57,6 +58,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -432,6 +434,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -439,6 +442,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -954,6 +958,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -961,6 +966,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -1414,6 +1420,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1048595.0,
                   "budget_tokens": 1048595.0,
                   "budget_usd": 1048595.0,
                   "daily_ceiling_tokens": 1048595.0,
@@ -1421,6 +1428,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url-1048594",
                     "max_context_tokens": 1048595.0,
+                    "max_output_tokens": 1048595.0,
                     "token_env": "spec.model.gateway.token_env-1048594"
                   },
                   "instructions": "spec.model.instructions-1048594",
@@ -1587,6 +1595,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -1594,6 +1603,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -1872,6 +1882,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -1879,6 +1890,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -2339,6 +2351,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -2346,6 +2359,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -2806,6 +2820,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -2813,6 +2828,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -3273,6 +3289,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -3280,6 +3297,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -3729,6 +3747,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -3736,6 +3755,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -4243,6 +4263,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1048595.0,
                   "budget_tokens": 1048595.0,
                   "budget_usd": 1048595.0,
                   "daily_ceiling_tokens": 1048595.0,
@@ -4250,6 +4271,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url-1048594",
                     "max_context_tokens": 1048595.0,
+                    "max_output_tokens": 1048595.0,
                     "token_env": "spec.model.gateway.token_env-1048594"
                   },
                   "instructions": "spec.model.instructions-1048594",
@@ -4412,6 +4434,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -4419,6 +4442,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -4589,6 +4613,7 @@
                 },
                 "model": {
                   "backend": "Codex",
+                  "batch_chars": 1048596.0,
                   "budget_tokens": 1048596.0,
                   "budget_usd": 1048596.0,
                   "daily_ceiling_tokens": 1048596.0,
@@ -4596,6 +4621,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url-1048595",
                     "max_context_tokens": 1048596.0,
+                    "max_output_tokens": 1048596.0,
                     "token_env": "spec.model.gateway.token_env-1048595"
                   },
                   "instructions": "spec.model.instructions-1048595",
@@ -4758,6 +4784,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -4765,6 +4792,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -5046,6 +5074,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -5053,6 +5082,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -5560,6 +5590,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -5567,6 +5598,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -6016,6 +6048,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -6023,6 +6056,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -6702,6 +6736,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -6709,6 +6744,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -7090,6 +7126,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -7097,6 +7134,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -7606,6 +7644,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -7613,6 +7652,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -8339,6 +8379,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -8346,6 +8387,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -9079,6 +9121,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -9086,6 +9129,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -9644,6 +9688,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -9651,6 +9696,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -10114,6 +10160,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -10121,6 +10168,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -10979,6 +11027,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -10986,6 +11035,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -12022,6 +12072,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -12029,6 +12080,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -12375,6 +12427,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -12382,6 +12435,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -12770,6 +12824,445 @@
         }
       ]
     },
+    "cortex.instance.RunSource/outcome/batch-too-large": {
+      "purpose": "`cortex.instance.RunSource` answers `batch-too-large` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "batch_chars": 1.0,
+                  "budget_tokens": 1.0,
+                  "budget_usd": 1.0,
+                  "daily_ceiling_tokens": 1.0,
+                  "daily_ceiling_usd": 1.0,
+                  "gateway": {
+                    "base_url": "spec.model.gateway.base_url",
+                    "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
+                    "token_env": "spec.model.gateway.token_env"
+                  },
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AddSource",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "instance_name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "Web"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "schedule": {
+              "kind": "literal",
+              "value": "schedule"
+            },
+            "source_id": {
+              "kind": "literal",
+              "value": "source_id"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "source",
+          "entity": "cortex.instance.Source",
+          "event": "cortex.instance.SourceAdded",
+          "field": "source_id"
+        },
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "batch-too-large"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RunSource",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "fetch_only": {
+              "kind": "literal",
+              "value": false
+            },
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "batch-too-large"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.BatchTooLarge"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "consecutive_failures": {
+                "kind": "literal",
+                "value": 0.0
+              },
+              "instance_name": {
+                "kind": "instance",
+                "instance": "instance"
+              },
+              "kind": {
+                "kind": "literal",
+                "value": "Web"
+              },
+              "last_outcome": {
+                "kind": "literal",
+                "value": "batch-too-large"
+              },
+              "name": {
+                "kind": "literal",
+                "value": "name"
+              },
+              "runs": {
+                "kind": "literal",
+                "value": 0.0
+              },
+              "schedule": {
+                "kind": "literal",
+                "value": "schedule"
+              },
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceId"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Source"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AddSource"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RunSource"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "batch-too-large"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.BatchTooLarge"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Scheduler"
+        }
+      ]
+    },
     "cortex.instance.RunSource/outcome/disabled": {
       "purpose": "`cortex.instance.RunSource` answers `disabled` for an input selecting the branch in its established subject state",
       "steps": [
@@ -12812,6 +13305,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -12819,6 +13313,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -13385,6 +13880,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -13392,6 +13888,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -13822,6 +14319,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -13829,6 +14327,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -14259,6 +14758,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -14266,6 +14766,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -14757,6 +15258,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -14764,6 +15266,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -15524,6 +16027,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -15531,6 +16035,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -15717,6 +16222,10 @@
             }
           },
           "shape": {
+            "batch_chars": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
             "cache_creation_input_tokens": {
               "holds": "primitive",
               "kind": "integer",
@@ -15775,6 +16284,10 @@
             "source_id": {
               "holds": "primitive",
               "kind": "string"
+            },
+            "splits": {
+              "holds": "primitive",
+              "kind": "integer"
             }
           }
         },
@@ -16038,6 +16551,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -16045,6 +16559,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -16475,6 +16990,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -16482,6 +16998,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -16707,6 +17224,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -16714,6 +17232,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -17089,6 +17608,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -17096,6 +17616,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -17389,6 +17910,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -17396,6 +17918,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -17746,6 +18269,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -17753,6 +18277,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -18004,6 +18529,308 @@
         }
       ]
     },
+    "cortex.instance.Source/invariant/after/cortex.instance.RunSource/batch-too-large": {
+      "purpose": "a `cortex.instance.Source` still satisfies what it declares after `cortex.instance.RunSource` on `batch-too-large`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "batch_chars": 1.0,
+                  "budget_tokens": 1.0,
+                  "budget_usd": 1.0,
+                  "daily_ceiling_tokens": 1.0,
+                  "daily_ceiling_usd": 1.0,
+                  "gateway": {
+                    "base_url": "spec.model.gateway.base_url",
+                    "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
+                    "token_env": "spec.model.gateway.token_env"
+                  },
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AddSource",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "instance_name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "kind": {
+              "kind": "literal",
+              "value": "Web"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "schedule": {
+              "kind": "literal",
+              "value": "schedule"
+            },
+            "source_id": {
+              "kind": "literal",
+              "value": "source_id"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "source",
+          "entity": "cortex.instance.Source",
+          "event": "cortex.instance.SourceAdded",
+          "field": "source_id"
+        },
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "batch-too-large"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RunSource",
+          "actor": "cortex.instance.Scheduler",
+          "input": {
+            "fetch_only": {
+              "kind": "literal",
+              "value": false
+            },
+            "source_id": {
+              "kind": "instance",
+              "instance": "source"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "batch-too-large"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "source_id": {
+                "kind": "instance",
+                "instance": "source"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Enabled"
+              }
+            }
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "runs >= 0"
+          }
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Sources"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Sources",
+          "expectation": {
+            "expect": "satisfies",
+            "predicate": "consecutive_failures >= 0"
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceId"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Source"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AddSource"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RunSource"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AddSource",
+            "outcome": "added"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RunSource",
+            "outcome": "batch-too-large"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Sources"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Scheduler"
+        }
+      ]
+    },
     "cortex.instance.Source/invariant/after/cortex.instance.RunSource/disabled": {
       "purpose": "a `cortex.instance.Source` still satisfies what it declares after `cortex.instance.RunSource` on `disabled`",
       "steps": [
@@ -18046,6 +18873,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -18053,6 +18881,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -18474,6 +19303,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -18481,6 +19311,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -18774,6 +19605,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -18781,6 +19613,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -19074,6 +19907,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -19081,6 +19915,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -19502,6 +20337,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -19509,6 +20345,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -19816,6 +20653,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -19823,6 +20661,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -20116,6 +20955,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -20123,6 +20963,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -20409,6 +21250,7 @@
                   "extraction-failed",
                   "apply-refused",
                   "store-outcome-unknown",
+                  "batch-too-large",
                   "disabled"
                 ]
               },
@@ -20697,6 +21539,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -20704,6 +21547,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -20890,6 +21734,7 @@
                   "extraction-failed",
                   "apply-refused",
                   "store-outcome-unknown",
+                  "batch-too-large",
                   "disabled"
                 ]
               },
@@ -21163,6 +22008,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -21170,6 +22016,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -21690,6 +22537,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -21697,6 +22545,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -22205,6 +23054,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -22212,6 +23062,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -22456,6 +23307,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -22463,6 +23315,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -22628,6 +23481,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -22635,6 +23489,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -22784,6 +23639,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -22791,6 +23647,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -23291,6 +24148,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -23298,6 +24156,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -23463,6 +24322,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -23470,6 +24330,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",
@@ -23601,6 +24462,7 @@
                 },
                 "model": {
                   "backend": "Codex",
+                  "batch_chars": 2.0,
                   "budget_tokens": 2.0,
                   "budget_usd": 2.0,
                   "daily_ceiling_tokens": 2.0,
@@ -23608,6 +24470,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url-1",
                     "max_context_tokens": 2.0,
+                    "max_output_tokens": 2.0,
                     "token_env": "spec.model.gateway.token_env-1"
                   },
                   "instructions": "spec.model.instructions-1",
@@ -24097,6 +24960,7 @@
                 },
                 "model": {
                   "backend": "Codex",
+                  "batch_chars": 2.0,
                   "budget_tokens": 2.0,
                   "budget_usd": 2.0,
                   "daily_ceiling_tokens": 2.0,
@@ -24104,6 +24968,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url-1",
                     "max_context_tokens": 2.0,
+                    "max_output_tokens": 2.0,
                     "token_env": "spec.model.gateway.token_env-1"
                   },
                   "instructions": "spec.model.instructions-1",
@@ -24235,6 +25100,7 @@
                 },
                 "model": {
                   "backend": "Claude",
+                  "batch_chars": 1.0,
                   "budget_tokens": 1.0,
                   "budget_usd": 1.0,
                   "daily_ceiling_tokens": 1.0,
@@ -24242,6 +25108,7 @@
                   "gateway": {
                     "base_url": "spec.model.gateway.base_url",
                     "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
                     "token_env": "spec.model.gateway.token_env"
                   },
                   "instructions": "spec.model.instructions",

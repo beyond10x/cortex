@@ -1798,12 +1798,17 @@ const EXIT_DISABLED: u8 = 3;
 /// broken source.
 const EXIT_STORE_OUTCOME_UNKNOWN: u8 = 4;
 
+/// The exit status of a `run` that ended because a part of an extraction batch still did not fit
+/// the model's window after it was split as far as it may be: not counted against the source.
+const EXIT_BATCH_TOO_LARGE: u8 = 6;
+
 /// The exit status of each `run` outcome, which an external scheduler reads instead of the line.
 fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
     match outcome {
         m::RunSourceOutcome::Ran { .. } | m::RunSourceOutcome::Fetched { .. } => 0,
         m::RunSourceOutcome::Disabled { .. } => EXIT_DISABLED,
         m::RunSourceOutcome::StoreOutcomeUnknown { .. } => EXIT_STORE_OUTCOME_UNKNOWN,
+        m::RunSourceOutcome::BatchTooLarge { .. } => EXIT_BATCH_TOO_LARGE,
         m::RunSourceOutcome::FetchOnlyFailed { .. }
         | m::RunSourceOutcome::FetchFailed { .. }
         | m::RunSourceOutcome::ExtractionFailed { .. }
@@ -1855,6 +1860,8 @@ fn run_source(
                 ("output_tokens", source_ran.output_tokens),
                 ("fixed_input_tokens", source_ran.fixed_input_tokens),
                 ("documents_input_tokens", source_ran.documents_input_tokens),
+                ("batch_chars", Some(source_ran.batch_chars)),
+                ("splits", Some(source_ran.splits)),
             ] {
                 detail[key] = json!(value);
             }
@@ -1973,6 +1980,16 @@ fn run_source(
         m::RunSourceOutcome::StoreOutcomeUnknown { error } => (
             Done {
                 outcome: "store-outcome-unknown",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            None,
+        ),
+        // Not a failure of the source either: no `RecordFailure`; status, metric and hook report
+        // it.
+        m::RunSourceOutcome::BatchTooLarge { error } => (
+            Done {
+                outcome: "batch-too-large",
                 ok: false,
                 detail: json!({"reason": error.reason}),
             },

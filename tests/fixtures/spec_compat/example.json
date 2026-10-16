@@ -18,6 +18,7 @@
   },
   "log": [
     {
+      "batch_chars": 60000,
       "cache_creation_input_tokens": null,
       "cache_read_input_tokens": null,
       "cost_usd": 0.01,
@@ -72,6 +73,7 @@
   "run": {
     "command": "run",
     "detail": {
+      "batch_chars": 60000,
       "cache_creation_input_tokens": null,
       "cache_read_input_tokens": null,
       "cost_usd": "0.0100",
@@ -86,6 +88,7 @@
       "output_tokens": null,
       "parts_rejected": 0,
       "source_id": "example/news",
+      "splits": 0,
       "stopped": null
     },
     "outcome": "ran"

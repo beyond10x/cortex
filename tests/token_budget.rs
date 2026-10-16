@@ -322,6 +322,7 @@ fn a_spend_file_without_tokens_reads_as_zero_and_a_bad_count_fails_closed() {
         gateway: None,
         timeout_s: 60,
         instructions: None,
+        batch_chars: None,
     };
     std::fs::write(
         spend::path(&layout),
