@@ -551,12 +551,13 @@ types:
   # not (`Jean-Luc`, `Co-Authored-By`), is replaced whole or not at all: no part of a word seen
   # more than `rare_limit` times is a rare name, and the `refuse_if_left` check reads words the
   # same way, so it finds nothing left of a word that was kept. A word glued to a lower-case
-  # letter before it (`useFoo-Bar`) is part of an identifier and skipped whole; one glued to an
-  # underscore or a letter of a script without case (`_Jean-Luc_`, CJK text) is read again from
-  # its next letter, so its rare tail is replaced. The part of a word before a span another class
-  # hides (`Co` of `Co-Jane`, `Jane` a known name) is read alone, as the check reads it beside
-  # that span's placeholder. A text cut at `max_chars` inside a word kept whole ends in a prefix of
-  # that word, which the check does not read as a rare name.
+  # letter before it, directly or through underscores (`useFoo-Bar`, `snake_case_Identifier`), is
+  # part of an identifier and skipped whole. Otherwise an underscore and a letter of a script
+  # without case bound a word, as a space does: `_Rowan_` and the `Rowan` of `会议上Rowan发言了`
+  # are words. The part of a word before a span another class hides (`Schmidt`
+  # of `Schmidt-Müller`, `Müller` a known name) is read alone, as the check reads it beside that
+  # span's placeholder, and replaced when it is rare. A text cut at `max_chars` inside a word kept
+  # whole ends in a prefix of that word, which the check does not read as a rare name.
   # UNMAPPED: how a text splits into words and how often a batch holds each is a rule on String
   # values the specification has no construct for; `src/redact.rs` holds it and its tests and
   # `tests/redaction_gate.rs` test it.
