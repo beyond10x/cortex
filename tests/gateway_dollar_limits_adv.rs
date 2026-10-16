@@ -450,11 +450,7 @@ fn legacy(name: &str, n: usize, model: &str) -> World {
 
 #[test]
 fn adv_a_legacy_gateway_instance_still_counts_its_daily_ceiling_in_dollars() {
-    let w = legacy(
-        "old",
-        7,
-        ", budget_usd: \"100\", daily_ceiling_usd: \"60\"",
-    );
+    let w = legacy("old", 7, ", budget_usd: \"100\", daily_ceiling_usd: \"60\"");
     let ran = run(&w, "old/news");
     // 50.5, then min(49.5, 9.5) for the second: 101 spent, then the ceiling.
     assert_eq!(calls(&w), 2, "{ran}");
@@ -547,7 +543,10 @@ fn adv_create_update_and_adopt_each_print_exactly_one_warning_line_and_none_with
     );
     let (w, stderr) = instance("warn", 1, &both, "", "0.01");
     assert_eq!(warnings(&stderr), 1, "create: {stderr}");
-    let line = stderr.lines().find(|l| l.contains("bound nothing")).unwrap();
+    let line = stderr
+        .lines()
+        .find(|l| l.contains("bound nothing"))
+        .unwrap();
     assert!(
         line.contains("model.budget_usd") && line.contains("model.daily_ceiling_usd"),
         "{line}"

@@ -146,10 +146,11 @@ figure bounds nothing:
   gives it one.
 - The cost an answer reports counts against no `budget_usd`, no `daily_ceiling_usd` and no
   dollar budget of a `cortex quality` measurement or a `cortex schema` round, and no
-  `--max-budget-usd` is passed to `claude`. The token limits ([Limits in
-  tokens](#limits-in-tokens)) hold as without a gateway.
-- A gateway spec that still gives `budget_usd` or `daily_ceiling_usd` is accepted, and `create`,
-  `update` and `adopt` print one line on stderr saying they bound nothing behind the gateway.
+  `--max-budget-usd` is passed to `claude`. A [run gate](#gate) check on `cost_usd` checks
+  nothing. The token limits ([Limits in tokens](#limits-in-tokens)) hold as without a gateway.
+- A gateway spec that still gives `budget_usd`, `daily_ceiling_usd` or a gate check on
+  `cost_usd` is accepted, and `create`, `update` and `adopt` print one line on stderr saying they
+  bound nothing behind the gateway.
 - The reported cost is still recorded, as not counted: a run's report and its `cortex.log` line
   carry `cost_usd` as reported and `cost_counted: false`, and `spend.json` sums it in
   `uncounted_usd`, leaving `spent_usd` as it is.
@@ -767,7 +768,7 @@ gate:
 |---|---|
 | `checks` | the checks, each with a `measure` and a `min`, a `max` or both. Without a `gate` section, or with no checks, a run is not checked |
 | `measure` | a number of the run report `cortex run` prints: `documents_new`, `documents_applied`, `facts_refused`, `parts_rejected`, `masked`, `truncated`, `unrestored` or `cost_usd`. Any other name is the dotted path of a number in what `ekr quality` prints for the store after the run, such as `assertions.active` or `sharing_nodes` |
-| `min`, `max` | decimals, written as strings; the check fails when the measure is below `min` or above `max`. Both are compared at 4 decimal places, the precision `cortex run` prints a cost at, so a cost printed as `0.3000` is within `max: "0.3"`. A measure that cannot be read (a misspelt name, a `cost_usd` no answer carried, an `ekr quality` that fails) fails its check |
+| `min`, `max` | decimals, written as strings; the check fails when the measure is below `min` or above `max`. Both are compared at 4 decimal places, the precision `cortex run` prints a cost at, so a cost printed as `0.3000` is within `max: "0.3"`. A measure that cannot be read (a misspelt name, a `cost_usd` no answer carried, an `ekr quality` that fails) fails its check. Behind a [model gateway](#a-model-gateway) a `cost_usd` check checks nothing: the cost is what `claude` reported, and it bounds nothing |
 
 ## `monitoring`
 

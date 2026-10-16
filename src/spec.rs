@@ -55,7 +55,9 @@ pub fn load(path: &Path) -> Result<Loaded, String> {
 /// ([`dollar_limits_warning`]).
 pub fn load_given(path: &Path) -> Result<Loaded, String> {
     let loaded = load(path)?;
-    if let Some(reason) = reserved_refusal(&loaded.model).or_else(|| gateway_refusal(&loaded.model))
+    if let Some(reason) = reserved_refusal(&loaded.model)
+        .or_else(|| infinite_refusal(&loaded.model))
+        .or_else(|| gateway_refusal(&loaded.model))
     {
         return Err(format!("{}: {reason}", path.display()));
     }
@@ -77,16 +79,43 @@ pub fn gateway_refusal(spec: &m::InstanceSpec) -> Option<String> {
     })
 }
 
-/// The warning for a spec that gives `model.budget_usd` or `model.daily_ceiling_usd` behind a
-/// model gateway, where they bound nothing; `None` for any other spec.
+/// Why a spec's dollar limit cannot be given: `model.budget_usd` or `model.daily_ceiling_usd`
+/// has more digits than a finite number holds, so it would read as infinite and bound nothing.
+/// Held for `create`, `update` and `adopt` ([`load_given`]); an instance's frozen copy, read with
+/// [`load`], is not held to it, so one created before the rule keeps running.
+pub fn infinite_refusal(spec: &m::InstanceSpec) -> Option<String> {
+    [
+        ("model.budget_usd", &spec.model.budget_usd),
+        ("model.daily_ceiling_usd", &spec.model.daily_ceiling_usd),
+    ]
+    .into_iter()
+    .find_map(|(field, value)| {
+        let value = value.as_ref()?;
+        value
+            .0
+            .parse::<f64>()
+            .is_ok_and(|usd| !usd.is_finite())
+            .then(|| format!("{field} is too large to be read as a finite number of US dollars"))
+    })
+}
+
+/// The warning for a spec that gives `model.budget_usd`, `model.daily_ceiling_usd` or a run gate
+/// check on `cost_usd` behind a model gateway, where they bound nothing; `None` for any other
+/// spec.
 pub fn dollar_limits_warning(spec: &m::InstanceSpec) -> Option<String> {
     spec.model.gateway.as_ref()?;
+    let gated = spec
+        .gate
+        .iter()
+        .flat_map(|g| g.checks.iter())
+        .any(|c| c.measure == "cost_usd");
     let given: Vec<&str> = [
         ("model.budget_usd", spec.model.budget_usd.is_some()),
         (
             "model.daily_ceiling_usd",
             spec.model.daily_ceiling_usd.is_some(),
         ),
+        ("a gate check on cost_usd", gated),
     ]
     .into_iter()
     .filter_map(|(field, given)| given.then_some(field))
