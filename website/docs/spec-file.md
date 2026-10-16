@@ -116,9 +116,9 @@ model:
 
 | field | meaning |
 |---|---|
-| `base_url` | the gateway's URL, passed to `claude` as `ANTHROPIC_BASE_URL` |
-| `token_env` | the name of the environment variable holding the gateway's token, never the token itself. Its value is read when each call is made and passed as `ANTHROPIC_AUTH_TOKEN`. A variable name (letters, digits and `_`, not starting with a digit), and not one cortex writes into a unit by value: `PATH`, `HOME`, the `XDG_*` directories, a `CONNECTORS_*` or a `CORTEX_*` variable; `create`, `update` and `adopt` refuse another |
-| `max_context_tokens` | optional: passed as `CLAUDE_CODE_MAX_CONTEXT_TOKENS` |
+| `base_url` | the gateway's URL, passed to `claude` as `ANTHROPIC_BASE_URL`. It starts with `http://` or `https://`; `create`, `update` and `adopt` refuse an empty one or another scheme |
+| `token_env` | the name of the environment variable holding the gateway's token, never the token itself. Its value is read when each call is made and passed as `ANTHROPIC_AUTH_TOKEN`. A variable name (letters, digits and `_`, not starting with a digit), and not one cortex writes into a unit by value (`PATH`, `HOME`, a `CONNECTORS_*` or a `CORTEX_*` variable), nor any `XDG_*` or `ANTHROPIC_*` variable; `create`, `update` and `adopt` refuse another |
+| `max_context_tokens` | optional: passed as `CLAUDE_CODE_MAX_CONTEXT_TOKENS`; a whole number above 0, `create`, `update` and `adopt` refuse another |
 
 cortex passes exactly that set to `claude`, from a run in your shell, a timer unit and a runner that
 calls `cortex run` directly alike; `model` names the gateway's model (`--model`). An
@@ -147,7 +147,9 @@ tokens, cache reads, cache writes and output tokens, added together.
 
 - `budget_tokens` bounds one run: before each batch, a run whose calls have used `budget_tokens`
   or more stops, `stopped` naming the token budget (`token budget of 200000 tokens spent: 201500
-  tokens used`).
+  tokens used`). It bounds each `cortex quality` measurement and each `cortex schema` round the
+  same way, as `budget_usd` does: before a further call, one whose calls have used
+  `budget_tokens` or more fails with that reason.
 - `daily_ceiling_tokens` bounds the instance's calls in one UTC calendar day, across the runs of
   all its sources, the seed extraction, `cortex quality` and `cortex schema`, as
   `daily_ceiling_usd` does. Every answer that reports a `usage` adds its tokens to the day's, a
@@ -155,9 +157,12 @@ tokens, cache reads, cache writes and output tokens, added together.
   batch with `daily_ceiling_reached: true` and `stopped` naming it (`daily ceiling of 2000000
   tokens reached: 2001500 tokens used on 2026-10-15 (UTC)`); `cortex quality` and `cortex schema`
   are refused with that reason.
-- Under either token limit, an answer that reports no `usage` stops the run before its next
-  batch, `stopped` saying its tokens could not be counted; the batches before it stay applied.
-  Under `daily_ceiling_tokens`, `cortex quality` and `cortex schema` are refused the same way.
+- Under either token limit, an answer whose tokens cannot be counted stops the run before its
+  next batch, `stopped` saying its tokens could not be counted; the batches before it stay
+  applied. That is an answer that reports no `usage`, or a count in it below 0, or counts whose
+  sum (with the tokens already used) does not fit a signed 64-bit integer. Such a stop is not a
+  reached ceiling: `daily_ceiling_reached` is not set. `cortex quality` and `cortex schema` are
+  refused the same way under either limit.
 
 A token limit cannot be passed to `claude` the way `--max-budget-usd` is, so a single call is not
 cut short: a run can pass its limit by the tokens of its last call. The token limits apply beside

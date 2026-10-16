@@ -241,7 +241,9 @@ fn copied(key: &str) -> bool {
 /// source unit names it with `PassEnvironment=`, so it must be one variable name (letters, digits
 /// and `_`, not starting with a digit), and a unit must not hold its value, so it must be none a
 /// unit writes by value: those [`environment`] copies and every `CORTEX_*`
-/// ([`tool_environment`]).
+/// ([`tool_environment`]). Nor may it be any `XDG_*` name (a unit copies some, and the session's
+/// base directories are no token) or any `ANTHROPIC_*` name (cortex sets or removes those for
+/// `claude` itself).
 pub fn token_env_refusal(token_env: &str) -> Option<String> {
     let name = token_env
         .chars()
@@ -256,12 +258,22 @@ pub fn token_env_refusal(token_env: &str) -> Option<String> {
              and `_`, not starting with a digit"
         ));
     }
-    (copied(token_env) || token_env.starts_with("CORTEX_")).then(|| {
-        format!(
+    if copied(token_env) || token_env.starts_with("CORTEX_") {
+        return Some(format!(
             "model.gateway.token_env {token_env} is a variable cortex writes into a systemd \
              unit by value, and a unit must not hold the gateway's token; name another variable"
-        )
-    })
+        ));
+    }
+    ["XDG_", "ANTHROPIC_"]
+        .into_iter()
+        .find(|prefix| token_env.starts_with(prefix))
+        .map(|prefix| {
+            format!(
+                "model.gateway.token_env {token_env} is a {prefix}* variable, which cortex \
+                 reserves (the session's base directories, and the variables it sets or removes \
+                 for claude); name another variable"
+            )
+        })
 }
 
 /// `CORTEX_CONNECTORS`, `CORTEX_CLAUDE` and `CORTEX_CODEX` for a source unit, so a scheduled run

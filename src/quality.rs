@@ -597,6 +597,8 @@ pub fn judge(
     let schema = answer_schema();
     let mut spent = 0.0;
     let mut daily = spend::Daily::new(layout, &spec.model, Some(home));
+    // The measurement's tokens, held to `model.budget_tokens` as a run's are.
+    let mut tokens = spend::TokenBudget::new(&spec.model);
     let mut cost_usd = Some(0.0);
     let mut all: Vec<m::QualityVerdict> = Vec::new();
     for (n, batch) in batches.iter().enumerate() {
@@ -604,6 +606,12 @@ pub fn judge(
         if remaining <= 0.0 {
             return Err(Failure::Judge(format!(
                 "budget of {budget} USD spent; {}",
+                so_far(all.len(), items.len(), cost_usd)
+            )));
+        }
+        if let Err(why) = tokens.check() {
+            return Err(Failure::Judge(format!(
+                "{why}; {}",
                 so_far(all.len(), items.len(), cost_usd)
             )));
         }
@@ -643,6 +651,7 @@ pub fn judge(
             }
         };
         daily.add_answer(answer.cost_usd, &answer.usage);
+        tokens.add(&answer.usage);
         spent += answer.cost_usd.unwrap_or(0.0);
         cost_usd = add_cost(cost_usd, answer.cost_usd);
         let mut restored = answer.document;

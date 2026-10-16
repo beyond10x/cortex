@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 972a2240d6d0adf2428e68bc8b7826fea28297c6b090df40dc3cfc498c920474
-// contract digest 279e2e42c50a95e8d6edb70efe5dd290e71186dec6280e9d6735be0f90ce0018
+// model digest 4ae7016a234132e571b7abed384e164e18cd472f2a8f3e07b3d7860f9d294f49
+// contract digest 26132d405a23c83a5737eb1c814a3d29d646abff53eb4c3c99e6298956066bda
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -2018,7 +2018,7 @@ pub enum RunSourceOutcome {
     },
     /// `ran` — otherwise.
     ///
-    /// Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day.
+    /// Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it.
     Ran {
         /// The `cortex.instance.SourceRan` this outcome publishes.
         source_ran: SourceRan,

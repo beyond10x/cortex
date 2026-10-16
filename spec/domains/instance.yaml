@@ -341,11 +341,17 @@ types:
   # tokens, for a model whose cost `claude` cannot report (one behind a gateway): `budget_tokens`
   # the tokens of one run, `daily_ceiling_tokens` the tokens of the instance in one UTC calendar
   # day (`cortex.instance.DailySpend`). A call's tokens are what its answer's `usage` reports:
-  # input, cache reads, cache writes and output together. Each is checked before a batch: a run
-  # that reached either stops before its next batch, keeps what it applied, and its reason names
-  # the limit. Under a token limit, an answer that reports no `usage` stops the run before its
-  # next batch, the reason saying its tokens could not be counted. An Integer above 0; absent
-  # means no limit in tokens. The dollar limits apply beside them unchanged.
+  # input, cache reads, cache writes and output together. An answer whose `usage` reports no
+  # count, a count below 0, or counts whose sum (or whose sum with the tokens already used) does
+  # not fit a signed 64-bit integer has tokens that could not be counted. Each limit is checked
+  # before a batch: a run that reached either stops before its next batch, keeps what it applied,
+  # and its reason names the limit. Under a token limit, an answer whose tokens could not be
+  # counted stops the run before its next batch, the reason saying so; that is not a reached
+  # daily ceiling (`cortex.instance.SourceRan.daily_ceiling_reached` stays false). A quality
+  # measurement and a schema proposal are held to `budget_tokens` as to `budget_usd`: each stops
+  # before a further model call once its own answers' tokens reach it, or once one of its answers'
+  # tokens could not be counted. An Integer above 0; absent means no limit in tokens. The dollar
+  # limits apply beside them unchanged.
   #
   # `gateway`, when given, sends the model calls through a model gateway
   # (`cortex.instance.ModelGateway`).
@@ -364,7 +370,15 @@ types:
 
   # A model gateway the `claude` backend's calls go through, with no interactive sign-in.
   # `base_url` is the gateway's URL; `token_env` the name of the environment variable that holds
-  # its token, never the token itself. cortex passes exactly this set to `claude`:
+  # its token, never the token itself. The spec check refuses (exit 2, naming the field, before
+  # anything is written, for `create`, `update` and `adopt` alike) a `base_url` that is empty or
+  # does not start with `http://` or `https://`; a `max_context_tokens` of 0 or less; and a
+  # `token_env` that is not a variable name (letters, digits and `_`, not starting with a digit),
+  # that a unit cortex writes holds by value (`PATH`, `HOME`, every `CONNECTORS_*` and `CORTEX_*`),
+  # or that is any `XDG_*` or `ANTHROPIC_*` name.
+  # UNMAPPED: these refusals are checks on String and Integer values the specification has no
+  # construct for; `spec::check` holds them and `tests/security_20261015c.rs` tests them.
+  # cortex passes exactly this set to `claude`:
   # `ANTHROPIC_BASE_URL` (`base_url`), `ANTHROPIC_AUTH_TOKEN` (the value of `token_env`, read
   # when the call is made) and `CLAUDE_CODE_MAX_CONTEXT_TOKENS` (`max_context_tokens`, when
   # given), from an interactive run, a timer unit and a runner that calls `cortex run` alike. A
@@ -388,8 +402,10 @@ types:
   # included; an answer with no cost adds nothing. The file is kept whether or not the spec names a
   # ceiling, and a snapshot restore leaves it as it is. `spent_tokens` sums, the same way, the
   # tokens the day's answers reported in their `usage` (input, cache reads, cache writes and
-  # output); an answer with no `usage` adds nothing, and a file written before it was counted
-  # reads as `0`.
+  # output); an answer whose tokens could not be counted (`cortex.instance.ModelSpec`: no `usage`,
+  # a count below 0, or a sum past a signed 64-bit integer) adds nothing, and a file written
+  # before it was counted reads as `0`. A day's sum that would pass a signed 64-bit integer is not
+  # recorded: as for any spend that could not be recorded, a ceiling then allows no further call.
   - name: cortex.instance.DailySpend
     kind: struct
     fields:
@@ -1416,7 +1432,8 @@ commands:
           model was called. `daily_ceiling_reached` is true when the run stopped before a batch
           because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its
           tokens reached `model.daily_ceiling_tokens`: the
-          batches before it are applied, the rest are extracted by a run on a later day.
+          batches before it are applied, the rest are extracted by a run on a later day. A run
+          stopped because an answer's tokens could not be counted does not set it.
 
       - name: no-such-source
         unknown_instance: true
@@ -1584,7 +1601,9 @@ commands:
     # measurement writes `quality/<UTC stamp>/verdicts.jsonl` and `quality/<UTC stamp>/
     # fact-quality.json` (the `ekr.fact-quality/1` document, as EKR printed it) under the instance
     # directory, and spends at most the spec's `model.budget_usd` and what is left of its
-    # `model.daily_ceiling_usd` for the UTC day. It reads the store and writes
+    # `model.daily_ceiling_usd` for the UTC day; in tokens, it stops before a further call once
+    # its answers' tokens reach `model.budget_tokens` or the day's reach
+    # `model.daily_ceiling_tokens`. It reads the store and writes
     # nothing to it, so a removed instance's store, which stays, is measured too.
     input:
       - {name: name, type: cortex.instance.InstanceName}
@@ -1657,7 +1676,9 @@ commands:
     # one schema transaction of its own, in order, against the ontology at the head. Every proposal
     # not dropped is a `cortex.instance.SchemaProposal` line of `schema/<UTC stamp>/proposals.jsonl`
     # under the instance directory. Spends at most the spec's `model.budget_usd` and what is left
-    # of its `model.daily_ceiling_usd` for the UTC day.
+    # of its `model.daily_ceiling_usd` for the UTC day; in tokens, it stops before a further call
+    # once its answers' tokens reach `model.budget_tokens` or the day's reach
+    # `model.daily_ceiling_tokens`.
     input:
       - {name: name, type: cortex.instance.InstanceName}
       - {name: sample, type: Integer}
@@ -1761,7 +1782,10 @@ events:
       - {name: instance_name, type: cortex.instance.InstanceName}
 
   # `daily_ceiling_reached` says the run stopped before a batch at one of the instance's daily
-  # ceilings, `model.daily_ceiling_usd` or `model.daily_ceiling_tokens`.
+  # ceilings, `model.daily_ceiling_usd` or `model.daily_ceiling_tokens`, because the day's spend
+  # or tokens reached it. A run stopped under a daily ceiling for another reason (an answer whose
+  # tokens could not be counted, a spend of the day that could not be read or recorded) does not
+  # set it; its `stopped` reason says why.
   # `model_calls` counts every model call the run made: a call asked again after an error answer
   # that cost zero counts twice, and a call that failed counts too. The token fields add up, over
   # those calls, what the model reported in its answer's `usage`: `input_tokens`,
