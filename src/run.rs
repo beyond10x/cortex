@@ -69,7 +69,9 @@ pub struct Report {
     /// changed value, and retracted as no longer listed.
     pub superseded: usize,
     pub retracted: usize,
-    /// Whether the run stopped before a batch at the instance's daily ceiling (said in `stopped`).
+    /// Whether the run stopped before a batch because the day's spend or tokens reached the
+    /// instance's daily ceiling (said in `stopped`); not when it stopped under the ceiling for
+    /// another reason, such as an answer whose tokens could not be counted.
     pub daily_ceiling_reached: bool,
     /// Every model call the run made, a call asked again and a failed one included.
     pub model_calls: i64,
@@ -145,7 +147,7 @@ impl Report {
         let split = usage
             .all_input()
             .map(|tokens| extract::split_tokens(tokens, fixed, documents));
-        let add = |total: Option<i64>, part: Option<i64>| Some(total? + part?);
+        let add = |total: Option<i64>, part: Option<i64>| total?.checked_add(part?);
         self.fixed_input_tokens = add(self.fixed_input_tokens, split.map(|s| s.0));
         self.documents_input_tokens = add(self.documents_input_tokens, split.map(|s| s.1));
     }
@@ -777,10 +779,9 @@ fn process_in(
     let mut spent = 0.0;
     // The instance's daily ceiling, across its sources and commands; a run holds the home's lock.
     let mut daily = spend::Daily::new(layout, &spec.model, None);
-    // The run's budget in tokens, and the tokens its answers reported: `None` from the first
-    // answer that reported no `usage`, which under the budget stops the run before its next batch.
-    let budget_tokens = spec.model.budget_tokens;
-    let mut used_tokens: Option<i64> = Some(0);
+    // The run's budget in tokens, and the tokens its answers reported: an answer whose tokens
+    // could not be counted stops the run under the budget before its next batch.
+    let mut tokens = spend::TokenBudget::new(&spec.model);
     let mut entities = load_entities(layout);
 
     let issued: Vec<_> = selected
@@ -805,29 +806,16 @@ fn process_in(
             report.stopped = Some(format!("budget of {budget} USD spent"));
             break;
         }
-        if let Some(cap) = budget_tokens {
-            match used_tokens {
-                None => {
-                    report.stopped = Some(format!(
-                        "token budget of {cap} tokens: the tokens of an answer could not be \
-                         counted: it reported no usage"
-                    ));
-                    break;
-                }
-                Some(used) if used >= cap => {
-                    report.stopped = Some(format!(
-                        "token budget of {cap} tokens spent: {used} tokens used"
-                    ));
-                    break;
-                }
-                Some(_) => {}
-            }
+        if let Err(why) = tokens.check() {
+            report.stopped = Some(why);
+            break;
         }
-        let remaining = match daily.allow(remaining) {
+        let remaining = match daily.check(remaining) {
             Ok(usd) => usd,
-            Err(why) => {
-                report.stopped = Some(why);
-                report.daily_ceiling_reached = true;
+            Err(refusal) => {
+                // Only a ceiling the day reached; not an uncounted answer or an unknown spend.
+                report.daily_ceiling_reached = refusal.reached;
+                report.stopped = Some(refusal.reason);
                 break;
             }
         };
@@ -886,7 +874,7 @@ fn process_in(
             },
             &usage,
         );
-        used_tokens = used_tokens.and_then(|used| Some(used + spend::tokens(&usage)?));
+        tokens.add(&usage);
         // Every model call counts, a failed one included. The fixed part is the system prompt,
         // the answer's schema (both sent as flags) and the prompt up to the documents.
         let fixed_bytes = extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed;

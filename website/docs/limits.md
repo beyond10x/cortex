@@ -130,8 +130,13 @@ stand; [Status](./status.mdx) lists what is planned.
   run. Bound it in tokens instead, with `budget_tokens` and `daily_ceiling_tokens` (see
   [the spec file](./spec-file.md#limits-in-tokens)).
 - **A token limit is checked between calls, not within one.** `claude` takes no token limit, so a
-  run can pass `budget_tokens` or `daily_ceiling_tokens` by the tokens of its last call, and
-  commands running at once can each pass the daily one by a call, as with the dollar ceiling.
+  run, quality measurement or schema round can pass `budget_tokens` or `daily_ceiling_tokens` by
+  the tokens of its last call, and commands running at once can each pass the daily one by a
+  call, as with the dollar ceiling.
+- **Token counts are what the answer reports.** cortex trusts the counts in an answer's `usage`
+  as the gateway or `claude` reports them. A count it cannot use (missing, below 0, or a sum past
+  a signed 64-bit integer) is treated as uncounted, which under a token limit stops the run
+  before its next call; it is never taken as zero.
 - **Commands running at once can each overshoot the daily ceiling by one call.** A call's
   allowance is read from `spend.json` without the home's lock, and its cost is added only after
   the answer. A run, a `cortex quality` and a `cortex schema` of one instance can run at the same

@@ -243,6 +243,21 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
     }
     // Refused before any unit is written: the viewer's unit copies the same variables by value.
     if let Some(gateway) = &spec.model.gateway {
+        let scheme = |prefix: &str| {
+            gateway
+                .base_url
+                .get(..prefix.len())
+                .is_some_and(|s| s.eq_ignore_ascii_case(prefix))
+        };
+        if !(scheme("http://") || scheme("https://")) {
+            return Err(format!(
+                "model.gateway.base_url {:?} must be an http:// or https:// URL",
+                gateway.base_url
+            ));
+        }
+        if gateway.max_context_tokens.is_some_and(|n| n <= 0) {
+            return Err("model.gateway.max_context_tokens must be above 0".into());
+        }
         if let Some(refusal) = crate::schedule::token_env_refusal(&gateway.token_env) {
             return Err(refusal);
         }

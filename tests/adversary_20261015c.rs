@@ -218,3 +218,114 @@ fn adv_the_judge_is_held_to_the_run_token_budget() {
         "the judge's first call spent 2000 of 1000 tokens and a second was asked: {out}"
     );
 }
+
+/// A schema stand-in answering no proposals, with no cost and, unless `usage` is empty, `usage`
+/// (JSON text, ending in a comma).
+fn proposer(w: &World, usage: &str) {
+    executable(
+        &w.bin.join("claude"),
+        &format!(
+            r#"echo call >> "{root}/schema-calls.log"
+cat > /dev/null
+echo '{{"type":"result","subtype":"success","is_error":false,{usage}"structured_output":{{"proposals":[]}}}}'
+"#,
+            root = w.root.display()
+        ),
+    );
+}
+
+/// An instance `name` of 30 product facts (two batches of a sample of 25) under `model` (YAML
+/// flow text after `timeout_s: 60`).
+fn products(name: &str, model: &str) -> World {
+    let w = World::new();
+    let path = w.spec(name, "conn_test");
+    let text = std::fs::read_to_string(&path).unwrap().replace(
+        "budget_usd: \"1\", timeout_s: 60}",
+        &format!("budget_usd: \"1\", timeout_s: 60{model}}}"),
+    );
+    std::fs::write(&path, text).unwrap();
+    extract_products(&w, 30);
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    let ran = run(&w, &format!("{name}/news"));
+    assert_eq!(ran["detail"]["stopped"], Value::Null, "{ran}");
+    w
+}
+
+/// As the judge: `cortex schema` is held to `budget_tokens`. A budget of 1000 tokens, 2000 tokens
+/// a call: the first batch's answer spends it, so the second batch is not asked for and the
+/// proposal fails naming the budget.
+#[test]
+fn schema_is_held_to_the_run_token_budget() {
+    let w = products("proposed", ", budget_tokens: 1000");
+    proposer(
+        &w,
+        r#""usage":{"input_tokens":1500,"cache_creation_input_tokens":100,"cache_read_input_tokens":300,"output_tokens":100},"#,
+    );
+    let (code, out) = w.cortex(&["schema", "proposed", "--sample", "25", "--dry-run"]);
+    assert_eq!(w.lines("schema-calls.log").len(), 1, "{out}");
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("propose-failed")),
+        "{out}"
+    );
+    let reason = out["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.starts_with("token budget of 1000 tokens spent: 2000 tokens used"),
+        "{out}"
+    );
+}
+
+/// Under `budget_tokens`, an answer of `cortex schema` or `cortex quality` with no `usage` stops it
+/// before a further call, the reason saying its tokens could not be counted.
+#[test]
+fn quality_and_schema_stop_on_an_uncounted_answer_under_the_run_token_budget() {
+    let w = products("uncounted", ", budget_tokens: 1000000");
+    proposer(&w, "");
+    let (code, out) = w.cortex(&["schema", "uncounted", "--sample", "25", "--dry-run"]);
+    assert_eq!(w.lines("schema-calls.log").len(), 1, "{out}");
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("propose-failed")),
+        "{out}"
+    );
+    let reason = out["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.starts_with(
+            "token budget of 1000000 tokens: the tokens of an answer could not be counted"
+        ),
+        "{out}"
+    );
+
+    // The judge, answering with no `usage`.
+    executable(
+        &w.bin.join("claude"),
+        &format!(
+            r#"R="{root}"
+echo call >> "$R/judge-calls.log"
+prompt=$(cat)
+verdicts=""
+for id in $(printf '%s\n' "$prompt" | grep -oE '^=== Fact [0-9a-f-]{{36}}' | cut -d' ' -f3); do
+  verdicts="$verdicts{{\"fact\":\"$id\",\"verdict\":\"yes\",\"reason\":\"the evidence says yes\"}},"
+done
+verdicts=${{verdicts%,}}
+echo "{{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"structured_output\":{{\"verdicts\":[$verdicts]}}}}"
+"#,
+            root = w.root.display()
+        ),
+    );
+    let (code, out) = w.cortex(&["quality", "uncounted", "--sample", "25"]);
+    assert_eq!(w.lines("judge-calls.log").len(), 1, "{out}");
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("judge-failed")),
+        "{out}"
+    );
+    let reason = out["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.starts_with(
+            "token budget of 1000000 tokens: the tokens of an answer could not be counted"
+        ),
+        "{out}"
+    );
+}

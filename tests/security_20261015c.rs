@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use common::{ekr, executable, World};
-use serde_json::{json, Value};
+use serde_json::json;
 
 const TOKEN: &str = "gw-token-value-c0ffee-5150";
 
@@ -120,14 +120,20 @@ fn the_gateway_token_value_lands_in_no_file_cortex_writes_and_no_output() {
 }
 
 /// The variable names a unit writes by value (`PATH`, `HOME`, the four `XDG_*` it copies, every
-/// `CONNECTORS_*` and `CORTEX_*`) and texts that are no variable name.
-const REFUSED_TOKEN_ENVS: [&str; 12] = [
+/// `CONNECTORS_*` and `CORTEX_*`), any other `XDG_*` or `ANTHROPIC_*` name, and texts that are no
+/// variable name.
+const REFUSED_TOKEN_ENVS: [&str; 17] = [
     "PATH",
     "HOME",
     "XDG_CONFIG_HOME",
     "XDG_STATE_HOME",
     "XDG_DATA_HOME",
     "XDG_RUNTIME_DIR",
+    "XDG_CACHE_HOME",
+    "XDG_GW",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_GW",
     "CONNECTORS_GW",
     "CORTEX_HOME",
     "\"\"",
@@ -140,89 +146,121 @@ const REFUSED_TOKEN_ENVS: [&str; 12] = [
 fn create_update_and_adopt_refuse_a_token_env_a_unit_writes_by_value_or_no_name() {
     for token_env in REFUSED_TOKEN_ENVS {
         let gateway = format!(r#"{{base_url: "http://gw.test", token_env: {token_env}}}"#);
-        let w = World::new();
-        let bad = gateway_spec(&w, "r", &gateway);
-        let bad = bad.to_str().unwrap();
-        // Not `CONNECTORS_GW`: a unit copies every `CONNECTORS_*` by value, by design.
-        let env = [("GW", TOKEN)];
-
-        let (code, _, stderr) = raw(&w, &["create", "--spec", bad], &env);
-        assert_eq!(code, Some(2), "create, token_env {token_env}: {stderr}");
-        assert!(
-            stderr.contains("model.gateway.token_env"),
-            "{token_env}: {stderr}"
-        );
-        assert!(
-            !w.home.join("instances/r").exists(),
-            "create left an instance"
-        );
-
-        let (code, _, stderr) = raw(
-            &w,
-            &[
-                "adopt",
-                "--spec",
-                bad,
-                "--store",
-                "absent.sqlite",
-                "--no-units",
-            ],
-            &env,
-        );
-        assert_eq!(code, Some(2), "adopt, token_env {token_env}: {stderr}");
-        assert!(
-            stderr.contains("model.gateway.token_env"),
-            "{token_env}: {stderr}"
-        );
-        assert!(
-            !w.home.join("instances/r").exists(),
-            "adopt left an instance"
-        );
-
-        // An instance without a gateway, then an update that names the refused variable.
-        let good = w.root.join("good.yaml");
-        std::fs::write(
-            &good,
-            std::fs::read_to_string(w.spec("r", "conn_test")).unwrap(),
-        )
-        .unwrap();
-        let bad_path = w.root.join("bad.yaml");
-        let text = std::fs::read_to_string(&good).unwrap().replacen(
-            "timeout_s: 60}",
-            &format!("timeout_s: 60, gateway: {gateway}}}"),
-            1,
-        );
-        std::fs::write(&bad_path, text).unwrap();
-        let (code, out, stderr) = raw(&w, &["create", "--spec", good.to_str().unwrap()], &env);
-        assert_eq!(code, Some(0), "{out}{stderr}");
-        let units_before = unit_texts(&w.units);
-        let frozen = std::fs::read_to_string(w.home.join("instances/r/instance.yaml")).unwrap();
-        let (code, _, stderr) = raw(
-            &w,
-            &["update", "r", "--spec", bad_path.to_str().unwrap()],
-            &env,
-        );
-        assert_eq!(code, Some(2), "update, token_env {token_env}: {stderr}");
-        assert!(
-            stderr.contains("model.gateway.token_env"),
-            "{token_env}: {stderr}"
-        );
-        assert_eq!(
-            std::fs::read_to_string(w.home.join("instances/r/instance.yaml")).unwrap(),
-            frozen,
-            "a refused update changed the frozen spec"
-        );
-        assert_eq!(
-            unit_texts(&w.units),
-            units_before,
-            "a refused update changed a unit"
-        );
-        let holding = files_holding(&w.units, TOKEN);
-        assert!(
-            holding.is_empty(),
-            "{token_env}: units holding the token: {holding:?}"
-        );
+        refused_everywhere(&gateway, "model.gateway.token_env");
     }
+}
+
+/// A `base_url` that is empty or not `http://` or `https://`, and a `max_context_tokens` of 0 or
+/// less, are refused by `create`, `update` and `adopt` alike, naming the field.
+#[test]
+fn create_update_and_adopt_refuse_a_base_url_not_http_or_a_context_limit_below_1() {
+    for (gateway, field) in [
+        (r#"{base_url: "", token_env: GW}"#, "model.gateway.base_url"),
+        (
+            r#"{base_url: "gw.test", token_env: GW}"#,
+            "model.gateway.base_url",
+        ),
+        (
+            r#"{base_url: "ftp://gw.test", token_env: GW}"#,
+            "model.gateway.base_url",
+        ),
+        (
+            r#"{base_url: "file:///gw", token_env: GW}"#,
+            "model.gateway.base_url",
+        ),
+        (
+            r#"{base_url: "HTTP//gw.test", token_env: GW}"#,
+            "model.gateway.base_url",
+        ),
+        (
+            r#"{base_url: "http://gw.test", token_env: GW, max_context_tokens: 0}"#,
+            "model.gateway.max_context_tokens",
+        ),
+        (
+            r#"{base_url: "https://gw.test", token_env: GW, max_context_tokens: -1}"#,
+            "model.gateway.max_context_tokens",
+        ),
+    ] {
+        refused_everywhere(gateway, field);
+    }
+}
+
+/// `create`, `adopt` and `update` with `gateway` (YAML flow text) as `model.gateway` each exit 2
+/// naming `field`, and leave no instance, no changed frozen spec and no changed unit behind.
+fn refused_everywhere(gateway: &str, field: &str) {
+    let w = World::new();
+    let bad = gateway_spec(&w, "r", gateway);
+    let bad = bad.to_str().unwrap();
+    // Not `CONNECTORS_GW`: a unit copies every `CONNECTORS_*` by value, by design.
+    let env = [("GW", TOKEN)];
+
+    let (code, _, stderr) = raw(&w, &["create", "--spec", bad], &env);
+    assert_eq!(code, Some(2), "create, {gateway}: {stderr}");
+    assert!(stderr.contains(field), "{gateway}: {stderr}");
+    assert!(
+        !w.home.join("instances/r").exists(),
+        "create left an instance"
+    );
+
+    let (code, _, stderr) = raw(
+        &w,
+        &[
+            "adopt",
+            "--spec",
+            bad,
+            "--store",
+            "absent.sqlite",
+            "--no-units",
+        ],
+        &env,
+    );
+    assert_eq!(code, Some(2), "adopt, {gateway}: {stderr}");
+    assert!(stderr.contains(field), "{gateway}: {stderr}");
+    assert!(
+        !w.home.join("instances/r").exists(),
+        "adopt left an instance"
+    );
+
+    // An instance without a gateway, then an update that names the refused gateway.
+    let good = w.root.join("good.yaml");
+    std::fs::write(
+        &good,
+        std::fs::read_to_string(w.spec("r", "conn_test")).unwrap(),
+    )
+    .unwrap();
+    let bad_path = w.root.join("bad.yaml");
+    let text = std::fs::read_to_string(&good).unwrap().replacen(
+        "timeout_s: 60}",
+        &format!("timeout_s: 60, gateway: {gateway}}}"),
+        1,
+    );
+    std::fs::write(&bad_path, text).unwrap();
+    let (code, out, stderr) = raw(&w, &["create", "--spec", good.to_str().unwrap()], &env);
+    assert_eq!(code, Some(0), "{out}{stderr}");
+    let units_before = unit_texts(&w.units);
+    let frozen = std::fs::read_to_string(w.home.join("instances/r/instance.yaml")).unwrap();
+    let (code, _, stderr) = raw(
+        &w,
+        &["update", "r", "--spec", bad_path.to_str().unwrap()],
+        &env,
+    );
+    assert_eq!(code, Some(2), "update, {gateway}: {stderr}");
+    assert!(stderr.contains(field), "{gateway}: {stderr}");
+    assert_eq!(
+        std::fs::read_to_string(w.home.join("instances/r/instance.yaml")).unwrap(),
+        frozen,
+        "a refused update changed the frozen spec"
+    );
+    assert_eq!(
+        unit_texts(&w.units),
+        units_before,
+        "a refused update changed a unit"
+    );
+    let holding = files_holding(&w.units, TOKEN);
+    assert!(
+        holding.is_empty(),
+        "{gateway}: units holding the token: {holding:?}"
+    );
 }
 
 fn unit_texts(dir: &Path) -> Vec<(PathBuf, String)> {
@@ -360,19 +398,26 @@ fn a_negative_token_count_in_an_answer_does_not_lift_the_run_token_budget() {
 }
 
 /// Under `daily_ceiling_tokens: 1000`, as above for the day's tokens: `spent_tokens` must not stay
-/// at 0 while answers that read 1900 input tokens each are made.
+/// at 0 while answers that read 1900 input tokens each are made: the first answer is uncounted
+/// and stops the run.
 #[test]
 fn a_negative_token_count_in_an_answer_does_not_lift_the_daily_token_ceiling() {
     let w = negative_usage_instance("negday", 7, ", daily_ceiling_tokens: 1000");
     let (code, ran) = w.cortex(&["run", "negday/news"]);
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
     let calls = w.lines("claude-calls.log").len();
-    let spend: Value = serde_json::from_str(
-        &std::fs::read_to_string(w.home.join("instances/negday/spend.json")).unwrap(),
-    )
-    .unwrap();
+    // The negative count leaves the first answer uncounted, which stops the run and adds
+    // nothing, so `spend.json` may not exist.
+    let spend =
+        std::fs::read_to_string(w.home.join("instances/negday/spend.json")).unwrap_or_default();
     assert_eq!(
         calls, 1,
         "the run kept calling past the daily token ceiling: {ran}\nspend.json: {spend}"
+    );
+    assert!(
+        ran["detail"]["stopped"]
+            .as_str()
+            .is_some_and(|s| s.contains("could not be counted")),
+        "{ran}"
     );
 }

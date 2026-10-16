@@ -171,8 +171,8 @@ The run stops starting batches when its `budget_usd` is spent, or when the insta
 the UTC day reaches `model.daily_ceiling_usd` (see
 [the spec file](./spec-file.md#the-daily-ceiling)). With a limit in tokens, it also stops when its
 calls have used `model.budget_tokens`, when the instance's tokens of the UTC day reach
-`model.daily_ceiling_tokens`, or when an answer reported no `usage`, so its tokens could not be
-counted (see [the spec file](./spec-file.md#limits-in-tokens)). Each stop is checked before a
+`model.daily_ceiling_tokens`, or when an answer reported no `usage` or a count in it below 0, so
+its tokens could not be counted (see [the spec file](./spec-file.md#limits-in-tokens)). Each stop is checked before a
 batch, keeps the batches before it applied, and names the limit in `stopped`. When a batch fails after an earlier
 one was applied, the run ends as `ran` with `stopped` set; when the first batch fails, nothing was
 applied and the run fails.
@@ -464,7 +464,7 @@ Besides `cost_usd`, a run's result and its `cortex.log` line say how many model 
 `cache_read_input_tokens`, `cache_creation_input_tokens` and `output_tokens`, each summed over the
 calls. A call asked again after an error answer that cost zero counts as two calls, and a failed
 call counts. A count is `0` for a run with no model call and `null` as soon as one answer did not
-report it; it is never written as `0` for a count nobody reported.
+report it (or reported it below 0); it is never written as `0` for a count nobody reported.
 
 Each request has a fixed part, sent again with every batch: the system prompt, EKR's extraction
 schema, the instance's description and instructions, the store's ontology and the known entity

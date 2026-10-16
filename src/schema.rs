@@ -456,6 +456,8 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn, home: &Home) -> Result<
     let shown_ontology = ontology_text(&ontology);
     let mut spent = 0.0;
     let mut daily = spend::Daily::new(layout, &spec.model, Some(home));
+    // The proposal's tokens, held to `model.budget_tokens` as a run's are.
+    let mut tokens = spend::TokenBudget::new(&spec.model);
     let mut cost_usd = Some(0.0);
     let mut proposals: Vec<Cited> = Vec::new();
     let mut dropped = 0;
@@ -464,6 +466,12 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn, home: &Home) -> Result<
         if remaining <= 0.0 {
             return Err(Failure::Propose(format!(
                 "budget of {budget} USD spent; {}",
+                so_far(proposals.len(), n, batches.len(), cost_usd)
+            )));
+        }
+        if let Err(why) = tokens.check() {
+            return Err(Failure::Propose(format!(
+                "{why}; {}",
                 so_far(proposals.len(), n, batches.len(), cost_usd)
             )));
         }
@@ -502,6 +510,7 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn, home: &Home) -> Result<
             }
         };
         daily.add_answer(answer.cost_usd, &answer.usage);
+        tokens.add(&answer.usage);
         spent += answer.cost_usd.unwrap_or(0.0);
         cost_usd = add_cost(cost_usd, answer.cost_usd);
         let Some(entries) = answer.document["proposals"].as_array() else {

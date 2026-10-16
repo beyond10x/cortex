@@ -27,9 +27,77 @@ pub fn day(ms: i64) -> String {
 }
 
 /// The tokens one answer's `usage` reported: its input, cache reads, cache writes and output
-/// together. `None` when the answer did not report each of them: its tokens cannot be counted.
+/// together. `None` when its tokens cannot be counted: the answer did not report each of them,
+/// reported one below 0, or their sum does not fit an `i64`.
 pub fn tokens(usage: &Usage) -> Option<i64> {
-    Some(usage.all_input()? + usage.output_tokens?)
+    [
+        usage.input_tokens,
+        usage.cache_read_input_tokens,
+        usage.cache_creation_input_tokens,
+        usage.output_tokens,
+    ]
+    .into_iter()
+    .try_fold(0i64, |sum, n| sum.checked_add(n.filter(|n| *n >= 0)?))
+}
+
+/// The why of an answer whose tokens could not be counted ([`tokens`]), after the limit's name.
+const UNCOUNTED: &str = "the tokens of an answer could not be counted: its usage reported no \
+                         count, a count below 0, or more than can be summed";
+
+/// A run's budget in tokens (`model.budget_tokens`), for one source run, quality measurement or
+/// schema proposal, and the tokens its answers reported.
+pub struct TokenBudget {
+    cap: Option<i64>,
+    /// `None` from the first answer whose tokens could not be counted, or when the sum would not
+    /// fit an `i64`.
+    used: Option<i64>,
+}
+
+impl TokenBudget {
+    /// No tokens used yet of `model.budget_tokens`.
+    pub fn new(model: &m::ModelSpec) -> Self {
+        Self {
+            cap: model.budget_tokens,
+            used: Some(0),
+        }
+    }
+
+    /// Adds one answer's tokens ([`tokens`]), a failed answer's included.
+    pub fn add(&mut self, usage: &Usage) {
+        self.used = self.used.and_then(|used| used.checked_add(tokens(usage)?));
+    }
+
+    /// Whether a further model call is allowed: an error naming the budget once the tokens used
+    /// reach it, or, under a budget, once an answer's tokens could not be counted.
+    pub fn check(&self) -> Result<(), String> {
+        match (self.cap, self.used) {
+            (Some(cap), None) => Err(format!("token budget of {cap} tokens: {UNCOUNTED}")),
+            (Some(cap), Some(used)) if used >= cap => Err(format!(
+                "token budget of {cap} tokens spent: {used} tokens used"
+            )),
+            _ => Ok(()),
+        }
+    }
+}
+
+/// Why [`Daily::check`] allows no further model call.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Refusal {
+    /// The reason, naming the daily ceiling.
+    pub reason: String,
+    /// Whether the day's spend or tokens reached a ceiling; `false` when the call is refused for
+    /// another reason (an answer's tokens could not be counted, the spend of the day could not be
+    /// read or recorded).
+    pub reached: bool,
+}
+
+impl Refusal {
+    fn not_reached(reason: String) -> Self {
+        Self {
+            reason,
+            reached: false,
+        }
+    }
 }
 
 /// Micro-dollars in one US dollar. The spend of the day is summed in whole micro-dollars, so a sum
@@ -117,7 +185,8 @@ pub struct Daily<'a> {
     home: Option<&'a Home>,
     /// Why an answer's cost could not be recorded: with a ceiling, no further call is allowed.
     unrecorded: Option<String>,
-    /// An answer reported no `usage`: with a ceiling in tokens, no further call is allowed.
+    /// An answer's tokens could not be counted: with a ceiling in tokens, no further call is
+    /// allowed.
     uncounted: bool,
 }
 
@@ -153,41 +222,53 @@ impl<'a> Daily<'a> {
     /// ceiling, when either ceiling leaves nothing, what was spent today cannot be known, or,
     /// under the ceiling in tokens, an answer's tokens could not be counted.
     pub fn allow(&self, left: f64) -> Result<f64, String> {
+        self.check(left).map_err(|refusal| refusal.reason)
+    }
+
+    /// [`Daily::allow`], its refusal saying whether a ceiling was reached.
+    pub fn check(&self, left: f64) -> Result<f64, Refusal> {
         if self.ceiling.is_none() && self.token_ceiling.is_none() {
             return Ok(left);
         }
         if let Some(e) = &self.unrecorded {
-            return Err(format!(
+            return Err(Refusal::not_reached(format!(
                 "{}: the spend of the day was not recorded: {e}",
                 self.named()
-            ));
+            )));
         }
         if let (Some(cap), true) = (self.token_ceiling, self.uncounted) {
-            return Err(format!(
-                "daily ceiling of {cap} tokens: the tokens of an answer could not be counted: \
-                 it reported no usage"
-            ));
+            return Err(Refusal::not_reached(format!(
+                "daily ceiling of {cap} tokens: {UNCOUNTED}"
+            )));
         }
         let today = day(now_ms());
-        let spent = spent(self.layout, &today).map_err(|e| format!("{}: {e}", self.named()))?;
+        let spent = spent(self.layout, &today)
+            .map_err(|e| Refusal::not_reached(format!("{}: {e}", self.named())))?;
         let mut allowed = left;
         if let Some(cap) = self.ceiling {
             let ceiling = cap as f64 / MICROS;
             let remaining = cap - spent.micros;
             if remaining <= 0 {
                 let spent = spent.micros as f64 / MICROS;
-                return Err(format!(
-                    "daily ceiling of {ceiling} USD reached: {spent:.4} USD spent on {today} (UTC)"
-                ));
+                return Err(Refusal {
+                    reason: format!(
+                        "daily ceiling of {ceiling} USD reached: {spent:.4} USD spent on {today} \
+                         (UTC)"
+                    ),
+                    reached: true,
+                });
             }
             allowed = allowed.min(remaining as f64 / MICROS);
         }
         if let Some(cap) = self.token_ceiling {
             if spent.tokens >= cap {
-                return Err(format!(
-                    "daily ceiling of {cap} tokens reached: {} tokens used on {today} (UTC)",
-                    spent.tokens
-                ));
+                return Err(Refusal {
+                    reason: format!(
+                        "daily ceiling of {cap} tokens reached: {} tokens used on {today} (UTC)",
+                        spent.tokens
+                    ),
+                    reached: true,
+                });
             }
         }
         Ok(allowed)
@@ -201,9 +282,10 @@ impl<'a> Daily<'a> {
 
     /// Adds what one answer cost and the tokens its `usage` reported ([`tokens`]) to the spend of
     /// today, under the home's lock, the cost rounded to the micro-dollar; an answer with no cost,
-    /// or a negative one, adds no dollars, and one with no `usage` no tokens. A spend that cannot
-    /// be recorded is said on stderr and, with a ceiling, allows no further call; so does, with a
-    /// ceiling in tokens, an answer with no `usage` ([`Daily::allow`]).
+    /// or a negative one, adds no dollars, and one whose tokens could not be counted no tokens. A
+    /// spend that cannot be recorded is said on stderr and, with a ceiling, allows no further
+    /// call; so does, with a ceiling in tokens, an answer whose tokens could not be counted
+    /// ([`Daily::allow`]).
     pub fn add_answer(&mut self, cost_usd: Option<f64>, usage: &Usage) {
         let tokens = tokens(usage);
         if tokens.is_none() {
@@ -237,7 +319,17 @@ impl<'a> Daily<'a> {
         let mut document = json!({"format": FORMAT, "day": today, "spent_usd": usd});
         // `spent_tokens` is written from the day's first answer that reported a `usage`.
         if before.counts_tokens || tokens.is_some() {
-            document["spent_tokens"] = json!(before.tokens + tokens.unwrap_or(0).max(0));
+            let sum = before
+                .tokens
+                .checked_add(tokens.unwrap_or(0).max(0))
+                .ok_or_else(|| {
+                    format!(
+                        "{}: the tokens of {today} would pass {} and cannot be summed",
+                        path(self.layout).display(),
+                        i64::MAX
+                    )
+                })?;
+            document["spent_tokens"] = json!(sum);
         }
         write_atomic(
             &path(self.layout),
@@ -357,5 +449,92 @@ mod tests {
         daily.add(Some(7.0));
         assert_eq!(spent_on(&layout, &day(now_ms())), Ok(7.0));
         assert_eq!(daily.allow(0.5), Ok(0.5));
+    }
+
+    fn usage(input: i64, output: i64) -> Usage {
+        Usage {
+            input_tokens: Some(input),
+            cache_creation_input_tokens: Some(0),
+            cache_read_input_tokens: Some(0),
+            output_tokens: Some(output),
+        }
+    }
+
+    #[test]
+    fn a_count_below_0_or_a_sum_past_i64_is_not_counted() {
+        assert_eq!(tokens(&usage(10, 5)), Some(15));
+        assert_eq!(tokens(&usage(1500, -1900)), None);
+        assert_eq!(tokens(&usage(-1, 0)), None);
+        assert_eq!(tokens(&usage(i64::MAX - 10, 100)), None);
+        assert_eq!(tokens(&usage(i64::MAX, 0)), Some(i64::MAX));
+    }
+
+    #[test]
+    fn a_run_token_budget_stops_at_its_cap_and_on_an_uncounted_or_unsummable_answer() {
+        let mut model = model(None);
+        assert_eq!(TokenBudget::new(&model).check(), Ok(()), "no budget");
+        model.budget_tokens = Some(100);
+        let mut budget = TokenBudget::new(&model);
+        budget.add(&usage(60, 0));
+        assert_eq!(budget.check(), Ok(()));
+        budget.add(&usage(40, 0));
+        assert_eq!(
+            budget.check(),
+            Err("token budget of 100 tokens spent: 100 tokens used".into())
+        );
+
+        for answer in [usage(0, -5), Usage::UNKNOWN] {
+            let mut budget = TokenBudget::new(&model);
+            budget.add(&answer);
+            let why = budget.check().unwrap_err();
+            assert!(why.contains("could not be counted"), "{why}");
+        }
+        let mut budget = TokenBudget::new(&model);
+        budget.add(&usage(50, 0));
+        budget.add(&usage(i64::MAX - 10, 0));
+        let why = budget.check().unwrap_err();
+        assert!(
+            why.contains("could not be counted"),
+            "a sum past i64: {why}"
+        );
+    }
+
+    #[test]
+    fn only_a_reached_ceiling_is_reached_and_a_day_past_i64_is_not_recorded() {
+        let tmp = tempfile::tempdir().unwrap();
+        let layout = Layout::new(tmp.path().to_path_buf());
+        let mut model = model(None);
+        model.daily_ceiling_tokens = Some(i64::MAX);
+        let mut daily = Daily::new(&layout, &model, None);
+        daily.add_answer(None, &usage(0, -1));
+        let refusal = daily.check(5.0).unwrap_err();
+        assert!(!refusal.reached, "{refusal:?}");
+        assert!(
+            refusal.reason.contains("could not be counted"),
+            "{refusal:?}"
+        );
+
+        std::fs::write(
+            path(&layout),
+            json!({"format": FORMAT, "day": day(now_ms()), "spent_usd": "0",
+                "spent_tokens": i64::MAX - 10})
+            .to_string(),
+        )
+        .unwrap();
+        let mut daily = Daily::new(&layout, &model, None);
+        assert_eq!(daily.check(5.0), Ok(5.0));
+        daily.add_answer(None, &usage(100, 0));
+        assert_eq!(
+            tokens_on(&layout, &day(now_ms())),
+            Ok(i64::MAX - 10),
+            "a sum past i64 is not written"
+        );
+        let refusal = daily.check(5.0).unwrap_err();
+        assert!(!refusal.reached, "{refusal:?}");
+        assert!(refusal.reason.contains("not recorded"), "{refusal:?}");
+
+        model.daily_ceiling_tokens = Some(10);
+        let refusal = Daily::new(&layout, &model, None).check(5.0).unwrap_err();
+        assert!(refusal.reached, "{refusal:?}");
     }
 }

@@ -116,7 +116,8 @@ pub struct Refused {
 
 /// The token counts of one or more model calls, as `claude` reports each in its answer's `usage`
 /// (`input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`).
-/// A count an answer did not carry is `None`, and a sum with it too: a missing count is never `0`.
+/// A count an answer did not carry, or carried below 0, is `None`, and a sum with it too, as is a
+/// sum that does not fit an `i64`: a missing count is never `0`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Usage {
     pub input_tokens: Option<i64>,
@@ -142,20 +143,23 @@ impl Usage {
         output_tokens: None,
     };
 
-    /// The `usage` of a JSON answer; a field it lacks is `None`.
+    /// The `usage` of a JSON answer; a field it lacks, or holds as no whole number of 0 or more,
+    /// is `None`.
     fn read(answer: &Value) -> Self {
         let usage = &answer["usage"];
+        let count = |field: &str| usage[field].as_i64().filter(|n| *n >= 0);
         Self {
-            input_tokens: usage["input_tokens"].as_i64(),
-            cache_creation_input_tokens: usage["cache_creation_input_tokens"].as_i64(),
-            cache_read_input_tokens: usage["cache_read_input_tokens"].as_i64(),
-            output_tokens: usage["output_tokens"].as_i64(),
+            input_tokens: count("input_tokens"),
+            cache_creation_input_tokens: count("cache_creation_input_tokens"),
+            cache_read_input_tokens: count("cache_read_input_tokens"),
+            output_tokens: count("output_tokens"),
         }
     }
 
-    /// Both calls' tokens, field by field: the sum while both carry it, `None` otherwise.
+    /// Both calls' tokens, field by field: the sum while both carry it and it fits an `i64`,
+    /// `None` otherwise.
     pub fn plus(self, other: Usage) -> Usage {
-        let sum = |a: Option<i64>, b: Option<i64>| Some(a? + b?);
+        let sum = |a: Option<i64>, b: Option<i64>| a?.checked_add(b?);
         Usage {
             input_tokens: sum(self.input_tokens, other.input_tokens),
             cache_creation_input_tokens: sum(
@@ -170,9 +174,12 @@ impl Usage {
         }
     }
 
-    /// Every input token: the uncached input, cache reads and cache writes.
+    /// Every input token: the uncached input, cache reads and cache writes; `None` when one is
+    /// missing or the sum does not fit an `i64`.
     pub fn all_input(&self) -> Option<i64> {
-        Some(self.input_tokens? + self.cache_read_input_tokens? + self.cache_creation_input_tokens?)
+        self.input_tokens?
+            .checked_add(self.cache_read_input_tokens?)?
+            .checked_add(self.cache_creation_input_tokens?)
     }
 }
 
@@ -851,6 +858,24 @@ mod tests {
         let sum = read.plus(partial);
         assert_eq!(sum.input_tokens, Some(20));
         assert_eq!(sum.cache_read_input_tokens, None);
+    }
+
+    #[test]
+    fn a_count_below_0_is_none_and_a_sum_past_i64_is_none() {
+        let read = Usage::read(&json!({"usage": {"input_tokens": 10,
+            "cache_creation_input_tokens": 2, "cache_read_input_tokens": 3,
+            "output_tokens": -4}}));
+        assert_eq!(read.output_tokens, None);
+        assert_eq!(read.all_input(), Some(15));
+        let huge = Usage {
+            input_tokens: Some(i64::MAX),
+            cache_creation_input_tokens: Some(1),
+            cache_read_input_tokens: Some(0),
+            output_tokens: Some(i64::MAX),
+        };
+        assert_eq!(huge.all_input(), None);
+        assert_eq!(huge.plus(huge).output_tokens, None);
+        assert_eq!(huge.plus(Usage::ZERO), huge);
     }
 
     #[test]
