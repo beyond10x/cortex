@@ -22,7 +22,9 @@ use cortex_model::primitives::Timestamp;
 const SVG_NS: &str = "http://www.w3.org/2000/svg";
 
 /// The elements a figure may hold.
-const ELEMENTS: &[&str] = &["svg", "g", "rect", "line", "path", "circle", "text", "title"];
+const ELEMENTS: &[&str] = &[
+    "svg", "g", "rect", "line", "path", "circle", "text", "title",
+];
 
 /// The attributes a figure may hold: geometry, fill, stroke and text.
 const ATTRIBUTES: &[&str] = &[
@@ -129,7 +131,12 @@ fn allowed(svg: &str) -> Vec<String> {
             roxmltree::NodeType::Root => {}
             roxmltree::NodeType::Element => {
                 let name = n.tag_name();
-                assert_eq!(name.namespace(), Some(SVG_NS), "{:?} is in the SVG namespace", name);
+                assert_eq!(
+                    name.namespace(),
+                    Some(SVG_NS),
+                    "{:?} is in the SVG namespace",
+                    name
+                );
                 assert!(
                     ELEMENTS.contains(&name.name()),
                     "element {:?} is outside the allow-list",
@@ -202,7 +209,10 @@ fn matches_fixture(spec: &ma::FigureSpec, name: &str) {
     }
     let committed = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("the fixture {} is committed ({e})", path.display()));
-    assert_eq!(first, committed, "{name}: the rendering equals the committed fixture");
+    assert_eq!(
+        first, committed,
+        "{name}: the rendering equals the committed fixture"
+    );
     allowed(&first);
 }
 
@@ -278,7 +288,12 @@ fn every_kind_draws_its_title_and_labels_as_text() {
         assert!(texts.iter().any(|t| t == want), "{want:?} in {texts:?}");
     }
     let texts = allowed(&render(&fixed_graph()).unwrap());
-    for want in ["Who decided what", "Billing <service>", "O'Neil", "reviews & signs"] {
+    for want in [
+        "Who decided what",
+        "Billing <service>",
+        "O'Neil",
+        "reviews & signs",
+    ] {
         assert!(texts.iter().any(|t| t == want), "{want:?} in {texts:?}");
     }
 }
@@ -294,8 +309,13 @@ fn labels_are_escaped_not_written_as_markup() {
     ))
     .unwrap();
     assert!(!svg.contains("<script"), "{svg}");
-    assert!(!svg.contains("</text><"), "{svg}");
-    assert!(svg.contains("&lt;script&gt;alert(1)&lt;/script&gt;"), "{svg}");
+    // The label's own `</text>` and handler, raw, would close its element and open markup.
+    assert!(!svg.contains("'d' </text>"), "{svg}");
+    assert!(!svg.contains("onload=\""), "{svg}");
+    assert!(
+        svg.contains("&lt;script&gt;alert(1)&lt;/script&gt;"),
+        "{svg}"
+    );
     assert!(
         svg.contains("a&lt;b &amp; &quot;c&quot; &apos;d&apos; &lt;/text&gt;&lt;script&gt;"),
         "{svg}"
@@ -359,15 +379,25 @@ fn the_caps_are_those_the_spec_states() {
 
 #[test]
 fn a_figure_at_each_count_cap_renders() {
-    let bars = (0..MAX_BARS).map(|i| bar(&format!("b{i}"), i as i64)).collect();
+    let bars = (0..MAX_BARS)
+        .map(|i| bar(&format!("b{i}"), i as i64))
+        .collect();
     allowed(&render(&bar_chart("t", bars)).unwrap());
     let entries = (0..MAX_ENTRIES)
         .map(|i| entry(&format!("2026-01-01T00:00:{:02}Z", i % 60), "e"))
         .collect();
     allowed(&render(&timeline("t", entries)).unwrap());
-    let nodes: Vec<_> = (0..MAX_NODES).map(|i| node(&format!("n{i}"), "n")).collect();
+    let nodes: Vec<_> = (0..MAX_NODES)
+        .map(|i| node(&format!("n{i}"), "n"))
+        .collect();
     let edges = (0..MAX_EDGES)
-        .map(|i| edge(&format!("n{}", i % MAX_NODES), &format!("n{}", (i * 7 + 1) % MAX_NODES), "e"))
+        .map(|i| {
+            edge(
+                &format!("n{}", i % MAX_NODES),
+                &format!("n{}", (i * 7 + 1) % MAX_NODES),
+                "e",
+            )
+        })
         .collect();
     allowed(&render(&graph("t", nodes, edges)).unwrap());
 }
@@ -384,7 +414,9 @@ fn a_figure_over_a_count_cap_is_refused_whole() {
     let e = too_large(&timeline("t", entries));
     assert_eq!((e.limit.as_str(), e.max, e.actual), ("entries", 200, 201));
 
-    let nodes: Vec<_> = (0..=MAX_NODES).map(|i| node(&format!("n{i}"), "n")).collect();
+    let nodes: Vec<_> = (0..=MAX_NODES)
+        .map(|i| node(&format!("n{i}"), "n"))
+        .collect();
     let e = too_large(&graph("t", nodes, vec![]));
     assert_eq!((e.limit.as_str(), e.max, e.actual), ("nodes", 100, 101));
 
@@ -553,9 +585,7 @@ impl Gen {
                     vec![]
                 } else {
                     (0..self.below(15))
-                        .map(|_| {
-                            edge(&ids[self.below(n)], &ids[self.below(n)], &self.label())
-                        })
+                        .map(|_| edge(&ids[self.below(n)], &ids[self.below(n)], &self.label()))
                         .collect()
                 };
                 graph(&title, nodes, edges)
