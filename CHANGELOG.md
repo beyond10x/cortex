@@ -36,13 +36,33 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+## 0.6.0 — 2026-10-17
+
 ### Added
 
+- `cortex ask serve --spec <instance spec>` answers questions over an instance's store as a
+  `text/event-stream`: a tool loop over the EKR MCP reader (`ekr mcp`) against the spec's
+  `model.gateway`, configured by the spec's new `ask` section. It reads the store only through the
+  reader and writes nothing to it.
+- With a `redaction` policy, the ask service and `cortex eval run --runner mcp` show the model only
+  redacted store contents: one placeholder mapping per answer, held in memory; a result in which a
+  `refuse_if_left` class is still detected is withheld from the model.
+- Every answer is kept as an answer record with its tool calls, latency, tokens and outcome.
+  Readers vote on it (`POST /ask/{id}/vote`, one changeable vote per identity); an answer voted
+  down, failed or slower than `slow_after_ms` opens a review item (`GET /review`,
+  `POST /review/{id}/close`); records older than `retention_days` are purged. On a `sqlite` store
+  they live in `ask.sqlite` in the instance directory, on a `postgres` store in a PostgreSQL schema
+  of their own (`ask.records`), never in EKR's. The PostgreSQL records are reached by
+  `cortex ask records`, which Connectors launches with the records role's password; the service
+  never reads it, and the connection requires TLS unless the URL says `sslmode=disable`.
+- `cortex eval run <name> --set <file> --runner mcp|ask|replay` asks each case of an eval set and
+  scores each answer with no model call, by the facts it must contain and the nodes it must cite.
 - `cortex eval case add <name> --set <file> --from-review <review id>` appends the case of a closed
   review item to an eval set: the question of its answer record and the facts and nodes the
   reviewer expected, with `review_id` naming the item. An open item, an unknown one and one the set
-  already holds are refused, and the set file is left as it was. `POST /review/{id}/close` takes
-  the expectations as `expect_facts` and `expect_nodes` beside `reason`.
+  already holds, and one closed with no expected fact or node, are refused, and the set file is left
+  as it was. `POST /review/{id}/close` takes the expectations as `expect_facts` and `expect_nodes`
+  beside `reason`.
 
 ## 0.5.6 — 2026-10-17
 
