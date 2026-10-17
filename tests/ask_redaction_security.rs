@@ -1,8 +1,7 @@
 //! Security conformance cases for `story:ask-redaction`: with a redaction policy no original value
 //! of a redacted class, known name or rule reaches the model, a `refuse_if_left` result is
 //! withheld, and the redacting MCP server of the eval `mcp` runner (`ask::proxy`) serves only the
-//! case it was started for. Each `#[ignore]`d case states an invariant the change does not yet
-//! enforce. The names and addresses are synthetic.
+//! case it was started for. The names and addresses are synthetic.
 
 mod common;
 
@@ -89,6 +88,8 @@ fn url_of(config: &Value) -> (String, String) {
 /// One JSON-RPC `POST` to `addr` at `path`: the whole HTTP response.
 fn post(addr: &str, path: &str, body: &Value) -> String {
     let mut s = TcpStream::connect(addr).expect("connect");
+    // A server that never ends its response fails the case instead of hanging it.
+    s.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
     let body = body.to_string();
     write!(
         s,
@@ -106,7 +107,6 @@ fn post(addr: &str, path: &str, body: &Value) -> String {
 /// be enough to read the store through the redacting server: today the path token is all the
 /// server checks, and it is in that document.
 #[test]
-#[ignore = "security: the proxy's access token travels on claude's command line; any local process reading it can call the store through the case's batch"]
 fn the_command_line_config_alone_does_not_open_the_store() {
     let tmp = scratch();
     let reader = stand_in_reader(tmp.path());
@@ -144,7 +144,6 @@ fn the_command_line_config_alone_does_not_open_the_store() {
 /// reader with it, open. Today `serve` waits for the 30-second read timeout of each held
 /// connection, and a client that sends a byte every few seconds holds it without bound.
 #[test]
-#[ignore = "security: a silent or trickling local connection keeps the proxy and the reader alive past the case (single-threaded accept, per-read 30 s timeout)"]
 fn the_server_stops_when_the_case_ends_even_with_a_silent_connection_open() {
     let tmp = scratch();
     let reader = stand_in_reader(tmp.path());
@@ -172,7 +171,6 @@ fn the_server_stops_when_the_case_ends_even_with_a_silent_connection_open() {
 /// earlier tool result was given that placeholder, is shown unchanged and then restored to the
 /// earlier result's value, so an answer quoting it attributes another document's address.
 #[test]
-#[ignore = "security: placeholder-shaped store text in a later tool result is restored to an earlier result's value"]
 fn a_placeholder_shaped_store_text_in_a_later_result_is_not_restored_to_another_value() {
     let r = email_and_name();
     let mut batch = r.batch();
@@ -195,7 +193,6 @@ fn a_placeholder_shaped_store_text_in_a_later_result_is_not_restored_to_another_
 /// before it checks, so the withheld text's values join the batch under sequential, guessable
 /// placeholders, and an answer naming `[Email-1]` is restored to an address from a withheld result.
 #[test]
-#[ignore = "security: values of a withheld tool result stay in the batch and are restored for a guessed placeholder"]
 fn a_value_of_a_withheld_result_is_never_restored() {
     // The rule's replacement is itself an address the `Email` detector finds, so the result is
     // withheld whatever else it holds.

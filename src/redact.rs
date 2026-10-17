@@ -1117,6 +1117,7 @@ impl Redactor {
             back: HashMap::new(),
             next: HashMap::new(),
             reserved: HashSet::new(),
+            escaped: HashMap::new(),
             words: HashMap::new(),
             named: HashSet::new(),
             counts: self.counts(),
@@ -1136,6 +1137,7 @@ impl Redactor {
 }
 
 /// The placeholders of one batch and the values they stand for. Never written anywhere.
+#[derive(Clone)]
 pub struct Batch<'a> {
     redactor: &'a Redactor,
     forward: HashMap<(usize, String), String>,
@@ -1143,6 +1145,9 @@ pub struct Batch<'a> {
     next: HashMap<String, usize>,
     /// Placeholder-shaped text the originals already hold: never handed out, never restored.
     reserved: HashSet<String>,
+    /// The fresh placeholder shown for each placeholder-shaped original an earlier text was
+    /// already given.
+    escaped: HashMap<String, String>,
     /// How often the batch's originals hold each capitalised word, when `RareName` is replaced or
     /// checked.
     words: HashMap<String, usize>,
@@ -1231,11 +1236,37 @@ impl<'a> Batch<'a> {
         let mut out = String::with_capacity(keep);
         let mut last = 0;
         let hits = self.redactor.find(full, |_| true, Some(&self.words));
-        for (step, range) in hits {
+        // Placeholder-shaped text of the original that an earlier text of the batch was already
+        // given: shown as it is, it would be restored to that text's value. It is shown as a
+        // fresh placeholder that restores to the text itself.
+        let mut edits: Vec<(Range<usize>, Option<usize>)> =
+            hits.into_iter().map(|(step, r)| (r, Some(step))).collect();
+        if let Some(placeholder) = &self.redactor.placeholder {
+            let issued: Vec<Range<usize>> = placeholder
+                .find_iter(&full[..keep])
+                .filter(|m| self.back.contains_key(m.as_str()))
+                .map(|m| m.range())
+                .filter(|r| {
+                    !edits
+                        .iter()
+                        .any(|(e, _)| e.start < r.end && r.start < e.end)
+                })
+                .collect();
+            edits.extend(issued.into_iter().map(|r| (r, None)));
+            edits.sort_by_key(|(r, _)| r.start);
+        }
+        for (range, step) in edits {
             if range.start >= keep {
                 break;
             }
             let end = range.end.min(keep);
+            let Some(step) = step else {
+                out.push_str(&full[last..range.start]);
+                let p = self.escape(&full[range.start..end]);
+                out.push_str(&p);
+                last = end;
+                continue;
+            };
             let replacement = self.redactor.steps[step].replacement.as_deref();
             if replacement == Some(&full[range.clone()]) {
                 continue;
@@ -1254,6 +1285,28 @@ impl<'a> Batch<'a> {
         }
         out.push_str(&full[last..keep]);
         out
+    }
+
+    /// A fresh placeholder of the label of the placeholder-shaped `literal`, restored to `literal`.
+    fn escape(&mut self, literal: &str) -> String {
+        if let Some(p) = self.escaped.get(literal) {
+            return p.clone();
+        }
+        let label = literal[1..literal.len() - 1]
+            .rsplit_once('-')
+            .map_or(literal, |(label, _)| label)
+            .to_string();
+        let n = self.next.entry(label.clone()).or_insert(0);
+        let p = loop {
+            *n += 1;
+            let p = format!("[{label}-{n}]");
+            if !self.reserved.contains(&p) && !self.back.contains_key(&p) {
+                break p;
+            }
+        };
+        self.escaped.insert(literal.to_string(), p.clone());
+        self.back.insert(p.clone(), literal.to_string());
+        p
     }
 
     /// Every placeholder of this batch in the strings of `value` replaced by its value. Returns

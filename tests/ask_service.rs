@@ -663,7 +663,8 @@ fn a_tool_result_still_holding_a_refused_class_is_withheld_and_the_answer_comple
     // The rule's replacement is itself an address the `Email` detector finds.
     let policy = "redaction:\n  classes: [Email]\n  rules:\n    - {name: Team, pattern: \"widget team\", replacement: \"ops@acme.example\"}\n  known_names: [Zorblat]\n  refuse_if_left: [Email]\n";
     let service = serve_with(&gateway, LIMITS, PERSONAL, policy);
-    let answer = ask(&service, Some("alice"), "Who leads the widget team?");
+    // The question avoids the rule's pattern: rewritten to an address, it would be refused itself.
+    let answer = ask(&service, Some("alice"), "Who leads which team?");
     let names = answer.names();
     assert_eq!(names.last(), Some(&"done"), "{:?}", answer.events);
     assert!(!names.contains(&"error"), "{names:?}");
@@ -717,7 +718,6 @@ fn without_a_policy_the_model_receives_the_tool_result_byte_for_byte() {
 /// well as a tool result does. Today the question is redacted but never checked: with a class the
 /// policy refuses and does not replace, the caller's question carries the original to the model.
 #[test]
-#[ignore = "security: the question is not checked against refuse_if_left; a refused class in it reaches the model"]
 fn a_question_still_holding_a_refused_class_does_not_reach_the_model() {
     let gateway = Gateway::start(vec![text_reply("I cannot say.", (100, 10, 0))]);
     let policy = "redaction:\n  classes: []\n  rules: []\n  refuse_if_left: [Email]\n";

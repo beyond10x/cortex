@@ -114,6 +114,11 @@ async fn ask(
         },
         Err(_) => return bad_request("the body is not JSON"),
     };
+    // A question still holding a class `refuse_if_left` names is refused before it spends a
+    // question of the minute, and before anything is sent.
+    if let Some(why) = super::question_refused(&service.settings, &question) {
+        return bad_request(&why);
+    }
     let admitted = service
         .limiter
         .lock()

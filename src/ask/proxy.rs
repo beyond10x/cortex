@@ -4,14 +4,14 @@
 //! `claude` runs its own tool loop, so cortex cannot redact a tool result it never sees. Under a
 //! policy the runner gives `claude` this server instead of `ekr mcp`: MCP over HTTP (the
 //! streamable-HTTP transport, one JSON response per `POST`), bound to `127.0.0.1` on a free port
-//! under a random path, for one case only. It answers `initialize` and `ping` itself and forwards
+//! under a random path and behind a random bearer header, for one case only. It answers `initialize` and `ping` itself and forwards
 //! `tools/list` and `tools/call` to the reader ([`mcp::Reader`]). Each tool result is shown as
 //! the ask service shows it ([`super::shown`]): its text redacted with the case's batch, or a
 //! withheld tool error. The batch, the case's one placeholder mapping, stays in this process, so
 //! the runner restores the answer with it; nothing of it is written anywhere.
 
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -34,9 +34,46 @@ pub struct Served<'r, T> {
     pub batch: Batch<'r>,
 }
 
+/// Why [`serve`] did not call `f`.
+#[derive(Debug)]
+pub enum ServeError {
+    /// The question still holds a class the policy's `refuse_if_left` names: nothing was started.
+    Refused(String),
+    /// The reader or the server could not be started.
+    Failed(String),
+}
+
+impl std::fmt::Display for ServeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ServeError::Refused(why) | ServeError::Failed(why) => f.write_str(why),
+        }
+    }
+}
+
+/// Ends the server when dropped, whether `f` returned or panicked: sets `stop` and shuts down
+/// every connection still open, so no idle or trickling client holds the case.
+struct Stopper<'a> {
+    stop: &'a AtomicBool,
+    open: &'a Mutex<Vec<TcpStream>>,
+}
+
+impl Drop for Stopper<'_> {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        let open = self.open.lock().unwrap_or_else(|e| e.into_inner());
+        for stream in open.iter() {
+            let _ = stream.shutdown(Shutdown::Both);
+        }
+    }
+}
+
 /// Starts the reader `command` and the server in front of it, redacts `question` with a new
 /// batch of `redactor`, and calls `f` with the redacted question and the `--mcp-config` document
-/// that names the server as `server`. The server and the reader stop when `f` returns.
+/// that names the server as `server`. The document carries the bearer header the server requires
+/// besides its path, so it goes to the client in a file, never on a command line. The server and
+/// the reader stop when `f` returns. A question in which a `refuse_if_left` class is still
+/// detected is refused before anything starts.
 pub fn serve<'r, T>(
     redactor: &'r Redactor,
     command: &ReaderCommand,
@@ -44,38 +81,70 @@ pub fn serve<'r, T>(
     question: &str,
     deadline: Instant,
     f: impl FnOnce(&str, &Value) -> T,
-) -> Result<Served<'r, T>, String> {
+) -> Result<Served<'r, T>, ServeError> {
     let mut batch = redactor.batch();
     batch.reserve(question);
     let question = batch.replace(question);
+    let left = batch.left(&question);
+    if !left.is_empty() {
+        return Err(ServeError::Refused(super::refused(&left)));
+    }
+    let failed = |why: String| ServeError::Failed(why);
     let reader = match Reader::start(command, deadline) {
         Ok(r) => r,
-        Err(CallError::Timeout) => return Err("the MCP reader did not start in time".into()),
-        Err(CallError::Failed(reason)) => return Err(format!("the MCP reader: {reason}")),
+        Err(CallError::Timeout) => {
+            return Err(failed("the MCP reader did not start in time".into()))
+        }
+        Err(CallError::Failed(reason)) => return Err(failed(format!("the MCP reader: {reason}"))),
     };
-    let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("127.0.0.1: {e}"))?;
-    let addr = listener.local_addr().map_err(|e| e.to_string())?;
-    let path = format!("/{}", token()?);
+    let listener =
+        TcpListener::bind("127.0.0.1:0").map_err(|e| failed(format!("127.0.0.1: {e}")))?;
+    listener
+        .set_nonblocking(true)
+        .map_err(|e| failed(e.to_string()))?;
+    let addr = listener.local_addr().map_err(|e| failed(e.to_string()))?;
+    let path = format!("/{}", token().map_err(failed)?);
+    let bearer = format!("Bearer {}", token().map_err(failed)?);
     let config = json!({"mcpServers": {server: {
         "type": "http",
         "url": format!("http://{addr}{path}"),
+        "headers": {"Authorization": bearer},
     }}});
     let state = Mutex::new((reader, batch));
     let stop = AtomicBool::new(false);
+    let open = Mutex::new(Vec::new());
     let answer = std::thread::scope(|s| {
+        let stopper = Stopper {
+            stop: &stop,
+            open: &open,
+        };
         s.spawn(|| {
-            for stream in listener.incoming() {
-                if stop.load(Ordering::SeqCst) {
-                    return;
-                }
-                if let Ok(stream) = stream {
-                    handle(stream, &path, &state, deadline);
+            while !stop.load(Ordering::SeqCst) {
+                match listener.accept() {
+                    Ok((stream, _)) => {
+                        let _ = stream.set_nonblocking(false);
+                        if let Ok(copy) = stream.try_clone() {
+                            open.lock().unwrap_or_else(|e| e.into_inner()).push(copy);
+                        }
+                        // Registered, then checked: a stop that came between is not missed.
+                        if stop.load(Ordering::SeqCst) {
+                            let _ = stream.shutdown(Shutdown::Both);
+                            return;
+                        }
+                        let (path, bearer, state) = (&path, &bearer, &state);
+                        s.spawn(move || {
+                            handle(&stream, path, bearer, state, deadline);
+                            // `open` holds a clone of this socket, so dropping `stream` alone
+                            // would leave the client waiting for the end of the response.
+                            let _ = stream.shutdown(Shutdown::Both);
+                        });
+                    }
+                    Err(_) => std::thread::sleep(Duration::from_millis(10)),
                 }
             }
         });
         let answer = f(&question, &config);
-        stop.store(true, Ordering::SeqCst);
-        wake(addr);
+        drop(stopper);
         answer
     });
     let (reader, batch) = state.into_inner().unwrap_or_else(|e| e.into_inner());
@@ -83,13 +152,17 @@ pub fn serve<'r, T>(
     Ok(Served { answer, batch })
 }
 
-/// Unblocks the server's `accept` so it sees `stop`.
-fn wake(addr: SocketAddr) {
-    let _ = TcpStream::connect_timeout(&addr, Duration::from_secs(1));
+/// Whether `a` and `b` are equal, in time that depends on their lengths only.
+fn same(a: &[u8], b: &[u8]) -> bool {
+    let mut diff = a.len() ^ b.len();
+    for i in 0..a.len().max(b.len()) {
+        diff |= usize::from(a.get(i).copied().unwrap_or(0) ^ b.get(i).copied().unwrap_or(0));
+    }
+    diff == 0
 }
 
 /// 128 random bits, in hex: the server's path, so only who was given the configuration finds it.
-fn token() -> Result<String, String> {
+pub(crate) fn token() -> Result<String, String> {
     let mut bytes = [0u8; 16];
     std::fs::File::open("/dev/urandom")
         .and_then(|mut f| f.read_exact(&mut bytes))
@@ -97,15 +170,23 @@ fn token() -> Result<String, String> {
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
-/// Answers one HTTP request on `stream`, then closes it.
-fn handle(stream: TcpStream, path: &str, state: &Mutex<(Reader, Batch<'_>)>, deadline: Instant) {
+/// Answers one HTTP request on `stream`; the caller closes it. A request without the `bearer` header is
+/// refused with 401.
+fn handle(
+    stream: &TcpStream,
+    path: &str,
+    bearer: &str,
+    state: &Mutex<(Reader, Batch<'_>)>,
+    deadline: Instant,
+) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
-    let mut reader = BufReader::new(&stream);
+    let mut reader = BufReader::new(stream);
     let mut request_line = String::new();
     if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
         return;
     }
     let mut length = 0;
+    let mut authorized = false;
     loop {
         let mut line = String::new();
         if reader.read_line(&mut line).unwrap_or(0) == 0 {
@@ -119,11 +200,19 @@ fn handle(stream: TcpStream, path: &str, state: &Mutex<(Reader, Batch<'_>)>, dea
             if name.trim().eq_ignore_ascii_case("content-length") {
                 length = value.trim().parse().unwrap_or(0);
             }
+            if name.trim().eq_ignore_ascii_case("authorization")
+                && same(value.trim().as_bytes(), bearer.as_bytes())
+            {
+                authorized = true;
+            }
         }
     }
     let mut parts = request_line.split_whitespace();
     let (method, target) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
-    let mut out = &stream;
+    let mut out = stream;
+    if !authorized {
+        return respond(&mut out, "401 Unauthorized", None);
+    }
     if target != path {
         return respond(&mut out, "404 Not Found", None);
     }

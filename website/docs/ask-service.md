@@ -89,7 +89,7 @@ over every model call (`prompt_tokens`, `completion_tokens`, `prompt_tokens_deta
 |---|---|---|
 | `unidentified` | 401 | no identity header; no model was asked |
 | `rate-limit` | 429 | the identity's questions of the minute are spent; `retry_after` (also the `Retry-After` header) is the whole seconds until the oldest leaves the window |
-| `bad-request` | 400, or 413 | the body is not JSON with a non-empty `question`, or is above 1 MiB (413); a refused body spends no question of the minute |
+| `bad-request` | 400, or 413 | the body is not JSON with a non-empty `question`, or is above 1 MiB (413), or the question still holds a class `refuse_if_left` names (400); a refused body spends no question of the minute |
 | `step-limit` | 200 | the model still asked for a tool at `max_steps` |
 | `time-limit` | 200 | the answer passed `max_seconds` |
 | `model-failed` | 200 | the gateway could not be reached, answered an error or no message |
@@ -112,6 +112,13 @@ mapping, held in memory for that answer and written nowhere.
 - A result in which a class the policy's `refuse_if_left` names is still detected is not given to
   the model: it gets a tool error saying the result was withheld by policy, naming the classes,
   and the `tool` event says `withheld: true`. The answer goes on.
+- A question in which a `refuse_if_left` class is still detected, after it is redacted, is refused
+  before anything is sent and before it spends a question of the minute: the answer is a 400 with
+  an `error` event whose `reason` is `bad-request`, naming the classes and never what was found.
+  No model is asked.
+- Text in a tool result that already looks like a placeholder (`[Email-1]`) is shown to the model
+  as a fresh placeholder that restores to that text, so it is never restored to another value.
+  A withheld result adds none of its values to the answer's mapping.
 - The answer is restored before the client sees it: each placeholder that has a value is replaced
   by it, in every `delta` and in `done.answer`. A `delta` that ends inside a possible placeholder
   holds that tail back until the next `delta` or `done`, so no client sees half a placeholder. A

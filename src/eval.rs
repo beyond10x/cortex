@@ -433,6 +433,16 @@ pub fn prepare(
     })
 }
 
+/// Appends `result` as one line of `results.jsonl`.
+fn write_result(path: &Path, result: &m::EvalResult) -> Result<(), Failure> {
+    let line = format!("{}\n", result_json(result));
+    std::fs::OpenOptions::new()
+        .append(true)
+        .open(path)
+        .and_then(|mut f| f.write_all(line.as_bytes()))
+        .map_err(|e| Failure::Runner(format!("{}: {e}", path.display())))
+}
+
 /// What a failed run had done when it stopped.
 fn so_far(answered: usize, of: usize, cost_usd: Option<f64>) -> String {
     format!(
@@ -530,22 +540,33 @@ pub fn run(
                         let seconds =
                             (spec.model.timeout_s.max(1) as u64).min(10 * 365 * 24 * 3600);
                         let deadline = Instant::now() + Duration::from_secs(seconds);
-                        let served = proxy::serve(
+                        match proxy::serve(
                             redactor,
                             reader,
                             MCP_SERVER,
                             &case.question,
                             deadline,
                             ask,
-                        )
-                        .map_err(|why| {
-                            Failure::Runner(format!(
-                                "case {:?}: {why}; {}",
-                                case.id,
-                                so_far(n, of, cost_usd)
-                            ))
-                        })?;
-                        (served.answer, Some(served.batch))
+                        ) {
+                            Ok(served) => (served.answer, Some(served.batch)),
+                            Err(proxy::ServeError::Refused(why)) => {
+                                // The ask service refuses such a question the same way: the
+                                // case is recorded as failed, with the reason as its answer, and
+                                // no model was asked.
+                                let mut result = score(case, &format!("refused: {why}"), &[]);
+                                result.passed = false;
+                                write_result(&results_path, &result)?;
+                                results.push(result);
+                                continue;
+                            }
+                            Err(proxy::ServeError::Failed(why)) => {
+                                return Err(Failure::Runner(format!(
+                                    "case {:?}: {why}; {}",
+                                    case.id,
+                                    so_far(n, of, cost_usd)
+                                )))
+                            }
+                        }
                     }
                     _ => (ask(&case.question, config), None),
                 };
@@ -584,12 +605,7 @@ pub fn run(
             }
         };
         let result = score(case, &answer, &cited);
-        let line = format!("{}\n", result_json(&result));
-        std::fs::OpenOptions::new()
-            .append(true)
-            .open(&results_path)
-            .and_then(|mut f| f.write_all(line.as_bytes()))
-            .map_err(|e| Failure::Runner(format!("{}: {e}", results_path.display())))?;
+        write_result(&results_path, &result)?;
         results.push(result);
     }
 

@@ -18,7 +18,13 @@ fn answerer(w: &World) {
         &format!(
             r#"R="{root}"
 echo call >> "$R/eval-calls.log"
-printf "%s\n" "$*" | tr "\n" " " >> "$R/eval-args.log"; echo >> "$R/eval-args.log"
+line="$*"
+prev=
+for a in "$@"; do
+  [ "$prev" = --mcp-config ] && line="$line $(cat "$a")"
+  prev="$a"
+done
+printf "%s\n" "$line" | tr "\n" " " >> "$R/eval-args.log"; echo >> "$R/eval-args.log"
 prompt=$(cat)
 case "$prompt" in
   *Widget*) A='"answer":"Example Labs develops the WIDGET   engine.","cited_nodes":["node-widget"]' ;;
@@ -528,9 +534,15 @@ fn mcp_client(w: &World) {
         &w.bin.join("claude"),
         &format!(
             r#"R="{root}"
-url=$(printf '%s' "$*" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
+prev=
+for a in "$@"; do
+  [ "$prev" = --mcp-config ] && conf=$(cat "$a")
+  prev="$a"
+done
+url=$(printf '%s' "$conf" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
+auth=$(printf '%s' "$conf" | sed -n 's/.*"Authorization":"\([^"]*\)".*/\1/p')
 cat >> "$R/model-saw.log"
-post() {{ curl -s -X POST "$url" -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' -d "$1"; echo; }}
+post() {{ curl -s -X POST "$url" -H "authorization: $auth" -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' -d "$1"; echo; }}
 post '{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"protocolVersion":"2025-06-18","capabilities":{{}},"clientInfo":{{"name":"stand-in","version":"0"}}}}}}' >> "$R/model-saw.log"
 post '{{"jsonrpc":"2.0","method":"notifications/initialized"}}' >> "$R/model-saw.log"
 post '{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}' >> "$R/model-saw.log"
