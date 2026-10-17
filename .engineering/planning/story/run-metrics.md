@@ -2,17 +2,18 @@
 format: aep.planning-md/3
 id: story:run-metrics
 kind: story
-status: active
+status: implemented
 title: A source's metrics say what each run did, and a terminated run is counted
 summary: Prometheus series for run duration, documents read and applied, model tokens and failure reason, and a final write on SIGTERM; no credential, prompt or content in any series
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - depends_on: story:run-failures-observable
 - serves: vision:self-updating-instances
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-17T15:56:26Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-17T15:56:26Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-10-17T19:51:12Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

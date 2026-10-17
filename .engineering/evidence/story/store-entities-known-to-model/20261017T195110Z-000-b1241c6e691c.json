@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-17T19:51:10Z",
+  "actor": "human:timo",
+  "artifact": "story:store-entities-known-to-model",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "~/.cache/cortex-w17d/gate-1db8c566.log"
+  }
+}

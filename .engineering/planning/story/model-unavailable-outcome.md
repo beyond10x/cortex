@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:model-unavailable-outcome
 kind: story
-status: active
+status: implemented
 title: A run that cannot reach its model ends model-unavailable and is not counted against the source
 summary: RunOutcome model-unavailable, exit 7, not counted by --record-failure
 relations:
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-17T15:56:20Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-17T15:56:21Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-17T19:51:13Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 
