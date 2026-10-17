@@ -1629,6 +1629,94 @@ fn undo(
     )
 }
 
+/// A store write outside a source run that is undone as a gated run is (`cortex schema apply`):
+/// on a `postgres` store it runs in an EKR stage ([`Staged`]), published only when the caller
+/// says so; on a `sqlite` store the store and `state/` are copied before it and the copy kept as
+/// a snapshot once a transaction commits ([`BeforeApply`]), which [`Held::undo`] restores. The
+/// stage of a source run that did not finish is settled first ([`Staged::recover`]).
+pub struct Held {
+    undo: Undo,
+    layout: Layout,
+    instance: String,
+}
+
+impl Held {
+    /// Begins the hold over `store` (put in the stage on `postgres`), named `label` for its
+    /// snapshot. The caller holds the home's lock.
+    pub fn begin(
+        layout: &Layout,
+        spec: &m::InstanceSpec,
+        store: &mut crate::ekr::Store,
+        label: &str,
+    ) -> Result<Self, Failure> {
+        Staged::recover(layout, spec)?;
+        let mut undo = Undo::new(BeforeApply::new(
+            layout,
+            store,
+            label,
+            now_ms(),
+            snapshot::keep(spec),
+        ));
+        undo.staged = Staged::begin(layout, store)?;
+        if undo.staged.is_none() {
+            undo.take()?;
+        }
+        Ok(Self {
+            undo,
+            layout: Layout::new(layout.dir.clone()),
+            instance: spec.name.0.clone(),
+        })
+    }
+
+    /// After a transaction committed: keeps the snapshot the first time.
+    pub fn committed(&mut self) {
+        self.undo.committed();
+    }
+
+    /// The snapshot kept so far, `<ms>-<label>`; none on `postgres` or before a commit.
+    pub fn snapshot(&self) -> Option<&str> {
+        self.undo.kept.as_deref()
+    }
+
+    /// Publishes the stage at the head it began from (nothing to do on `sqlite`). A refused
+    /// publish abandons it; one whose outcome is unknown keeps it in `stage.json` for the next run.
+    pub fn publish(mut self) -> Result<(), Failure> {
+        match self.undo.staged.take() {
+            Some(staged) => staged.publish(),
+            None => Ok(()),
+        }
+    }
+
+    /// Undoes everything the hold committed: abandons the stage, or restores the snapshot taken
+    /// before. Answers what was done.
+    pub fn undo(mut self) -> String {
+        match self.undo.staged.take() {
+            Some(staged) if self.undo.applied => staged.abandon(),
+            Some(staged) => match staged.discard() {
+                Ok(()) => "nothing was committed, and its stage was abandoned".into(),
+                Err(e) => format!("nothing was committed: {e}"),
+            },
+            None if !self.undo.applied => "nothing was committed".into(),
+            None => {
+                let home = self
+                    .layout
+                    .dir
+                    .parent()
+                    .and_then(std::path::Path::parent)
+                    .unwrap_or(&self.layout.dir);
+                let systemd = Systemd::from_env(home);
+                undo(
+                    &self.layout,
+                    &self.instance,
+                    self.undo.kept.as_deref(),
+                    &systemd,
+                )
+                .1
+            }
+        }
+    }
+}
+
 /// `issued` in batches of at most `size` characters of text, counted as UTF-8 bytes (as before
 /// `model.batch_chars`: a non-Latin character counts 2 to 3), a longer document alone.
 fn batches(issued: Vec<evidence::Issued>, size: usize) -> Vec<Vec<evidence::Issued>> {

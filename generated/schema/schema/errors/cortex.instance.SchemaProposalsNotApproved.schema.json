@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SchemaProposalsNotApproved payload",
+  "description": "`apply` found no approved proposal in the run: none was approved, or every approved one is applied or decided. Nothing was applied.",
+  "x-ess-name": "cortex.instance.SchemaProposalsNotApproved",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "2ce17e0fbcf490d2ef1d8e110063c04e4e9e78f0826a42886b2f5ad9c6cc68d9",
+    "contract_digest": "slice-sha256/2:125fa3d6c363b0ae6bc2be3b19ed0954e95b90093f5badba070f0fb5cf9b83bd",
+    "regenerate": "ess generate"
+  }
+}

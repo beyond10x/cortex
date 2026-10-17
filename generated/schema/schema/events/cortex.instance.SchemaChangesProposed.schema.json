@@ -29,6 +29,9 @@
     "invalid": {
       "type": "integer"
     },
+    "pending": {
+      "type": "integer"
+    },
     "dropped": {
       "type": "integer"
     },
@@ -47,14 +50,15 @@
     "refused",
     "recorded_only",
     "invalid",
+    "pending",
     "dropped"
   ],
   "additionalProperties": false,
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58",
-    "contract_digest": "slice-sha256/2:800993f92252bb62b297b98f1477fdf62b66c2dbd207b31b898af5cfd692d011",
+    "source_digest": "2ce17e0fbcf490d2ef1d8e110063c04e4e9e78f0826a42886b2f5ad9c6cc68d9",
+    "contract_digest": "slice-sha256/2:f23ea0b993e55d9104e900f2df61d29fbac49b418bc51c9a0c07704669079baf",
     "regenerate": "ess generate"
   },
   "$defs": {

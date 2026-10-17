@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SchemaRunNotFound payload",
+  "description": "The instance has no schema run by this stamp: no `schema/<stamp>/proposals.jsonl`, or one that cannot be read.",
+  "x-ess-name": "cortex.instance.SchemaRunNotFound",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "stamp": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "stamp",
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "2ce17e0fbcf490d2ef1d8e110063c04e4e9e78f0826a42886b2f5ad9c6cc68d9",
+    "contract_digest": "slice-sha256/2:4d099066a90d83aa3b08fbd577306ab5fd0c56d6f4e45d2355c0bd50b728cd88",
+    "regenerate": "ess generate"
+  }
+}

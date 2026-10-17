@@ -13,19 +13,23 @@
     },
     "dry_run": {
       "type": "boolean"
+    },
+    "review": {
+      "type": "boolean"
     }
   },
   "required": [
     "name",
     "sample",
-    "dry_run"
+    "dry_run",
+    "review"
   ],
   "additionalProperties": false,
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58",
-    "contract_digest": "slice-sha256/2:5b101b1e0ec9b8c1b33a52d96e0edbed130b155d1b4992afe9c91a0266dcfed3",
+    "source_digest": "2ce17e0fbcf490d2ef1d8e110063c04e4e9e78f0826a42886b2f5ad9c6cc68d9",
+    "contract_digest": "slice-sha256/2:6dd1a718ed922e27f7dd90909a57c4f069e1438d5acaac4d090328deed88d6f1",
     "regenerate": "ess generate"
   },
   "$defs": {

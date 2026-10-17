@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SchemaProposalsNotPending payload",
+  "description": "`approve` or `reject` named a proposal the run does not have or that is already decided, or the run has no pending proposal left. A decided proposal is not decided again; nothing changed.",
+  "x-ess-name": "cortex.instance.SchemaProposalsNotPending",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "2ce17e0fbcf490d2ef1d8e110063c04e4e9e78f0826a42886b2f5ad9c6cc68d9",
+    "contract_digest": "slice-sha256/2:7980429ecedd59ae357769df94865ba243d7c1450b4a60ef350230a68a5f40e4",
+    "regenerate": "ess generate"
+  }
+}

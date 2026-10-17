@@ -438,6 +438,19 @@ has had), such as one a run began and was killed before it wrote `stage.json`, i
 holds a copy of the store. Beginning a stage copies the store, so it takes longer as the store
 grows. A run on a `postgres` store with no `gate` runs in no stage.
 
+### Undoing a schema apply
+
+`cortex schema apply <name> <stamp>`, which applies the approved proposals of a review run (see
+[Reviewing schema changes](./commands.md#reviewing-schema-changes)), is held the same way, gate or
+none. First it settles a `stage.json` a killed run left, as a run does. On a `sqlite` store it
+copies the store and `state/` before its first transaction and keeps the copy as the snapshot
+`<time>-schema-<stamp>` once one commits; `cortex restore <name> <time>-schema-<stamp>` puts the
+ontology back as it was before the apply, and a gate the changes fail restores it at once. On a
+`postgres` store it begins a stage, writes `stage.json`, asks every transaction and `ekr quality`
+in the stage, and publishes the stage only when EKR answered every transaction and the gate
+passed; otherwise it abandons the stage and `ekr head` is where it was. A `stage.json` it leaves
+behind is settled by the next run of a source as a run's is.
+
 ## Adopting an existing store
 
 `cortex adopt --spec <file> --store <file>` makes an EKR store that cortex did not create an

@@ -442,6 +442,14 @@ impl Store {
         }
     }
 
+    /// The revision `ekr head` answers: the store's, or its stage's when it is in one.
+    pub fn head(&self) -> Result<i64, String> {
+        let head = json(&run(self.command(&[OsStr::new("head")])?, "head")?, "head")?;
+        head["revision"]
+            .as_i64()
+            .ok_or_else(|| format!("ekr head answered no revision: {head}"))
+    }
+
     /// Whether the store's lineage holds a seed: `ekr head` answers a head, or says "the lineage
     /// has no seed" (EKR 0.0.30, measured on PostgreSQL). Any other answer is an error.
     pub fn seeded(&self) -> Result<bool, String> {
