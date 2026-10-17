@@ -1023,6 +1023,7 @@ impl Scenario {
                                     result_bytes: n("result_bytes"),
                                     truncated: t["truncated"].as_bool().expect("a bool"),
                                     failed: t["failed"].as_bool().expect("a bool"),
+                                    withheld: t["withheld"].as_bool().unwrap_or(false),
                                 }
                             })
                             .collect()

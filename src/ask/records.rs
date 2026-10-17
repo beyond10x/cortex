@@ -623,6 +623,7 @@ pub fn tools_json(tools: &[ma::AskTool]) -> String {
                     "result_bytes": t.result_bytes,
                     "truncated": t.truncated,
                     "failed": t.failed,
+                    "withheld": t.withheld,
                 })
             })
             .collect(),
@@ -642,6 +643,8 @@ fn tools_of(text: &str) -> Option<Vec<ma::AskTool>> {
                 result_bytes: t.get("result_bytes")?.as_i64()?,
                 truncated: t.get("truncated")?.as_bool()?,
                 failed: t.get("failed")?.as_bool()?,
+                // Kept since redaction; a record from before it was never withheld.
+                withheld: t.get("withheld").and_then(Value::as_bool).unwrap_or(false),
             })
         })
         .collect()
@@ -800,6 +803,7 @@ impl Keeper {
             cached_tokens: 0,
             context_tokens: 0,
             steps: 0,
+            unrestored: 0,
         };
         let (kind, done, reason) = match outcome {
             ma::AskOutcome::Answered { answered } => {
