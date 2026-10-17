@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ask-service
 kind: story
-status: active
+status: implemented
 title: An instance answers a question as a stream of events over its store
 summary: 'cortex ask serve: POST /ask streams status, tool, delta, discard, done and error within the spec''s limits'
 relations:
@@ -11,10 +11,11 @@ relations:
 - depends_on: architecture-decision-record:answer-service-in-cortex
 - informed_by: story:model-through-gateway
 - informed_by: story:token-budget
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-17T03:36:58Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-17T03:36:58Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-17T16:10:56Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

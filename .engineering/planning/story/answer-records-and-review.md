@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:answer-records-and-review
 kind: story
-status: active
+status: implemented
 title: Every answer is kept with its votes, and the failed ones are queued for review
 summary: Answer records, one changeable vote per identity, a review queue and retention in cortex's own tables
 relations:
@@ -10,10 +10,11 @@ relations:
 - serves: vision:self-updating-instances
 - depends_on: architecture-decision-record:answer-service-in-cortex
 - depends_on: story:ask-service
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-17T04:12:07Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-17T04:12:08Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-17T16:10:56Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

@@ -214,14 +214,6 @@
       "cardinality": "many",
       "from": "cortex.instance.Instance",
       "kind": "owns",
-      "name": "answers",
-      "to": "cortex.ask.AnswerRecord",
-      "via": "instance_name"
-    },
-    {
-      "cardinality": "many",
-      "from": "cortex.instance.Instance",
-      "kind": "owns",
       "name": "eval_runs",
       "to": "cortex.instance.EvalRun",
       "via": "instance_name"

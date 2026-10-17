@@ -2,17 +2,18 @@
 format: aep.planning-md/3
 id: story:ask-redaction
 kind: story
-status: active
+status: implemented
 title: The ask service and eval runs show the model only redacted store contents
 relations:
 - decomposes: epic:instance-answers-questions
 - serves: vision:self-updating-instances
 - depends_on: story:ask-service
 - depends_on: story:eval-run
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-17T03:58:48Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-17T03:58:48Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-17T16:10:56Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Story
 

@@ -98,6 +98,7 @@ pub fn domain_graph(model: &Value, domain: &str) -> Result<Value, String> {
         .filter_map(Value::as_str)
         .collect();
     names.sort_unstable();
+    let in_domain: std::collections::BTreeSet<&str> = names.iter().copied().collect();
 
     let mut entities = Vec::new();
     let mut relations = Vec::new();
@@ -118,9 +119,14 @@ pub fn domain_graph(model: &Value, domain: &str) -> Result<Value, String> {
         }
         entities.push(Value::Object(out));
         for relation in entity["relations"].as_array().into_iter().flatten() {
+            // A graph shows one domain; a relation into another is listed on the domain page.
+            let target = text(relation, "target")?;
+            if !in_domain.contains(target) {
+                continue;
+            }
             let mut edge = Map::new();
             edge.insert("from".into(), json!(name));
-            edge.insert("to".into(), json!(text(relation, "target")?));
+            edge.insert("to".into(), json!(target));
             edge.insert("name".into(), json!(text(relation, "name")?));
             edge.insert("kind".into(), json!(text(relation, "kind")?));
             edge.insert("cardinality".into(), json!(text(relation, "cardinality")?));
@@ -210,6 +216,26 @@ mod tests {
             json!({"from": "cortex.instance.Instance", "to": "cortex.instance.Source",
                    "name": "sources", "kind": "owns", "cardinality": "many", "via": "instance_name"})
         );
+    }
+
+    #[test]
+    fn a_relation_into_another_domain_is_left_out_of_the_graph() {
+        let mut model = model();
+        model["entities"]["cortex.instance.Instance"]["relations"]
+            .as_array_mut()
+            .unwrap()
+            .push(
+                json!({"name": "answers", "kind": "owns", "target": "cortex.ask.AnswerRecord",
+                         "cardinality": "many", "via": "instance_name"}),
+            );
+        let graph = domain_graph(&model, "cortex.instance").unwrap();
+        let targets: Vec<_> = graph["relations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|relation| relation["to"].as_str().unwrap())
+            .collect();
+        assert_eq!(targets, ["cortex.instance.Source"]);
     }
 
     #[test]
