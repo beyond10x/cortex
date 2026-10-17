@@ -46,6 +46,7 @@ tokio-postgres-rustls = "0.14"
 webpki-roots = "1"
 
 [dev-dependencies]
+roxmltree = "0.21"
 tempfile = "3"
 
 [workspace]
