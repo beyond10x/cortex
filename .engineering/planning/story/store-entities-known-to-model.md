@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:store-entities-known-to-model
 kind: story
-status: draft
+status: active
 title: The model sees the store's existing entities for a batch's keys, and mappings can add templated aliases
 summary: Per-batch store lookup of keys and aliases across types as known entities; alias templates on structured mappings
 relations:
 - serves: vision:self-updating-instances
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-17T15:56:20Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-17T15:56:20Z", actor: "human:timo", revision: 3}
 ---
 ## Outcome
 

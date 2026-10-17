@@ -2,12 +2,16 @@
 format: aep.planning-md/3
 id: story:figure-svg-renderer
 kind: story
-status: draft
+status: active
 title: cortex draws figures as allow-listed, byte-stable SVG from a typed spec
 summary: A renderer for bar charts, timelines and relationship graphs with no script, no foreignObject, no handlers, no external href, and a size cap
 relations:
 - decomposes: epic:instance-answers-questions
-revision: 2
+- serves: vision:self-updating-instances
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-17T15:56:25Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-10-17T15:56:25Z", actor: "human:timo", revision: 4}
 ---
 ## Outcome
 
