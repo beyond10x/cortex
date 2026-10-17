@@ -2,6 +2,7 @@
 
 pub mod connectors;
 pub mod ekr;
+pub mod eval;
 pub mod evidence;
 pub mod extract;
 pub mod gate;
