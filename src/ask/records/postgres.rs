@@ -127,7 +127,7 @@ pub fn url_refusal(url: &str) -> Option<String> {
     None
 }
 
-/// The connection settings of the records: the URL, TLS required unless it says
+/// The connection settings of the records: the URL, TLS required for every mode but
 /// `sslmode=disable`, verified against `ca_file` or the public web roots.
 fn config_of(url: &str, password: &str) -> Result<postgres::Config, String> {
     if let Some(refused) = url_refusal(url) {
@@ -135,7 +135,7 @@ fn config_of(url: &str, password: &str) -> Result<postgres::Config, String> {
     }
     let mut config = postgres::Config::from_str(url)
         .map_err(|_| "ask.records.url: not a PostgreSQL connection URL".to_string())?;
-    if !url.contains("sslmode=") {
+    if config.get_ssl_mode() != postgres::config::SslMode::Disable {
         config.ssl_mode(postgres::config::SslMode::Require);
     }
     config
