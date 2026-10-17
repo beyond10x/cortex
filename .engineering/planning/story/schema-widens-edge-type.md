@@ -9,7 +9,7 @@ relations:
 - decomposes: epic:organisation-scale-instance
 - serves: vision:self-updating-instances
 - depends_on: story:schema-proposals-on-approval
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-17T02:21:56Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-17T02:21:56Z", actor: "human:timo", revision: 3}
@@ -28,7 +28,7 @@ as EKR's own widening:
 3. It is reviewed and applied like any other proposal (`story:schema-proposals-on-approval`):
    recorded `pending`, applied only once approved, inside the gated stage.
 4. After it is applied, a fact whose edge connects the newly admitted types is no longer refused
-   with `edge-endpoint-type`.
+   (EKR 0.0.34 refuses it with `extraction-relation-ends`).
 
 ## Why
 
@@ -47,9 +47,10 @@ between other node types, every such fact is refused. Verified:
   (`src/ekr.rs:646-677`). A proposal that re-adds an existing edge type with more ends is `invalid`
   ("the ontology already declares a type", `src/schema.rs:766-770`, checked for `add_edge_type`
   at `src/schema.rs:799-801`).
-- A fact whose edge joins types outside the edge type's ends is refused by EKR with
-  `edge-endpoint-type` (EKR `crates/ekr-kernel/src/validate/types.rs:58`) and counted in the run's
-  `facts_refused` (`src/run.rs:938`).
+- A fact whose edge joins types outside the edge type's ends is refused by EKR 0.0.34's
+  `apply-extraction` with `extraction-relation-ends` (observed in `tests/schema_review.rs`), and
+  counted in the run's `parts_rejected`; `facts_refused` counts only facts cortex itself refuses
+  for citing evidence it did not issue (`src/extract.rs:664`).
 
 Order: after `story:schema-proposals-on-approval`, whose review and apply path it is applied
 through (`depends_on`: the widening is a new proposal kind of that path, and both change
@@ -87,7 +88,7 @@ Spec first, in `spec/domains/instance.yaml`:
   proposal is recorded `pending`, and after approve and apply `ekr ontology` lists `works_on` with
   sources `Person` and `Team` and target `Project`.
 - Before the widening a structured or extracted fact `Team works_on Project` is refused
-  (`facts_refused` 1); after it, the same fact is applied.
+  (`parts_rejected` 1, `facts_refused` 0); after it, the same fact is applied.
 - A widening naming an edge type the ontology lacks, or a node type it lacks, is `invalid` with a
   note naming it, and nothing is submitted.
 - A widening that adds nothing new to either end is `invalid`.
