@@ -36,6 +36,8 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+## 0.5.5 — 2026-10-17
+
 ### Fixed
 
 - A rare name in underscore italics (`_Rowan_`), in a file name after an underscore
