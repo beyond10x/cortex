@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:batch-fits-model-window
 kind: story
-status: active
+status: implemented
 title: An extraction batch fits the model's window, and one that does not is split and retried, not counted against the source
 refs:
 - provider: github
@@ -10,10 +10,11 @@ refs:
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-16T18:18:11Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-16T18:18:11Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-17T02:05:50Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

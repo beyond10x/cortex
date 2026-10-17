@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-16T21:40:00Z",
+  "actor": "human:timo",
+  "artifact": "story:batch-fits-model-window",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "full gate on d9dff0c: 70 test binaries, 804 passed, 0 failed; released in v0.5.4 (PR #75, merge 64bc2d1)"
+  }
+}
