@@ -302,7 +302,7 @@ pub enum Unavailable {
     Refused,
     /// The server behind the gateway has not loaded the model, or is still loading it.
     NotLoaded,
-    /// The gateway or the API answered HTTP 502, 503 or 504.
+    /// The gateway or the API answered HTTP 502, 503, 504 or 529 (overloaded).
     GatewayDown,
 }
 
@@ -319,10 +319,11 @@ impl Unavailable {
 
 /// Whether a model call's error text says the model could not be reached, in any case:
 /// [`Unavailable::NotLoaded`] for `model not loaded`, `no models loaded`, `model is loading` or
-/// `currently loading`; [`Unavailable::GatewayDown`] for an `API Error` with status 502, 503 or
-/// 504, `Bad Gateway`, `Service Unavailable` or `Gateway Timeout`; [`Unavailable::Refused`] for
-/// `connection refused`, `ECONNREFUSED`, `Connection error` (how `claude -p` words a connection
-/// that failed) or `Unable to connect`. A timeout and every other error are not.
+/// `currently loading`; [`Unavailable::GatewayDown`] for an `API Error` with status 502, 503, 504
+/// or 529, `Bad Gateway`, `Service Unavailable`, `Gateway Timeout` or `overloaded`;
+/// [`Unavailable::Refused`] for `connection refused`, `ECONNREFUSED`, `Connection error` (how
+/// `claude -p` words a connection that failed) or `Unable to connect`. A timeout and every other
+/// error are not.
 pub fn unavailable(text: &str) -> Option<Unavailable> {
     let text = text.to_lowercase();
     let any = |words: &[&str]| words.iter().any(|w| text.contains(w));
@@ -334,8 +335,15 @@ pub fn unavailable(text: &str) -> Option<Unavailable> {
     ]) {
         return Some(Unavailable::NotLoaded);
     }
-    let status = regex::Regex::new(r"api error:?\s*(502|503|504)\b").expect("a valid pattern");
-    if status.is_match(&text) || any(&["bad gateway", "service unavailable", "gateway timeout"]) {
+    let status = regex::Regex::new(r"api error:?\s*(502|503|504|529)\b").expect("a valid pattern");
+    if status.is_match(&text)
+        || any(&[
+            "bad gateway",
+            "service unavailable",
+            "gateway timeout",
+            "overloaded",
+        ])
+    {
         return Some(Unavailable::GatewayDown);
     }
     if any(&[
@@ -620,6 +628,12 @@ fn wait_or_terminate(child: &mut std::process::Child, prompt: &str) -> Waited {
     );
     let status = loop {
         match child.try_wait() {
+            // A stop of the whole unit signals the call too: one that ended after the run was
+            // sent SIGTERM ended because of it, whatever its status says.
+            Ok(Some(_)) if crate::terminate::requested() => {
+                end(child);
+                return Waited::Terminated;
+            }
             Ok(Some(status)) => break status,
             Ok(None) if crate::terminate::requested() => {
                 end(child);
@@ -682,7 +696,11 @@ impl Model {
     ) -> Result<Answer, Refused> {
         match self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd) {
             Err(first) if first.free_error_answer() => {
-                std::thread::sleep(retry_wait());
+                // The wait ends early on SIGTERM: a pod's grace period is shorter than it.
+                let until = std::time::Instant::now() + retry_wait();
+                while std::time::Instant::now() < until && !crate::terminate::requested() {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
                 if crate::terminate::requested() {
                     return Err(Refused {
                         calls: first.calls,
@@ -1138,6 +1156,11 @@ mod tests {
                 Some(Unavailable::GatewayDown),
             ),
             ("api error: 504 timeout", Some(Unavailable::GatewayDown)),
+            (
+                r#"API Error: 529 {"type":"error","error":{"type":"overloaded_error"}}"#,
+                Some(Unavailable::GatewayDown),
+            ),
+            ("Overloaded", Some(Unavailable::GatewayDown)),
             (
                 "API Error: 503 {error:Model is currently loading}",
                 Some(Unavailable::NotLoaded),

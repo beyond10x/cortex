@@ -2405,7 +2405,7 @@ const EXIT_BATCH_TOO_LARGE: u8 = 6;
 const EXIT_TERMINATED: u8 = 8;
 
 /// The exit status of a `run` whose model could not be reached (its connection refused, the
-/// gateway answering 502, 503 or 504, the model not loaded, `claude` not startable): distinct
+/// gateway answering 502, 503, 504 or 529, the model not loaded, `claude` not startable): distinct
 /// from every failure's, so a wrapper tells a model outage, which is not counted against the
 /// source, from a broken source.
 const EXIT_MODEL_UNAVAILABLE: u8 = 7;

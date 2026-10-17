@@ -125,7 +125,7 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 4 | `store-outcome-unknown` | EKR could not say whether a store write of the run took effect (`publication outcome is unknown` from a stage verb, `apply-extraction` or a transaction's commit); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage or extracts the batch again, and a gated `sqlite` run that had kept its snapshot is undone from it (see [Undoing a run](#undoing-a-run)) |
 | 5 | `connection-unavailable` | Connectors answered a retryable failure to every attempt of `connections revalidate` (or of the `connections list` read before it) before the run fetched anything; not a failure of the source, so `--record-failure` counts nothing, and the next scheduled run starts as usual (see [Failures](#failures)) |
 | 6 | `batch-too-large` | a part of several documents of an extraction batch was still too long for the model's window, or its answer still cut off, after the batch was split 3 deep; the reason names that part's documents and the batch size used. Not a failure of the source, so `--record-failure` counts nothing; the batches before it stay applied, and a later run extracts the rest. A part of one document does not end the run: it is left out alone, named in `too_large` and marked seen (see [The batch size](./spec-file.md#the-batch-size)) |
-| 7 | `model-unavailable` | the model could not be reached: `detail.cause` is `refused` (`claude` could not be started, or the connection was refused), `not-loaded` (the server behind the gateway has not loaded the model) or `gateway-down` (HTTP 502, 503 or 504). Not a failure of the source, so `--record-failure` counts nothing, however long the model is down; the batches before it stay applied, and a later run extracts the rest (see [When the model cannot be reached](#when-the-model-cannot-be-reached)) |
+| 7 | `model-unavailable` | the model could not be reached: `detail.cause` is `refused` (`claude` could not be started, or the connection was refused), `not-loaded` (the server behind the gateway has not loaded the model) or `gateway-down` (HTTP 502, 503, 504 or 529 overloaded). Not a failure of the source, so `--record-failure` counts nothing, however long the model is down; the batches before it stay applied, and a later run extracts the rest (see [When the model cannot be reached](#when-the-model-cannot-be-reached)) |
 | 8 | `terminated` | the run was sent SIGTERM and stopped at its next safe point; a gated run was undone first. Not a failure of the source, so `--record-failure` counts nothing (see [Stopping a run](#stopping-a-run)) |
 | 143 | none | a second SIGTERM ended the process at once; nothing was recorded |
 
@@ -426,8 +426,8 @@ exit status 7, instead of `extraction-failed`, so a model outage never disables 
 cortex tells it by the call's error text, in any case: `refused` when `claude` could not be
 started (or `timeout` could not run it) or the error says `connection refused`, `ECONNREFUSED`,
 `Connection error` or `Unable to connect`; `not-loaded` for `model not loaded`, `no models loaded`,
-`model is loading` or `currently loading`; `gateway-down` for an `API Error` with status 502, 503
-or 504, `Bad Gateway`, `Service Unavailable` or `Gateway Timeout`. A call that timed out, any other
+`model is loading` or `currently loading`; `gateway-down` for an `API Error` with status 502, 503,
+504 or 529, `Bad Gateway`, `Service Unavailable`, `Gateway Timeout` or `overloaded`. A call that timed out, any other
 error and an answer that is not a valid document still end `extraction-failed`, which
 `--record-failure` counts. An error answer that cost zero is asked once more first, as every one
 is. The `reason` holds the call's error text, masked for credential shapes and bounded; never the

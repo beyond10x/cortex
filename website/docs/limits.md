@@ -130,7 +130,7 @@ stand; [Status](./status.mdx) lists what is planned.
   measurement and schema round of such an instance fails, naming `story:codex-model-backend`.
 - **A model outage is told by its error text.** A run ends `model-unavailable`, not counted
   against the source, only when the model call's error names a refused connection, a model not
-  loaded, or HTTP 502, 503 or 504 in words cortex knows (see
+  loaded, or HTTP 502, 503, 504 or 529 (overloaded) in words cortex knows (see
   [When the model cannot be reached](./operating.md#when-the-model-cannot-be-reached)); an outage
   a gateway words otherwise, or a call that times out, ends `extraction-failed` and is counted.
   The run does not retry the model beyond the one repeat of an error that cost zero.

@@ -650,7 +650,7 @@ types:
   # Why a run's model could not be reached (`cortex.instance.ModelUnavailable`): `refused`, the
   # model process could not be started or its connection was refused; `not-loaded`, the server
   # behind the gateway answered that the model is not loaded or still loading; `gateway-down`,
-  # the gateway or the API answered HTTP 502, 503 or 504.
+  # the gateway or the API answered HTTP 502, 503, 504 or 529 (overloaded).
   - name: cortex.instance.ModelUnavailableCause
     kind: enum
     variants: [refused, not-loaded, gateway-down]
@@ -1967,9 +1967,10 @@ commands:
       # in any case. `refused`: `claude` (through `timeout`) could not be started (exit 126 or
       # 127), or its error says `connection refused`, `ECONNREFUSED`, `Connection error` or
       # `Unable to connect`; `not-loaded`: `model not loaded`, `no models loaded`, `model is
-      # loading` or `currently loading`; `gateway-down`: an `API Error` with status 502, 503 or
-      # 504, `Bad Gateway`, `Service Unavailable` or `Gateway Timeout`. A call that timed out, an
-      # answer that is not valid, and every other error stay `extraction-failed`. An error answer
+      # loading` or `currently loading`; `gateway-down`: an `API Error` with status 502, 503,
+      # 504 or 529, `Bad Gateway`, `Service Unavailable`, `Gateway Timeout` or `overloaded`. A
+      # call that timed out, an answer that is not valid, and every other error stay
+      # `extraction-failed`. An error answer
       # that cost zero is asked once more first, as any is. What the run leaves: the batches before
       # it are applied, held to the gate and seen, as for `batch-too-large`; that batch and every
       # later one are not marked seen. `model-unavailable` exits 7; its status, metric and hook
@@ -1979,7 +1980,7 @@ commands:
         external: >-
           The run's model cannot be reached: its process cannot be started, its connection is
           refused, the server behind the gateway has not loaded the model, or the gateway answers
-          HTTP 502, 503 or 504
+          HTTP 502, 503, 504 or 529 (overloaded)
         error: cortex.instance.ModelUnavailable
         compensates: true
         updates: cortex.instance.Source

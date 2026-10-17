@@ -15,9 +15,12 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   flight), a gated run is undone, and it ends `terminated`, exit 8, with its status, metric file
   and hook written; `--record-failure` does not count it. A second SIGTERM exits 143 at once.
 - A run whose model cannot be reached (connection refused, `claude` not startable, the model not
-  loaded, a gateway answering 502, 503 or 504) ends `model-unavailable`, exit 7, with its cause
-  (`refused`, `not-loaded`, `gateway-down`), instead of `extraction-failed`; `--record-failure`
-  does not count it, so a model outage never disables a source. Batches applied before it stay.
+  loaded, a gateway answering 502, 503 or 504, an API answering 529 overloaded) ends
+  `model-unavailable`, exit 7, with its cause (`refused`, `not-loaded`, `gateway-down`), instead
+  of `extraction-failed`; `--record-failure` does not count it, so a model outage never disables
+  a source. Batches applied before it stay. A stop that also ends the model call or the
+  `connectors` fetch still ends `terminated`, and the wait before a model call is asked again
+  ends on SIGTERM.
 
 - Before each batch, a run looks the batch's document keys and record ids up in the store, across
   every node type, and shows the model each node it finds (type, name, aliases, marked as in the

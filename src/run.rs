@@ -415,7 +415,13 @@ pub fn count(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<C
 pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Report, Failure> {
     let planned = Planned::of(layout, source)?;
     let (window, seen_path) = (planned.window, planned.seen_path.clone());
-    let ran = planned.fetch(tools).and_then(|fetched| {
+    // A stop of the whole unit (`systemctl stop`, a pod's deadline) ends the `connectors` child
+    // too: a fetch that failed after SIGTERM is the stop, not a failure of the source.
+    let fetched = planned.fetch(tools).or_else(|failure| {
+        stop_point("while it fetched")?;
+        Err(failure)
+    });
+    let ran = fetched.and_then(|fetched| {
         stop_point("before it used the documents it fetched")?;
         process(
             layout,
