@@ -232,6 +232,27 @@ pub fn withheld(left: &BTreeSet<&str>) -> String {
     )
 }
 
+/// Why a question in which the redaction policy still detects a class its `refuse_if_left` names
+/// is refused: it names the classes, never what was found.
+pub fn refused(left: &BTreeSet<&str>) -> String {
+    format!(
+        "the question was refused by policy: the instance's redaction policy still detects {} in \
+         it, and it is not sent to the model.",
+        left.iter().copied().collect::<Vec<_>>().join(", ")
+    )
+}
+
+/// The reason `question` is refused under the settings' redaction policy, when a class its
+/// `refuse_if_left` names is still detected in it as the model would be shown it.
+pub fn question_refused(settings: &Settings, question: &str) -> Option<String> {
+    let redactor = crate::redact::compile(settings.redaction.as_ref()).ok()??;
+    let mut batch = redactor.batch();
+    batch.reserve(question);
+    let shown = batch.replace(question);
+    let left = batch.left(&shown);
+    (!left.is_empty()).then(|| refused(&left))
+}
+
 /// A tool result's text as the model is shown it, whether it was cut and whether it was
 /// withheld. Without a policy (`batch` is `None`) it is `text` cut to `max` bytes. With one it is
 /// redacted with the answer's batch, then cut; a cut text in which a `refuse_if_left` class is
@@ -241,6 +262,9 @@ pub fn shown(batch: Option<&mut Batch<'_>>, text: &str, max: usize) -> (String, 
         let (shown, truncated) = cut(text, max);
         return (shown.to_string(), truncated, false);
     };
+    // A withheld result is never shown, so none of its values may stay in the mapping: the
+    // batch is put back as it was.
+    let before = batch.clone();
     batch.reserve(text);
     let redacted = batch.replace(text);
     let (shown, truncated) = cut(&redacted, max);
@@ -248,7 +272,9 @@ pub fn shown(batch: Option<&mut Batch<'_>>, text: &str, max: usize) -> (String, 
     if left.is_empty() {
         (shown.to_string(), truncated, false)
     } else {
-        (withheld(&left), false, true)
+        let message = withheld(&left);
+        *batch = before;
+        (message, false, true)
     }
 }
 

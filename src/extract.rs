@@ -457,6 +457,48 @@ pub fn prompt_split(
     (p, fixed)
 }
 
+/// A file of mode 0600 in a new directory of mode 0700, both removed when it is dropped.
+struct PrivateFile {
+    dir: PathBuf,
+    file: PathBuf,
+}
+
+impl PrivateFile {
+    fn write(content: &str) -> Result<PrivateFile, String> {
+        use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+        let dir = std::env::temp_dir().join(format!(
+            "cortex-mcp-{}",
+            crate::ask::proxy::token().map_err(|e| format!("the MCP configuration: {e}"))?
+        ));
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&dir)
+            .map_err(|e| format!("the MCP configuration directory: {e}"))?;
+        let private = PrivateFile {
+            file: dir.join("mcp.json"),
+            dir,
+        };
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&private.file)
+            .and_then(|mut f| f.write_all(content.as_bytes()))
+            .map_err(|e| format!("the MCP configuration file: {e}"))?;
+        Ok(private)
+    }
+
+    fn path(&self) -> &Path {
+        &self.file
+    }
+}
+
+impl Drop for PrivateFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
 impl Model {
     /// One extraction call for one batch, through the spec's backend, run in `dir`: [`ask_with`]
     /// and the extraction prompt [`SYSTEM_PROMPT`]. An error answer that cost zero is asked once
@@ -568,6 +610,12 @@ impl Model {
         let gateway = gateway_environment(self.gateway.as_ref()).map_err(Refused::free)?;
         std::fs::create_dir_all(dir)
             .map_err(|e| Refused::free(format!("{}: {e}", dir.display())))?;
+        // The MCP configuration may carry a bearer header: it goes in a file only its owner reads,
+        // never on the command line, and is removed when the call ends.
+        let config_file = match mcp {
+            Some((config, _)) => Some(PrivateFile::write(config).map_err(Refused::free)?),
+            None => None,
+        };
         let mut command = Command::new("timeout");
         for (key, value) in gateway {
             match value {
@@ -585,14 +633,14 @@ impl Model {
                 "--disable-slash-commands",
                 "--no-session-persistence",
             ])
-            .args(match mcp {
-                Some((config, allowed)) => vec![
+            .args(match (mcp, &config_file) {
+                (Some((_, allowed)), Some(file)) => vec![
                     "--mcp-config".to_string(),
-                    config.to_string(),
+                    file.path().display().to_string(),
                     "--allowedTools".to_string(),
                     allowed.to_string(),
                 ],
-                None => vec![],
+                _ => vec![],
             })
             .args(["--model", &self.model])
             .args(["--system-prompt", system_prompt])

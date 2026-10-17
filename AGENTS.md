@@ -143,7 +143,9 @@ this repository and published by the organisation's reusable workflow.
   every batch is checked as the model would be shown it before the first model call, and a class
   still detected then fails the run with nothing sent or stored; each batch is checked again just
   before it is sent (the known entity names grow), and a class found then stops the run before
-  that batch, with the batches before it applied.
+  that batch, with the batches before it applied. A question that still holds a `refuse_if_left`
+  class after redaction is refused (the ask service: `bad-request`, 400; an eval case: recorded as
+  failed), and a withheld tool result leaves none of its values in the mapping.
 - **A rule with a `replacement` is irreversible, like a credential.** A `rules` entry with a
   non-empty `replacement` replaces its matches by that text in a document's text, title and
   description before the document is stored (`Redactor::scrub`), and in its URL before the model

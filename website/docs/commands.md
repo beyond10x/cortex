@@ -115,10 +115,13 @@ came from and is not scored.
 :::note[Redaction under the `mcp` runner]
 With a `redaction` policy in the spec, the `mcp` runner's model reads the store through a
 redacting MCP server in the `cortex` process instead of `ekr mcp` directly: MCP over HTTP on
-`127.0.0.1`, under a random path, for one case. Each case is one redaction batch: its question and
+`127.0.0.1`, under a random path and behind a random bearer header, for one case. The `--mcp-config`
+that names it is a file only its owner reads, removed after the case: no secret is on the command
+line. The server stops when the case ends, whatever connections are open. Each case is one redaction batch: its question and
 every tool result are redacted as the [ask service](./ask-service.md#redaction) redacts them, a
 result in which a `refuse_if_left` class is still detected reaches the model as a tool error saying
-it was withheld by policy, and the answer is restored before it is scored and written. Without a
+it was withheld by policy, a question that still holds such a class is recorded as a failed case
+with the refusal as its answer and no model is asked, and the answer is restored before it is scored and written. Without a
 policy the model reads `ekr mcp` as before.
 :::
 
