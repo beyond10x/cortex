@@ -64,6 +64,12 @@ types:
   # UNMAPPED: the refusal of a `retention_days` or `slow_after_ms` of 0 or less (the service does
   # not start, exit 2, naming the field) is a check on an Integer the specification has no
   # construct for; `ask::check` holds it and `tests/answer_records.rs` tests it.
+  # For an instance whose store is `postgres`, the records belong in a schema of their own (never
+  # EKR's), reached through a Connectors connection of their own. That backend is not built yet:
+  # until it is, the service does not start on such an instance (exit 2, naming `store.backend`).
+  # UNMAPPED: that refusal reads the instance's `store` beside its `ask` section, a rule across two
+  # fields of `cortex.instance.InstanceSpec` the specification has no construct for; `ask::check`
+  # holds it and `tests/answer_records.rs` tests it.
   - name: cortex.ask.AskSpec
     kind: struct
     fields:

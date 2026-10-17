@@ -1,6 +1,7 @@
 //! The ports the generated behaviours run over: the registry as storage, the context that answers
 //! each `external:` branch and each `{generated: true}` value, and the two obligations
 //! `generated/cortex-model/PLAN.md` leaves to this crate, `RunSource` and `RecordFailure`.
+//! The answer service's component runs over [`AskPorts`], whose storage is its answer records.
 //!
 //! The generated `Cortex<B>` keeps its behaviours private, so the state the command line also
 //! reads and writes lives in [`Shared`], held by both.
@@ -8,13 +9,20 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
+use std::sync::Arc;
 
-use cortex_model::behaviour::{Context, ExternalCommand, InstanceStorage, SourceStorage};
+use cortex_model::ask as ma;
+use cortex_model::ask::obligations::OpenReviewsQuery;
+use cortex_model::behaviour::{
+    AnswerRecordStorage, Context, ExternalCommand, InstanceStorage, ReviewItemStorage,
+    SourceStorage, VoteStorage,
+};
 use cortex_model::instance as m;
 use cortex_model::instance::obligations::{RecordFailureBehavior, RunSourceBehavior};
 use cortex_model::obligation::UnmetObligation;
 use cortex_model::primitives::{Decimal, Timestamp};
 
+use crate::ask::records::RecordStore;
 use crate::home::{Home, Registry};
 use crate::instance::Layout;
 use crate::run::{self, Counts, Failure, Report, Tools};
@@ -157,22 +165,165 @@ impl Context for Ports {
             .pop_front()
             .unwrap_or_default()
     }
-    /// Only `cortex.ask.Ask`'s `answered` asks, and the service answers it from its own tool loop
-    /// (`ask::answer`); through the ports the answer is an empty one.
-    fn generate_cortex_ask_ask_done(&mut self) -> cortex_model::ask::AskDone {
-        cortex_model::ask::AskDone {
-            answer: String::new(),
-            nodes: vec![],
-            evidence: vec![],
-            input_tokens: 0,
-            output_tokens: 0,
-            cached_tokens: 0,
-            context_tokens: 0,
-            steps: 0,
-        }
+    /// Only `cortex.ask.Ask`'s `answered` asks; the answer service runs over [`AskPorts`].
+    fn generate_cortex_ask_ask_done(&mut self) -> ma::AskDone {
+        empty_done()
+    }
+    /// Only the commands of `cortex.ask` ask, which run over [`AskPorts`].
+    fn generate_timestamp(&mut self) -> Timestamp {
+        Timestamp(crate::sources::rfc3339(crate::instance::now_ms()))
+    }
+    fn generate_optional_timestamp(&mut self) -> Option<Timestamp> {
+        Some(self.generate_timestamp())
     }
     fn external(&mut self, command: ExternalCommand<'_>, outcome: &'static str) -> bool {
         self.decided(command.name(), outcome)
+    }
+}
+
+/// The answer `cortex.ask.Ask`'s `answered` carries through the ports: an empty one under a new
+/// answer id. The service answers from its own tool loop (`ask::answer`) instead.
+fn empty_done() -> ma::AskDone {
+    ma::AskDone {
+        answer_id: uuid::Uuid::now_v7().to_string(),
+        answer: String::new(),
+        nodes: vec![],
+        evidence: vec![],
+        input_tokens: 0,
+        output_tokens: 0,
+        cached_tokens: 0,
+        context_tokens: 0,
+        steps: 0,
+    }
+}
+
+/// The ports of the answer service's component (`cortex.ask`): the records as storage
+/// (`ask::records::RecordStore`), and the context, whose `external:` branches and generated
+/// values are those [`Shared`] holds, as for [`Ports`].
+pub struct AskPorts {
+    pub records: Arc<dyn RecordStore>,
+    pub shared: SharedRef,
+    /// The first failure of the record store during a command. The generated storage ports
+    /// answer nothing, so a failure is kept here for the caller ([`AskPorts::take_fault`]).
+    fault: RefCell<Option<String>>,
+}
+
+impl AskPorts {
+    pub fn new(records: Arc<dyn RecordStore>, shared: SharedRef) -> Self {
+        Self {
+            records,
+            shared,
+            fault: RefCell::new(None),
+        }
+    }
+
+    /// The first failure of the record store since the last call, if any.
+    pub fn take_fault(&self) -> Option<String> {
+        self.fault.borrow_mut().take()
+    }
+
+    fn read<T: Default>(&self, read: Result<T, String>) -> T {
+        read.unwrap_or_else(|e| {
+            self.fault.borrow_mut().get_or_insert(e);
+            T::default()
+        })
+    }
+
+    fn write(&mut self, written: Result<(), String>) {
+        self.read(written)
+    }
+}
+
+impl AnswerRecordStorage for AskPorts {
+    fn get(&self, identity: &ma::AnswerId) -> Option<ma::AnswerRecordSnapshot> {
+        self.read(self.records.answer(identity))
+    }
+    fn put(&mut self, snapshot: ma::AnswerRecordSnapshot) {
+        let written = self.records.put_answer(&snapshot);
+        self.write(written);
+    }
+    fn delete(&mut self, identity: &ma::AnswerId) {
+        let written = self.records.delete_answer(identity);
+        self.write(written);
+    }
+}
+
+impl VoteStorage for AskPorts {
+    fn get(&self, identity: &ma::VoteId) -> Option<ma::VoteSnapshot> {
+        self.read(self.records.vote(identity))
+    }
+    fn put(&mut self, snapshot: ma::VoteSnapshot) {
+        let written = self.records.put_vote(&snapshot);
+        self.write(written);
+    }
+    fn delete(&mut self, identity: &ma::VoteId) {
+        let written = self.records.delete_vote(identity);
+        self.write(written);
+    }
+}
+
+impl ReviewItemStorage for AskPorts {
+    fn get(&self, identity: &ma::ReviewId) -> Option<ma::ReviewItemSnapshot> {
+        self.read(self.records.review(identity))
+    }
+    fn put(&mut self, snapshot: ma::ReviewItemSnapshot) {
+        let written = self.records.put_review(&snapshot);
+        self.write(written);
+    }
+    fn delete(&mut self, identity: &ma::ReviewId) {
+        let written = self.records.delete_review(identity);
+        self.write(written);
+    }
+}
+
+impl OpenReviewsQuery for AskPorts {
+    /// Every open item, oldest first; a failed read answers none and is the command's fault.
+    fn open_reviews(&self) -> Result<Vec<ma::OpenReviews>, UnmetObligation> {
+        Ok(self.read(self.records.open_reviews()))
+    }
+}
+
+impl Context for AskPorts {
+    /// Only `InstanceNotActive` asks, a command of `cortex.instance`.
+    fn generate_cortex_instance_instance_state(&mut self) -> m::InstanceState {
+        m::InstanceState::Removed
+    }
+    /// Only `SourceNotDisabled` asks, a command of `cortex.instance`.
+    fn generate_cortex_instance_source_state(&mut self) -> m::SourceState {
+        m::SourceState::Enabled
+    }
+    fn generate_integer(&mut self) -> i64 {
+        self.shared.borrow_mut().integers.pop_front().unwrap_or(0)
+    }
+    fn generate_decimal(&mut self) -> Decimal {
+        Decimal("0".into())
+    }
+    fn generate_optional_decimal(&mut self) -> Option<Decimal> {
+        None
+    }
+    fn generate_string(&mut self) -> String {
+        self.shared
+            .borrow_mut()
+            .strings
+            .pop_front()
+            .unwrap_or_default()
+    }
+    fn generate_cortex_ask_ask_done(&mut self) -> ma::AskDone {
+        empty_done()
+    }
+    fn generate_timestamp(&mut self) -> Timestamp {
+        Timestamp(crate::sources::rfc3339(crate::instance::now_ms()))
+    }
+    fn generate_optional_timestamp(&mut self) -> Option<Timestamp> {
+        Some(self.generate_timestamp())
+    }
+    fn external(&mut self, command: ExternalCommand<'_>, outcome: &'static str) -> bool {
+        self.shared
+            .borrow()
+            .external
+            .get(&(command.name(), outcome))
+            .copied()
+            .unwrap_or(false)
     }
 }
 

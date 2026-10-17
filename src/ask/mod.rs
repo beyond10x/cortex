@@ -10,6 +10,7 @@ pub mod cite;
 pub mod limit;
 pub mod mcp;
 pub mod model;
+pub mod records;
 pub mod serve;
 
 use std::path::PathBuf;
@@ -266,11 +267,12 @@ fn model_failed(reason: String) -> ma::AskOutcome {
     }
 }
 
-/// Answers `question` for `identity`: the tool loop. Each event before the last is handed to
+/// Answers `question` for `identity`, under `answer_id`: the tool loop. Each event before the last is handed to
 /// `emit` as it happens; `emit` answers false once nobody reads the stream, which ends the loop.
 /// The outcome is the answer or why there is none; [`final_event`] makes it the last event.
 pub fn answer(
     settings: &Settings,
+    answer_id: &str,
     identity: &str,
     question: &str,
     emit: &mut dyn FnMut(ma::AskEvent) -> bool,
@@ -347,6 +349,7 @@ pub fn answer(
                 answered: ma::Answered {
                     identity: identity.into(),
                     done: ma::AskDone {
+                        answer_id: answer_id.into(),
                         answer: cited.answer,
                         nodes: cited.nodes,
                         evidence: cited.evidence,

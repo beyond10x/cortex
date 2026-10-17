@@ -554,131 +554,11 @@ fn a_retention_or_slow_threshold_of_zero_is_refused_naming_the_field() {
     }
 }
 
-/// The tables of every schema of a PostgreSQL database, `<schema>.<table>`, sorted.
-fn tables(container: &str) -> Vec<String> {
-    let out = Command::new("docker")
-        .args([
-            "exec", container, "psql", "-U", "postgres", "-d", "ekr", "-At", "-c",
-            "SELECT table_schema || '.' || table_name FROM information_schema.tables \
-             WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY 1",
-        ])
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .map(str::to_string)
-        .collect()
-}
-
-struct Container(String);
-
-impl Drop for Container {
-    fn drop(&mut self) {
-        let _ = Command::new("docker").args(["rm", "-f", &self.0]).output();
-    }
-}
-
-/// An instance on a PostgreSQL store keeps its answers, votes and review items in `ask.sqlite`:
-/// the tables of the store's database, EKR's schema among them, are the same before and after an
-/// answer, a vote and a review. Without a container runtime the case skips with the reason,
-/// except on GitHub Actions, where it fails.
+/// An instance on a PostgreSQL store keeps its records in a schema of their own, a backend not
+/// built yet: until it is, `cortex ask serve` refuses the instance before anything binds (exit 2,
+/// naming `store.backend`), and writes no `ask.sqlite` beside a store that is not SQLite.
 #[test]
-fn no_table_is_created_in_the_schema_of_a_postgres_store() {
-    let runtime = Command::new("docker")
-        .args(["info", "--format", "{{.ServerVersion}}"])
-        .output();
-    if !runtime.as_ref().is_ok_and(|o| o.status.success()) {
-        assert_ne!(
-            std::env::var("GITHUB_ACTIONS").as_deref(),
-            Ok("true"),
-            "the PostgreSQL case must run on GitHub Actions"
-        );
-        eprintln!("SKIP the PostgreSQL records case: no container runtime");
-        return;
-    }
-    let name = format!(
-        "cortex-answer-records-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    );
-    let started = Command::new("docker")
-        .args([
-            "run",
-            "-d",
-            "--name",
-            &name,
-            "--label",
-            "cortex.test=answer-records",
-            "-e",
-            "POSTGRES_PASSWORD=superuser",
-            "-e",
-            "POSTGRES_DB=ekr",
-            "postgres:17",
-        ])
-        .output()
-        .unwrap();
-    assert!(
-        started.status.success(),
-        "{}",
-        String::from_utf8_lossy(&started.stderr)
-    );
-    let container = Container(name);
-    let deadline = std::time::Instant::now() + Duration::from_secs(120);
-    while !Command::new("docker")
-        .args([
-            "exec",
-            &container.0,
-            "pg_isready",
-            "-h",
-            "127.0.0.1",
-            "-U",
-            "postgres",
-        ])
-        .output()
-        .is_ok_and(|o| o.status.success())
-    {
-        assert!(
-            std::time::Instant::now() < deadline,
-            "PostgreSQL did not start"
-        );
-        std::thread::sleep(Duration::from_millis(500));
-    }
-    // EKR's schema as a store holds it: a schema of its own with its tables.
-    let made = Command::new("docker")
-        .args([
-            "exec",
-            &container.0,
-            "psql",
-            "-v",
-            "ON_ERROR_STOP=1",
-            "-h",
-            "127.0.0.1",
-            "-U",
-            "postgres",
-            "-d",
-            "ekr",
-            "-c",
-            "CREATE SCHEMA ekr; CREATE TABLE ekr.nodes (id text primary key); \
-             CREATE TABLE ekr.transactions (id bigint primary key);",
-        ])
-        .output()
-        .unwrap();
-    assert!(
-        made.status.success(),
-        "{}",
-        String::from_utf8_lossy(&made.stderr)
-    );
-    let before = tables(&container.0);
-    assert_eq!(before, ["ekr.nodes", "ekr.transactions"]);
-
+fn an_instance_on_a_postgres_store_is_refused_until_its_records_backend_exists() {
     let world = World::new();
     let config = world.root.join("ekr-postgres.json");
     std::fs::write(
@@ -689,22 +569,29 @@ fn no_table_is_created_in_the_schema_of_a_postgres_store() {
         .to_string(),
     )
     .unwrap();
-    let url = gateway(vec![(0, broken_reply())]);
     let spec = world.spec(
-        &url,
+        "http://127.0.0.1:9",
         "",
         &format!(
             "store: {{backend: postgres, value: {{config: \"{}\"}}}}",
             config.display()
         ),
     );
-    let service = serve(&world, &spec);
-    let (name, _) = service.ask("alice", "anything?");
-    assert_eq!(name, "error");
-    let reviews = service.reviews();
-    assert_eq!(reviews.len(), 1, "{reviews:?}");
-    let id = reviews[0]["answer_id"].as_str().unwrap().to_string();
-    assert_eq!(service.vote(&id, "bob", "down").0, 200);
-    assert_eq!(world.records().answers().unwrap().len(), 1);
-    assert_eq!(tables(&container.0), before);
+    let out = Command::new(env!("CARGO_BIN_EXE_cortex"))
+        .args(["ask", "serve", "--spec"])
+        .arg(&spec)
+        .env("CORTEX_HOME", world.home())
+        .env(TOKEN_ENV, "t")
+        .output()
+        .unwrap();
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(out.status.code(), Some(2), "{text}");
+    assert!(text.contains("store.backend"), "{text}");
+    assert!(text.contains("postgres"), "{text}");
+    assert!(!text.contains("listening"), "{text}");
+    assert!(!world.records_file().exists());
 }

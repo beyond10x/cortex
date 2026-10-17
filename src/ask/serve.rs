@@ -111,7 +111,8 @@ async fn ask(State(service): State<Arc<Service>>, headers: HeaderMap, body: Byte
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let service = service.clone();
     tokio::task::spawn_blocking(move || {
-        let outcome = answer(&service.settings, &identity, &question, &mut |event| {
+        let answer_id = uuid::Uuid::now_v7().to_string();
+        let outcome = answer(&service.settings, &answer_id, &identity, &question, &mut |event| {
             tx.send(event).is_ok()
         });
         let _ = tx.send(final_event(&outcome));
