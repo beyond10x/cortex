@@ -7,10 +7,12 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
+use cortex_cli::ask::records::{self, RecordStore, Records};
 use cortex_cli::connectors::Connectors;
 use cortex_cli::home::{self, Home, Registry};
-use cortex_cli::ports::{Ports, Shared, SharedRef};
+use cortex_cli::ports::{AskPorts, Ports, Shared, SharedRef};
 use cortex_cli::run::{Counts, Failure, Report, Tools};
 use cortex_cli::status;
 use cortex_model::ask as ma;
@@ -21,7 +23,7 @@ use cortex_model::ports::cortex_ask::{CortexAsk, PublishedEvent as AskPublished}
 use serde_json::{json, Value};
 
 type App = Cortex<Generated<Ports>>;
-type AskApp = CortexAsk<Generated<Ports>>;
+type AskApp = CortexAsk<Generated<AskPorts>>;
 
 struct Last {
     outcome: String,
@@ -34,6 +36,8 @@ struct Last {
 struct Scenario {
     app: App,
     ask_app: AskApp,
+    /// The answer records the ask app keeps, in memory.
+    records: Arc<Records>,
     shared: SharedRef,
     captured: BTreeMap<String, Value>,
     observed: Vec<(String, Value)>,
@@ -231,11 +235,48 @@ fn event(e: PublishedEvent) -> (String, Value) {
 /// An event of the answer service, by its qualified name, with its payload as JSON.
 fn ask_event(e: AskPublished) -> (String, Value) {
     match e {
+        AskPublished::AnswerRecorded(e) => (
+            "cortex.ask.AnswerRecorded".into(),
+            json!({
+                "answer_id": e.answer_id.0,
+                "outcome": records::outcome_name(e.outcome),
+            }),
+        ),
+        AskPublished::Purged(e) => (
+            "cortex.ask.Purged".into(),
+            json!({
+                "before": e.before.0,
+                "records": e.records,
+                "votes": e.votes,
+                "reviews": e.reviews,
+            }),
+        ),
+        AskPublished::ReviewClosed(e) => (
+            "cortex.ask.ReviewClosed".into(),
+            json!({"review_id": e.review_id.0, "reason": e.reason}),
+        ),
+        AskPublished::ReviewOpened(e) => (
+            "cortex.ask.ReviewOpened".into(),
+            json!({
+                "review_id": e.review_id.0,
+                "answer_id": e.answer_id.0,
+                "cause": records::cause_name(e.cause),
+            }),
+        ),
+        AskPublished::Voted(e) => (
+            "cortex.ask.Voted".into(),
+            json!({
+                "vote_id": e.vote_id.0,
+                "answer_id": e.answer_id.0,
+                "value": records::value_name(e.value),
+            }),
+        ),
         AskPublished::Answered(e) => (
             "cortex.ask.Answered".into(),
             json!({
                 "identity": e.identity,
                 "done": {
+                    "answer_id": e.done.answer_id,
                     "answer": e.done.answer,
                     "nodes": e.done.nodes,
                     "evidence": e.done.evidence,
@@ -417,21 +458,17 @@ impl Scenario {
             runner: Some(runner),
             counter: Some(counter),
         }));
-        // The answer service is a component of its own over the same shared state.
-        let ask_app = CortexAsk::new(Generated::new(Ports {
-            home: Home::new(std::env::temp_dir().join("cortex-conformance-unused")),
-            tools: Tools {
-                connectors: Connectors::new("connectors-unused".into()),
-                claude: "claude-unused".into(),
-                codex: "codex-unused".into(),
-            },
-            shared: shared.clone(),
-            runner: None,
-            counter: None,
-        }));
+        // The answer service is a component of its own over the same shared state, its records
+        // in a store in memory.
+        let records = Arc::new(Records::in_memory().expect("a store in memory"));
+        let ask_app = CortexAsk::new(Generated::new(AskPorts::new(
+            records.clone(),
+            shared.clone(),
+        )));
         Self {
             app,
             ask_app,
+            records,
             shared,
             captured: BTreeMap::new(),
             observed: Vec::new(),
@@ -478,6 +515,14 @@ impl Scenario {
                 .map(|a| a.iter().filter_map(Value::as_i64).collect())
                 .unwrap_or_default()
         };
+        // A suite writes an integer as a JSON number, `1.0` included.
+        let int = |k: &str| -> i64 {
+            let v = input.get(k).unwrap_or(&Value::Null);
+            v.as_i64()
+                .or_else(|| v.as_f64().filter(|f| f.fract() == 0.0).map(|f| f as i64))
+                .unwrap_or_else(|| panic!("{k}: {v} is not an integer"))
+        };
+        let optional = |k: &str| input.get(k).and_then(Value::as_str).map(str::to_string);
         let app = &mut self.app;
         // Events an outcome carries that the generated port does not publish (below).
         let mut unpublished: Vec<(String, Value)> = Vec::new();
@@ -949,6 +994,143 @@ impl Scenario {
                     Some(("cortex.ask.ReaderFailed", json!({"reason": error.reason}))),
                 ),
             },
+            "cortex.ask.RecordAnswer" => {
+                let tool_calls = input
+                    .get("tool_calls")
+                    .and_then(Value::as_array)
+                    .map(|calls| {
+                        calls
+                            .iter()
+                            .map(|t| {
+                                let n = |k: &str| t[k].as_f64().expect("a number") as i64;
+                                ma::AskTool {
+                                    step: n("step"),
+                                    name: text(&t["name"]),
+                                    arguments: text(&t["arguments"]),
+                                    result_bytes: n("result_bytes"),
+                                    truncated: t["truncated"].as_bool().expect("a bool"),
+                                    failed: t["failed"].as_bool().expect("a bool"),
+                                }
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let outcome = s("outcome");
+                match self
+                    .ask_app
+                    .record_answer(ma::RecordAnswer {
+                        answer_id: ma::AnswerId(s("answer_id")),
+                        instance_name: m::InstanceName(s("instance_name")),
+                        identity: s("identity"),
+                        question: s("question"),
+                        answer: optional("answer"),
+                        reason: optional("reason"),
+                        outcome: [
+                            ma::AnswerOutcome::Answered,
+                            ma::AnswerOutcome::Failed,
+                            ma::AnswerOutcome::Limited,
+                        ]
+                        .into_iter()
+                        .find(|o| records::outcome_name(*o) == outcome)
+                        .unwrap_or_else(|| panic!("unknown answer outcome {outcome}")),
+                        tool_calls,
+                        latency_ms: int("latency_ms"),
+                        input_tokens: int("input_tokens"),
+                        output_tokens: int("output_tokens"),
+                        cached_tokens: int("cached_tokens"),
+                        context_tokens: int("context_tokens"),
+                        steps: int("steps"),
+                        at: cortex_model::primitives::Timestamp(s("at")),
+                    })
+                    .unwrap()
+                {
+                    ma::RecordAnswerOutcome::Recorded { .. } => ("recorded", None),
+                }
+            }
+            "cortex.ask.CastVote" => {
+                let value = s("value");
+                match self
+                    .ask_app
+                    .cast_vote(ma::CastVote {
+                        vote_id: ma::VoteId(s("vote_id")),
+                        answer_id: ma::AnswerId(s("answer_id")),
+                        identity: s("identity"),
+                        value: records::value_of(&value)
+                            .unwrap_or_else(|| panic!("unknown vote value {value}")),
+                        comment: optional("comment"),
+                    })
+                    .unwrap()
+                {
+                    ma::CastVoteOutcome::Cast { .. } => ("cast", None),
+                    ma::CastVoteOutcome::Changed { .. } => ("changed", None),
+                    ma::CastVoteOutcome::Unidentified { error } => (
+                        "unidentified",
+                        Some(("cortex.ask.Unidentified", json!({"header": error.header}))),
+                    ),
+                    ma::CastVoteOutcome::NoSuchAnswer { error } => (
+                        "no-such-answer",
+                        Some((
+                            "cortex.ask.AnswerNotFound",
+                            json!({"answer_id": error.answer_id.0}),
+                        )),
+                    ),
+                }
+            }
+            "cortex.ask.OpenReview" => {
+                let cause = s("cause");
+                match self
+                    .ask_app
+                    .open_review(ma::OpenReview {
+                        review_id: ma::ReviewId(s("review_id")),
+                        answer_id: ma::AnswerId(s("answer_id")),
+                        cause: records::cause_of(&cause)
+                            .unwrap_or_else(|| panic!("unknown review cause {cause}")),
+                    })
+                    .unwrap()
+                {
+                    ma::OpenReviewOutcome::Opened { .. } => ("opened", None),
+                    ma::OpenReviewOutcome::Exists { error } => (
+                        "exists",
+                        Some((
+                            "cortex.ask.ReviewExists",
+                            json!({"review_id": error.review_id.0}),
+                        )),
+                    ),
+                }
+            }
+            "cortex.ask.CloseReview" => match self
+                .ask_app
+                .close_review(ma::CloseReview {
+                    review_id: ma::ReviewId(s("review_id")),
+                    reason: s("reason"),
+                })
+                .unwrap()
+            {
+                ma::CloseReviewOutcome::Closed { .. } => ("closed", None),
+                ma::CloseReviewOutcome::WrongState { error } => (
+                    "wrong-state",
+                    Some((
+                        "cortex.ask.ReviewNotOpen",
+                        json!({"review_id": error.review_id.0}),
+                    )),
+                ),
+                ma::CloseReviewOutcome::NoSuchReview { error } => (
+                    "no-such-review",
+                    Some((
+                        "cortex.ask.ReviewNotFound",
+                        json!({"review_id": error.review_id.0}),
+                    )),
+                ),
+            },
+            "cortex.ask.PurgeExpired" => match self
+                .ask_app
+                .purge_expired(ma::PurgeExpired {
+                    before: cortex_model::primitives::Timestamp(s("before")),
+                })
+                .unwrap()
+            {
+                ma::PurgeExpiredOutcome::Purged { .. } => ("purged", None),
+            },
             other => panic!("unknown command {other}"),
         };
         let mut events: Vec<_> = self.app.drain_outbox().into_iter().map(event).collect();
@@ -1006,6 +1188,20 @@ impl Scenario {
                         "last_outcome": s.data.last_outcome.map(status::outcome_name),
                         "last_run_at": s.data.last_run_at.as_ref().map(|t| t.0.clone()),
                         "last_reason": s.data.last_reason,
+                    })
+                })
+                .collect(),
+            "cortex.ask.OpenReviews" => self
+                .records
+                .open_reviews()
+                .expect("the records read")
+                .into_iter()
+                .map(|r| {
+                    json!({
+                        "review_id": r.review_id.0,
+                        "answer_id": r.answer_id.0,
+                        "cause": records::cause_name(r.cause),
+                        "opened_at": r.opened_at.0,
                     })
                 })
                 .collect(),
@@ -1158,6 +1354,14 @@ impl Scenario {
                             assert!(ok, "{view}: {p} fails for {r}");
                         }
                     }
+                    "counts" => {
+                        let at_least = expectation["at_least"].as_u64().expect("at_least") as usize;
+                        assert!(
+                            rows.len() >= at_least,
+                            "{view} holds {} rows, not at least {at_least}",
+                            rows.len()
+                        );
+                    }
                     other => panic!("unsupported expectation {other}"),
                 }
             }
@@ -1174,7 +1378,7 @@ impl Scenario {
                 let id_field = before
                     .as_object()
                     .and_then(|o| {
-                        ["name", "source_id"]
+                        ["name", "source_id", "review_id"]
                             .into_iter()
                             .find(|k| o.contains_key(*k))
                     })
@@ -1222,7 +1426,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        93,
+        104,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

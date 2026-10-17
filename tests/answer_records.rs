@@ -198,6 +198,42 @@ impl Drop for Service {
     }
 }
 
+/// The longest any wait of these tests lasts: a ready line, a request, a process's exit.
+const WAIT: Duration = Duration::from_secs(30);
+
+/// Runs `command` to its exit, killing it after [`WAIT`]: its exit code (none when killed) and
+/// its stdout and stderr together.
+fn run_bounded(command: &mut Command) -> (Option<i32>, String) {
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let drain = |mut r: Box<dyn Read + Send>| {
+        std::thread::spawn(move || {
+            let mut text = String::new();
+            let _ = r.read_to_string(&mut text);
+            text
+        })
+    };
+    let out = drain(Box::new(child.stdout.take().unwrap()));
+    let err = drain(Box::new(child.stderr.take().unwrap()));
+    let start = std::time::Instant::now();
+    let code = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status.code();
+        }
+        if start.elapsed() > WAIT {
+            let _ = child.kill();
+            let _ = child.wait();
+            break None;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    let text = format!("{}{}", out.join().unwrap(), err.join().unwrap());
+    (code, text)
+}
+
 fn serve(world: &World, spec: &Path) -> Service {
     let mut child = Command::new(env!("CARGO_BIN_EXE_cortex"))
         .args(["ask", "serve", "--spec"])
@@ -208,17 +244,28 @@ fn serve(world: &World, spec: &Path) -> Service {
         .stderr(Stdio::inherit())
         .spawn()
         .unwrap();
-    let mut line = String::new();
-    BufReader::new(child.stdout.take().unwrap())
-        .read_line(&mut line)
-        .unwrap();
-    let ready: Value = serde_json::from_str(line.trim())
-        .unwrap_or_else(|e| panic!("`cortex ask serve` printed no ready line ({e}): {line:?}"));
+    let stdout = child.stdout.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut line = String::new();
+        let _ = BufReader::new(stdout).read_line(&mut line);
+        let _ = tx.send(line);
+    });
+    let Ok(line) = rx.recv_timeout(WAIT) else {
+        let _ = child.kill();
+        let _ = child.wait();
+        panic!("`cortex ask serve` printed no ready line within {WAIT:?}");
+    };
+    let ready: Value = serde_json::from_str(line.trim()).unwrap_or_else(|e| {
+        let _ = child.kill();
+        let _ = child.wait();
+        panic!("`cortex ask serve` printed no ready line ({e}): {line:?}")
+    });
     Service {
         child,
         addr: ready["listening"].as_str().expect("listening").to_string(),
         client: reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(60))
+            .timeout(WAIT)
             .build()
             .unwrap(),
     }
@@ -238,7 +285,8 @@ impl Service {
             .unwrap();
         let block = text
             .split("\n\n")
-            .rfind(|b| !b.trim().is_empty())
+            .filter(|b| !b.trim().is_empty())
+            .last()
             .expect("an event");
         let data: String = block
             .lines()
@@ -258,7 +306,10 @@ impl Service {
     fn answered(&self, identity: &str, question: &str) -> (String, Value) {
         let (name, done) = self.ask(identity, question);
         assert_eq!(name, "done", "{done}");
-        let id = done["answer_id"].as_str().expect("an answer_id").to_string();
+        let id = done["answer_id"]
+            .as_str()
+            .expect("an answer_id")
+            .to_string();
         (id, done)
     }
 
@@ -337,8 +388,14 @@ fn one_answer_is_kept_as_one_record_with_the_token_counts_of_its_done_event() {
     assert_eq!(record.outcome, ma::AnswerOutcome::Answered);
     assert_eq!(record.answer.as_deref(), done["answer"].as_str());
     assert_eq!(record.input_tokens, done["input_tokens"].as_i64().unwrap());
-    assert_eq!(record.output_tokens, done["output_tokens"].as_i64().unwrap());
-    assert_eq!(record.cached_tokens, done["cached_tokens"].as_i64().unwrap());
+    assert_eq!(
+        record.output_tokens,
+        done["output_tokens"].as_i64().unwrap()
+    );
+    assert_eq!(
+        record.cached_tokens,
+        done["cached_tokens"].as_i64().unwrap()
+    );
     assert_eq!(
         record.context_tokens,
         done["context_tokens"].as_i64().unwrap()
@@ -537,19 +594,14 @@ fn a_retention_or_slow_threshold_of_zero_is_refused_naming_the_field() {
         ("  slow_after_ms: -5", "ask.slow_after_ms"),
     ] {
         let spec = world.spec("http://127.0.0.1:9", extra, "");
-        let out = Command::new(env!("CARGO_BIN_EXE_cortex"))
-            .args(["ask", "serve", "--spec"])
-            .arg(&spec)
-            .env("CORTEX_HOME", world.home())
-            .env(TOKEN_ENV, "t")
-            .output()
-            .unwrap();
-        let text = format!(
-            "{}{}",
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr)
+        let (code, text) = run_bounded(
+            Command::new(env!("CARGO_BIN_EXE_cortex"))
+                .args(["ask", "serve", "--spec"])
+                .arg(&spec)
+                .env("CORTEX_HOME", world.home())
+                .env(TOKEN_ENV, "t"),
         );
-        assert_eq!(out.status.code(), Some(2), "{text}");
+        assert_eq!(code, Some(2), "{text}");
         assert!(text.contains(field), "{text}");
     }
 }
@@ -577,19 +629,14 @@ fn an_instance_on_a_postgres_store_is_refused_until_its_records_backend_exists()
             config.display()
         ),
     );
-    let out = Command::new(env!("CARGO_BIN_EXE_cortex"))
-        .args(["ask", "serve", "--spec"])
-        .arg(&spec)
-        .env("CORTEX_HOME", world.home())
-        .env(TOKEN_ENV, "t")
-        .output()
-        .unwrap();
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
+    let (code, text) = run_bounded(
+        Command::new(env!("CARGO_BIN_EXE_cortex"))
+            .args(["ask", "serve", "--spec"])
+            .arg(&spec)
+            .env("CORTEX_HOME", world.home())
+            .env(TOKEN_ENV, "t"),
     );
-    assert_eq!(out.status.code(), Some(2), "{text}");
+    assert_eq!(code, Some(2), "{text}");
     assert!(text.contains("store.backend"), "{text}");
     assert!(text.contains("postgres"), "{text}");
     assert!(!text.contains("listening"), "{text}");

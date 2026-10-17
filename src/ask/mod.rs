@@ -27,7 +27,8 @@ use crate::instance::Layout;
 pub const EVENTS_FORMAT: &str = "cortex.ask-events/1";
 
 /// Why a spec cannot be served, naming the field: no `ask` section, no model gateway, a limit of
-/// 0 or less, an identity header that is no header name, or an empty listen address.
+/// 0 or less (a retention or slow threshold included), an identity header that is no header name,
+/// an empty listen address, or a `postgres` store, whose records backend is not built yet.
 pub fn check(spec: &m::InstanceSpec) -> Result<&ma::AskSpec, String> {
     let ask = spec
         .ask
@@ -53,6 +54,17 @@ pub fn check(spec: &m::InstanceSpec) -> Result<&ma::AskSpec, String> {
         if value <= 0 {
             return Err(format!("{field}: {value} is not above 0"));
         }
+    }
+    for (field, value) in [
+        ("ask.retention_days", ask.retention_days),
+        ("ask.slow_after_ms", ask.slow_after_ms),
+    ] {
+        if let Some(value) = value.filter(|v| *v <= 0) {
+            return Err(format!("{field}: {value} is not above 0"));
+        }
+    }
+    if let Some(m::StoreSpec::Postgres(_)) = &spec.store {
+        return Err(records::POSTGRES_NOT_YET.into());
     }
     let header = &ask.identity_header;
     if header.is_empty()

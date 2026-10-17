@@ -747,9 +747,11 @@ impl Keeper {
             ma::AskOutcome::LimitReached { error } => {
                 (ma::AnswerOutcome::Limited, &zero, Some(error.limit.clone()))
             }
-            ma::AskOutcome::ModelFailed { .. } => {
-                (ma::AnswerOutcome::Failed, &zero, Some("model-failed".into()))
-            }
+            ma::AskOutcome::ModelFailed { .. } => (
+                ma::AnswerOutcome::Failed,
+                &zero,
+                Some("model-failed".into()),
+            ),
             ma::AskOutcome::ReaderFailed { .. } => (
                 ma::AnswerOutcome::Failed,
                 &zero,
@@ -837,7 +839,9 @@ impl Keeper {
         match outcome {
             ma::CastVoteOutcome::NoSuchAnswer { .. } => return Err(VoteRefused::NoSuchAnswer),
             ma::CastVoteOutcome::Unidentified { .. } => {
-                return Err(VoteRefused::Store("an unidentified vote reached the store".into()))
+                return Err(VoteRefused::Store(
+                    "an unidentified vote reached the store".into(),
+                ))
             }
             ma::CastVoteOutcome::Cast { .. } | ma::CastVoteOutcome::Changed { .. } => {}
         }
@@ -918,7 +922,10 @@ mod tests {
             parse_rfc3339("2020-01-01T01:00:00.250+01:00"),
             Some(1_577_836_800_250)
         );
-        assert_eq!(parse_rfc3339("2020-01-01 00:00:00Z"), Some(1_577_836_800_000));
+        assert_eq!(
+            parse_rfc3339("2020-01-01 00:00:00Z"),
+            Some(1_577_836_800_000)
+        );
         assert_eq!(parse_rfc3339("2020-13-01T00:00:00Z"), None);
         assert_eq!(parse_rfc3339("yesterday"), None);
     }

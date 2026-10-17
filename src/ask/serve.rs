@@ -1,17 +1,21 @@
 //! The HTTP side of `cortex ask serve`: `POST /ask` answers `text/event-stream`, one SSE event per
-//! `cortex.ask.AskEvent`, in the generated wire form (`model_map::ask_event`).
+//! `cortex.ask.AskEvent`, in the generated wire form (`model_map::ask_event`), and keeps the answer
+//! as a record (`records::Keeper`) before its last event. `POST /ask/{answer_id}/vote` casts or
+//! changes the caller's vote, `GET /review` lists the open review items and
+//! `POST /review/{review_id}/close` closes one; each needs the identity header and answers JSON.
+//! Records past `ask.retention_days` are purged before the ready line and every 24 hours after.
 
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::body::Bytes;
 use axum::extract::rejection::BytesRejection;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::post;
+use axum::routing::{get, post};
 use axum::Router;
 use cortex_model::ask as ma;
 use serde_json::{json, Value};
@@ -19,11 +23,70 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_stream::StreamExt;
 
 use super::limit::RateLimiter;
+use super::records::{self, Asked, Keeper, VoteRefused};
 use super::{answer, final_event, Settings};
 
 struct Service {
     settings: Settings,
     limiter: Mutex<RateLimiter>,
+    keeper: Keeper,
+}
+
+/// Now, in Unix milliseconds.
+fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as i64)
+}
+
+/// The caller's identity: the trimmed value of the header the spec names, when not empty.
+fn identity_of(service: &Service, headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(service.settings.ask.identity_header.as_str())
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+}
+
+/// A JSON answer of the record routes.
+fn json_response(status: StatusCode, body: Value) -> Response {
+    (
+        status,
+        [("content-type", "application/json")],
+        body.to_string(),
+    )
+        .into_response()
+}
+
+/// A JSON refusal of the record routes: `{"error": <reason>, "message": <words>}`.
+fn json_error(status: StatusCode, error: &str, message: impl Into<String>) -> Response {
+    json_response(status, json!({"error": error, "message": message.into()}))
+}
+
+fn unidentified(service: &Service) -> Response {
+    json_error(
+        StatusCode::UNAUTHORIZED,
+        "unidentified",
+        format!(
+            "the request carries no `{}` header",
+            service.settings.ask.identity_header
+        ),
+    )
+}
+
+fn store_failed(reason: String) -> Response {
+    eprintln!("cortex: answer records: {reason}");
+    json_error(StatusCode::INTERNAL_SERVER_ERROR, "store-failed", reason)
+}
+
+/// Runs `work` on the blocking pool: the records are SQLite.
+async fn blocking<T: Send + 'static>(
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, Box<Response>> {
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|e| Box::new(store_failed(format!("the store call stopped: {e}"))))
 }
 
 /// The SSE event of one `cortex.ask.AskEvent`: its name, and the event as one JSON object.
@@ -77,13 +140,7 @@ async fn ask(
     body: Result<Bytes, BytesRejection>,
 ) -> Response {
     let header = &service.settings.ask.identity_header;
-    let identity = headers
-        .get(header.as_str())
-        .and_then(|v| v.to_str().ok())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(str::to_string);
-    let Some(identity) = identity else {
+    let Some(identity) = identity_of(&service, &headers) else {
         return refusal(
             StatusCode::UNAUTHORIZED,
             final_event(&ma::AskOutcome::Unidentified {
@@ -132,20 +189,203 @@ async fn ask(
     }
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let service = service.clone();
+    let (started, at_ms) = (Instant::now(), now_ms());
     tokio::task::spawn_blocking(move || {
         let answer_id = uuid::Uuid::now_v7().to_string();
-        let outcome = answer(&service.settings, &answer_id, &identity, &question, &mut |event| {
-            tx.send(event).is_ok()
-        });
+        let mut tool_calls = Vec::new();
+        let outcome = answer(
+            &service.settings,
+            &answer_id,
+            &identity,
+            &question,
+            &mut |event| {
+                if let ma::AskEvent::Tool(tool) = &event {
+                    tool_calls.push(tool.clone());
+                }
+                tx.send(event).is_ok()
+            },
+        );
+        let asked = Asked {
+            answer_id,
+            identity,
+            question,
+            tool_calls,
+            latency_ms: started.elapsed().as_millis() as i64,
+            at_ms,
+        };
+        // The record is kept before the last event, so a reader who saw it can vote on it.
+        if let Err(e) = service.keeper.record(asked, &outcome) {
+            eprintln!("cortex: answer records: {e}");
+        }
         let _ = tx.send(final_event(&outcome));
     });
     let stream = UnboundedReceiverStream::new(rx).map(|event| Ok::<_, Infallible>(sse(&event)));
     Sse::new(stream).into_response()
 }
 
+/// `POST /ask/{answer_id}/vote` with `{"value": "up"|"down", "comment"?: "…"}`: the vote as kept.
+async fn vote(
+    State(service): State<Arc<Service>>,
+    Path(answer_id): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let Some(identity) = identity_of(&service, &headers) else {
+        return unidentified(&service);
+    };
+    let Ok(body) = serde_json::from_slice::<Value>(&body) else {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "bad-request",
+            "the body is not JSON",
+        );
+    };
+    let Some(value) = body
+        .get("value")
+        .and_then(Value::as_str)
+        .and_then(records::value_of)
+    else {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "bad-request",
+            "`value` is `up` or `down`",
+        );
+    };
+    let comment = match body.get("comment") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(c)) => Some(c.clone()),
+        Some(_) => {
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "bad-request",
+                "`comment` is a string",
+            )
+        }
+    };
+    let keeper = service.keeper.clone();
+    let voted = match blocking(move || keeper.vote(&answer_id, &identity, value, comment)).await {
+        Ok(voted) => voted,
+        Err(response) => return *response,
+    };
+    match voted {
+        Ok(vote) => json_response(
+            StatusCode::OK,
+            json!({
+                "vote_id": vote.vote_id.0,
+                "answer_id": vote.answer_id.0,
+                "identity": vote.identity,
+                "value": records::value_name(vote.value),
+                "comment": vote.comment,
+                "at": vote.at.0,
+            }),
+        ),
+        Err(VoteRefused::NoSuchAnswer) => json_error(
+            StatusCode::NOT_FOUND,
+            "no-such-answer",
+            "no answer record carries that id",
+        ),
+        Err(VoteRefused::Store(reason)) => store_failed(reason),
+    }
+}
+
+/// `GET /review`: `{"reviews": [...]}`, the open review items, oldest first.
+async fn review(State(service): State<Arc<Service>>, headers: HeaderMap) -> Response {
+    if identity_of(&service, &headers).is_none() {
+        return unidentified(&service);
+    }
+    let keeper = service.keeper.clone();
+    match blocking(move || keeper.open_reviews()).await {
+        Ok(Ok(items)) => {
+            let reviews: Vec<Value> = items
+                .into_iter()
+                .map(|item| {
+                    json!({
+                        "review_id": item.review_id.0,
+                        "answer_id": item.answer_id.0,
+                        "cause": records::cause_name(item.cause),
+                        "opened_at": item.opened_at.0,
+                    })
+                })
+                .collect();
+            json_response(StatusCode::OK, json!({ "reviews": reviews }))
+        }
+        Ok(Err(reason)) => store_failed(reason),
+        Err(response) => *response,
+    }
+}
+
+/// `POST /review/{review_id}/close` with `{"reason": "…"}`: the item as kept after it.
+async fn close(
+    State(service): State<Arc<Service>>,
+    Path(review_id): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    if identity_of(&service, &headers).is_none() {
+        return unidentified(&service);
+    }
+    let reason = serde_json::from_slice::<Value>(&body)
+        .ok()
+        .and_then(|b| {
+            b.get("reason")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .map(str::to_string)
+        })
+        .filter(|r| !r.is_empty());
+    let Some(reason) = reason else {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "bad-request",
+            "the body names no `reason`",
+        );
+    };
+    let keeper = service.keeper.clone();
+    let closed = match blocking(move || keeper.close(&review_id, &reason)).await {
+        Ok(Ok(closed)) => closed,
+        Ok(Err(reason)) => return store_failed(reason),
+        Err(response) => return *response,
+    };
+    match closed {
+        (ma::CloseReviewOutcome::Closed { .. }, Some(item)) => json_response(
+            StatusCode::OK,
+            json!({
+                "review_id": item.data.review_id.0,
+                "answer_id": item.data.answer_id.0,
+                "cause": records::cause_name(item.data.cause),
+                "state": records::review_state_name(item.state),
+                "opened_at": item.data.opened_at.0,
+                "close_reason": item.data.close_reason,
+                "closed_at": item.data.closed_at.map(|t| t.0),
+            }),
+        ),
+        (ma::CloseReviewOutcome::Closed { review_closed }, None) => store_failed(format!(
+            "the review item {} was not kept",
+            review_closed.review_id.0
+        )),
+        (ma::CloseReviewOutcome::WrongState { error }, _) => json_error(
+            StatusCode::CONFLICT,
+            "review-not-open",
+            format!("the review item {} is closed already", error.review_id.0),
+        ),
+        (ma::CloseReviewOutcome::NoSuchReview { .. }, _) => json_error(
+            StatusCode::NOT_FOUND,
+            "no-such-review",
+            "no review item carries that id",
+        ),
+    }
+}
+
+/// How often the service purges expired records after the purge it makes when it starts.
+const PURGE_EVERY: Duration = Duration::from_secs(24 * 3600);
+
 /// Binds `ask.listen`, prints `{"listening": "<address>"}` on one line, and answers until the
-/// process is stopped.
-pub fn serve(settings: Settings) -> Result<(), String> {
+/// process is stopped. Records past retention are purged before the ready line (a failure there
+/// stops the service) and every 24 hours after.
+pub fn serve(settings: Settings, keeper: Keeper) -> Result<(), String> {
+    keeper
+        .purge(now_ms())
+        .map_err(|e| format!("answer records: the purge failed: {e}"))?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_io()
         .enable_time()
@@ -163,9 +403,27 @@ pub fn serve(settings: Settings) -> Result<(), String> {
         let service = Arc::new(Service {
             settings,
             limiter: Mutex::new(RateLimiter::new(per_minute)),
+            keeper,
+        });
+        let keeper = service.keeper.clone();
+        tokio::spawn(async move {
+            let mut every =
+                tokio::time::interval_at(tokio::time::Instant::now() + PURGE_EVERY, PURGE_EVERY);
+            loop {
+                every.tick().await;
+                let keeper = keeper.clone();
+                match tokio::task::spawn_blocking(move || keeper.purge(now_ms())).await {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(e)) => eprintln!("cortex: answer records: the purge failed: {e}"),
+                    Err(e) => eprintln!("cortex: answer records: the purge stopped: {e}"),
+                }
+            }
         });
         let app = Router::new()
             .route("/ask", post(ask))
+            .route("/ask/{answer_id}/vote", post(vote))
+            .route("/review", get(review))
+            .route("/review/{review_id}/close", post(close))
             .layer(axum::extract::DefaultBodyLimit::max(BODY_LIMIT))
             .with_state(service);
         println!("{}", json!({"listening": address.to_string()}));

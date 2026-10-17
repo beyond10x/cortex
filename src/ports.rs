@@ -311,6 +311,10 @@ impl Context for AskPorts {
     fn generate_optional_decimal(&mut self) -> Option<Decimal> {
         None
     }
+    /// Not known: no ask command reports an optional count.
+    fn generate_optional_integer(&mut self) -> Option<i64> {
+        None
+    }
     fn generate_string(&mut self) -> String {
         self.shared
             .borrow_mut()

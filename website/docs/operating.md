@@ -18,6 +18,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `bin/cortex.version` | the version of that copy, recorded when it is placed |
 | `instances/<name>/instance.yaml` | the frozen spec file, beside copies of the seed files and instructions it names |
 | `instances/<name>/store.sqlite` | the instance's EKR store, unless its spec names `store.backend: postgres`; then the store is in PostgreSQL, opened through the spec's `ekr.postgres/1` file |
+| `instances/<name>/ask.sqlite` | with `cortex ask serve`, its answer records, votes and review items ([Ask service](./ask-service.md#answer-records-votes-and-review)); kept `ask.retention_days` (default 90) |
 | `instances/<name>/host.json` | the EKR host document the store is opened with |
 | `instances/<name>/meta.json` | the viewer's port and the directory the spec was created from |
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
@@ -48,7 +49,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `cortex` (every command, the timers' runs included) | no port: it runs, prints one JSON line and exits; metrics are a file |
 | `ekr view`, in the viewer unit | the store's viewer, at `serve.view_port` |
 | `ekr mcp`, from `cortex mcp-line` | the store to one agent, over its stdio |
-| `cortex ask serve --spec <file>` | `POST /ask` at the spec's `ask.listen` ([Ask service](./ask-service.md)); it starts its own `ekr mcp` per answer |
+| `cortex ask serve --spec <file>` | `POST /ask`, the votes and the review queue at the spec's `ask.listen` ([Ask service](./ask-service.md)); it starts its own `ekr mcp` per answer |
 
 cortex installs no unit for the ask service; run it under a unit or supervisor of your own, behind
 the guard that verifies the asker and sets the spec's `ask.identity_header`.
