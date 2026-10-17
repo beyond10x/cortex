@@ -49,6 +49,11 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   (`repo:{namespace}/{path}`), so a source's records resolve to an adopted store's nodes. A
   template whose field a record lacks yields no alias; another placeholder syntax is refused when
   the spec is read.
+- A figure renderer for the ask service (`cortex.ask.FigureSpec`): a bar chart, a timeline or a
+  relationship graph drawn as SVG by cortex's own code, from typed values only. The SVG holds only
+  allow-listed elements and attributes, with every label as escaped text; the same figure gives
+  the same bytes; a figure over a cap (50 bars, 200 timeline entries, 100 nodes, 300 edges,
+  256 KiB) is refused whole. No endpoint draws one yet.
 
 ## 0.6.0 — 2026-10-17
 

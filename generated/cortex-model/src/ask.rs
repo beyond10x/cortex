@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest aa803d5fc727448fdc67db2b62ea07416e47fd00e48479e5419e9c0ab02ee313
-// contract digest fc938cf590397daaea314b0d740cec2f7eec65097ef799a6d0f3db60df721a9c
+// model digest 33b99b070654ace12840af9a0ffd38b5565691f60a37e5e0795d7c799d5ad121
+// contract digest f931c0a4605acc8bda17aba87eb5f8f31cdf6c1d7e01f81e01dca43dfdb8c3a4
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Answers — `cortex.ask`.
@@ -165,6 +165,55 @@ pub struct AskTool {
     pub withheld: bool,
 }
 
+/// Bar — `cortex.ask.Bar`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bar {
+    /// `label` — `String`.
+    pub label: String,
+    /// `count` — `Integer`.
+    pub count: i64,
+}
+
+/// BarChart — `cortex.ask.BarChart`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BarChart {
+    /// `title` — `String`.
+    pub title: String,
+    /// `bars` — `List<cortex.ask.Bar>`.
+    pub bars: Vec<Bar>,
+}
+
+/// FigureSpec — `cortex.ask.FigureSpec`: one of a fixed set of shapes, tagged on the wire by `kind`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FigureSpec {
+    /// Tagged `bar-chart` — `cortex.ask.BarChart`.
+    BarChart(BarChart),
+    /// Tagged `relationship-graph` — `cortex.ask.RelationshipGraph`.
+    RelationshipGraph(RelationshipGraph),
+    /// Tagged `timeline` — `cortex.ask.Timeline`.
+    Timeline(Timeline),
+}
+
+/// GraphEdge — `cortex.ask.GraphEdge`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphEdge {
+    /// `source` — `String`.
+    pub source: String,
+    /// `target` — `String`.
+    pub target: String,
+    /// `label` — `String`.
+    pub label: String,
+}
+
+/// GraphNode — `cortex.ask.GraphNode`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphNode {
+    /// `id` — `String`.
+    pub id: String,
+    /// `label` — `String`.
+    pub label: String,
+}
+
 /// LinkTemplates — `cortex.ask.LinkTemplates`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkTemplates {
@@ -185,6 +234,17 @@ pub struct PostgresRecords {
     pub ca_file: Option<String>,
     /// `connection` — `cortex.instance.ConnectionRef`.
     pub connection: crate::instance::ConnectionRef,
+}
+
+/// RelationshipGraph — `cortex.ask.RelationshipGraph`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelationshipGraph {
+    /// `title` — `String`.
+    pub title: String,
+    /// `nodes` — `List<cortex.ask.GraphNode>`.
+    pub nodes: Vec<GraphNode>,
+    /// `edges` — `List<cortex.ask.GraphEdge>`.
+    pub edges: Vec<GraphEdge>,
 }
 
 /// ReviewCause — `cortex.ask.ReviewCause`: one of a closed set of names.
@@ -212,6 +272,24 @@ pub enum ReviewItemState {
     Closed,
     /// `Open`.
     Open,
+}
+
+/// Timeline — `cortex.ask.Timeline`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Timeline {
+    /// `title` — `String`.
+    pub title: String,
+    /// `entries` — `List<cortex.ask.TimelineEntry>`.
+    pub entries: Vec<TimelineEntry>,
+}
+
+/// TimelineEntry — `cortex.ask.TimelineEntry`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimelineEntry {
+    /// `at` — `Timestamp`.
+    pub at: crate::primitives::Timestamp,
+    /// `label` — `String`.
+    pub label: String,
 }
 
 /// The states of `cortex.ask.Vote`, as runtime values.
@@ -1084,6 +1162,30 @@ pub struct Voted {
 pub struct AnswerNotFound {
     /// `answer_id` — `cortex.ask.AnswerId`.
     pub answer_id: AnswerId,
+}
+
+/// The declared error `cortex.ask.FigureInvalid`.
+///
+/// The figure holds a value it cannot be drawn from: a negative bar count, a timeline instant that is not RFC 3339, a node id given twice, or an edge to a node the graph does not have; nothing is drawn. `field` names the value, `reason` says why, for a person.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FigureInvalid {
+    /// `field` — `String`.
+    pub field: String,
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
+/// The declared error `cortex.ask.FigureTooLarge`.
+///
+/// The figure is over a cap (`cortex.ask.FigureSpec`); nothing is drawn. `limit` names the cap, one of `bars`, `entries`, `nodes`, `edges` and `bytes`; `max` is the cap and `actual` what the figure has, or would have drawn.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FigureTooLarge {
+    /// `limit` — `String`.
+    pub limit: String,
+    /// `max` — `Integer`.
+    pub max: i64,
+    /// `actual` — `Integer`.
+    pub actual: i64,
 }
 
 /// The declared error `cortex.ask.LimitReached`.

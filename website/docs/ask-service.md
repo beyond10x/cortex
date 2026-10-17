@@ -238,3 +238,39 @@ The operator, once per deployment:
 `postgres` store without `ask.records`, a `sqlite` store with one, a schema that is the store's or
 no lowercase identifier, a URL that carries a password, names no role or is not a PostgreSQL URL,
 and a connection named by both id and profile.
+
+## Figures
+
+cortex draws figures as SVG with its own code, from a typed figure
+([`cortex.ask.FigureSpec`](./reference/ess/cortex-ask.md)), never from markup a model wrote. A
+figure is one of three kinds:
+
+| kind | holds | drawn as |
+|---|---|---|
+| `bar-chart` | a title and bars, each a label and a count of 0 or more | one horizontal bar per entry, in the order given, as long as its count against the largest |
+| `timeline` | a title and entries, each an RFC 3339 instant and a label | one row per entry, earliest first, each with its instant in UTC |
+| `relationship-graph` | a title, nodes (a store node or evidence id and a label) and edges (a source id, a target id and a label) | the nodes on a circle in the order given, each edge a line with an arrowhead |
+
+The SVG uses only the elements `svg`, `g`, `rect`, `line`, `path`, `circle`, `text` and `title`,
+and only geometry, fill, stroke and text attributes, whose values are numbers, colours and
+keywords. It holds no script, no `foreignObject`, no `style`, no event-handler attribute and no
+`href`. Every title and label is the text of a `text` or `title` element, escaped (`<`, `>`, `&`,
+`"`, `'`), with each control character drawn as U+FFFD. The same figure always gives the same
+bytes.
+
+A figure over a cap is refused whole (`cortex.ask.FigureTooLarge`, naming the cap), never cut:
+
+| cap | at most |
+|---|---|
+| `bars` | 50 bars |
+| `entries` | 200 timeline entries |
+| `nodes` | 100 graph nodes |
+| `edges` | 300 graph edges |
+| `bytes` | 262,144 bytes of SVG |
+
+A figure holding a value it cannot be drawn from is refused too (`cortex.ask.FigureInvalid`,
+naming the value): a negative count, an instant that is not RFC 3339, a node id given twice, or an
+edge whose source or target is no node of the graph.
+
+The renderer is not yet reachable from `POST /ask`: no endpoint or event draws a figure in this
+release.

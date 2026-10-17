@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest aa803d5fc727448fdc67db2b62ea07416e47fd00e48479e5419e9c0ab02ee313
-// contract digest fc938cf590397daaea314b0d740cec2f7eec65097ef799a6d0f3db60df721a9c
+// model digest 33b99b070654ace12840af9a0ffd38b5565691f60a37e5e0795d7c799d5ad121
+// contract digest f931c0a4605acc8bda17aba87eb5f8f31cdf6c1d7e01f81e01dca43dfdb8c3a4
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
