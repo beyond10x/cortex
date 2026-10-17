@@ -9,6 +9,7 @@ pub mod extract;
 pub mod gate;
 pub mod home;
 pub mod instance;
+pub mod known;
 pub mod mask;
 pub mod model_map;
 pub mod ports;

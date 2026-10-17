@@ -538,6 +538,18 @@ fn aliases(mapping: &m::RecordMapping, record: &Value, identity: &str) -> Option
     Some(out)
 }
 
+/// `template` (`cortex.instance.RecordMapping.alias_templates`) rendered from `record`.
+pub fn render_template(template: &str, record: &Value) -> Option<String> {
+    let _ = (template, record);
+    None
+}
+
+/// Why `template` is no alias template.
+pub fn template_refusal(template: &str) -> Option<String> {
+    let _ = template;
+    None
+}
+
 /// One structured source as a run maps it: its identity prefix, its mapping, its child operations
 /// and the instance's redaction policy.
 pub struct Source<'a> {
@@ -1648,6 +1660,58 @@ mod tests {
             json!({"name": "MEMBER_OF", "source_types": ["Person"], "target_types": ["Team"],
                 "cardinality": "Many", "properties": []})
         );
+    }
+
+    #[test]
+    fn an_alias_template_adds_its_rendered_alias_after_the_mapped_ones() {
+        let mut m = mapping();
+        m.alias_templates = Some(vec!["repo:{namespace}/{path}".into(), "{$.id}".into()]);
+        let record = json!({"name": "API", "namespace": "acme", "path": "api", "id": 7,
+            "handles": ["api"]});
+        assert_eq!(
+            aliases(&m, &record, "dir:people.list:7"),
+            Some(vec![
+                "API (dir:people.list:7)".to_string(),
+                "dir:people.list:7".into(),
+                "api".into(),
+                "repo:acme/api".into(),
+                "7".into(),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_template_whose_field_the_record_lacks_yields_no_alias_and_no_error() {
+        let mut m = mapping();
+        m.alias_templates = Some(vec!["repo:{namespace}/{path}".into()]);
+        for record in [
+            json!({"name": "Web", "path": "web"}),
+            json!({"name": "Web", "path": "web", "namespace": null}),
+            json!({"name": "Web", "path": "web", "namespace": " "}),
+            json!({"name": "Web", "path": "web", "namespace": {"a": 1}}),
+            json!({"name": "Web", "path": "web", "namespace": ["acme"]}),
+        ] {
+            assert_eq!(
+                aliases(&m, &record, "x:1"),
+                Some(vec!["Web (x:1)".to_string(), "x:1".into()]),
+                "{record}"
+            );
+        }
+        assert_eq!(render_template("{a.b}", &json!({"a": {"b": true}})), Some("true".into()));
+        assert_eq!(render_template("{a.b}", &json!({"a": {"c": 1}})), None);
+    }
+
+    #[test]
+    fn a_template_of_another_placeholder_syntax_is_named_and_a_good_one_is_not() {
+        for good in ["repo:{namespace}/{path}", "{$.a}", "x-{a_b.c-D9}"] {
+            assert_eq!(template_refusal(good), None, "{good}");
+        }
+        for bad in [
+            "", "fixed", "{a", "a}", "{}", "{{a}}", "{a b}", "{a[0]}", "{a..b}", "{.a}", "{a.}",
+            "{$.}", "{a}{",
+        ] {
+            assert!(template_refusal(bad).is_some(), "{bad:?}");
+        }
     }
 
     #[test]
