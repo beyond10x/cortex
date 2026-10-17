@@ -59,7 +59,8 @@ The gateway is spoken to as an OpenAI-compatible endpoint: `POST <base_url>/v1/c
 (`<base_url>/chat/completions` when `base_url` already ends in `/v1`), with the value of the
 variable `token_env` names as a bearer token, read when an answer starts. A missing or empty token
 fails the answer with `model-failed`, naming the variable. The reader does not inherit that
-variable, nor `ANTHROPIC_API_KEY`.
+variable, nor any other `ANTHROPIC_*` or `CLAUDE_*` variable: it reads a store and gets no model
+credential. A `max_seconds` above ten years counts as ten years.
 
 ## The event contract
 
@@ -88,7 +89,7 @@ over every model call (`prompt_tokens`, `completion_tokens`, `prompt_tokens_deta
 |---|---|---|
 | `unidentified` | 401 | no identity header; no model was asked |
 | `rate-limit` | 429 | the identity's questions of the minute are spent; `retry_after` (also the `Retry-After` header) is the whole seconds until the oldest leaves the window |
-| `bad-request` | 400 | the body is not JSON with a non-empty `question` |
+| `bad-request` | 400, or 413 | the body is not JSON with a non-empty `question`, or is above 1 MiB (413); a refused body spends no question of the minute |
 | `step-limit` | 200 | the model still asked for a tool at `max_steps` |
 | `time-limit` | 200 | the answer passed `max_seconds` |
 | `model-failed` | 200 | the gateway could not be reached, answered an error or no message |

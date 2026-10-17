@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest b979825d9ba3898417b16740c98b19baa65c45db0467e0e887c9ec8c35b8a194
-// contract digest af1fe44bd7162114b5142156736e336d7e7f76c9c135606857f141c8aa77ff7a
+// model digest 27787b9088d35d07b00d13e5448d7b0aac403e27b974bf944430b06450632fff
+// contract digest 173c0bac3c228ac9f9040c04e2cb6d3d34a62be78bcb85ce3703400a1e8b2136
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -123,6 +123,8 @@ pub enum ExternalCommand<'a> {
     CortexInstanceRejectSchemaProposals(&'a crate::instance::RejectSchemaProposals),
     /// The executing `cortex.instance.RestoreSnapshot` input.
     CortexInstanceRestoreSnapshot(&'a crate::instance::RestoreSnapshot),
+    /// The executing `cortex.instance.RunEval` input.
+    CortexInstanceRunEval(&'a crate::instance::RunEval),
 }
 
 impl ExternalCommand<'_> {
@@ -139,6 +141,7 @@ impl ExternalCommand<'_> {
             Self::CortexInstanceProposeSchemaChanges(_) => "cortex.instance.ProposeSchemaChanges",
             Self::CortexInstanceRejectSchemaProposals(_) => "cortex.instance.RejectSchemaProposals",
             Self::CortexInstanceRestoreSnapshot(_) => "cortex.instance.RestoreSnapshot",
+            Self::CortexInstanceRunEval(_) => "cortex.instance.RunEval",
         }
     }
 }
@@ -171,6 +174,10 @@ pub trait Context {
     /// A `Optional<Decimal>` the model says the implementation assigns — a `{generated: true}` value —
     /// or `None` where there is nothing to report.
     fn generate_optional_decimal(&mut self) -> Option<crate::primitives::Decimal>;
+
+    /// A `Optional<Integer>` the model says the implementation assigns — a `{generated: true}` value —
+    /// or `None` where there is nothing to report.
+    fn generate_optional_integer(&mut self) -> Option<i64>;
 
     /// A `Optional<Timestamp>` the model says the implementation assigns — a `{generated: true}` value —
     /// or `None` where there is nothing to report.
@@ -208,6 +215,8 @@ fn try_generate_integer(&mut self) -> Result<i64, UnmetObligation>;
 /// Assigns the value, or names the unavailable answer.
 fn try_generate_optional_decimal(&mut self) -> Result<Option<crate::primitives::Decimal>, UnmetObligation>;
 /// Assigns the value, or names the unavailable answer.
+fn try_generate_optional_integer(&mut self) -> Result<Option<i64>, UnmetObligation>;
+/// Assigns the value, or names the unavailable answer.
 fn try_generate_optional_timestamp(&mut self) -> Result<Option<crate::primitives::Timestamp>, UnmetObligation>;
 /// Assigns the value, or names the unavailable answer.
 fn try_generate_string(&mut self) -> Result<String, UnmetObligation>;
@@ -224,6 +233,7 @@ fn try_generate_cortex_instance_source_state(&mut self) -> Result<crate::instanc
 fn try_generate_decimal(&mut self) -> Result<crate::primitives::Decimal, UnmetObligation> { Ok(Context::generate_decimal(self)) }
 fn try_generate_integer(&mut self) -> Result<i64, UnmetObligation> { Ok(Context::generate_integer(self)) }
 fn try_generate_optional_decimal(&mut self) -> Result<Option<crate::primitives::Decimal>, UnmetObligation> { Ok(Context::generate_optional_decimal(self)) }
+fn try_generate_optional_integer(&mut self) -> Result<Option<i64>, UnmetObligation> { Ok(Context::generate_optional_integer(self)) }
 fn try_generate_optional_timestamp(&mut self) -> Result<Option<crate::primitives::Timestamp>, UnmetObligation> { Ok(Context::generate_optional_timestamp(self)) }
 fn try_generate_string(&mut self) -> Result<String, UnmetObligation> { Ok(Context::generate_string(self)) }
 fn try_generate_timestamp(&mut self) -> Result<crate::primitives::Timestamp, UnmetObligation> { Ok(Context::generate_timestamp(self)) }
@@ -796,6 +806,33 @@ where
         let _ = &held;
         let next = held;
         let answer = crate::instance::RestoreSnapshotOutcome::Restored { snapshot_restored: crate::instance::SnapshotRestored { name: input.name.clone(), snapshot: input.snapshot.clone() } };
+        InstanceStorage::put(&mut self.ports, next);
+        return Ok(answer);
+    }
+}
+
+/// `cortex.instance.RunEval`, generated: every outcome is one the specification fully determines.
+impl<P> crate::instance::obligations::RunEvalBehavior for Generated<P>
+where
+    P: TryContext + InstanceStorage,
+{
+    fn run_eval(&mut self, input: crate::instance::RunEval) -> Result<crate::instance::RunEvalOutcome, UnmetObligation> {
+        let _ = &input;
+        // `set-invalid`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceRunEval(&input), "set-invalid")? {
+            return Ok(crate::instance::RunEvalOutcome::SetInvalid { error: crate::instance::EvalSetInvalid { reason: self.ports.try_generate_string()? } });
+        }
+        // `runner-failed`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceRunEval(&input), "runner-failed")? {
+            return Ok(crate::instance::RunEvalOutcome::RunnerFailed { error: crate::instance::EvalRunnerFailed { reason: self.ports.try_generate_string()? } });
+        }
+        // `evaluated`: the default.
+        let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
+            return Ok(crate::instance::RunEvalOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        };
+        let _ = &held;
+        let next = held;
+        let answer = crate::instance::RunEvalOutcome::Evaluated { eval_ran: crate::instance::EvalRan { name: input.name.clone(), stamp: self.ports.try_generate_string()?, runner: input.runner.clone(), cases: self.ports.try_generate_integer()?, passed: self.ports.try_generate_integer()?, facts_expected: self.ports.try_generate_integer()?, facts_found: self.ports.try_generate_integer()?, nodes_expected: self.ports.try_generate_integer()?, nodes_found: self.ports.try_generate_integer()?, model_calls: self.ports.try_generate_integer()?, input_tokens: self.ports.try_generate_optional_integer()?, output_tokens: self.ports.try_generate_optional_integer()?, cost_usd: self.ports.try_generate_optional_decimal()? } };
         InstanceStorage::put(&mut self.ports, next);
         return Ok(answer);
     }

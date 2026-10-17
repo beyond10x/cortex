@@ -10,6 +10,45 @@
     {
       "fields": [
         {
+          "name": "instance_name",
+          "type": "InstanceName"
+        },
+        {
+          "name": "runner",
+          "type": "EvalRunner"
+        },
+        {
+          "name": "cases",
+          "type": "integer"
+        },
+        {
+          "name": "passed",
+          "type": "integer"
+        },
+        {
+          "name": "cost_usd",
+          "type": "Optional<decimal>"
+        }
+      ],
+      "id": "cortex.instance.EvalRun",
+      "identity": {
+        "name": "stamp",
+        "type": "string"
+      },
+      "lifecycle": {
+        "initial": "Recorded",
+        "states": [
+          "Recorded"
+        ],
+        "terminal": [
+          "Recorded"
+        ]
+      },
+      "name": "EvalRun"
+    },
+    {
+      "fields": [
+        {
           "name": "description",
           "type": "string"
         },
@@ -177,6 +216,14 @@
       "kind": "owns",
       "name": "answers",
       "to": "cortex.ask.AnswerRecord",
+      "via": "instance_name"
+    },
+    {
+      "cardinality": "many",
+      "from": "cortex.instance.Instance",
+      "kind": "owns",
+      "name": "eval_runs",
+      "to": "cortex.instance.EvalRun",
       "via": "instance_name"
     },
     {

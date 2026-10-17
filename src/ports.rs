@@ -38,6 +38,8 @@ pub struct Shared {
     pub decimals: VecDeque<Decimal>,
     /// Values for `Optional<Decimal>` fields: `None` where there is nothing to report.
     pub optional_decimals: VecDeque<Option<Decimal>>,
+    /// Values for `Optional<Integer>` fields: `None` where a count is not known.
+    pub optional_integers: VecDeque<Option<i64>>,
     /// The report of the last run, for the caller to print.
     pub last_run: Option<Report>,
     /// When the last `RunSource` started, in Unix milliseconds, once it recorded an outcome.
@@ -155,6 +157,14 @@ impl Context for Ports {
         self.shared
             .borrow_mut()
             .optional_decimals
+            .pop_front()
+            .flatten()
+    }
+    /// Not known when the caller queued no value.
+    fn generate_optional_integer(&mut self) -> Option<i64> {
+        self.shared
+            .borrow_mut()
+            .optional_integers
             .pop_front()
             .flatten()
     }

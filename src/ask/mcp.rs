@@ -2,8 +2,8 @@
 //! reader is started per answer and killed when the answer ends.
 
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::Instant;
 
 use serde_json::{json, Value};
@@ -15,7 +15,9 @@ const PROTOCOL: &str = "2025-06-18";
 
 pub struct Reader {
     child: Child,
-    stdin: ChildStdin,
+    /// The requests for the writer thread, which owns the child's stdin: a reader that stops
+    /// reading blocks that thread, never the answer, whose deadline the wait for a response keeps.
+    requests: Sender<String>,
     lines: Receiver<String>,
     next: u64,
 }
@@ -35,6 +37,14 @@ impl Reader {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
+        // The reader reads a store and needs no model credential: no ANTHROPIC_* or CLAUDE_*
+        // variable, nor the names the command lists (the gateway's token), reaches it.
+        for (name, _) in std::env::vars_os() {
+            let name = name.to_string_lossy();
+            if name.starts_with("ANTHROPIC_") || name.starts_with("CLAUDE_") {
+                cmd.env_remove(name.as_ref());
+            }
+        }
         for name in &command.remove {
             cmd.env_remove(name);
         }
@@ -58,9 +68,21 @@ impl Reader {
                 }
             }
         });
+        let (requests, queue) = mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            let mut stdin = stdin;
+            for line in queue {
+                if writeln!(stdin, "{line}")
+                    .and_then(|_| stdin.flush())
+                    .is_err()
+                {
+                    return;
+                }
+            }
+        });
         let mut reader = Self {
             child,
-            stdin,
+            requests,
             lines,
             next: 1,
         };
@@ -111,9 +133,9 @@ impl Reader {
     }
 
     fn send(&mut self, message: &Value) -> Result<(), CallError> {
-        writeln!(self.stdin, "{message}")
-            .and_then(|_| self.stdin.flush())
-            .map_err(|e| CallError::Failed(format!("the reader stopped reading: {e}")))
+        self.requests
+            .send(message.to_string())
+            .map_err(|_| CallError::Failed("the reader stopped reading".into()))
     }
 
     /// Sends one request and waits for the response with its id, skipping anything else: its

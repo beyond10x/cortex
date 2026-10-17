@@ -522,6 +522,49 @@ impl Model {
         prompt: &str,
         budget_usd: Option<f64>,
     ) -> Result<Answer, Refused> {
+        self.ask_claude_with(system_prompt, dir, schema, prompt, budget_usd, None)
+    }
+
+    /// [`ask_with`] for the one call that is given a tool: `mcp_config` is the JSON of the MCP
+    /// servers `claude` starts (`--mcp-config`, still with `--strict-mcp-config`, so no other
+    /// server is read) and `allowed` the tools it may call (`--allowedTools`); every built-in
+    /// tool stays off (`--tools ""`) and every other isolation flag stays. The eval `mcp` runner
+    /// is its only caller. Codex is refused as in [`ask_with`].
+    ///
+    /// [`ask_with`]: Model::ask_with
+    #[allow(clippy::too_many_arguments)]
+    pub fn ask_with_mcp(
+        &self,
+        system_prompt: &str,
+        dir: &Path,
+        schema: &Value,
+        prompt: &str,
+        budget_usd: Option<f64>,
+        mcp_config: &str,
+        allowed: &str,
+    ) -> Result<Answer, Refused> {
+        match self.backend {
+            ModelBackend::Claude => self.ask_claude_with(
+                system_prompt,
+                dir,
+                schema,
+                prompt,
+                budget_usd,
+                Some((mcp_config, allowed)),
+            ),
+            ModelBackend::Codex => Err(Refused::free(CODEX_PENDING.into())),
+        }
+    }
+
+    fn ask_claude_with(
+        &self,
+        system_prompt: &str,
+        dir: &Path,
+        schema: &Value,
+        prompt: &str,
+        budget_usd: Option<f64>,
+        mcp: Option<(&str, &str)>,
+    ) -> Result<Answer, Refused> {
         let gateway = gateway_environment(self.gateway.as_ref()).map_err(Refused::free)?;
         std::fs::create_dir_all(dir)
             .map_err(|e| Refused::free(format!("{}: {e}", dir.display())))?;
@@ -542,6 +585,15 @@ impl Model {
                 "--disable-slash-commands",
                 "--no-session-persistence",
             ])
+            .args(match mcp {
+                Some((config, allowed)) => vec![
+                    "--mcp-config".to_string(),
+                    config.to_string(),
+                    "--allowedTools".to_string(),
+                    allowed.to_string(),
+                ],
+                None => vec![],
+            })
             .args(["--model", &self.model])
             .args(["--system-prompt", system_prompt])
             .args(["--json-schema", &schema.to_string()])

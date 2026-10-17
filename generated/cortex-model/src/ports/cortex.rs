@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest b979825d9ba3898417b16740c98b19baa65c45db0467e0e887c9ec8c35b8a194
-// contract digest af1fe44bd7162114b5142156736e336d7e7f76c9c135606857f141c8aa77ff7a
+// model digest 27787b9088d35d07b00d13e5448d7b0aac403e27b974bf944430b06450632fff
+// contract digest 173c0bac3c228ac9f9040c04e2cb6d3d34a62be78bcb85ce3703400a1e8b2136
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -18,6 +18,8 @@
 /// An event this component declares it publishes, on its way to the system's transport.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PublishedEvent {
+    /// `cortex.instance.EvalRan`.
+    EvalRan(crate::instance::EvalRan),
     /// `cortex.instance.InstanceAdopted`.
     InstanceAdopted(crate::instance::InstanceAdopted),
     /// `cortex.instance.InstanceCreated`.
@@ -78,7 +80,7 @@ impl<B> Cortex<B> {
 
 impl<B> Cortex<B>
 where
-    B: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    B: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunEvalBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
 {
     /// Accepts `cortex.instance.AddSource`: runs the behaviour obligation, then publishes the declared events
     /// the outcome carries.
@@ -304,6 +306,24 @@ where
                 self.outbox.push(PublishedEvent::SnapshotRestored(snapshot_restored.clone()));
             }
             crate::instance::RestoreSnapshotOutcome::NoSuchInstance { .. } => {}
+        }
+        Ok(outcome)
+    }
+
+    /// Accepts `cortex.instance.RunEval`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn run_eval(&mut self, input: crate::instance::RunEval) -> Result<crate::instance::RunEvalOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.run_eval(input)?;
+        match &outcome {
+            crate::instance::RunEvalOutcome::SetInvalid { .. } => {}
+            crate::instance::RunEvalOutcome::RunnerFailed { .. } => {}
+            crate::instance::RunEvalOutcome::Evaluated { eval_ran, .. } => {
+                self.outbox.push(PublishedEvent::EvalRan(eval_ran.clone()));
+            }
+            crate::instance::RunEvalOutcome::NoSuchInstance { .. } => {}
         }
         Ok(outcome)
     }

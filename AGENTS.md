@@ -156,6 +156,9 @@ this repository and published by the organisation's reusable workflow.
   `--strict-mcp-config`, `--disable-slash-commands` and `--tools ""`, in an empty directory.
   Measured on 2026-10-05: 423 input tokens with these flags against 10,837 with the user's
   setting sources, which carry the user's global instructions. Keep the flags.
+  The one call given a tool is the eval `mcp` runner's (`Model::ask_with_mcp`): the same flags plus
+  `--mcp-config` naming `ekr mcp` as its only server and `--allowedTools mcp__ekr`; its tool
+  results are not redacted yet.
 
 ## Upstream facts the code works around
 
@@ -173,7 +176,7 @@ this repository and published by the organisation's reusable workflow.
 - `task check` is the gate (see [Commands](#commands)); `STATUS.md` records its last result.
 - Format with `cargo fmt -p cortex-cli -p cortex-docs`. `cargo fmt --all` also rewrites the
   generated crates, which are path dependencies, and `task drift` then fails.
-- `tests/conformance.rs` runs every scenario of `spec/suite.json` (89) in process; `tests/e2e.rs`
+- `tests/conformance.rs` runs every scenario of `spec/suite.json` (93) in process; `tests/e2e.rs`
   drives the binary end to end; the clap ⇔ spec test in `src/main.rs` holds the command line to
   the commands, inputs and views `spec/` puts on it.
 - Build into this tree's own `target/` (leave `CARGO_TARGET_DIR` unset), and end each tree with
