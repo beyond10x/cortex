@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7
-// contract digest a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96
+// model digest b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64
+// contract digest 38571540d03e174471671e428e08bfba610dca6caa7e6de6077494ad0f35ae34
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -61,6 +61,8 @@ pub trait SourceStorage {
 /// This supplies facts, not authority: the context must verify its request-bound proof.
 #[derive(Debug, Clone, Copy)]
 pub enum ExternalCommand<'a> {
+    /// The executing `cortex.ask.Ask` input.
+    CortexAskAsk(&'a crate::ask::Ask),
     /// The executing `cortex.instance.AdoptInstance` input.
     CortexInstanceAdoptInstance(&'a crate::instance::AdoptInstance),
     /// The executing `cortex.instance.ApplySchemaProposals` input.
@@ -83,6 +85,7 @@ impl ExternalCommand<'_> {
     /// The canonical qualified identity of this command.
     pub fn name(&self) -> &'static str {
         match self {
+            Self::CortexAskAsk(_) => "cortex.ask.Ask",
             Self::CortexInstanceAdoptInstance(_) => "cortex.instance.AdoptInstance",
             Self::CortexInstanceApplySchemaProposals(_) => "cortex.instance.ApplySchemaProposals",
             Self::CortexInstanceApproveSchemaProposals(_) => "cortex.instance.ApproveSchemaProposals",
@@ -100,6 +103,10 @@ impl ExternalCommand<'_> {
 /// The caller's attributes, the values the model says the implementation assigns, and the answer
 /// to each `external:` branch.
 pub trait Context {
+    /// A new `cortex.ask.AskDone`, which the model says the implementation assigns — a created identity, a
+    /// `{generated: true}` value, or an event field the model leaves undetermined.
+    fn generate_cortex_ask_ask_done(&mut self) -> crate::ask::AskDone;
+
     /// A new `cortex.instance.Instance.State`, which the model says the implementation assigns — a created identity, a
     /// `{generated: true}` value, or an event field the model leaves undetermined.
     fn generate_cortex_instance_instance_state(&mut self) -> crate::instance::InstanceState;
@@ -136,6 +143,8 @@ pub trait Context {
 /// Existing `Context` implementations receive the blanket adapter.
 pub trait TryContext {
 /// Assigns the value, or names the unavailable answer.
+fn try_generate_cortex_ask_ask_done(&mut self) -> Result<crate::ask::AskDone, UnmetObligation>;
+/// Assigns the value, or names the unavailable answer.
 fn try_generate_cortex_instance_instance_state(&mut self) -> Result<crate::instance::InstanceState, UnmetObligation>;
 /// Assigns the value, or names the unavailable answer.
 fn try_generate_cortex_instance_source_state(&mut self) -> Result<crate::instance::SourceState, UnmetObligation>;
@@ -152,6 +161,7 @@ fn try_external(&mut self, command: ExternalCommand<'_>, outcome: &'static str) 
 }
 
 impl<T: Context + ?Sized> TryContext for T {
+fn try_generate_cortex_ask_ask_done(&mut self) -> Result<crate::ask::AskDone, UnmetObligation> { Ok(Context::generate_cortex_ask_ask_done(self)) }
 fn try_generate_cortex_instance_instance_state(&mut self) -> Result<crate::instance::InstanceState, UnmetObligation> { Ok(Context::generate_cortex_instance_instance_state(self)) }
 fn try_generate_cortex_instance_source_state(&mut self) -> Result<crate::instance::SourceState, UnmetObligation> { Ok(Context::generate_cortex_instance_source_state(self)) }
 fn try_generate_decimal(&mut self) -> Result<crate::primitives::Decimal, UnmetObligation> { Ok(Context::generate_decimal(self)) }
@@ -178,6 +188,38 @@ impl<P> Generated<P> {
     /// The generated behaviours, over `ports`.
     pub fn new(ports: P) -> Self {
         Self { ports }
+    }
+}
+
+/// `cortex.ask.Ask`, generated: every outcome is one the specification fully determines.
+impl<P> crate::ask::obligations::AskBehavior for Generated<P>
+where
+    P: TryContext,
+{
+    fn ask(&mut self, input: crate::ask::Ask) -> Result<crate::ask::AskOutcome, UnmetObligation> {
+        let _ = &input;
+        // `unidentified`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "unidentified")? {
+            return Ok(crate::ask::AskOutcome::Unidentified { error: crate::ask::Unidentified { header: self.ports.try_generate_string()? } });
+        }
+        // `rate-limited`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "rate-limited")? {
+            return Ok(crate::ask::AskOutcome::RateLimited { error: crate::ask::RateLimited { identity: input.identity.clone(), retry_after: self.ports.try_generate_integer()? } });
+        }
+        // `limit-reached`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "limit-reached")? {
+            return Ok(crate::ask::AskOutcome::LimitReached { error: crate::ask::LimitReached { limit: self.ports.try_generate_string()? } });
+        }
+        // `model-failed`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "model-failed")? {
+            return Ok(crate::ask::AskOutcome::ModelFailed { error: crate::ask::ModelFailed { reason: self.ports.try_generate_string()? } });
+        }
+        // `reader-failed`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "reader-failed")? {
+            return Ok(crate::ask::AskOutcome::ReaderFailed { error: crate::ask::ReaderFailed { reason: self.ports.try_generate_string()? } });
+        }
+        // `answered`: the default.
+        return Ok(crate::ask::AskOutcome::Answered { answered: crate::ask::Answered { identity: input.identity.clone(), done: self.ports.try_generate_cortex_ask_ask_done()? } });
     }
 }
 

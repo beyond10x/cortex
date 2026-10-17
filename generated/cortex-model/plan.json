@@ -2,14 +2,84 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7",
-    "contract_digest": "a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96"
+    "source_digest": "b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64",
+    "contract_digest": "38571540d03e174471671e428e08bfba610dca6caa7e6de6077494ad0f35ae34"
   },
   "scope": {
     "profile": "component-skeletons",
     "layout": "crate"
   },
   "capabilities": [
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.AskDelta",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.AskDiscard",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.AskDone",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.AskError",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.AskEvent",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.AskLimits",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.AskSpec",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.AskStatus",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.AskTool",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.LinkTemplates",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
     {
       "kind": "domain_type",
       "source": "cortex.instance.ChangeDetection",
@@ -579,6 +649,20 @@
     },
     {
       "kind": "command_contract",
+      "source": "cortex.ask.Ask",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_behavior",
+      "source": "cortex.ask.Ask",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_contract",
       "source": "cortex.instance.AddSource",
       "disposition": {
         "disposition": "generated"
@@ -785,6 +869,13 @@
     },
     {
       "kind": "event_type",
+      "source": "cortex.ask.Answered",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "event_type",
       "source": "cortex.instance.InstanceAdopted",
       "disposition": {
         "disposition": "generated"
@@ -891,6 +982,41 @@
     {
       "kind": "event_type",
       "source": "cortex.instance.SourceRan",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.ask.LimitReached",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.ask.ModelFailed",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.ask.RateLimited",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.ask.ReaderFailed",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.ask.Unidentified",
       "disposition": {
         "disposition": "generated"
       }
@@ -1135,6 +1261,16 @@
     },
     {
       "kind": "actor_grants",
+      "source": "cortex.ask.Asker",
+      "disposition": {
+        "disposition": "refused",
+        "reason": "needs_caller_identity",
+        "stage": "planning",
+        "detail": "may invoke `cortex.ask.Ask`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry"
+      }
+    },
+    {
+      "kind": "actor_grants",
       "source": "cortex.instance.Operator",
       "disposition": {
         "disposition": "refused",
@@ -1156,6 +1292,13 @@
     {
       "kind": "component_port",
       "source": "cortex",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "component_port",
+      "source": "cortex-ask",
       "disposition": {
         "disposition": "generated"
       }

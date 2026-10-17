@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.AskError",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64",
+    "contract_digest": "slice-sha256/2:1cea7fff660261469b1ed195420d223109c6ea242d5f18aa9fba3912c62e60ec",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AskError": {
+      "title": "AskError",
+      "x-ess-name": "cortex.ask.AskError",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retry_after": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "reason",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

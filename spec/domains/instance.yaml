@@ -664,6 +664,7 @@ types:
       - {name: snapshots, type: Optional<cortex.instance.SnapshotPolicy>}
       - {name: gate, type: Optional<cortex.instance.RunGate>}
       - {name: monitoring, type: Optional<cortex.instance.MonitoringSpec>}
+      - {name: ask, type: Optional<cortex.ask.AskSpec>}
 
   # A judge's answer on one sampled fact: `yes` when the evidence the fact cites supports it, `no`
   # when it does not, `unclear` when the judge cannot tell. EKR's `ekr.fact-judgements/1` knows only

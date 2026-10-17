@@ -66,3 +66,18 @@ components:
       views:
         - cortex.instance.Instances
         - cortex.instance.Sources
+
+  - component: cortex-ask
+    summary: >-
+      The answer service, `cortex ask serve --spec <instance spec>`: a long-running process that
+      answers `POST /ask` as a stream of events over the instance's store, read through the EKR MCP
+      reader. The batch component `cortex` serves no port; this one serves the spec's `ask.listen`.
+    owns:
+      domains:
+        - cortex.ask
+    accepts:
+      commands:
+        - cortex.ask.Ask
+    publishes:
+      events:
+        - cortex.ask.Answered

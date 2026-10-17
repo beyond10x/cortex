@@ -3,11 +3,1212 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7",
-    "contract_digest": "a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96",
+    "spec_digest": "b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64",
+    "contract_digest": "38571540d03e174471671e428e08bfba610dca6caa7e6de6077494ad0f35ae34",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
+    "cortex.ask.Ask/outcome/answered": {
+      "purpose": "`cortex.ask.Ask` answers `answered` for an input no other branch's guard claims",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.ask.Ask",
+          "actor": "cortex.ask.Asker",
+          "input": {
+            "identity": {
+              "kind": "literal",
+              "value": "identity"
+            },
+            "question": {
+              "kind": "literal",
+              "value": "question"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.ask.Ask",
+            "outcome": "answered"
+          }
+        },
+        {
+          "step": "expect_event",
+          "event": "cortex.ask.Answered",
+          "payload": {
+            "identity": "identity"
+          },
+          "shape": {
+            "done.answer": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "done.cached_tokens": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "done.context_tokens": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "done.evidence": {
+              "holds": "list"
+            },
+            "done.input_tokens": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "done.nodes": {
+              "holds": "list"
+            },
+            "done.output_tokens": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "done.steps": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "identity": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskDone"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.ask.Ask"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.ask.Ask",
+            "outcome": "answered"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.ask.Asker"
+        }
+      ]
+    },
+    "cortex.ask.Ask/outcome/limit-reached": {
+      "purpose": "`cortex.ask.Ask` answers `limit-reached` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.ask.Ask",
+            "outcome": "limit-reached"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.ask.Ask",
+          "actor": "cortex.ask.Asker",
+          "input": {
+            "identity": {
+              "kind": "literal",
+              "value": "identity"
+            },
+            "question": {
+              "kind": "literal",
+              "value": "question"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.ask.Ask",
+            "outcome": "limit-reached"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.ask.LimitReached"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "command",
+          "name": "cortex.ask.Ask"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.ask.Ask",
+            "outcome": "limit-reached"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.ask.LimitReached"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.ask.Asker"
+        }
+      ]
+    },
+    "cortex.ask.Ask/outcome/model-failed": {
+      "purpose": "`cortex.ask.Ask` answers `model-failed` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.ask.Ask",
+            "outcome": "model-failed"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.ask.Ask",
+          "actor": "cortex.ask.Asker",
+          "input": {
+            "identity": {
+              "kind": "literal",
+              "value": "identity"
+            },
+            "question": {
+              "kind": "literal",
+              "value": "question"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.ask.Ask",
+            "outcome": "model-failed"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.ask.ModelFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "command",
+          "name": "cortex.ask.Ask"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.ask.Ask",
+            "outcome": "model-failed"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.ask.ModelFailed"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.ask.Asker"
+        }
+      ]
+    },
+    "cortex.ask.Ask/outcome/rate-limited": {
+      "purpose": "`cortex.ask.Ask` answers `rate-limited` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.ask.Ask",
+            "outcome": "rate-limited"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.ask.Ask",
+          "actor": "cortex.ask.Asker",
+          "input": {
+            "identity": {
+              "kind": "literal",
+              "value": "identity"
+            },
+            "question": {
+              "kind": "literal",
+              "value": "question"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.ask.Ask",
+            "outcome": "rate-limited"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.ask.RateLimited",
+          "fields": {
+            "identity": "identity"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "command",
+          "name": "cortex.ask.Ask"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.ask.Ask",
+            "outcome": "rate-limited"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.ask.RateLimited"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.ask.Asker"
+        }
+      ]
+    },
+    "cortex.ask.Ask/outcome/reader-failed": {
+      "purpose": "`cortex.ask.Ask` answers `reader-failed` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.ask.Ask",
+            "outcome": "reader-failed"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.ask.Ask",
+          "actor": "cortex.ask.Asker",
+          "input": {
+            "identity": {
+              "kind": "literal",
+              "value": "identity"
+            },
+            "question": {
+              "kind": "literal",
+              "value": "question"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.ask.Ask",
+            "outcome": "reader-failed"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.ask.ReaderFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "command",
+          "name": "cortex.ask.Ask"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.ask.Ask",
+            "outcome": "reader-failed"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.ask.ReaderFailed"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.ask.Asker"
+        }
+      ]
+    },
+    "cortex.ask.Ask/outcome/unidentified": {
+      "purpose": "`cortex.ask.Ask` answers `unidentified` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.ask.Ask",
+            "outcome": "unidentified"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.ask.Ask",
+          "actor": "cortex.ask.Asker",
+          "input": {
+            "identity": {
+              "kind": "literal",
+              "value": "identity"
+            },
+            "question": {
+              "kind": "literal",
+              "value": "question"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.ask.Ask",
+            "outcome": "unidentified"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.ask.Unidentified"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "command",
+          "name": "cortex.ask.Ask"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.ask.Ask",
+            "outcome": "unidentified"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.ask.Unidentified"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.ask.Asker"
+        }
+      ]
+    },
     "cortex.instance.AddSource/outcome/added": {
       "purpose": "`cortex.instance.AddSource` answers `added` for an input no other branch's guard claims",
       "steps": [
@@ -39,6 +1240,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -190,6 +1406,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -336,6 +1556,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -439,6 +1663,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -546,6 +1785,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceCreated"
         },
         {
@@ -644,6 +1887,18 @@
         }
       ],
       "source": [
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
         {
           "kind": "type",
           "name": "cortex.instance.ChangeDetection"
@@ -869,6 +2124,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -979,6 +2238,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -1069,6 +2343,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -1133,6 +2411,18 @@
         }
       ],
       "source": [
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
         {
           "kind": "type",
           "name": "cortex.instance.ChangeDetection"
@@ -1354,6 +2644,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -1457,6 +2751,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance-1048594",
+                  "identity_header": "spec.ask.identity_header-1048594",
+                  "limits": {
+                    "max_result_bytes": 1048595.0,
+                    "max_seconds": 1048595.0,
+                    "max_steps": 1048595.0,
+                    "per_identity_per_minute": 1048595.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence-1048594",
+                    "node": "spec.ask.link_templates.node-1048594"
+                  },
+                  "listen": "spec.ask.listen-1048594"
+                },
                 "description": "spec.description-1048594",
                 "ekr": {
                   "bin": "spec.ekr.bin-1048594",
@@ -1632,6 +2941,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -1722,6 +3046,10 @@
           "fields": {
             "name": "name-1048594"
           }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
         },
         {
           "step": "expect_no_event",
@@ -1818,6 +3146,10 @@
             "command": "cortex.instance.AdoptInstance",
             "outcome": "name-taken"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -1935,6 +3267,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -2025,6 +3372,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -2089,6 +3440,18 @@
         }
       ],
       "source": [
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
         {
           "kind": "type",
           "name": "cortex.instance.ChangeDetection"
@@ -2307,6 +3670,10 @@
             "command": "cortex.instance.AdoptInstance",
             "outcome": "seed-types-missing"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -2420,6 +3787,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -2510,6 +3892,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -2574,6 +3960,18 @@
         }
       ],
       "source": [
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
         {
           "kind": "type",
           "name": "cortex.instance.ChangeDetection"
@@ -2792,6 +4190,10 @@
             "command": "cortex.instance.AdoptInstance",
             "outcome": "store-held"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -2905,6 +4307,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -2995,6 +4412,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -3059,6 +4480,18 @@
         }
       ],
       "source": [
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
         {
           "kind": "type",
           "name": "cortex.instance.ChangeDetection"
@@ -3280,6 +4713,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -3383,6 +4820,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -3542,6 +4994,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -3671,6 +5127,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -3781,6 +5241,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -3859,6 +5323,10 @@
             "command": "cortex.instance.ApplySchemaProposals",
             "outcome": "apply-failed"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -3972,6 +5440,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -4050,6 +5522,10 @@
             "command": "cortex.instance.ApplySchemaProposals",
             "outcome": "gate-failed"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -4159,6 +5635,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -4237,6 +5717,10 @@
             "command": "cortex.instance.ApplySchemaProposals",
             "outcome": "no-such-instance"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -4353,6 +5837,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -4431,6 +5919,10 @@
             "command": "cortex.instance.ApplySchemaProposals",
             "outcome": "no-such-run"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -4544,6 +6036,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -4622,6 +6118,10 @@
             "command": "cortex.instance.ApplySchemaProposals",
             "outcome": "not-approved"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -4735,6 +6235,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -4813,6 +6317,10 @@
             "command": "cortex.instance.ApplySchemaProposals",
             "outcome": "store-outcome-unknown"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -4919,6 +6427,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -5078,6 +6601,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -5207,6 +6734,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -5321,6 +6852,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -5399,6 +6934,10 @@
             "command": "cortex.instance.ApproveSchemaProposals",
             "outcome": "no-such-instance"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -5523,6 +7062,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -5601,6 +7144,10 @@
             "command": "cortex.instance.ApproveSchemaProposals",
             "outcome": "no-such-run"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -5722,6 +7269,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -5800,6 +7351,10 @@
             "command": "cortex.instance.ApproveSchemaProposals",
             "outcome": "not-pending"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -5913,6 +7468,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -5999,6 +7569,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -6063,6 +7637,18 @@
         }
       ],
       "source": [
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
         {
           "kind": "type",
           "name": "cortex.instance.ChangeDetection"
@@ -6284,6 +7870,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -6387,6 +7977,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -6483,6 +8088,10 @@
               "kind": "integer"
             }
           }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
         },
         {
           "step": "expect_no_event",
@@ -6584,6 +8193,18 @@
         }
       ],
       "source": [
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
         {
           "kind": "type",
           "name": "cortex.instance.ChangeDetection"
@@ -6809,6 +8430,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -6919,6 +8544,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance-1048594",
+                  "identity_header": "spec.ask.identity_header-1048594",
+                  "limits": {
+                    "max_result_bytes": 1048595.0,
+                    "max_seconds": 1048595.0,
+                    "max_steps": 1048595.0,
+                    "per_identity_per_minute": 1048595.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence-1048594",
+                    "node": "spec.ask.link_templates.node-1048594"
+                  },
+                  "listen": "spec.ask.listen-1048594"
+                },
                 "description": "spec.description-1048594",
                 "ekr": {
                   "bin": "spec.ekr.bin-1048594",
@@ -7090,6 +8730,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -7176,6 +8831,10 @@
           "fields": {
             "name": "name-1048594"
           }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
         },
         {
           "step": "expect_no_event",
@@ -7277,6 +8936,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance-1048595",
+                  "identity_header": "spec.ask.identity_header-1048595",
+                  "limits": {
+                    "max_result_bytes": 1048596.0,
+                    "max_seconds": 1048596.0,
+                    "max_steps": 1048596.0,
+                    "per_identity_per_minute": 1048596.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence-1048595",
+                    "node": "spec.ask.link_templates.node-1048595"
+                  },
+                  "listen": "spec.ask.listen-1048595"
+                },
                 "description": "spec.description-1048595",
                 "ekr": {
                   "bin": "spec.ekr.bin-1048595",
@@ -7448,6 +9122,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -7534,6 +9223,10 @@
           "fields": {
             "name": "name-1048595"
           }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
         },
         {
           "step": "expect_no_event",
@@ -7637,6 +9330,10 @@
             "command": "cortex.instance.CreateInstance",
             "outcome": "partial"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -7754,6 +9451,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -7850,6 +9562,10 @@
               "kind": "integer"
             }
           }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
         },
         {
           "step": "expect_no_event",
@@ -7951,6 +9667,18 @@
         }
       ],
       "source": [
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
         {
           "kind": "type",
           "name": "cortex.instance.ChangeDetection"
@@ -8176,6 +9904,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -8286,6 +10018,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -8372,6 +10119,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -8436,6 +10187,18 @@
         }
       ],
       "source": [
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
         {
           "kind": "type",
           "name": "cortex.instance.ChangeDetection"
@@ -8657,6 +10420,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -8760,6 +10527,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -9028,6 +10810,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -9194,6 +10980,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -9296,6 +11086,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -9374,6 +11168,10 @@
             "command": "cortex.instance.EnableSource",
             "outcome": "no-such-source"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -9480,6 +11278,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -9669,6 +11482,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -9779,6 +11596,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -9886,6 +11707,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -10010,6 +11846,10 @@
               "kind": "string"
             }
           }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
         },
         {
           "step": "expect_no_event",
@@ -10142,6 +11982,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -10252,6 +12096,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -10330,6 +12178,10 @@
             "command": "cortex.instance.MeasureQuality",
             "outcome": "judge-failed"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -10436,6 +12288,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -10609,6 +12476,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -10738,6 +12609,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -10844,6 +12719,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -10922,6 +12801,10 @@
             "command": "cortex.instance.MeasureQuality",
             "outcome": "no-such-instance"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -11035,6 +12918,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -11113,6 +13000,10 @@
             "command": "cortex.instance.MeasureQuality",
             "outcome": "sample-failed"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -11219,6 +13110,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -11399,6 +13305,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -11528,6 +13438,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -11642,6 +13556,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -11720,6 +13638,10 @@
             "command": "cortex.instance.ProposeSchemaChanges",
             "outcome": "no-such-instance"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -11841,6 +13763,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -11919,6 +13845,10 @@
             "command": "cortex.instance.ProposeSchemaChanges",
             "outcome": "propose-failed"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -12025,6 +13955,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -12205,6 +14150,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -12334,6 +14283,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -12437,6 +14390,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -12617,6 +14585,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -12746,6 +14718,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -12864,6 +14840,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -12942,6 +14922,10 @@
             "command": "cortex.instance.ProposeSchemaChanges",
             "outcome": "sample-failed"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -13048,6 +15032,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -13256,6 +15255,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -13429,6 +15432,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -13536,6 +15543,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -13794,6 +15816,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -13974,6 +16000,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -14084,6 +16114,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -14162,6 +16196,10 @@
             "command": "cortex.instance.RecordFailure",
             "outcome": "no-such-source"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -14283,6 +16321,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -14361,6 +16403,10 @@
             "command": "cortex.instance.RejectSchemaProposals",
             "outcome": "no-such-instance"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -14489,6 +16535,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -14567,6 +16617,10 @@
             "command": "cortex.instance.RejectSchemaProposals",
             "outcome": "no-such-run"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -14692,6 +16746,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -14770,6 +16828,10 @@
             "command": "cortex.instance.RejectSchemaProposals",
             "outcome": "not-pending"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -14876,6 +16938,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -15039,6 +17116,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -15168,6 +17249,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -15270,6 +17355,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -15348,6 +17437,10 @@
             "command": "cortex.instance.RemoveInstance",
             "outcome": "no-such-instance"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -15454,6 +17547,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -15578,6 +17686,10 @@
               "kind": "string"
             }
           }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
         },
         {
           "step": "expect_no_event",
@@ -15710,6 +17822,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -15823,6 +17939,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -15901,6 +18021,10 @@
             "command": "cortex.instance.RestoreSnapshot",
             "outcome": "backend-unsupported"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -16014,6 +18138,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -16092,6 +18220,10 @@
             "command": "cortex.instance.RestoreSnapshot",
             "outcome": "busy"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -16201,6 +18333,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -16279,6 +18415,10 @@
             "command": "cortex.instance.RestoreSnapshot",
             "outcome": "no-such-instance"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -16395,6 +18535,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -16473,6 +18617,10 @@
             "command": "cortex.instance.RestoreSnapshot",
             "outcome": "no-such-snapshot"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -16579,6 +18727,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -16718,6 +18881,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -16847,6 +19014,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -16950,6 +19121,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -17138,6 +19324,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -17294,6 +19484,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -17405,6 +19599,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -17593,6 +19802,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -17749,6 +19962,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -17860,6 +20077,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -18048,6 +20280,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -18204,6 +20440,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -18315,6 +20555,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -18629,6 +20884,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -18803,6 +21062,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -18906,6 +21169,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -19094,6 +21372,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -19250,6 +21532,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -19361,6 +21647,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -19549,6 +21850,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -19705,6 +22010,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -19816,6 +22125,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -20104,6 +22428,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -20225,6 +22553,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -20332,6 +22664,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -20677,6 +23024,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -20843,6 +23194,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -20949,6 +23304,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -21027,6 +23386,10 @@
             "command": "cortex.instance.RunSource",
             "outcome": "no-such-source"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -21133,6 +23496,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -21410,6 +23788,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -21566,6 +23948,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -21673,6 +24059,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -21861,6 +24262,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -22017,6 +24422,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -22128,6 +24537,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -22362,6 +24786,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -22746,6 +25185,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -23048,6 +25502,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -23407,6 +25876,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -23709,6 +26193,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -24011,6 +26510,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -24313,6 +26827,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -24743,6 +27272,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -25045,6 +27589,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -25347,6 +27906,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -25777,6 +28351,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -26093,6 +28682,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -26395,6 +28999,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -26757,6 +29376,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -26885,6 +29508,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -26996,6 +29623,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -27254,6 +29896,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -27375,6 +30021,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -27482,6 +30132,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -27740,6 +30405,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -27920,6 +30589,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -28027,6 +30700,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -28295,6 +30983,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -28461,6 +31153,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -28560,6 +31256,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -28649,6 +31360,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -28727,6 +31442,10 @@
             "command": "cortex.instance.UpdateInstance",
             "outcome": "no-such-instance"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",
@@ -28829,6 +31548,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -28901,6 +31635,10 @@
               }
             }
           }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
         },
         {
           "step": "expect_no_event",
@@ -29011,6 +31749,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -29169,6 +31922,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -29252,6 +32020,10 @@
         {
           "step": "expect_error",
           "error": "cortex.instance.InstanceNotActive"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
         },
         {
           "step": "expect_no_event",
@@ -29344,6 +32116,18 @@
         }
       ],
       "source": [
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
         {
           "kind": "type",
           "name": "cortex.instance.ChangeDetection"
@@ -29591,6 +32375,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -29694,6 +32482,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -29766,6 +32569,10 @@
               }
             }
           }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
         },
         {
           "step": "expect_no_event",
@@ -29876,6 +32683,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -30016,6 +32838,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance-1",
+                  "identity_header": "spec.ask.identity_header-1",
+                  "limits": {
+                    "max_result_bytes": 2.0,
+                    "max_seconds": 2.0,
+                    "max_steps": 2.0,
+                    "per_identity_per_minute": 2.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence-1",
+                    "node": "spec.ask.link_templates.node-1"
+                  },
+                  "listen": "spec.ask.listen-1"
+                },
                 "description": "spec.description-1",
                 "ekr": {
                   "bin": "spec.ekr.bin-1",
@@ -30099,6 +32936,10 @@
         {
           "step": "expect_error",
           "error": "cortex.instance.SeedChangeRefused"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
         },
         {
           "step": "expect_no_event",
@@ -30191,6 +33032,18 @@
         }
       ],
       "source": [
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
         {
           "kind": "type",
           "name": "cortex.instance.ChangeDetection"
@@ -30423,6 +33276,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -30530,6 +33387,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance-1",
+                  "identity_header": "spec.ask.identity_header-1",
+                  "limits": {
+                    "max_result_bytes": 2.0,
+                    "max_seconds": 2.0,
+                    "max_steps": 2.0,
+                    "per_identity_per_minute": 2.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence-1",
+                    "node": "spec.ask.link_templates.node-1"
+                  },
+                  "listen": "spec.ask.listen-1"
+                },
                 "description": "spec.description-1",
                 "ekr": {
                   "bin": "spec.ekr.bin-1",
@@ -30670,6 +33542,21 @@
             "spec": {
               "kind": "literal",
               "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
                 "description": "spec.description",
                 "ekr": {
                   "bin": "spec.ekr.bin",
@@ -30768,6 +33655,10 @@
               "kind": "string"
             }
           }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
         },
         {
           "step": "expect_no_event",
@@ -30893,6 +33784,18 @@
         }
       ],
       "source": [
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
         {
           "kind": "type",
           "name": "cortex.instance.ChangeDetection"
@@ -31126,6 +34029,10 @@
             "command": "cortex.instance.UpdateInstance",
             "outcome": "updated"
           }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
         },
         {
           "kind": "event",

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReaderFailed payload",
+  "description": "The EKR MCP reader could not be started or stopped answering.",
+  "x-ess-name": "cortex.ask.ReaderFailed",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64",
+    "contract_digest": "slice-sha256/2:7b9e2ef9bc40c65464e6b494d79e3760571aa44a12e1c19d739f5727e514e614",
+    "regenerate": "ess generate"
+  }
+}

@@ -41,6 +41,18 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
   `<home>/bin/cortex --home <home> run <instance>/<source> --record-failure`.
 - `cortex-<instance>-view.service`, which runs `ekr view` on the store at the instance's port.
 
+### Which process serves what
+
+| process | serves |
+|---|---|
+| `cortex` (every command, the timers' runs included) | no port: it runs, prints one JSON line and exits; metrics are a file |
+| `ekr view`, in the viewer unit | the store's viewer, at `serve.view_port` |
+| `ekr mcp`, from `cortex mcp-line` | the store to one agent, over its stdio |
+| `cortex ask serve --spec <file>` | `POST /ask` at the spec's `ask.listen` ([Ask service](./ask-service.md)); it starts its own `ekr mcp` per answer |
+
+cortex installs no unit for the ask service; run it under a unit or supervisor of your own, behind
+the guard that verifies the asker and sets the spec's `ask.identity_header`.
+
 Unit names carry no home, and every home of one user shares the unit directory. So each unit
 records the home that wrote it as `X-CortexHome=<home>` in its `[Unit]` section (a unit an earlier
 cortex wrote is read as belonging to the `--home` its service runs, or for a viewer the home of

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RateLimited payload",
+  "description": "The identity asked `per_identity_per_minute` questions in the last minute; it answers 429. Ask again after `retry_after` seconds.",
+  "x-ess-name": "cortex.ask.RateLimited",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "identity": {
+      "type": "string"
+    },
+    "retry_after": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "identity",
+    "retry_after"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64",
+    "contract_digest": "slice-sha256/2:04134c9448619029049b7d15fedd18d08118100b50bcc01511a0199d40bc5e3a",
+    "regenerate": "ess generate"
+  }
+}

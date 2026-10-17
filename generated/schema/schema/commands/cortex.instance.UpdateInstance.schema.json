@@ -32,11 +32,82 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7",
-    "contract_digest": "slice-sha256/2:e1bbade2be889e813d1f5e1e0a9677e0a1e601ca238ce70b7788b424c5713f7a",
+    "source_digest": "b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64",
+    "contract_digest": "slice-sha256/2:47f10e56d5f4a9532a26197180a7146b2955ea4ea0734af15250718b950d07a3",
     "regenerate": "ess generate"
   },
   "$defs": {
+    "cortex.ask.AskLimits": {
+      "title": "AskLimits",
+      "x-ess-name": "cortex.ask.AskLimits",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "max_steps": {
+          "type": "integer"
+        },
+        "max_result_bytes": {
+          "type": "integer"
+        },
+        "max_seconds": {
+          "type": "integer"
+        },
+        "per_identity_per_minute": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_steps",
+        "max_result_bytes",
+        "max_seconds",
+        "per_identity_per_minute"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.AskSpec": {
+      "title": "AskSpec",
+      "x-ess-name": "cortex.ask.AskSpec",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "listen": {
+          "type": "string"
+        },
+        "identity_header": {
+          "type": "string"
+        },
+        "limits": {
+          "$ref": "#/$defs/cortex.ask.AskLimits"
+        },
+        "link_templates": {
+          "$ref": "#/$defs/cortex.ask.LinkTemplates"
+        },
+        "guidance": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "listen",
+        "identity_header",
+        "limits"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.LinkTemplates": {
+      "title": "LinkTemplates",
+      "x-ess-name": "cortex.ask.LinkTemplates",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
     "cortex.instance.ChangeDetection": {
       "title": "ChangeDetection",
       "x-ess-name": "cortex.instance.ChangeDetection",
@@ -455,6 +526,9 @@
         },
         "monitoring": {
           "$ref": "#/$defs/cortex.instance.MonitoringSpec"
+        },
+        "ask": {
+          "$ref": "#/$defs/cortex.ask.AskSpec"
         }
       },
       "required": [

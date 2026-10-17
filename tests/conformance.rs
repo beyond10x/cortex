@@ -13,12 +13,15 @@ use cortex_cli::home::{self, Home, Registry};
 use cortex_cli::ports::{Ports, Shared, SharedRef};
 use cortex_cli::run::{Counts, Failure, Report, Tools};
 use cortex_cli::status;
+use cortex_model::ask as ma;
 use cortex_model::behaviour::Generated;
 use cortex_model::instance as m;
 use cortex_model::ports::cortex::{Cortex, PublishedEvent};
+use cortex_model::ports::cortex_ask::{CortexAsk, PublishedEvent as AskPublished};
 use serde_json::{json, Value};
 
 type App = Cortex<Generated<Ports>>;
+type AskApp = CortexAsk<Generated<Ports>>;
 
 struct Last {
     outcome: String,
@@ -30,6 +33,7 @@ struct Last {
 
 struct Scenario {
     app: App,
+    ask_app: AskApp,
     shared: SharedRef,
     captured: BTreeMap<String, Value>,
     observed: Vec<(String, Value)>,
@@ -71,6 +75,7 @@ fn placeholder_spec() -> m::InstanceSpec {
         snapshots: None,
         gate: None,
         monitoring: None,
+        ask: None,
     }
 }
 
@@ -201,6 +206,53 @@ fn event(e: PublishedEvent) -> (String, Value) {
     (format!("cortex.instance.{name}"), payload)
 }
 
+/// An event of the answer service, by its qualified name, with its payload as JSON.
+fn ask_event(e: AskPublished) -> (String, Value) {
+    match e {
+        AskPublished::Answered(e) => (
+            "cortex.ask.Answered".into(),
+            json!({
+                "identity": e.identity,
+                "done": {
+                    "answer": e.done.answer,
+                    "nodes": e.done.nodes,
+                    "evidence": e.done.evidence,
+                    "input_tokens": e.done.input_tokens,
+                    "output_tokens": e.done.output_tokens,
+                    "cached_tokens": e.done.cached_tokens,
+                    "context_tokens": e.done.context_tokens,
+                    "steps": e.done.steps,
+                },
+            }),
+        ),
+    }
+}
+
+/// A payload with every field that holds a struct replaced by its fields, named `<field>.<sub>`,
+/// as the suite names them in a shape.
+fn flatten(payload: &Value) -> Value {
+    fn walk(prefix: &str, v: &Value, out: &mut serde_json::Map<String, Value>) {
+        match v {
+            Value::Object(o) if !prefix.is_empty() => {
+                for (k, sub) in o {
+                    walk(&format!("{prefix}.{k}"), sub, out);
+                }
+            }
+            _ => {
+                out.insert(prefix.to_string(), v.clone());
+            }
+        }
+    }
+    let Some(fields) = payload.as_object() else {
+        return payload.clone();
+    };
+    let mut out = serde_json::Map::new();
+    for (k, v) in fields {
+        walk(k, v, &mut out);
+    }
+    Value::Object(out)
+}
+
 fn manifest_dir() -> std::path::PathBuf {
     std::env::var("CARGO_MANIFEST_DIR")
         .expect("cargo sets CARGO_MANIFEST_DIR")
@@ -230,6 +282,7 @@ fn decimal_pattern(event: &str, field: &str) -> regex::Regex {
 /// unless the suite marks it `optional`, a present value is of the stated `kind` (never null),
 /// and the payload carries no field the shape does not state.
 fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Value>) {
+    let payload = flatten(payload);
     let fields = payload
         .as_object()
         .unwrap_or_else(|| panic!("{event}: {payload} is not an object"));
@@ -324,8 +377,21 @@ impl Scenario {
             runner: Some(runner),
             counter: Some(counter),
         }));
+        // The answer service is a component of its own over the same shared state.
+        let ask_app = CortexAsk::new(Generated::new(Ports {
+            home: Home::new(std::env::temp_dir().join("cortex-conformance-unused")),
+            tools: Tools {
+                connectors: Connectors::new("connectors-unused".into()),
+                claude: "claude-unused".into(),
+                codex: "codex-unused".into(),
+            },
+            shared: shared.clone(),
+            runner: None,
+            counter: None,
+        }));
         Self {
             app,
+            ask_app,
             shared,
             captured: BTreeMap::new(),
             observed: Vec::new(),
@@ -780,16 +846,56 @@ impl Scenario {
                     Some(("InstanceNotFound", json!({"name": error.name.0}))),
                 ),
             },
+            "cortex.ask.Ask" => match self
+                .ask_app
+                .ask(ma::Ask {
+                    question: s("question"),
+                    identity: s("identity"),
+                })
+                .unwrap()
+            {
+                ma::AskOutcome::Answered { .. } => ("answered", None),
+                ma::AskOutcome::Unidentified { error } => (
+                    "unidentified",
+                    Some(("cortex.ask.Unidentified", json!({"header": error.header}))),
+                ),
+                ma::AskOutcome::RateLimited { error } => (
+                    "rate-limited",
+                    Some((
+                        "cortex.ask.RateLimited",
+                        json!({"identity": error.identity, "retry_after": error.retry_after}),
+                    )),
+                ),
+                ma::AskOutcome::LimitReached { error } => (
+                    "limit-reached",
+                    Some(("cortex.ask.LimitReached", json!({"limit": error.limit}))),
+                ),
+                ma::AskOutcome::ModelFailed { error } => (
+                    "model-failed",
+                    Some(("cortex.ask.ModelFailed", json!({"reason": error.reason}))),
+                ),
+                ma::AskOutcome::ReaderFailed { error } => (
+                    "reader-failed",
+                    Some(("cortex.ask.ReaderFailed", json!({"reason": error.reason}))),
+                ),
+            },
             other => panic!("unknown command {other}"),
         };
         let mut events: Vec<_> = self.app.drain_outbox().into_iter().map(event).collect();
+        events.extend(self.ask_app.drain_outbox().into_iter().map(ask_event));
         events.extend(unpublished);
         self.observed.extend(events.iter().cloned());
         // A forced branch holds for the one command that follows it.
         self.shared.borrow_mut().external.clear();
         self.last = Some(Last {
             outcome: outcome.to_string(),
-            error: error.as_ref().map(|(e, _)| format!("cortex.instance.{e}")),
+            error: error.as_ref().map(|(e, _)| {
+                if e.contains('.') {
+                    e.to_string()
+                } else {
+                    format!("cortex.instance.{e}")
+                }
+            }),
             error_fields: error.map(|(_, f)| f).unwrap_or(Value::Null),
             events,
         });
@@ -1046,7 +1152,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        83,
+        89,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

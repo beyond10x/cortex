@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.AskSpec",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64",
+    "contract_digest": "slice-sha256/2:ac9868624ffebd77c7bf699ef6668c3fcfb3af4879648aaaf35db9040368abed",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AskLimits": {
+      "title": "AskLimits",
+      "x-ess-name": "cortex.ask.AskLimits",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "max_steps": {
+          "type": "integer"
+        },
+        "max_result_bytes": {
+          "type": "integer"
+        },
+        "max_seconds": {
+          "type": "integer"
+        },
+        "per_identity_per_minute": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_steps",
+        "max_result_bytes",
+        "max_seconds",
+        "per_identity_per_minute"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.AskSpec": {
+      "title": "AskSpec",
+      "x-ess-name": "cortex.ask.AskSpec",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "listen": {
+          "type": "string"
+        },
+        "identity_header": {
+          "type": "string"
+        },
+        "limits": {
+          "$ref": "#/$defs/cortex.ask.AskLimits"
+        },
+        "link_templates": {
+          "$ref": "#/$defs/cortex.ask.LinkTemplates"
+        },
+        "guidance": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "listen",
+        "identity_header",
+        "limits"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.LinkTemplates": {
+      "title": "LinkTemplates",
+      "x-ess-name": "cortex.ask.LinkTemplates",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

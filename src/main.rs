@@ -191,6 +191,22 @@ enum Command {
         #[command(subcommand)]
         decide: Option<SchemaCommand>,
     },
+    /// The answer service of an instance (`cortex.ask`).
+    Ask {
+        #[command(subcommand)]
+        command: AskCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum AskCommand {
+    /// Answer questions over the store of the instance the spec names: `POST /ask` on the spec's
+    /// `ask.listen` streams `cortex.ask.AskEvent`s (`cortex.ask.Ask`). Prints
+    /// `{"listening": "<address>"}` once bound, and serves until stopped.
+    Serve {
+        #[arg(long)]
+        spec: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -301,6 +317,9 @@ fn main() -> ExitCode {
             Err(e) => fail(e),
         },
         Command::McpLine { name } => mcp_line(&home, &name),
+        Command::Ask {
+            command: AskCommand::Serve { spec },
+        } => ask_serve(&home, &spec),
         command => {
             // `restore` does not wait for the lock: while another command holds it, it answers
             // `busy` and writes nothing.
@@ -524,7 +543,10 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             }
             Err(e) => fail(e),
         },
-        Command::Schema { name: None, .. } | Command::Setup { .. } | Command::McpLine { .. } => {
+        Command::Schema { name: None, .. }
+        | Command::Setup { .. }
+        | Command::McpLine { .. }
+        | Command::Ask { .. } => {
             unreachable!("handled before the lock")
         }
     }
@@ -2441,6 +2463,24 @@ fn enable(app: &mut App, ctx: &Ctx, source_id: &str) -> ExitCode {
         },
     };
     print("source enable", &done)
+}
+
+/// `cortex ask serve`: a spec the service cannot serve is refused (exit 2, naming the field)
+/// before anything binds; a service that stops exits 1.
+fn ask_serve(home: &Home, spec: &std::path::Path) -> ExitCode {
+    let settings = match cortex_cli::spec::load_given(spec)
+        .and_then(|loaded| cortex_cli::ask::Settings::of(home, &loaded.model))
+    {
+        Ok(s) => s,
+        Err(e) => return fail(format!("{}: {e}", spec.display())),
+    };
+    match cortex_cli::ask::serve::serve(settings) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("cortex: {e}");
+            ExitCode::from(1)
+        }
+    }
 }
 
 fn mcp_line(home: &Home, name: &str) -> ExitCode {
