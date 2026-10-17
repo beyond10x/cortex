@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.Timeline",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "a1a2c16744bd24e3a915e4dd2994e25e0b9be613e6b2a589c30f19cc957b98bb",
+    "contract_digest": "slice-sha256/2:5fdf40621d02c74724532eae38481897a8ff1b310811b264ebbe0d1d580e468f",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.Timeline": {
+      "title": "Timeline",
+      "x-ess-name": "cortex.ask.Timeline",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.ask.TimelineEntry"
+          }
+        }
+      },
+      "required": [
+        "title",
+        "entries"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.TimelineEntry": {
+      "title": "TimelineEntry",
+      "x-ess-name": "cortex.ask.TimelineEntry",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "label"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

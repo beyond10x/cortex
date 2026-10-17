@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
-    "contract_digest": "7d415de25a37eea36ac6425b96c4fa73b380215c1b617c8e06d0464a3499f204"
+    "source_digest": "a1a2c16744bd24e3a915e4dd2994e25e0b9be613e6b2a589c30f19cc957b98bb",
+    "contract_digest": "41067196d49db389bcc208396b6fbf74881189f5e6a42eedbaae93b5a80e41c1"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -96,6 +96,41 @@
     },
     {
       "kind": "domain_type",
+      "source": "cortex.ask.Bar",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.BarChart",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.FigureSpec",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.GraphEdge",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.GraphNode",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
       "source": "cortex.ask.LinkTemplates",
       "disposition": {
         "disposition": "generated"
@@ -104,6 +139,13 @@
     {
       "kind": "domain_type",
       "source": "cortex.ask.PostgresRecords",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.RelationshipGraph",
       "disposition": {
         "disposition": "generated"
       }
@@ -125,6 +167,20 @@
     {
       "kind": "domain_type",
       "source": "cortex.ask.ReviewItem.State",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.Timeline",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.TimelineEntry",
       "disposition": {
         "disposition": "generated"
       }
@@ -1269,6 +1325,20 @@
     {
       "kind": "error_type",
       "source": "cortex.ask.AnswerNotFound",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.ask.FigureInvalid",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.ask.FigureTooLarge",
       "disposition": {
         "disposition": "generated"
       }

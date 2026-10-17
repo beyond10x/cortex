@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FigureTooLarge payload",
+  "description": "The figure is over a cap (`cortex.ask.FigureSpec`); nothing is drawn. `limit` names the cap, one of `bars`, `entries`, `nodes`, `edges` and `bytes`; `max` is the cap and `actual` what the figure has, or would have drawn.",
+  "x-ess-name": "cortex.ask.FigureTooLarge",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "limit": {
+      "type": "string"
+    },
+    "max": {
+      "type": "integer"
+    },
+    "actual": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "limit",
+    "max",
+    "actual"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "a1a2c16744bd24e3a915e4dd2994e25e0b9be613e6b2a589c30f19cc957b98bb",
+    "contract_digest": "slice-sha256/2:9a456afe07b595a53b5c5a07ec437d3b2bbd1cb5479a940c2226c1125f4e7983",
+    "regenerate": "ess generate"
+  }
+}

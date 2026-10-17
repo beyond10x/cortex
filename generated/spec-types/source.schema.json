@@ -1830,8 +1830,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:7a4a9d280f6dd245837da09ff77a16b7f1848b57183c83183296e7dacfe3c4f8",
-    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:677bdb53a8519791bc9ff7be55460dc03a7745fb322dd80110130c777fd68874",
+    "source_digest": "a1a2c16744bd24e3a915e4dd2994e25e0b9be613e6b2a589c30f19cc957b98bb",
     "specification_version": "v1",
     "system": "cortex"
   }

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.GraphNode",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "a1a2c16744bd24e3a915e4dd2994e25e0b9be613e6b2a589c30f19cc957b98bb",
+    "contract_digest": "slice-sha256/2:57fb296ae4ec3b8ce07436e895be940bb03582580e246d6fc4f6feb8aaa527f4",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.GraphNode": {
+      "title": "GraphNode",
+      "x-ess-name": "cortex.ask.GraphNode",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

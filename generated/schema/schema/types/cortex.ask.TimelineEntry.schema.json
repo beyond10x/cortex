@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.TimelineEntry",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "a1a2c16744bd24e3a915e4dd2994e25e0b9be613e6b2a589c30f19cc957b98bb",
+    "contract_digest": "slice-sha256/2:c8e230e4af2d585a2d293ea538a1ffb4a9221cac183aa7190092fc9477e03535",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.TimelineEntry": {
+      "title": "TimelineEntry",
+      "x-ess-name": "cortex.ask.TimelineEntry",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "label"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

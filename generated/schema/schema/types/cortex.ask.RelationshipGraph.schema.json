@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.RelationshipGraph",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "a1a2c16744bd24e3a915e4dd2994e25e0b9be613e6b2a589c30f19cc957b98bb",
+    "contract_digest": "slice-sha256/2:320f612130f67ffc4e6a237885c9573ef02d97fa60db7def97ee01151997039e",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.GraphEdge": {
+      "title": "GraphEdge",
+      "x-ess-name": "cortex.ask.GraphEdge",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target",
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.GraphNode": {
+      "title": "GraphNode",
+      "x-ess-name": "cortex.ask.GraphNode",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.RelationshipGraph": {
+      "title": "RelationshipGraph",
+      "x-ess-name": "cortex.ask.RelationshipGraph",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.ask.GraphNode"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.ask.GraphEdge"
+          }
+        }
+      },
+      "required": [
+        "title",
+        "nodes",
+        "edges"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

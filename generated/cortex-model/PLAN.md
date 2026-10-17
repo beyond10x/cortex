@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda
-  contract digest 7d415de25a37eea36ac6425b96c4fa73b380215c1b617c8e06d0464a3499f204
+  model digest a1a2c16744bd24e3a915e4dd2994e25e0b9be613e6b2a589c30f19cc957b98bb
+  contract digest 41067196d49db389bcc208396b6fbf74881189f5e6a42eedbaae93b5a80e41c1
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-236 capabilities: **228 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+246 capabilities: **238 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -26,11 +26,19 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.ask.AskSpec` |
 | domain type | `cortex.ask.AskStatus` |
 | domain type | `cortex.ask.AskTool` |
+| domain type | `cortex.ask.Bar` |
+| domain type | `cortex.ask.BarChart` |
+| domain type | `cortex.ask.FigureSpec` |
+| domain type | `cortex.ask.GraphEdge` |
+| domain type | `cortex.ask.GraphNode` |
 | domain type | `cortex.ask.LinkTemplates` |
 | domain type | `cortex.ask.PostgresRecords` |
+| domain type | `cortex.ask.RelationshipGraph` |
 | domain type | `cortex.ask.ReviewCause` |
 | domain type | `cortex.ask.ReviewId` |
 | domain type | `cortex.ask.ReviewItem.State` |
+| domain type | `cortex.ask.Timeline` |
+| domain type | `cortex.ask.TimelineEntry` |
 | domain type | `cortex.ask.Vote.State` |
 | domain type | `cortex.ask.VoteId` |
 | domain type | `cortex.ask.VoteValue` |
@@ -191,6 +199,8 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | event type | `cortex.instance.SourceFetched` |
 | event type | `cortex.instance.SourceRan` |
 | error type | `cortex.ask.AnswerNotFound` |
+| error type | `cortex.ask.FigureInvalid` |
+| error type | `cortex.ask.FigureTooLarge` |
 | error type | `cortex.ask.LimitReached` |
 | error type | `cortex.ask.ModelFailed` |
 | error type | `cortex.ask.RateLimited` |

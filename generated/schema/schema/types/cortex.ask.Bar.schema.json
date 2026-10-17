@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.Bar",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "a1a2c16744bd24e3a915e4dd2994e25e0b9be613e6b2a589c30f19cc957b98bb",
+    "contract_digest": "slice-sha256/2:5faab1976b49928bef7b8ffc519a7b44f48975b2bec105c4f601160a655cba7b",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.Bar": {
+      "title": "Bar",
+      "x-ess-name": "cortex.ask.Bar",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label",
+        "count"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
