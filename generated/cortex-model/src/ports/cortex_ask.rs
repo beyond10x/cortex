@@ -1,11 +1,11 @@
 // generated from cortex v1
-// model digest b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64
-// contract digest 38571540d03e174471671e428e08bfba610dca6caa7e6de6077494ad0f35ae34
+// model digest b979825d9ba3898417b16740c98b19baa65c45db0467e0e887c9ec8c35b8a194
+// contract digest af1fe44bd7162114b5142156736e336d7e7f76c9c135606857f141c8aa77ff7a
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex-ask — the `cortex-ask` component of `cortex` v1.
 //!
-//! The answer service, `cortex ask serve --spec <instance spec>`: a long-running process that answers `POST /ask` as a stream of events over the instance's store, read through the EKR MCP reader. The batch component `cortex` serves no port; this one serves the spec's `ask.listen`.
+//! The answer service, `cortex ask serve --spec <instance spec>`: a long-running process that answers `POST /ask` as a stream of events over the instance's store, read through the EKR MCP reader. The batch component `cortex` serves no port; this one serves the spec's `ask.listen`. It keeps every answer with its votes and a review queue in `ask.sqlite` in the instance directory, and purges them after the spec's `retention_days`.
 //!
 //! The component's outer surface exactly as the specification declares it: accepted commands as
 //! handlers, declared views as queries, published events as a typed outbox. The behaviour behind
@@ -18,8 +18,18 @@
 /// An event this component declares it publishes, on its way to the system's transport.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PublishedEvent {
+    /// `cortex.ask.AnswerRecorded`.
+    AnswerRecorded(crate::ask::AnswerRecorded),
     /// `cortex.ask.Answered`.
     Answered(crate::ask::Answered),
+    /// `cortex.ask.Purged`.
+    Purged(crate::ask::Purged),
+    /// `cortex.ask.ReviewClosed`.
+    ReviewClosed(crate::ask::ReviewClosed),
+    /// `cortex.ask.ReviewOpened`.
+    ReviewOpened(crate::ask::ReviewOpened),
+    /// `cortex.ask.Voted`.
+    Voted(crate::ask::Voted),
 }
 
 /// cortex-ask — the port over the component's obligations.
@@ -52,7 +62,7 @@ impl<B> CortexAsk<B> {
 
 impl<B> CortexAsk<B>
 where
-    B: crate::ask::obligations::AskBehavior,
+    B: crate::ask::obligations::AskBehavior + crate::ask::obligations::CastVoteBehavior + crate::ask::obligations::CloseReviewBehavior + crate::ask::obligations::OpenReviewBehavior + crate::ask::obligations::PurgeExpiredBehavior + crate::ask::obligations::RecordAnswerBehavior + crate::ask::obligations::OpenReviewsQuery,
 {
     /// Accepts `cortex.ask.Ask`: runs the behaviour obligation, then publishes the declared events
     /// the outcome carries.
@@ -72,5 +82,93 @@ where
             }
         }
         Ok(outcome)
+    }
+
+    /// Accepts `cortex.ask.CastVote`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn cast_vote(&mut self, input: crate::ask::CastVote) -> Result<crate::ask::CastVoteOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.cast_vote(input)?;
+        match &outcome {
+            crate::ask::CastVoteOutcome::Unidentified { .. } => {}
+            crate::ask::CastVoteOutcome::NoSuchAnswer { .. } => {}
+            crate::ask::CastVoteOutcome::Changed { voted, .. } => {
+                self.outbox.push(PublishedEvent::Voted(voted.clone()));
+            }
+            crate::ask::CastVoteOutcome::Cast { voted, .. } => {
+                self.outbox.push(PublishedEvent::Voted(voted.clone()));
+            }
+        }
+        Ok(outcome)
+    }
+
+    /// Accepts `cortex.ask.CloseReview`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn close_review(&mut self, input: crate::ask::CloseReview) -> Result<crate::ask::CloseReviewOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.close_review(input)?;
+        match &outcome {
+            crate::ask::CloseReviewOutcome::Closed { review_closed, .. } => {
+                self.outbox.push(PublishedEvent::ReviewClosed(review_closed.clone()));
+            }
+            crate::ask::CloseReviewOutcome::WrongState { .. } => {}
+            crate::ask::CloseReviewOutcome::NoSuchReview { .. } => {}
+        }
+        Ok(outcome)
+    }
+
+    /// Accepts `cortex.ask.OpenReview`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn open_review(&mut self, input: crate::ask::OpenReview) -> Result<crate::ask::OpenReviewOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.open_review(input)?;
+        match &outcome {
+            crate::ask::OpenReviewOutcome::Opened { review_opened, .. } => {
+                self.outbox.push(PublishedEvent::ReviewOpened(review_opened.clone()));
+            }
+            crate::ask::OpenReviewOutcome::Exists { .. } => {}
+        }
+        Ok(outcome)
+    }
+
+    /// Accepts `cortex.ask.PurgeExpired`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn purge_expired(&mut self, input: crate::ask::PurgeExpired) -> Result<crate::ask::PurgeExpiredOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.purge_expired(input)?;
+        match &outcome {
+            crate::ask::PurgeExpiredOutcome::Purged { purged, .. } => {
+                self.outbox.push(PublishedEvent::Purged(purged.clone()));
+            }
+        }
+        Ok(outcome)
+    }
+
+    /// Accepts `cortex.ask.RecordAnswer`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn record_answer(&mut self, input: crate::ask::RecordAnswer) -> Result<crate::ask::RecordAnswerOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.record_answer(input)?;
+        match &outcome {
+            crate::ask::RecordAnswerOutcome::Recorded { answer_recorded, .. } => {
+                self.outbox.push(PublishedEvent::AnswerRecorded(answer_recorded.clone()));
+            }
+        }
+        Ok(outcome)
+    }
+
+    /// Serves `cortex.ask.OpenReviews` at `read_your_writes` consistency, from the owed projection.
+    pub fn open_reviews(&self) -> Result<Vec<crate::ask::OpenReviews>, crate::obligation::UnmetObligation> {
+        self.behaviors.open_reviews()
     }
 }

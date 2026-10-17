@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.VoteValue",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b979825d9ba3898417b16740c98b19baa65c45db0467e0e887c9ec8c35b8a194",
+    "contract_digest": "slice-sha256/2:8ce980441e4ac692bde9a05b0702a87e6187f907c6f3205d0121d2e3b748a381",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.VoteValue": {
+      "title": "VoteValue",
+      "x-ess-name": "cortex.ask.VoteValue",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "up",
+        "down"
+      ]
+    }
+  }
+}

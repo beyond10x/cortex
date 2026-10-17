@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64
-// contract digest 38571540d03e174471671e428e08bfba610dca6caa7e6de6077494ad0f35ae34
+// model digest b979825d9ba3898417b16740c98b19baa65c45db0467e0e887c9ec8c35b8a194
+// contract digest af1fe44bd7162114b5142156736e336d7e7f76c9c135606857f141c8aa77ff7a
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -19,6 +19,48 @@
 //! or — as `entity invariant` — the declared outcome would leave an entity breaking an invariant.
 
 use crate::obligation::UnmetObligation;
+
+/// Where `cortex.ask.AnswerRecord` is stored — a port the implementor provides.
+///
+/// Keyed by the identity `answer_id`. Generated network entries supply an ephemeral implementation; durable storage remains a port.
+pub trait AnswerRecordStorage {
+    /// The instance with this identity, or `None` where none is stored.
+    fn get(&self, identity: &crate::ask::AnswerId) -> Option<crate::ask::AnswerRecordSnapshot>;
+
+    /// Stores this instance under its identity, replacing what was held.
+    fn put(&mut self, snapshot: crate::ask::AnswerRecordSnapshot);
+
+    /// Removes the instance with this identity.
+    fn delete(&mut self, identity: &crate::ask::AnswerId);
+}
+
+/// Where `cortex.ask.ReviewItem` is stored — a port the implementor provides.
+///
+/// Keyed by the identity `review_id`. Generated network entries supply an ephemeral implementation; durable storage remains a port.
+pub trait ReviewItemStorage {
+    /// The instance with this identity, or `None` where none is stored.
+    fn get(&self, identity: &crate::ask::ReviewId) -> Option<crate::ask::ReviewItemSnapshot>;
+
+    /// Stores this instance under its identity, replacing what was held.
+    fn put(&mut self, snapshot: crate::ask::ReviewItemSnapshot);
+
+    /// Removes the instance with this identity.
+    fn delete(&mut self, identity: &crate::ask::ReviewId);
+}
+
+/// Where `cortex.ask.Vote` is stored — a port the implementor provides.
+///
+/// Keyed by the identity `vote_id`. Generated network entries supply an ephemeral implementation; durable storage remains a port.
+pub trait VoteStorage {
+    /// The instance with this identity, or `None` where none is stored.
+    fn get(&self, identity: &crate::ask::VoteId) -> Option<crate::ask::VoteSnapshot>;
+
+    /// Stores this instance under its identity, replacing what was held.
+    fn put(&mut self, snapshot: crate::ask::VoteSnapshot);
+
+    /// Removes the instance with this identity.
+    fn delete(&mut self, identity: &crate::ask::VoteId);
+}
 
 /// Where `cortex.instance.Instance` is stored — a port the implementor provides.
 ///
@@ -63,6 +105,8 @@ pub trait SourceStorage {
 pub enum ExternalCommand<'a> {
     /// The executing `cortex.ask.Ask` input.
     CortexAskAsk(&'a crate::ask::Ask),
+    /// The executing `cortex.ask.CastVote` input.
+    CortexAskCastVote(&'a crate::ask::CastVote),
     /// The executing `cortex.instance.AdoptInstance` input.
     CortexInstanceAdoptInstance(&'a crate::instance::AdoptInstance),
     /// The executing `cortex.instance.ApplySchemaProposals` input.
@@ -86,6 +130,7 @@ impl ExternalCommand<'_> {
     pub fn name(&self) -> &'static str {
         match self {
             Self::CortexAskAsk(_) => "cortex.ask.Ask",
+            Self::CortexAskCastVote(_) => "cortex.ask.CastVote",
             Self::CortexInstanceAdoptInstance(_) => "cortex.instance.AdoptInstance",
             Self::CortexInstanceApplySchemaProposals(_) => "cortex.instance.ApplySchemaProposals",
             Self::CortexInstanceApproveSchemaProposals(_) => "cortex.instance.ApproveSchemaProposals",
@@ -127,9 +172,17 @@ pub trait Context {
     /// or `None` where there is nothing to report.
     fn generate_optional_decimal(&mut self) -> Option<crate::primitives::Decimal>;
 
+    /// A `Optional<Timestamp>` the model says the implementation assigns — a `{generated: true}` value —
+    /// or `None` where there is nothing to report.
+    fn generate_optional_timestamp(&mut self) -> Option<crate::primitives::Timestamp>;
+
     /// A new `String`, which the model says the implementation assigns — a created identity, a
     /// `{generated: true}` value, or an event field the model leaves undetermined.
     fn generate_string(&mut self) -> String;
+
+    /// A new `Timestamp`, which the model says the implementation assigns — a created identity, a
+    /// `{generated: true}` value, or an event field the model leaves undetermined.
+    fn generate_timestamp(&mut self) -> crate::primitives::Timestamp;
 
     /// Whether the external branch `outcome` of `command` is taken on this invocation.
     ///
@@ -155,7 +208,11 @@ fn try_generate_integer(&mut self) -> Result<i64, UnmetObligation>;
 /// Assigns the value, or names the unavailable answer.
 fn try_generate_optional_decimal(&mut self) -> Result<Option<crate::primitives::Decimal>, UnmetObligation>;
 /// Assigns the value, or names the unavailable answer.
+fn try_generate_optional_timestamp(&mut self) -> Result<Option<crate::primitives::Timestamp>, UnmetObligation>;
+/// Assigns the value, or names the unavailable answer.
 fn try_generate_string(&mut self) -> Result<String, UnmetObligation>;
+/// Assigns the value, or names the unavailable answer.
+fn try_generate_timestamp(&mut self) -> Result<crate::primitives::Timestamp, UnmetObligation>;
 /// Decides the named external branch, or names the unavailable answer.
 fn try_external(&mut self, command: ExternalCommand<'_>, outcome: &'static str) -> Result<bool, UnmetObligation>;
 }
@@ -167,7 +224,9 @@ fn try_generate_cortex_instance_source_state(&mut self) -> Result<crate::instanc
 fn try_generate_decimal(&mut self) -> Result<crate::primitives::Decimal, UnmetObligation> { Ok(Context::generate_decimal(self)) }
 fn try_generate_integer(&mut self) -> Result<i64, UnmetObligation> { Ok(Context::generate_integer(self)) }
 fn try_generate_optional_decimal(&mut self) -> Result<Option<crate::primitives::Decimal>, UnmetObligation> { Ok(Context::generate_optional_decimal(self)) }
+fn try_generate_optional_timestamp(&mut self) -> Result<Option<crate::primitives::Timestamp>, UnmetObligation> { Ok(Context::generate_optional_timestamp(self)) }
 fn try_generate_string(&mut self) -> Result<String, UnmetObligation> { Ok(Context::generate_string(self)) }
+fn try_generate_timestamp(&mut self) -> Result<crate::primitives::Timestamp, UnmetObligation> { Ok(Context::generate_timestamp(self)) }
 fn try_external(&mut self, command: ExternalCommand<'_>, outcome: &'static str) -> Result<bool, UnmetObligation> { Ok(Context::external(self, command, outcome)) }
 }
 
@@ -220,6 +279,147 @@ where
         }
         // `answered`: the default.
         return Ok(crate::ask::AskOutcome::Answered { answered: crate::ask::Answered { identity: input.identity.clone(), done: self.ports.try_generate_cortex_ask_ask_done()? } });
+    }
+}
+
+/// `cortex.ask.CastVote`, generated: every outcome is one the specification fully determines.
+impl<P> crate::ask::obligations::CastVoteBehavior for Generated<P>
+where
+    P: TryContext + VoteStorage,
+{
+    fn cast_vote(&mut self, input: crate::ask::CastVote) -> Result<crate::ask::CastVoteOutcome, UnmetObligation> {
+        let _ = &input;
+        // `unidentified`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskCastVote(&input), "unidentified")? {
+            return Ok(crate::ask::CastVoteOutcome::Unidentified { error: crate::ask::Unidentified { header: self.ports.try_generate_string()? } });
+        }
+        // `no-such-answer`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskCastVote(&input), "no-such-answer")? {
+            return Ok(crate::ask::CastVoteOutcome::NoSuchAnswer { error: crate::ask::AnswerNotFound { answer_id: input.answer_id.clone() } });
+        }
+        // `changed`: the default.
+        let Some(held) = VoteStorage::get(&self.ports, &input.vote_id) else {
+            let identity: crate::ask::VoteId = input.vote_id.clone();
+            let data = crate::ask::VoteData {
+                vote_id: identity.clone(),
+                answer_id: input.answer_id.clone(),
+                identity: input.identity.clone(),
+                value: input.value.clone(),
+                comment: input.comment.clone(),
+                at: self.ports.try_generate_timestamp()?,
+            };
+            let answer = crate::ask::CastVoteOutcome::Cast { voted: crate::ask::Voted { vote_id: identity.clone(), answer_id: input.answer_id.clone(), value: input.value.clone() } };
+            VoteStorage::put(&mut self.ports, crate::ask::AnyVote::Cast(crate::ask::Vote::new(data)).snapshot());
+            return Ok(answer);
+        };
+        let _ = &held;
+        let mut next = held;
+        next.data.value = input.value.clone();
+        next.data.comment = input.comment.clone();
+        next.data.at = self.ports.try_generate_timestamp()?;
+        let answer = crate::ask::CastVoteOutcome::Changed { voted: crate::ask::Voted { vote_id: input.vote_id.clone(), answer_id: input.answer_id.clone(), value: input.value.clone() } };
+        VoteStorage::put(&mut self.ports, next);
+        return Ok(answer);
+    }
+}
+
+/// `cortex.ask.CloseReview`, generated: every outcome is one the specification fully determines.
+impl<P> crate::ask::obligations::CloseReviewBehavior for Generated<P>
+where
+    P: TryContext + ReviewItemStorage,
+{
+    fn close_review(&mut self, input: crate::ask::CloseReview) -> Result<crate::ask::CloseReviewOutcome, UnmetObligation> {
+        let _ = &input;
+        // `closed`: the default.
+        let Some(held) = ReviewItemStorage::get(&self.ports, &input.review_id) else {
+            return Ok(crate::ask::CloseReviewOutcome::NoSuchReview { error: crate::ask::ReviewNotFound { review_id: input.review_id.clone() } });
+        };
+        let _ = &held;
+        let moved = match held.refine() {
+            crate::ask::AnyReviewItem::Open(instance) => crate::ask::AnyReviewItem::Closed(instance.close()),
+            _ => return Ok(crate::ask::CloseReviewOutcome::WrongState { error: crate::ask::ReviewNotOpen { review_id: input.review_id.clone() } }),
+        };
+        let mut next = moved.snapshot();
+        next.data.close_reason = Some(input.reason.clone());
+        next.data.closed_at = self.ports.try_generate_optional_timestamp()?;
+        let answer = crate::ask::CloseReviewOutcome::Closed { review_closed: crate::ask::ReviewClosed { review_id: input.review_id.clone(), reason: input.reason.clone() } };
+        ReviewItemStorage::put(&mut self.ports, next);
+        return Ok(answer);
+    }
+}
+
+/// `cortex.ask.OpenReview`, generated: every outcome is one the specification fully determines.
+impl<P> crate::ask::obligations::OpenReviewBehavior for Generated<P>
+where
+    P: TryContext + ReviewItemStorage,
+{
+    fn open_review(&mut self, input: crate::ask::OpenReview) -> Result<crate::ask::OpenReviewOutcome, UnmetObligation> {
+        let _ = &input;
+        // `exists`: an identity a record already carries, before any branch is taken.
+        if ReviewItemStorage::get(&self.ports, &input.review_id).is_some() {
+            return Ok(crate::ask::OpenReviewOutcome::Exists { error: crate::ask::ReviewExists { review_id: input.review_id.clone() } });
+        }
+        // `opened`: the default.
+        let identity: crate::ask::ReviewId = input.review_id.clone();
+        let data = crate::ask::ReviewItemData {
+            review_id: identity.clone(),
+            answer_id: input.answer_id.clone(),
+            cause: input.cause.clone(),
+            opened_at: self.ports.try_generate_timestamp()?,
+            close_reason: None,
+            closed_at: None,
+        };
+        let answer = crate::ask::OpenReviewOutcome::Opened { review_opened: crate::ask::ReviewOpened { review_id: identity.clone(), answer_id: input.answer_id.clone(), cause: input.cause.clone() } };
+        ReviewItemStorage::put(&mut self.ports, crate::ask::AnyReviewItem::Open(crate::ask::ReviewItem::new(data)).snapshot());
+        return Ok(answer);
+    }
+}
+
+/// `cortex.ask.PurgeExpired`, generated: every outcome is one the specification fully determines.
+impl<P> crate::ask::obligations::PurgeExpiredBehavior for Generated<P>
+where
+    P: TryContext,
+{
+    fn purge_expired(&mut self, input: crate::ask::PurgeExpired) -> Result<crate::ask::PurgeExpiredOutcome, UnmetObligation> {
+        let _ = &input;
+        // `purged`: the default.
+        return Ok(crate::ask::PurgeExpiredOutcome::Purged { purged: crate::ask::Purged { before: input.before.clone(), records: self.ports.try_generate_integer()?, votes: self.ports.try_generate_integer()?, reviews: self.ports.try_generate_integer()? } });
+    }
+}
+
+/// `cortex.ask.RecordAnswer`, generated: every outcome is one the specification fully determines.
+impl<P> crate::ask::obligations::RecordAnswerBehavior for Generated<P>
+where
+    P: AnswerRecordStorage,
+{
+    fn record_answer(&mut self, input: crate::ask::RecordAnswer) -> Result<crate::ask::RecordAnswerOutcome, UnmetObligation> {
+        let _ = &input;
+        // `recorded`: the default.
+        let identity: crate::ask::AnswerId = input.answer_id.clone();
+        let data = crate::ask::AnswerRecordData {
+            answer_id: identity.clone(),
+            instance_name: input.instance_name.clone(),
+            identity: input.identity.clone(),
+            question: input.question.clone(),
+            answer: input.answer.clone(),
+            reason: input.reason.clone(),
+            outcome: input.outcome.clone(),
+            tool_calls: input.tool_calls.clone(),
+            latency_ms: input.latency_ms.clone(),
+            input_tokens: input.input_tokens.clone(),
+            output_tokens: input.output_tokens.clone(),
+            cached_tokens: input.cached_tokens.clone(),
+            context_tokens: input.context_tokens.clone(),
+            steps: input.steps.clone(),
+            at: input.at.clone(),
+        };
+        if let Some(broken) = data.broken_invariant() {
+            let capability = "entity invariant";
+            return Err(UnmetObligation { capability, source: broken });
+        }
+        let answer = crate::ask::RecordAnswerOutcome::Recorded { answer_recorded: crate::ask::AnswerRecorded { answer_id: identity.clone(), outcome: input.outcome.clone() } };
+        AnswerRecordStorage::put(&mut self.ports, crate::ask::AnyAnswerRecord::Kept(crate::ask::AnswerRecord::new(data)).snapshot());
+        return Ok(answer);
     }
 }
 
@@ -638,6 +838,12 @@ where
         let answer = crate::instance::UpdateInstanceOutcome::Updated { instance_updated: crate::instance::InstanceUpdated { name: input.name.clone() } };
         InstanceStorage::put(&mut self.ports, next);
         return Ok(answer);
+    }
+}
+
+impl<P: crate::ask::obligations::OpenReviewsQuery> crate::ask::obligations::OpenReviewsQuery for Generated<P> {
+    fn open_reviews(&self) -> Result<Vec<crate::ask::OpenReviews>, UnmetObligation> {
+        crate::ask::obligations::OpenReviewsQuery::open_reviews(&self.ports)
     }
 }
 

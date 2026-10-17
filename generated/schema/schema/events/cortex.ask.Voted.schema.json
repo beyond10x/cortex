@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Voted payload",
+  "x-ess-name": "cortex.ask.Voted",
+  "x-ess-kind": "event-payload",
+  "type": "object",
+  "properties": {
+    "vote_id": {
+      "$ref": "#/$defs/cortex.ask.VoteId"
+    },
+    "answer_id": {
+      "$ref": "#/$defs/cortex.ask.AnswerId"
+    },
+    "value": {
+      "$ref": "#/$defs/cortex.ask.VoteValue"
+    }
+  },
+  "required": [
+    "vote_id",
+    "answer_id",
+    "value"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b979825d9ba3898417b16740c98b19baa65c45db0467e0e887c9ec8c35b8a194",
+    "contract_digest": "slice-sha256/2:59d98da947f6f9ebca5dd03403d44d71d5691d22ab35c14861ab08fc1d38a7e8",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AnswerId": {
+      "title": "AnswerId",
+      "x-ess-name": "cortex.ask.AnswerId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "cortex.ask.VoteId": {
+      "title": "VoteId",
+      "x-ess-name": "cortex.ask.VoteId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "cortex.ask.VoteValue": {
+      "title": "VoteValue",
+      "x-ess-name": "cortex.ask.VoteValue",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "up",
+        "down"
+      ]
+    }
+  }
+}

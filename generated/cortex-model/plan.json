@@ -2,14 +2,35 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64",
-    "contract_digest": "38571540d03e174471671e428e08bfba610dca6caa7e6de6077494ad0f35ae34"
+    "source_digest": "b979825d9ba3898417b16740c98b19baa65c45db0467e0e887c9ec8c35b8a194",
+    "contract_digest": "af1fe44bd7162114b5142156736e336d7e7f76c9c135606857f141c8aa77ff7a"
   },
   "scope": {
     "profile": "component-skeletons",
     "layout": "crate"
   },
   "capabilities": [
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.AnswerId",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.AnswerOutcome",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.AnswerRecord.State",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
     {
       "kind": "domain_type",
       "source": "cortex.ask.AskDelta",
@@ -76,6 +97,48 @@
     {
       "kind": "domain_type",
       "source": "cortex.ask.LinkTemplates",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.ReviewCause",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.ReviewId",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.ReviewItem.State",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.Vote.State",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.VoteId",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.ask.VoteValue",
       "disposition": {
         "disposition": "generated"
       }
@@ -628,6 +691,27 @@
     },
     {
       "kind": "entity_lifecycle",
+      "source": "cortex.ask.AnswerRecord",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "entity_lifecycle",
+      "source": "cortex.ask.ReviewItem",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "entity_lifecycle",
+      "source": "cortex.ask.Vote",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "entity_lifecycle",
       "source": "cortex.instance.Instance",
       "disposition": {
         "disposition": "generated"
@@ -657,6 +741,76 @@
     {
       "kind": "command_behavior",
       "source": "cortex.ask.Ask",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_contract",
+      "source": "cortex.ask.CastVote",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_behavior",
+      "source": "cortex.ask.CastVote",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_contract",
+      "source": "cortex.ask.CloseReview",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_behavior",
+      "source": "cortex.ask.CloseReview",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_contract",
+      "source": "cortex.ask.OpenReview",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_behavior",
+      "source": "cortex.ask.OpenReview",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_contract",
+      "source": "cortex.ask.PurgeExpired",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_behavior",
+      "source": "cortex.ask.PurgeExpired",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_contract",
+      "source": "cortex.ask.RecordAnswer",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_behavior",
+      "source": "cortex.ask.RecordAnswer",
       "disposition": {
         "disposition": "generated"
       }
@@ -869,7 +1023,42 @@
     },
     {
       "kind": "event_type",
+      "source": "cortex.ask.AnswerRecorded",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "event_type",
       "source": "cortex.ask.Answered",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "event_type",
+      "source": "cortex.ask.Purged",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "event_type",
+      "source": "cortex.ask.ReviewClosed",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "event_type",
+      "source": "cortex.ask.ReviewOpened",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "event_type",
+      "source": "cortex.ask.Voted",
       "disposition": {
         "disposition": "generated"
       }
@@ -988,6 +1177,13 @@
     },
     {
       "kind": "error_type",
+      "source": "cortex.ask.AnswerNotFound",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
       "source": "cortex.ask.LimitReached",
       "disposition": {
         "disposition": "generated"
@@ -1010,6 +1206,27 @@
     {
       "kind": "error_type",
       "source": "cortex.ask.ReaderFailed",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.ask.ReviewExists",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.ask.ReviewNotFound",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.ask.ReviewNotOpen",
       "disposition": {
         "disposition": "generated"
       }
@@ -1233,6 +1450,25 @@
     },
     {
       "kind": "view_type",
+      "source": "cortex.ask.OpenReviews",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "view_query",
+      "source": "cortex.ask.OpenReviews",
+      "disposition": {
+        "disposition": "obligation",
+        "reason": {
+          "class": "undetermined",
+          "construct": "an order over the `Timestamp` field `opened_at`, which the suite ranks by its instant and a generated query does not"
+        },
+        "contract": "a query answering `cortex.ask.OpenReviews` with rows projected from `cortex.ask.ReviewItem` at `read_your_writes` consistency, containing instances where `state == Open`"
+      }
+    },
+    {
+      "kind": "view_type",
       "source": "cortex.instance.Instances",
       "disposition": {
         "disposition": "generated"
@@ -1266,7 +1502,27 @@
         "disposition": "refused",
         "reason": "needs_caller_identity",
         "stage": "planning",
-        "detail": "may invoke `cortex.ask.Ask`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry"
+        "detail": "may invoke `cortex.ask.Ask`, `cortex.ask.CastVote`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry"
+      }
+    },
+    {
+      "kind": "actor_grants",
+      "source": "cortex.ask.Reviewer",
+      "disposition": {
+        "disposition": "refused",
+        "reason": "needs_caller_identity",
+        "stage": "planning",
+        "detail": "may invoke `cortex.ask.CloseReview`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry"
+      }
+    },
+    {
+      "kind": "actor_grants",
+      "source": "cortex.ask.Service",
+      "disposition": {
+        "disposition": "refused",
+        "reason": "needs_caller_identity",
+        "stage": "planning",
+        "detail": "may invoke `cortex.ask.OpenReview`, `cortex.ask.PurgeExpired`, `cortex.ask.RecordAnswer`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry"
       }
     },
     {

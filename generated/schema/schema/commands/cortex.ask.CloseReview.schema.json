@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Close a review item input",
+  "x-ess-name": "cortex.ask.CloseReview",
+  "x-ess-kind": "command-input",
+  "type": "object",
+  "properties": {
+    "review_id": {
+      "$ref": "#/$defs/cortex.ask.ReviewId"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "review_id",
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b979825d9ba3898417b16740c98b19baa65c45db0467e0e887c9ec8c35b8a194",
+    "contract_digest": "slice-sha256/2:c05d10df3ed0bbb98127688d104b42d3bcd2368abc9d03a48e4c12d8851d6129",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.ReviewId": {
+      "title": "ReviewId",
+      "x-ess-name": "cortex.ask.ReviewId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

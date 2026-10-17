@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Record an answer input",
+  "x-ess-name": "cortex.ask.RecordAnswer",
+  "x-ess-kind": "command-input",
+  "type": "object",
+  "properties": {
+    "answer_id": {
+      "$ref": "#/$defs/cortex.ask.AnswerId"
+    },
+    "instance_name": {
+      "$ref": "#/$defs/cortex.instance.InstanceName"
+    },
+    "identity": {
+      "type": "string"
+    },
+    "question": {
+      "type": "string"
+    },
+    "answer": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "outcome": {
+      "$ref": "#/$defs/cortex.ask.AnswerOutcome"
+    },
+    "tool_calls": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/cortex.ask.AskTool"
+      }
+    },
+    "latency_ms": {
+      "type": "integer"
+    },
+    "input_tokens": {
+      "type": "integer"
+    },
+    "output_tokens": {
+      "type": "integer"
+    },
+    "cached_tokens": {
+      "type": "integer"
+    },
+    "context_tokens": {
+      "type": "integer"
+    },
+    "steps": {
+      "type": "integer"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "answer_id",
+    "instance_name",
+    "identity",
+    "question",
+    "outcome",
+    "tool_calls",
+    "latency_ms",
+    "input_tokens",
+    "output_tokens",
+    "cached_tokens",
+    "context_tokens",
+    "steps",
+    "at"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b979825d9ba3898417b16740c98b19baa65c45db0467e0e887c9ec8c35b8a194",
+    "contract_digest": "slice-sha256/2:e4b61af776e84421d431835fc874a54133c10495b8e16255c1fcca27e90fea88",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AnswerId": {
+      "title": "AnswerId",
+      "x-ess-name": "cortex.ask.AnswerId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "cortex.ask.AnswerOutcome": {
+      "title": "AnswerOutcome",
+      "x-ess-name": "cortex.ask.AnswerOutcome",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "answered",
+        "failed",
+        "limited"
+      ]
+    },
+    "cortex.ask.AskTool": {
+      "title": "AskTool",
+      "x-ess-name": "cortex.ask.AskTool",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "arguments": {
+          "type": "string"
+        },
+        "result_bytes": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "failed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "step",
+        "name",
+        "arguments",
+        "result_bytes",
+        "truncated",
+        "failed"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.InstanceName": {
+      "title": "InstanceName",
+      "x-ess-name": "cortex.instance.InstanceName",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

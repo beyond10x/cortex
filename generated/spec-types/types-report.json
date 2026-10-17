@@ -1,12 +1,12 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64",
+  "source_digest": "b979825d9ba3898417b16740c98b19baa65c45db0467e0e887c9ec8c35b8a194",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:9bcaee68e792ad330e814f421d8c2876774bd64a6482f838ad7659e26703fabd",
-    "projection_digest": "bf41d4ff3a22400e4bac75cbc79c2754946ec2cceb42bdfd789ce2362f97c90e"
+    "contract_digest": "slice-sha256/2:826a9edfe50483eb8ff5a6f5690e84cbaa1a93119f0742014e37d3f56484cde5",
+    "projection_digest": "41108c46263ab25d3563c8393db48c2846fcf717972f05c38b7ced8e77eea598"
   },
   "generator_version": "0.60.0",
   "target": "rust",
@@ -1262,6 +1262,26 @@
     },
     {
       "pointer": "/$defs/cortex.ask.AskLimits/properties/per_identity_per_minute",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.ask.AskSpec/properties/retention_days",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.ask.AskSpec/properties/retention_days",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.ask.AskSpec/properties/slow_after_ms",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.ask.AskSpec/properties/slow_after_ms",
       "rule": "rust_exact_numbers",
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
     },

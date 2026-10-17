@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64
-// contract digest 38571540d03e174471671e428e08bfba610dca6caa7e6de6077494ad0f35ae34
+// model digest b979825d9ba3898417b16740c98b19baa65c45db0467e0e887c9ec8c35b8a194
+// contract digest af1fe44bd7162114b5142156736e336d7e7f76c9c135606857f141c8aa77ff7a
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Every actor the specification declares, and the commands each may invoke — as data.
@@ -15,6 +15,10 @@
 pub enum Actor {
     /// `cortex.ask.Asker`.
     Asker,
+    /// `cortex.ask.Reviewer`.
+    Reviewer,
+    /// `cortex.ask.Service`.
+    Service,
     /// `cortex.instance.Operator`.
     Operator,
     /// `cortex.instance.Scheduler`.
@@ -25,6 +29,8 @@ impl Actor {
     /// Every declared actor, ordered by qualified name.
     pub const ALL: &'static [Actor] = &[
         Actor::Asker,
+        Actor::Reviewer,
+        Actor::Service,
         Actor::Operator,
         Actor::Scheduler,
     ];
@@ -33,6 +39,8 @@ impl Actor {
     pub const fn name(self) -> &'static str {
         match self {
             Actor::Asker => "cortex.ask.Asker",
+            Actor::Reviewer => "cortex.ask.Reviewer",
+            Actor::Service => "cortex.ask.Service",
             Actor::Operator => "cortex.instance.Operator",
             Actor::Scheduler => "cortex.instance.Scheduler",
         }
@@ -45,6 +53,15 @@ pub fn may(actor: Actor) -> &'static [&'static str] {
     match actor {
         Actor::Asker => &[
             "cortex.ask.Ask",
+            "cortex.ask.CastVote",
+        ],
+        Actor::Reviewer => &[
+            "cortex.ask.CloseReview",
+        ],
+        Actor::Service => &[
+            "cortex.ask.OpenReview",
+            "cortex.ask.PurgeExpired",
+            "cortex.ask.RecordAnswer",
         ],
         Actor::Operator => &[
             "cortex.instance.AddSource",

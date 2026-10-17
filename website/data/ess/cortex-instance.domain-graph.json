@@ -173,6 +173,14 @@
     },
     {
       "cardinality": "many",
+      "from": "cortex.instance.Instance",
+      "kind": "owns",
+      "name": "answers",
+      "to": "cortex.ask.AnswerRecord",
+      "via": "instance_name"
+    },
+    {
+      "cardinality": "many",
       "from": "cortex.instance.Source",
       "kind": "owns",
       "name": "seen",
