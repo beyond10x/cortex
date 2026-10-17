@@ -715,6 +715,15 @@ types:
       - {name: source_types, type: List<String>}
       - {name: target_types, type: List<String>}
 
+  # The node types to add to an existing edge type's ends. cortex writes EKR's widening with each
+  # end whole: what the end holds now plus these; an end never loses a type.
+  - name: cortex.instance.EdgeTypeWidening
+    kind: struct
+    fields:
+      - {name: name, type: String}
+      - {name: add_source_types, type: List<String>}
+      - {name: add_target_types, type: List<String>}
+
   # `owner` names a node type or an edge type.
   - name: cortex.instance.PropertyChange
     kind: struct
@@ -745,15 +754,17 @@ types:
       - {name: name, type: String}
       - {name: into, type: List<String>}
 
-  # The closed list of ontology changes a schema proposal names. EKR applies the first four as
-  # schema transactions (`DefineNodeType`, `DefineEdgeType`, `ModifyProperty`); it removes, merges
-  # and splits nothing, so the other five are recorded for review only.
+  # The closed list of ontology changes a schema proposal names. EKR applies the first four and
+  # `widen_edge_type` as schema transactions (`DefineNodeType`, `DefineEdgeType`, `ModifyProperty`,
+  # `WidenEdgeType`); it removes, merges and splits nothing, so the other five are recorded for
+  # review only.
   - name: cortex.instance.SchemaChange
     kind: union
     tag: kind
     variants:
       add_node_type: cortex.instance.NewNodeType
       add_edge_type: cortex.instance.NewEdgeType
+      widen_edge_type: cortex.instance.EdgeTypeWidening
       add_property: cortex.instance.PropertyChange
       redeclare_property: cortex.instance.PropertyChange
       remove_node_type: cortex.instance.TypeRemoval

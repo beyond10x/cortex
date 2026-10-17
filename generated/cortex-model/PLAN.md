@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 2ce17e0fbcf490d2ef1d8e110063c04e4e9e78f0826a42886b2f5ad9c6cc68d9
-  contract digest 43225ed42ba038a39e958e5f854b03fd46a7513ab11106f58f122e45534860ce
+  model digest 590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7
+  contract digest a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-161 capabilities: **157 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+162 capabilities: **158 generated**, **2 obligations**, **2 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -23,6 +23,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.DailySpend` |
 | domain type | `cortex.instance.DocumentId` |
 | domain type | `cortex.instance.DropPolicy` |
+| domain type | `cortex.instance.EdgeTypeWidening` |
 | domain type | `cortex.instance.EkrPin` |
 | domain type | `cortex.instance.FetchPolicy` |
 | domain type | `cortex.instance.FileRecords` |

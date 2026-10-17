@@ -98,6 +98,7 @@ The changes the model may propose are a closed list:
 | change | what cortex does |
 |---|---|
 | `add_node_type`, `add_edge_type`, `add_property` | asks EKR to apply it (`DefineNodeType`, `DefineEdgeType`, `ModifyProperty`). Every property cortex declares is optional, so no node the store holds becomes invalid |
+| `widen_edge_type` | names an edge type the ontology declares and the node types to add to its sources (`add_source_types`), its targets (`add_target_types`) or both; asks EKR to apply it (`WidenEdgeType`) with each end written whole, what it holds now and the additions, so an end never loses a type. It is `invalid` when the edge type or a named node type is not in the ontology, or when it adds no type new to either end. Once applied, an edge between the newly admitted types is no longer rejected |
 | `redeclare_property` | asks EKR to apply a new value kind or cardinality to a property the type declares itself (`ModifyProperty`); whether it is required and its constraints stay as declared. EKR refuses one the values the store holds do not fit |
 | `remove_node_type`, `remove_edge_type`, `remove_property`, `merge_types`, `split_type` | records it for review: EKR removes, merges and splits nothing |
 

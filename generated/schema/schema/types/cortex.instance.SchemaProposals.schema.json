@@ -4,11 +4,40 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "2ce17e0fbcf490d2ef1d8e110063c04e4e9e78f0826a42886b2f5ad9c6cc68d9",
-    "contract_digest": "slice-sha256/2:5c24856d46450168681640d21764adefd7de0f95f0d085e9af7d7cce644c3e60",
+    "source_digest": "590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7",
+    "contract_digest": "slice-sha256/2:5fad40185420c84d63a49bea97a58e53a9399d3b42bd27372b4877af27aac3ce",
     "regenerate": "ess generate"
   },
   "$defs": {
+    "cortex.instance.EdgeTypeWidening": {
+      "title": "EdgeTypeWidening",
+      "x-ess-name": "cortex.instance.EdgeTypeWidening",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "add_source_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "add_target_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "add_source_types",
+        "add_target_types"
+      ],
+      "additionalProperties": false
+    },
     "cortex.instance.NewEdgeType": {
       "title": "NewEdgeType",
       "x-ess-name": "cortex.instance.NewEdgeType",
@@ -300,6 +329,24 @@
             },
             "value": {
               "$ref": "#/$defs/cortex.instance.TypeSplit"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "widen_edge_type",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "widen_edge_type"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.EdgeTypeWidening"
             }
           },
           "required": [
