@@ -96,7 +96,10 @@ fn eval(w: &World, args: &[&str]) -> (i32, Value) {
 }
 
 fn mcp(w: &World, name: &str, set: &Path) -> (i32, Value) {
-    eval(w, &[name, "--set", set.to_str().unwrap(), "--runner", "mcp"])
+    eval(
+        w,
+        &[name, "--set", set.to_str().unwrap(), "--runner", "mcp"],
+    )
 }
 
 fn replay(w: &World, name: &str, set: &Path, from: &str) -> (i32, Value) {
@@ -140,7 +143,6 @@ fn outcome(code: i32, out: &Value) -> (i32, Option<&str>) {
 /// not a `cortex.eval-case/1` case, and the misspelt key of the first one would otherwise score a
 /// case with no expectation as passed.
 #[test]
-#[ignore = "adversary: a case the published EvalCase schema refuses (misspelt expect_facts, no expect lists, numeric source) is evaluated, and passes with no expectation"]
 fn a_case_the_published_eval_case_schema_refuses_is_set_invalid() {
     let w = instance("schema");
     let misspelt = json!({
@@ -172,7 +174,6 @@ fn a_case_the_published_eval_case_schema_refuses_is_set_invalid() {
 /// A blank expected fact is contained in every answer: the case passes on "Nothing in the store
 /// says." and `facts_found` counts it.
 #[test]
-#[ignore = "adversary: an expected fact of only white space (or empty) is found in every answer, so the case passes on a non-answer"]
 fn a_blank_expected_fact_is_set_invalid() {
     let w = instance("blank");
     for blank in ["", "   "] {
@@ -193,7 +194,6 @@ fn a_blank_expected_fact_is_set_invalid() {
 /// id asked another question is replayed as if it had answered this one: the new results line
 /// pairs this set's question with an answer to a different question.
 #[test]
-#[ignore = "adversary: replay pairs a recorded answer with a different question of the same id and scores it as evaluated"]
 fn replay_of_a_run_that_asked_another_question_under_the_id_is_refused() {
     let w = instance("otherset");
     let first = write_set(&w, "first.json", vec![widget()]);
@@ -221,7 +221,6 @@ fn replay_of_a_run_that_asked_another_question_under_the_id_is_refused() {
 /// The run `replay` names must be an eval run: a directory whose run failed has a `results.jsonl`
 /// with the cases answered before the failure and no `summary.json`, and is no `EvalRun`.
 #[test]
-#[ignore = "adversary: replay accepts a run that failed mid-set (no summary.json) as its source and answers evaluated"]
 fn replay_of_a_run_that_failed_and_wrote_no_summary_is_runner_failed() {
     let w = instance("halfdone");
     executable(
@@ -307,7 +306,11 @@ echo '{{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.
         started.elapsed()
     );
     assert_eq!(outcome(code, &out), (1, Some("runner-failed")), "{out}");
-    assert_eq!(w.lines("eval-calls.log").len(), 2, "a case after it was asked");
+    assert_eq!(
+        w.lines("eval-calls.log").len(),
+        2,
+        "a case after it was asked"
+    );
     let dirs = eval_dirs(&w, "slow");
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     let kept = results(&dirs[0]);
@@ -372,7 +375,12 @@ echo '{{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.
     assert_eq!(d["output_tokens"], Value::Null, "{out}");
     assert_eq!(d["cost_usd"], Value::Null, "{out}");
     assert_eq!(
-        [&d["cases"], &d["passed"], &d["facts_found"], &d["nodes_found"]],
+        [
+            &d["cases"],
+            &d["passed"],
+            &d["facts_found"],
+            &d["nodes_found"]
+        ],
         [&json!(2), &json!(1), &json!(1), &json!(1)],
         "{out}"
     );

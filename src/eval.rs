@@ -89,15 +89,31 @@ pub fn runner_of(name: &str) -> Option<m::EvalRunner> {
     }
 }
 
+/// The keys `cortex.instance.EvalCase` admits; the generated model has no reader of its own, so
+/// the published schema's rules are applied here.
+const CASE_KEYS: [&str; 6] = [
+    "format",
+    "id",
+    "question",
+    "expect_facts",
+    "expect_nodes",
+    "source",
+];
+
+/// A required list of non-blank strings.
 fn strings(v: &Value, key: &str, at: &str) -> Result<Vec<String>, String> {
     match v.get(key) {
-        None | Some(Value::Null) => Ok(Vec::new()),
+        None | Some(Value::Null) => Err(format!("{at}: no `{key}`")),
         Some(Value::Array(items)) => items
             .iter()
             .map(|i| {
-                i.as_str()
-                    .map(str::to_string)
-                    .ok_or_else(|| format!("{at}: `{key}` holds a value that is not a string"))
+                let s = i
+                    .as_str()
+                    .ok_or_else(|| format!("{at}: `{key}` holds a value that is not a string"))?;
+                if s.trim().is_empty() {
+                    return Err(format!("{at}: `{key}` holds an empty or blank string"));
+                }
+                Ok(s.to_string())
             })
             .collect(),
         Some(_) => Err(format!("{at}: `{key}` is not a list of strings")),
@@ -109,6 +125,19 @@ fn case_of(v: &Value, n: usize) -> Result<m::EvalCase, String> {
     if v.get("format").and_then(Value::as_str) != Some(CASE_FORMAT) {
         return Err(format!("{at} is not a {CASE_FORMAT} case (`format`)"));
     }
+    let object = v
+        .as_object()
+        .ok_or_else(|| format!("{at} is not an object"))?;
+    if let Some(key) = object.keys().find(|k| !CASE_KEYS.contains(&k.as_str())) {
+        return Err(format!(
+            "{at}: `{key}` is not a key of a {CASE_FORMAT} case"
+        ));
+    }
+    let source = match v.get("source") {
+        None => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => return Err(format!("{at}: `source` is not a string")),
+    };
     let text = |key: &str| {
         v.get(key)
             .and_then(Value::as_str)
@@ -122,12 +151,13 @@ fn case_of(v: &Value, n: usize) -> Result<m::EvalCase, String> {
         question: text("question")?,
         expect_facts: strings(v, "expect_facts", &at)?,
         expect_nodes: strings(v, "expect_nodes", &at)?,
-        source: v.get("source").and_then(Value::as_str).map(str::to_string),
+        source,
     })
 }
 
 /// The `cortex.instance.EvalSet` of `text`: an object whose `cases` are `cortex.eval-case/1`
-/// cases, at least one, with distinct ids.
+/// cases as the published schema holds them (both expect lists, no other key, no blank
+/// expectation), at least one, with distinct ids.
 pub fn parse_set(text: &str) -> Result<m::EvalSet, String> {
     let doc: Value = serde_json::from_str(text).map_err(|e| format!("the set is not JSON: {e}"))?;
     let items = doc
@@ -269,8 +299,11 @@ enum Answers {
     /// The instance's model, with this MCP configuration.
     Mcp(Value),
     /// The answers of an earlier run, by case id.
-    Replay(BTreeMap<String, (String, Vec<String>)>),
+    Replay(BTreeMap<String, Recorded>),
 }
+
+/// A recorded case: its question, its answer and the nodes the answer cited.
+type Recorded = (String, String, Vec<String>);
 
 /// An eval run whose set and runner are read: [`prepare`] reads them under the home's lock,
 /// [`run`] needs none.
@@ -282,12 +315,16 @@ pub struct Prepared {
     answers: Answers,
 }
 
-/// The answers `results.jsonl` of the run `from` recorded, by case id.
-fn recorded(
-    layout: &Layout,
-    from: &str,
-) -> Result<BTreeMap<String, (String, Vec<String>)>, String> {
-    let path = layout.dir.join("eval").join(from).join("results.jsonl");
+/// The answers `results.jsonl` of the run `from` recorded, by case id, with the question each
+/// answered. A run with no `summary.json` failed and is no eval run to replay.
+fn recorded(layout: &Layout, from: &str) -> Result<BTreeMap<String, Recorded>, String> {
+    let run = layout.dir.join("eval").join(from);
+    if !run.join("summary.json").is_file() {
+        return Err(format!(
+            "the eval run {from} wrote no summary.json: it failed and is not an eval run to replay"
+        ));
+    }
+    let path = run.join("results.jsonl");
     let text = std::fs::read_to_string(&path).map_err(|e| {
         format!(
             "the eval run {from} recorded no results ({}: {e})",
@@ -299,9 +336,10 @@ fn recorded(
         let v: Value = serde_json::from_str(line)
             .map_err(|e| format!("line {} of the eval run {from} is not JSON: {e}", n + 1))?;
         let id = v.get("id").and_then(Value::as_str);
-        match (id, answer_of(&v)) {
-            (Some(id), Some(answer)) => {
-                answers.insert(id.to_string(), answer);
+        let question = v.get("question").and_then(Value::as_str);
+        match (id, question, answer_of(&v)) {
+            (Some(id), Some(question), Some((answer, cited))) => {
+                answers.insert(id.to_string(), (question.to_string(), answer, cited));
             }
             _ => {
                 return Err(format!(
@@ -355,11 +393,23 @@ pub fn prepare(
             m::EvalRunner::Replay => {
                 let from = from.unwrap_or_default();
                 let answers = recorded(layout, from).map_err(Failure::Runner)?;
-                if let Some(c) = set.cases.iter().find(|c| !answers.contains_key(&c.id)) {
-                    return Err(Failure::Runner(format!(
-                        "the eval run {from} recorded no answer for the case {:?}",
-                        c.id
-                    )));
+                for c in &set.cases {
+                    match answers.get(&c.id) {
+                        None => {
+                            return Err(Failure::Runner(format!(
+                                "the eval run {from} recorded no answer for the case {:?}",
+                                c.id
+                            )))
+                        }
+                        Some((question, ..)) if *question != c.question => {
+                            return Err(Failure::Runner(format!(
+                                "the eval run {from} answered another question under the case \
+                                 {:?}: {question:?}",
+                                c.id
+                            )))
+                        }
+                        Some(_) => {}
+                    }
                 }
                 Answers::Replay(answers)
             }
@@ -425,7 +475,10 @@ pub fn run(
     let of = set.cases.len();
     for (n, case) in set.cases.iter().enumerate() {
         let (answer, cited) = match &answers {
-            Answers::Replay(recorded) => recorded[&case.id].clone(),
+            Answers::Replay(recorded) => {
+                let (_, answer, cited) = recorded[&case.id].clone();
+                (answer, cited)
+            }
             Answers::Mcp(config) => {
                 let remaining = match budget {
                     Some(budget) if budget - spent <= 0.0 => {
@@ -541,9 +594,23 @@ pub fn run(
     if let Some(from) = from {
         summary["from"] = json!(from);
     }
+    // The results are on disk before a summary can name them, and the summary appears whole or
+    // not at all: a temp file in the same directory, renamed.
+    std::fs::File::open(&results_path)
+        .and_then(|f| f.sync_all())
+        .map_err(|err| Failure::Runner(format!("{}: {err}", results_path.display())))?;
     let path = e.dir.join("summary.json");
-    std::fs::write(&path, format!("{summary:#}\n"))
-        .map_err(|err| Failure::Runner(format!("{}: {err}", path.display())))?;
+    let temp = e.dir.join(".summary.json.tmp");
+    let written = std::fs::File::create(&temp)
+        .and_then(|mut f| {
+            f.write_all(format!("{summary:#}\n").as_bytes())?;
+            f.sync_all()
+        })
+        .and_then(|()| std::fs::rename(&temp, &path));
+    written.map_err(|err| {
+        let _ = std::fs::remove_file(&temp);
+        Failure::Runner(format!("{}: {err}", path.display()))
+    })?;
     Ok(evaluation)
 }
 
@@ -575,7 +642,7 @@ mod tests {
 
     #[test]
     fn a_set_is_refused_for_another_format_a_missing_question_or_a_repeated_id() {
-        let ok = |id: &str| json!({"format": CASE_FORMAT, "id": id, "question": "?"});
+        let ok = |id: &str| json!({"format": CASE_FORMAT, "id": id, "question": "?", "expect_facts": [], "expect_nodes": []});
         assert!(parse_set(&json!({"cases": [ok("a"), ok("b")]}).to_string()).is_ok());
         let mut other = ok("a");
         other["format"] = json!("cortex.eval-case/2");

@@ -96,6 +96,11 @@ set's order, and scores each answer deterministically. The set is a JSON object 
 ]}
 ```
 
+A case is held to the published `cortex.instance.EvalCase` schema: `expect_facts` and
+`expect_nodes` are both required lists of strings, no other key is admitted, `source` is a string,
+and no expected fact or node is empty or white space only. A case the schema refuses makes the
+set `set-invalid`.
+
 An answer passes when it contains every `expect_facts` string (letter case and runs of white
 space ignored) and cites every `expect_nodes` id exactly. An optional `source` says where a case
 came from and is not scored.
@@ -104,7 +109,7 @@ came from and is not scored.
 |---|---|
 | `mcp` | the instance's model (the `claude` backend), with the store's MCP reader, `ekr mcp` as `cortex mcp-line` starts it, as its only tools (`--allowedTools mcp__ekr`, every built-in tool off). It answers `answer` and `cited_nodes`, and spends at most the spec's `model.budget_usd` and what its `model.daily_ceiling_usd` leaves of the UTC day, held to its token limits, as `cortex quality` is |
 | `ask` | a running `cortex ask serve`. This release has none, so the runner answers `runner-failed` |
-| `replay` | the answers the eval run `--from <stamp>` (a directory under `eval/`) recorded, by case id. It asks no model; two replays of one run write the same `results.jsonl`, byte for byte |
+| `replay` | the answers the eval run `--from <stamp>` (a directory under `eval/`) recorded, by case id and question: a case whose id the run recorded under another question, or a run with no `summary.json` (a failed run), is `runner-failed`. It asks no model; two replays of one run write the same `results.jsonl`, byte for byte |
 
 :::caution[The `mcp` runner does not redact store contents]
 What `ekr mcp` returns reaches the model as the store holds it: the spec's `redaction` policy,
@@ -117,14 +122,14 @@ It writes two files under `eval/<UTC stamp>/` in the instance directory:
 | file | holds |
 |---|---|
 | `results.jsonl` | one `cortex.eval-result/1` object per case, in the set's order: `id`, `question`, `answer`, `cited_nodes`, `passed`, `missing_facts` (the expected fact strings the answer does not contain) and `missing_nodes` (the expected node ids it does not cite). A line holds no time or cost |
-| `summary.json` | `cortex.eval-run/1`: `stamp`, `instance_name`, `runner`, `cases`, `passed`, `facts_expected`, `facts_found`, `nodes_expected`, `nodes_found`, `model_calls`, `input_tokens`, `output_tokens`, `cost_usd`, and `from` for a replay |
+| `summary.json` | written last, by a temporary file renamed into place, so it exists only when every result is on disk. `cortex.eval-run/1`: `stamp`, `instance_name`, `runner`, `cases`, `passed`, `facts_expected`, `facts_found`, `nodes_expected`, `nodes_found`, `model_calls`, `input_tokens`, `output_tokens`, `cost_usd`, and `from` for a replay |
 
 An `evaluated` line's detail carries the counts of `summary.json`, `name` and `dir`;
 `input_tokens`, `output_tokens` and `cost_usd` are null as soon as one answer carried no count or
 cost, and 0 for `replay`. `set-invalid` (the set cannot be read or is not a `cortex.eval-case/1`
 set, or `--from` is missing for `replay` or given for another runner) asks no model and writes
 nothing. `runner-failed` (a model call failed or found the budget or the daily ceiling spent, no
-ask service answered, or the replayed run recorded no answer for a case) writes no
+ask service answered, the replayed run recorded no answer, or another question, for a case, or it wrote no `summary.json`) writes no
 `summary.json`; `results.jsonl` keeps the results of the cases answered before, and the reason
 states the cost so far.
 
