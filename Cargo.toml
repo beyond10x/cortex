@@ -32,6 +32,13 @@ unicode-normalization = "0.1"
 uuid = { version = "1", features = ["v7"] }
 walkdir = "2"
 
+# The answer service (`cortex ask serve`, `src/ask/`) only: an async runtime, an HTTP server, its
+# event stream, and an HTTP client for the model gateway. Nothing on the path of `cortex run` uses them.
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time"] }
+tokio-stream = { version = "0.1", default-features = false }
+
 [dev-dependencies]
 tempfile = "3"
 

@@ -1,0 +1,109 @@
+---
+title: Ask service
+sidebar_position: 6
+description: cortex ask serve answers questions over an instance's store as a stream of events.
+---
+
+# Ask service
+
+`cortex ask serve --spec <instance spec>` answers questions over the store of the instance the spec
+names. It is a long-running process of its own: `POST /ask` answers `text/event-stream`, one event
+per step of a tool loop over the EKR MCP reader (`ekr mcp`, as [`cortex mcp-line`](./commands.md)
+starts it) against the instance's model gateway. It reads the store only through the reader and
+writes nothing to it; an answer is streamed, not stored. The specification is the domain
+[`cortex.ask`](./reference/ess/cortex-ask.md).
+
+## The `ask` section
+
+The service is configured by the optional `ask` section of the instance spec
+(`cortex.ask.AskSpec`), and its model is the spec's `model.gateway` and `model.model`:
+
+```yaml
+model:
+  model: my-model
+  budget_tokens: 2000000
+  timeout_s: 120
+  gateway: {base_url: "https://gateway.example", token_env: GATEWAY_TOKEN}
+ask:
+  listen: "127.0.0.1:8088"
+  identity_header: x-asker
+  limits: {max_steps: 8, max_result_bytes: 16384, max_seconds: 120, per_identity_per_minute: 10}
+  link_templates: {node: "https://view.example/node/{id}", evidence: "https://view.example/evidence/{id}"}
+  guidance: Answer in English, in at most five sentences.
+```
+
+| field | meaning |
+|---|---|
+| `listen` | the address the service binds, `host:port`; port `0` takes a free one |
+| `identity_header` | the request header that carries the asker's identity, set by the guard in front of the service |
+| `limits.max_steps` | the most model calls of one answer |
+| `limits.max_result_bytes` | the most bytes of one tool result the model is shown |
+| `limits.max_seconds` | the most seconds one answer takes, every model and tool call included |
+| `limits.per_identity_per_minute` | the most questions of one identity in a sliding minute |
+| `link_templates` | optional: the URL of a cited node or evidence, `{id}` replaced by its percent-encoded id |
+| `guidance` | optional: text added to the service's system prompt |
+
+`cortex ask serve` refuses to start (exit 2, naming the field) a spec with no `ask` section, no
+`model.gateway`, a limit of 0 or less, or an `identity_header` that is no header name. Once bound it
+prints one line, `{"listening": "<address>"}`, and serves until it is stopped.
+
+:::note[Identity]
+cortex verifies no token. The guard in front of the service verifies the asker and hands the
+identity on in `identity_header`. A request without it, or with an empty one, answers 401 and asks
+no model. Bind `listen` where only that guard reaches it.
+:::
+
+## The model route
+
+The gateway is spoken to as an OpenAI-compatible endpoint: `POST <base_url>/v1/chat/completions`
+(`<base_url>/chat/completions` when `base_url` already ends in `/v1`), with the value of the
+variable `token_env` names as a bearer token, read when an answer starts. A missing or empty token
+fails the answer with `model-failed`, naming the variable. The reader does not inherit that
+variable, nor `ANTHROPIC_API_KEY`.
+
+## The event contract
+
+The contract is `cortex.ask-events/1` (`cortex.ask.AskEvent`). Each SSE event's `event:` line is
+the event's name and its `data:` line the event as one JSON object, `{"event": <name>, "value":
+<fields>}`:
+
+| event | fields | when |
+|---|---|---|
+| `status` | `format` (`cortex.ask-events/1`), `step`, `message` | first, then before each model call |
+| `tool` | `step`, `name`, `arguments`, `result_bytes`, `truncated`, `failed` | after each tool call the model asked for |
+| `delta` | `text` | a piece of the model's text, in order |
+| `discard` | `step` | withdraws the `delta`s since the last `discard`: text before a tool call, not the answer |
+| `done` | `answer`, `nodes`, `evidence`, `input_tokens`, `output_tokens`, `cached_tokens`, `context_tokens`, `steps` | the last event of an answer |
+| `error` | `reason`, `message`, `retry_after` (with `rate-limit` only) | the last event of a request with no answer |
+
+`done.answer` is the answer with each citation marker, `[node:<id>]` or `[evidence:<id>]`, turned
+into a Markdown link from `link_templates` (left as written without a template); `nodes` and
+`evidence` are the cited ids, each once, in order. The token counts add up the gateway's `usage`
+over every model call (`prompt_tokens`, `completion_tokens`, `prompt_tokens_details.cached_tokens`;
+0 where not reported); `context_tokens` is the prompt tokens of the last call.
+
+`error.reason` is one of:
+
+| reason | status | meaning |
+|---|---|---|
+| `unidentified` | 401 | no identity header; no model was asked |
+| `rate-limit` | 429 | the identity's questions of the minute are spent; `retry_after` (also the `Retry-After` header) is the whole seconds until the oldest leaves the window |
+| `bad-request` | 400 | the body is not JSON with a non-empty `question` |
+| `step-limit` | 200 | the model still asked for a tool at `max_steps` |
+| `time-limit` | 200 | the answer passed `max_seconds` |
+| `model-failed` | 200 | the gateway could not be reached, answered an error or no message |
+| `reader-failed` | 200 | the reader could not be started or stopped answering |
+
+A tool result is rewritten into compact text (each text that is JSON written without whitespace)
+and cut at a character boundary to `max_result_bytes`; its `tool` event says whether it was cut.
+
+```text
+event: status
+data: {"event":"status","value":{"format":"cortex.ask-events/1","message":"starting the reader","step":0}}
+
+event: tool
+data: {"event":"tool","value":{"arguments":"{\"query\":\"widget\"}","failed":false,"name":"search","result_bytes":35,"step":1,"truncated":false}}
+
+event: done
+data: {"event":"done","value":{"answer":"…","cached_tokens":100,"context_tokens":200,"evidence":[],"input_tokens":300,"nodes":["n-42"],"output_tokens":30,"steps":2}}
+```

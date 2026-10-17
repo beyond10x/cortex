@@ -12,7 +12,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Using cortex',
       collapsed: false,
-      items: ['spec-file', 'commands', 'operating', 'limits'],
+      items: ['spec-file', 'commands', 'operating', 'ask-service', 'limits'],
     },
     {
       type: 'category',

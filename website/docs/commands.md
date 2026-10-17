@@ -50,6 +50,7 @@ naming `story:codex-model-backend`, and `codex` is never started; `cortex qualit
 | `cortex schema apply <name> <stamp>` | apply the run's approved proposals, with no model call, in an EKR stage (`postgres`) or after a snapshot (`sqlite`), held to the spec's `gate` | `applied`, `not-approved`, `gate-failed`, `apply-failed`, `store-outcome-unknown`, `no-such-run`, `no-such-instance` |
 | `cortex list` | instances: name, state, description, model, EKR version, seed digest, viewer address, and the version of `<home>/bin/cortex` their timers run (`binary_version`, null when none is recorded) | |
 | `cortex mcp-line <name>` | print the `claude mcp add` line that serves the instance's store through `ekr mcp` | |
+| `cortex ask serve --spec <file>` | answer questions over the store of the instance the spec names: `POST /ask` on the spec's `ask.listen` streams the events of `cortex.ask-events/1`, from a tool loop over `ekr mcp` against `model.gateway`, until stopped (see [Ask service](./ask-service.md)). A spec it cannot serve exits 2, naming the field | `answered` (`done`), `unidentified`, `rate-limited`, `limit-reached`, `model-failed`, `reader-failed` (`error`) |
 
 `cortex update` refuses a spec whose `name` is not `<name>`. `create`, `adopt` and `update` name each unit they took over from a home that no longer holds the instance in `units.taken_over` (see [Operating](./operating.md#systemd-units)). Every command refuses a home whose path holds a line break.
 
