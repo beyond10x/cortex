@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-17T03:36:57Z",
+  "actor": "human:timo",
+  "artifact": "story:token-budget",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "full gate on 7464bd4: 58 test binaries, 690 passed, 0 failed; released in v0.5.0 (PR #68, merge dce291d9)"
+  }
+}
