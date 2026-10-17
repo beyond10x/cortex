@@ -17,7 +17,7 @@ The spec file an instance is created from is the type `InstanceSpec` below. Its 
 
 ## Answers
 
-The answer service of an instance: `cortex ask serve` answers a question over the instance's store as a stream of events. It reads the store only through the EKR MCP reader (`ekr mcp`) and writes nothing to it; its model is the instance's model gateway, spoken to as an OpenAI-compatible endpoint. Every answer is streamed and kept as an answer record, with the votes of its readers; an answer voted down, failed or slow is queued for review. The records are cortex's own, in `ask.sqlite` in the instance directory, never in the store, and are purged after the spec's `retention_days`.
+The answer service of an instance: `cortex ask serve` answers a question over the instance's store as a stream of events. It reads the store only through the EKR MCP reader (`ekr mcp`) and writes nothing to it; its model is the instance's model gateway, spoken to as an OpenAI-compatible endpoint. Every answer is streamed and kept as an answer record, with the votes of its readers; an answer voted down, failed or slow is queued for review. The records are cortex's own, never in the store: in `ask.sqlite` in the instance directory on a `sqlite` store, in a PostgreSQL schema of their own on a `postgres` one; they are purged after the spec's `retention_days`.
 
 <DomainGraph data={domainGraph0} title="Answers" />
 

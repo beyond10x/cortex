@@ -410,6 +410,13 @@ fn reference_refusal(spec: &m::InstanceSpec) -> Option<String> {
             }
         }
     }
+    if let Some(r) = spec.ask.as_ref().and_then(|a| a.records.as_ref()) {
+        named.push((
+            "ask.records.connection".into(),
+            r.connection.connection.is_some(),
+            r.connection.profile.is_some(),
+        ));
+    }
     named
         .into_iter()
         .find_map(|(at, id, profile)| match (id, profile) {

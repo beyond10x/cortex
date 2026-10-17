@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168
-  contract digest 8430bcd9044fb62ace879bb3f848bc003309cb17d8528501327ed301f98ec627
+  model digest 35445edbfb924602bf5ee4c9b32cce8f1c4d409e8e17675c8b68b61dbaf6bec5
+  contract digest 6cc21d245bef94a86dddf5ce3002dec278709616b6c49500ec2220a65697e5a7
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-228 capabilities: **220 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+229 capabilities: **221 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -27,6 +27,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.ask.AskStatus` |
 | domain type | `cortex.ask.AskTool` |
 | domain type | `cortex.ask.LinkTemplates` |
+| domain type | `cortex.ask.PostgresRecords` |
 | domain type | `cortex.ask.ReviewCause` |
 | domain type | `cortex.ask.ReviewId` |
 | domain type | `cortex.ask.ReviewItem.State` |

@@ -606,39 +606,109 @@ fn a_retention_or_slow_threshold_of_zero_is_refused_naming_the_field() {
     }
 }
 
-/// An instance on a PostgreSQL store keeps its records in a schema of their own, a backend not
-/// built yet: until it is, `cortex ask serve` refuses the instance before anything binds (exit 2,
-/// naming `store.backend`), and writes no `ask.sqlite` beside a store that is not SQLite.
+/// The `records` section of an instance on a PostgreSQL store, its schema and URL as given.
+fn records_section(url: &str, schema: &str) -> String {
+    format!(
+        "  records:\n    url: \"{url}\"\n    schema: \"{schema}\"\n    \
+         connection: {{adapter: postgres, connection: records}}"
+    )
+}
+
+/// An instance on a PostgreSQL store keeps its records in a schema of their own (`ask.records`),
+/// never EKR's. `cortex ask serve` refuses before anything binds (exit 2, naming the field, never
+/// a value) a `postgres` store without `ask.records`, a `sqlite` store with one, a records schema
+/// that is the store's own, a schema that is no lowercase identifier or is reserved, a URL that
+/// carries a password or is no PostgreSQL URL, and a connection named by both id and profile; and
+/// it writes no `ask.sqlite` beside a store that is not SQLite.
 #[test]
-fn an_instance_on_a_postgres_store_is_refused_until_its_records_backend_exists() {
+fn a_postgres_store_needs_records_of_their_own_never_in_ekrs_schema() {
     let world = World::new();
     let config = world.root.join("ekr-postgres.json");
     std::fs::write(
         &config,
         json!({"format": "ekr.postgres/1", "connection_file": "pg.connection",
-               "schema": "ekr", "database_connections": 10, "replicas": 1,
+               "schema": "ekr_store", "database_connections": 10, "replicas": 1,
                "reserved_connections": 1})
         .to_string(),
     )
     .unwrap();
-    let spec = world.spec(
-        "http://127.0.0.1:9",
-        "",
-        &format!(
-            "store: {{backend: postgres, value: {{config: \"{}\"}}}}",
-            config.display()
+    let postgres = format!(
+        "store: {{backend: postgres, value: {{config: \"{}\"}}}}",
+        config.display()
+    );
+    let good = "postgres://cortex_ask@db.example:5432/brain";
+    let secret = "pw-never-printed-91";
+    let cases = [
+        (String::new(), postgres.clone(), "ask.records"),
+        (
+            records_section(good, "cortex_ask"),
+            String::new(),
+            "ask.records",
         ),
-    );
-    let (code, text) = run_bounded(
-        Command::new(env!("CARGO_BIN_EXE_cortex"))
-            .args(["ask", "serve", "--spec"])
-            .arg(&spec)
-            .env("CORTEX_HOME", world.home())
-            .env(TOKEN_ENV, "t"),
-    );
-    assert_eq!(code, Some(2), "{text}");
-    assert!(text.contains("store.backend"), "{text}");
-    assert!(text.contains("postgres"), "{text}");
-    assert!(!text.contains("listening"), "{text}");
-    assert!(!world.records_file().exists());
+        (
+            records_section(good, "ekr_store"),
+            postgres.clone(),
+            "ask.records.schema",
+        ),
+        (
+            records_section(good, "Cortex-Ask"),
+            postgres.clone(),
+            "ask.records.schema",
+        ),
+        (
+            records_section(good, "pg_records"),
+            postgres.clone(),
+            "ask.records.schema",
+        ),
+        (
+            records_section(good, &"a".repeat(64)),
+            postgres.clone(),
+            "ask.records.schema",
+        ),
+        (
+            records_section(
+                &format!("postgres://cortex_ask:{secret}@db.example/brain"),
+                "cortex_ask",
+            ),
+            postgres.clone(),
+            "ask.records.url",
+        ),
+        (
+            records_section(
+                &format!("postgresql://db.example/brain?password={secret}"),
+                "cortex_ask",
+            ),
+            postgres.clone(),
+            "ask.records.url",
+        ),
+        (
+            records_section("mysql://db.example/brain", "cortex_ask"),
+            postgres.clone(),
+            "ask.records.url",
+        ),
+        (
+            records_section(good, "cortex_ask").replace(
+                "connection: records}",
+                "connection: records, profile: main}",
+            ),
+            postgres.clone(),
+            "ask.records.connection",
+        ),
+    ];
+    for (extra, store, field) in cases {
+        let spec = world.spec("http://127.0.0.1:9", &extra, &store);
+        let (code, text) = run_bounded(
+            Command::new(env!("CARGO_BIN_EXE_cortex"))
+                .args(["ask", "serve", "--spec"])
+                .arg(&spec)
+                .env("CORTEX_HOME", world.home())
+                .env("CORTEX_CONNECTORS", world.root.join("bin/no-connectors"))
+                .env(TOKEN_ENV, "t"),
+        );
+        assert_eq!(code, Some(2), "{field}: {text}");
+        assert!(text.contains(field), "{field}: {text}");
+        assert!(!text.contains(secret), "{text}");
+        assert!(!text.contains("listening"), "{text}");
+        assert!(!world.records_file().exists());
+    }
 }

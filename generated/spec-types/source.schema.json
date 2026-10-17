@@ -270,6 +270,9 @@
         "listen": {
           "type": "string"
         },
+        "records": {
+          "$ref": "#/$defs/cortex.ask.PostgresRecords"
+        },
         "retention_days": {
           "type": "integer"
         },
@@ -363,6 +366,32 @@
       "type": "object",
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.ask.LinkTemplates"
+    },
+    "cortex.ask.PostgresRecords": {
+      "additionalProperties": false,
+      "properties": {
+        "ca_file": {
+          "type": "string"
+        },
+        "connection": {
+          "$ref": "#/$defs/cortex.instance.ConnectionRef"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "schema",
+        "connection"
+      ],
+      "title": "PostgresRecords",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.ask.PostgresRecords"
     },
     "cortex.instance.ChangeDetection": {
       "enum": [
@@ -1801,8 +1830,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:c697b14e667ced4ca382b84ef1dc84ac2f3bef6079e79b2f32d4202467860c72",
-    "source_digest": "1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168",
+    "contract_digest": "slice-sha256/2:abfefb1ec4f62f120cf2ab70a3308aa7ca965f54dbf1776772b0c41f7abd46d7",
+    "source_digest": "35445edbfb924602bf5ee4c9b32cce8f1c4d409e8e17675c8b68b61dbaf6bec5",
     "specification_version": "v1",
     "system": "cortex"
   }

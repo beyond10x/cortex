@@ -1,11 +1,11 @@
 // generated from cortex v1
-// model digest 1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168
-// contract digest 8430bcd9044fb62ace879bb3f848bc003309cb17d8528501327ed301f98ec627
+// model digest 35445edbfb924602bf5ee4c9b32cce8f1c4d409e8e17675c8b68b61dbaf6bec5
+// contract digest 6cc21d245bef94a86dddf5ce3002dec278709616b6c49500ec2220a65697e5a7
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex-ask — the `cortex-ask` component of `cortex` v1.
 //!
-//! The answer service, `cortex ask serve --spec <instance spec>`: a long-running process that answers `POST /ask` as a stream of events over the instance's store, read through the EKR MCP reader. The batch component `cortex` serves no port; this one serves the spec's `ask.listen`. It keeps every answer with its votes and a review queue in `ask.sqlite` in the instance directory, and purges them after the spec's `retention_days`.
+//! The answer service, `cortex ask serve --spec <instance spec>`: a long-running process that answers `POST /ask` as a stream of events over the instance's store, read through the EKR MCP reader. The batch component `cortex` serves no port; this one serves the spec's `ask.listen`. It keeps every answer with its votes and a review queue in `ask.sqlite` in the instance directory, or, for an instance on a `postgres` store, in a PostgreSQL schema of their own through a records process launched by Connectors (`cortex ask records`), and purges them after the spec's `retention_days`.
 //!
 //! The component's outer surface exactly as the specification declares it: accepted commands as
 //! handlers, declared views as queries, published events as a typed outbox. The behaviour behind

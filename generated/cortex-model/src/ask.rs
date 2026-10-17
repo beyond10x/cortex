@@ -1,11 +1,11 @@
 // generated from cortex v1
-// model digest 1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168
-// contract digest 8430bcd9044fb62ace879bb3f848bc003309cb17d8528501327ed301f98ec627
+// model digest 35445edbfb924602bf5ee4c9b32cce8f1c4d409e8e17675c8b68b61dbaf6bec5
+// contract digest 6cc21d245bef94a86dddf5ce3002dec278709616b6c49500ec2220a65697e5a7
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Answers — `cortex.ask`.
 //!
-//! The answer service of an instance: `cortex ask serve` answers a question over the instance's store as a stream of events. It reads the store only through the EKR MCP reader (`ekr mcp`) and writes nothing to it; its model is the instance's model gateway, spoken to as an OpenAI-compatible endpoint. Every answer is streamed and kept as an answer record, with the votes of its readers; an answer voted down, failed or slow is queued for review. The records are cortex's own, in `ask.sqlite` in the instance directory, never in the store, and are purged after the spec's `retention_days`.
+//! The answer service of an instance: `cortex ask serve` answers a question over the instance's store as a stream of events. It reads the store only through the EKR MCP reader (`ekr mcp`) and writes nothing to it; its model is the instance's model gateway, spoken to as an OpenAI-compatible endpoint. Every answer is streamed and kept as an answer record, with the votes of its readers; an answer voted down, failed or slow is queued for review. The records are cortex's own, never in the store: in `ask.sqlite` in the instance directory on a `sqlite` store, in a PostgreSQL schema of their own on a `postgres` one; they are purged after the spec's `retention_days`.
 //!
 //! Everything this bounded context declares that the synthesis plan marks generated.
 
@@ -131,6 +131,8 @@ pub struct AskSpec {
     pub retention_days: Option<i64>,
     /// `slow_after_ms` — `Optional<Integer>`.
     pub slow_after_ms: Option<i64>,
+    /// `records` — `Optional<cortex.ask.PostgresRecords>`.
+    pub records: Option<PostgresRecords>,
 }
 
 /// AskStatus — `cortex.ask.AskStatus`.
@@ -170,6 +172,19 @@ pub struct LinkTemplates {
     pub node: Option<String>,
     /// `evidence` — `Optional<String>`.
     pub evidence: Option<String>,
+}
+
+/// PostgresRecords — `cortex.ask.PostgresRecords`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PostgresRecords {
+    /// `url` — `String`.
+    pub url: String,
+    /// `schema` — `String`.
+    pub schema: String,
+    /// `ca_file` — `Optional<String>`.
+    pub ca_file: Option<String>,
+    /// `connection` — `cortex.instance.ConnectionRef`.
+    pub connection: crate::instance::ConnectionRef,
 }
 
 /// ReviewCause — `cortex.ask.ReviewCause`: one of a closed set of names.

@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168
-contract digest 8430bcd9044fb62ace879bb3f848bc003309cb17d8528501327ed301f98ec627
+model digest 35445edbfb924602bf5ee4c9b32cce8f1c4d409e8e17675c8b68b61dbaf6bec5
+contract digest 6cc21d245bef94a86dddf5ce3002dec278709616b6c49500ec2220a65697e5a7
 do not edit: regenerate with `ess generate`
 -->
 
@@ -125,7 +125,7 @@ A command is accepted by the component that owns its context, emits the events o
 
 ## Bounded contexts
 
-- **[Answers](domains/cortex-ask.md)** (`cortex.ask`) — The answer service of an instance: `cortex ask serve` answers a question over the instance's store as a stream of events. It reads the store only through the EKR MCP reader (`ekr mcp`) and writes nothing to it; its model is the instance's model gateway, spoken to as an OpenAI-compatible endpoint. Every answer is streamed and kept as an answer record, with the votes of its readers; an answer voted down, failed or slow is queued for review. The records are cortex's own, in `ask.sqlite` in the instance directory, never in the store, and are purged after the spec's `retention_days`. 16 types, three entities, one view, six commands, six events, nine errors and three actors.
+- **[Answers](domains/cortex-ask.md)** (`cortex.ask`) — The answer service of an instance: `cortex ask serve` answers a question over the instance's store as a stream of events. It reads the store only through the EKR MCP reader (`ekr mcp`) and writes nothing to it; its model is the instance's model gateway, spoken to as an OpenAI-compatible endpoint. Every answer is streamed and kept as an answer record, with the votes of its readers; an answer voted down, failed or slow is queued for review. The records are cortex's own, never in the store: in `ask.sqlite` in the instance directory on a `sqlite` store, in a PostgreSQL schema of their own on a `postgres` one; they are purged after the spec's `retention_days`. 17 types, three entities, one view, six commands, six events, nine errors and three actors.
 - **[Instances](domains/cortex-instance.md)** (`cortex.instance`) — Instances of a knowledge brain and the data sources that feed them. An instance owns one EKR store, created from the instance spec's seed. A source fetches documents on its own schedule, keeps those that are new or changed, has a model extract them into an EKR extraction document and applies it to the instance's store. 79 types, four entities, two views, 15 commands, 17 events, 32 errors and two actors.
 
 ## Components
@@ -134,7 +134,7 @@ A component is a unit of ownership, not a deployment. How many of each runs, and
 
 **`cortex`** — The operator's command line: create, update, run and remove instances, and switch a source off and on. A systemd user timer per source calls the same binary. It owns [`cortex.instance`](domains/cortex-instance.md). It accepts `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.ApplySchemaProposals`, `cortex.instance.ApproveSchemaProposals`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.ProposeSchemaChanges`, `cortex.instance.RecordFailure`, `cortex.instance.RejectSchemaProposals`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.RunEval`, `cortex.instance.RunSource` and `cortex.instance.UpdateInstance`. It publishes `cortex.instance.EvalRan`, `cortex.instance.InstanceAdopted`, `cortex.instance.InstanceCreated`, `cortex.instance.InstanceRemoved`, `cortex.instance.InstanceUpdated`, `cortex.instance.QualityMeasured`, `cortex.instance.RunFailed`, `cortex.instance.SchemaChangesProposed`, `cortex.instance.SchemaProposalsApplied`, `cortex.instance.SchemaProposalsDecided`, `cortex.instance.SnapshotRestored`, `cortex.instance.SourceAdded`, `cortex.instance.SourceDisabled`, `cortex.instance.SourceEnabled` and `cortex.instance.SourceRan`.
 
-**`cortex-ask`** — The answer service, `cortex ask serve --spec <instance spec>`: a long-running process that answers `POST /ask` as a stream of events over the instance's store, read through the EKR MCP reader. The batch component `cortex` serves no port; this one serves the spec's `ask.listen`. It keeps every answer with its votes and a review queue in `ask.sqlite` in the instance directory, and purges them after the spec's `retention_days`. It owns [`cortex.ask`](domains/cortex-ask.md). It accepts `cortex.ask.Ask`, `cortex.ask.CastVote`, `cortex.ask.CloseReview`, `cortex.ask.OpenReview`, `cortex.ask.PurgeExpired` and `cortex.ask.RecordAnswer`. It publishes `cortex.ask.AnswerRecorded`, `cortex.ask.Answered`, `cortex.ask.Purged`, `cortex.ask.ReviewClosed`, `cortex.ask.ReviewOpened` and `cortex.ask.Voted`.
+**`cortex-ask`** — The answer service, `cortex ask serve --spec <instance spec>`: a long-running process that answers `POST /ask` as a stream of events over the instance's store, read through the EKR MCP reader. The batch component `cortex` serves no port; this one serves the spec's `ask.listen`. It keeps every answer with its votes and a review queue in `ask.sqlite` in the instance directory, or, for an instance on a `postgres` store, in a PostgreSQL schema of their own through a records process launched by Connectors (`cortex ask records`), and purges them after the spec's `retention_days`. It owns [`cortex.ask`](domains/cortex-ask.md). It accepts `cortex.ask.Ask`, `cortex.ask.CastVote`, `cortex.ask.CloseReview`, `cortex.ask.OpenReview`, `cortex.ask.PurgeExpired` and `cortex.ask.RecordAnswer`. It publishes `cortex.ask.AnswerRecorded`, `cortex.ask.Answered`, `cortex.ask.Purged`, `cortex.ask.ReviewClosed`, `cortex.ask.ReviewOpened` and `cortex.ask.Voted`.
 
 ## The other pages
 
@@ -149,4 +149,4 @@ A component is a unit of ownership, not a deployment. How many of each runs, and
 
 ---
 
-Generated from cortex v1 · model digest `1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168` · contract digest `8430bcd9044fb62ace879bb3f848bc003309cb17d8528501327ed301f98ec627`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `35445edbfb924602bf5ee4c9b32cce8f1c4d409e8e17675c8b68b61dbaf6bec5` · contract digest `6cc21d245bef94a86dddf5ce3002dec278709616b6c49500ec2220a65697e5a7`. Do not edit this file; change the specification and regenerate it with `ess generate`.

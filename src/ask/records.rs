@@ -2,9 +2,10 @@
 //! `cortex.ask.ReviewItem`): cortex's own tables, never the store's.
 //!
 //! Storage is one seam, [`RecordStore`]; [`Records`] is its SQLite backend, `ask.sqlite` in the
-//! instance directory, with a schema version and a migration on open. A PostgreSQL backend (a
-//! schema of its own, through a Connectors connection of its own) is not built yet; `ask::check`
-//! refuses an instance on a `postgres` store until it is.
+//! instance directory, with a schema version and a migration on open. [`postgres::PgRecords`] is
+//! its PostgreSQL backend, for an instance on a `postgres` store: a schema of its own named by
+//! `ask.records`, reached through a records process that a Connectors connection of its own
+//! launches, so the service never holds the password.
 //!
 //! [`Keeper`] is what the service does with the records: it runs the generated behaviours of
 //! `RecordAnswer`, `CastVote`, `OpenReview`, `CloseReview` and `PurgeExpired` over the store
@@ -29,6 +30,8 @@ use serde_json::{json, Value};
 
 use crate::home::Home;
 use crate::ports::{AskPorts, Shared};
+
+pub mod postgres;
 
 /// The file the records of an instance on a SQLite store live in, in its instance directory.
 pub const FILE: &str = "ask.sqlite";
@@ -751,16 +754,20 @@ pub struct Keeper {
 }
 
 impl Keeper {
-    /// The records of the instance `spec` names, in `home`: `ask.sqlite` in its instance
-    /// directory. A `postgres` store has no backend yet (`ask::check` refuses it first).
+    /// The records of the instance `spec` names, in `home`: the schema `ask.records` names,
+    /// through the records process its connection launches ([`postgres::PgRecords`]), or
+    /// `ask.sqlite` in its instance directory when there is no `ask.records` (`ask::check` holds
+    /// `ask.records` to a `postgres` store).
     pub fn open(home: &Home, spec: &m::InstanceSpec) -> Result<Self, String> {
-        if let Some(m::StoreSpec::Postgres(_)) = &spec.store {
-            return Err(POSTGRES_NOT_YET.into());
-        }
-        let path = home.instance_dir(&spec.name.0).join(FILE);
         let ask = spec.ask.as_ref();
+        let store: Arc<dyn RecordStore> = match ask.and_then(|a| a.records.as_ref()) {
+            Some(records) => Arc::new(postgres::PgRecords::launched(postgres::launch_of(
+                spec, records,
+            )?)?),
+            None => Arc::new(Records::open(&home.instance_dir(&spec.name.0).join(FILE))?),
+        };
         Ok(Self {
-            store: Arc::new(Records::open(&path)?),
+            store,
             instance: spec.name.0.clone(),
             retention_days: ask
                 .and_then(|a| a.retention_days)
@@ -1014,11 +1021,6 @@ fn refused(e: String) -> VoteRefused {
         VoteRefused::Store(e)
     }
 }
-
-/// Why `cortex ask serve` does not start on an instance whose store is `postgres`.
-pub const POSTGRES_NOT_YET: &str = "store.backend: the answer records of an instance on a \
-    `postgres` store belong in a schema of their own, and that backend is not built yet; \
-    `cortex ask serve` serves only an instance on a `sqlite` store for now";
 
 #[cfg(test)]
 mod tests {

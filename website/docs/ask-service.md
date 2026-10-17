@@ -48,10 +48,12 @@ ask:
 | `guidance` | optional: text added to the service's system prompt |
 | `retention_days` | optional: how many days an answer record is kept, with its votes and review items (default 90) |
 | `slow_after_ms` | optional: an answer that took longer opens a `slow` review item; without it none does |
+| `records` | required on a `postgres` store, refused on a `sqlite` one: the PostgreSQL schema of the answer records ([Records on a PostgreSQL store](#records-on-a-postgresql-store)) |
 
 `cortex ask serve` refuses to start (exit 2, naming the field) a spec with no `ask` section, no
 `model.gateway`, a limit, `retention_days` or `slow_after_ms` of 0 or less, an `identity_header`
-that is no header name, or an instance on a `postgres` store (see below). It then opens its records
+that is no header name, or `ask.records` that does not fit the store (see
+[Records on a PostgreSQL store](#records-on-a-postgresql-store)). It then opens its records
 (exit 1 when it cannot) and purges the expired ones. Once bound it prints one line,
 `{"listening": "<address>"}`, and serves until it is stopped.
 
@@ -155,10 +157,11 @@ Every answer the service gives, and every one that failed or hit a limit, is kep
 (`cortex.ask.AnswerRecord`) before its last event is sent: the question, the identity, the answer or
 the reason there is none, the outcome (`answered`, `failed`, `limited`), the `tool` events, the
 latency, the token counts of its `done` event and the time. A request refused before it started
-(401, 429, 400) leaves no record. The records are cortex's own: they live in
-`instances/<name>/ask.sqlite` in the instance directory, never in the EKR store, and the file
-carries its schema version, migrated when the service starts. A file written by a newer cortex is
-refused. The question, the answer, the `tool` events' arguments, a vote's comment and a close's
+(401, 429, 400) leaves no record. The records are cortex's own, never in the EKR store: on a `sqlite`
+store they live in `instances/<name>/ask.sqlite` in the instance directory, on a `postgres` store in
+a schema of their own ([below](#records-on-a-postgresql-store)). Either carries its schema version,
+migrated when the service starts; one written by a newer cortex is refused. The question, the
+answer, the `tool` events' arguments, a vote's comment and a close's
 reason are kept with every credential shape masked (`[masked:<shape>]`), whatever the instance's
 `redaction` policy; the mask is irreversible.
 
@@ -189,9 +192,48 @@ transaction, when the service starts (before the ready line) and every 24 hours 
 review item whose record is gone goes with them. A `retention_days` too large to count keeps every
 record.
 
-:::note[PostgreSQL stores]
-On a `postgres` store the records belong in a schema of their own, opened through a Connectors
-connection of their own; that backend is not built yet. Until it is, `cortex ask serve` refuses an
-instance whose spec names `store.backend: postgres` (exit 2, naming `store.backend`) and writes no
-`ask.sqlite` for it.
-:::
+### Records on a PostgreSQL store
+
+An instance on a `postgres` store keeps its records in a PostgreSQL schema of their own, never in
+EKR's schema, and writes no `ask.sqlite`. Its spec must name that schema in `ask.records`:
+
+```yaml
+ask:
+  # listen, identity_header, limits as above
+  records:
+    url: "postgres://cortex_ask@db.example:5432/brain"
+    schema: cortex_ask
+    ca_file: /etc/cortex/db-ca.pem
+    connection: {adapter: postgres, profile: cortex-ask}
+```
+
+| field | meaning |
+|---|---|
+| `url` | a `postgres://` or `postgresql://` URL naming the records role, with no password. TLS is required unless the URL says `sslmode=disable` |
+| `schema` | the records' schema: a lowercase identifier (`a-z`, digits, `_`, not starting with a digit or `pg_`, at most 63 bytes), never the schema of the store's `ekr.postgres/1` file |
+| `ca_file` | optional: the PEM file the server's certificate is verified against; without it, the public web roots |
+| `connection` | the Connectors connection holding the records role's `{"password": …}` document, by `connection` id or by `profile` |
+
+The service never holds that password. When it starts, it launches its records process,
+`cortex ask records --url <url> --schema <schema> [--ca-file <file>]`, with
+`connectors connections launch --adapter <adapter> --connection <id> --consumer cortex-records`,
+which hands that process the connection's document on descriptor 3. The records process connects,
+creates the schema when it is missing, migrates the tables `answers`, `votes`, `reviews` and
+`schema_version` in it to this cortex's schema version, and then runs the service's statements,
+one JSON line each way on its standard input and output. A schema at a newer version is refused
+(the service exits 1). Only the records process reads the password; the service, its output and
+the instance directory never see it.
+
+The operator, once per deployment:
+
+1. Creates the records role, and either grants it `CREATE` on the database or creates the schema
+   owned by it. It needs no privilege in EKR's schema.
+2. Saves the role's password with `connectors connections connect` (the `{"password": …}`
+   document), and allows the connection's adapter alias in `permissions.connections`.
+3. Pins the `cortex` binary in the Connectors configuration as the consumer `cortex-records`. It
+   needs no variable passed (`pass_env = []`).
+
+`cortex ask serve` refuses before anything binds (exit 2, naming the field, never its value) a
+`postgres` store without `ask.records`, a `sqlite` store with one, a schema that is the store's or
+no lowercase identifier, a URL that carries a password, names no role or is not a PostgreSQL URL,
+and a connection named by both id and profile.
