@@ -1971,6 +1971,9 @@ fn eval_case_add(app: &mut App, ctx: &Ctx, name: &str, set: &Path, review_id: &s
             Err(eval::CaseRefused::ReviewOpen) => {
                 shared.external.insert((CMD, "review-open"), true);
             }
+            Err(eval::CaseRefused::NoExpectations) => {
+                shared.external.insert((CMD, "no-expectations"), true);
+            }
             Err(eval::CaseRefused::CaseExists) => {
                 shared.external.insert((CMD, "case-exists"), true);
             }
@@ -2006,6 +2009,11 @@ fn eval_case_add(app: &mut App, ctx: &Ctx, name: &str, set: &Path, review_id: &s
         },
         Ok(m::AddEvalCaseOutcome::ReviewOpen { error }) => Done {
             outcome: "review-open",
+            ok: false,
+            detail: json!({"review_id": error.review_id.0}),
+        },
+        Ok(m::AddEvalCaseOutcome::NoExpectations { error }) => Done {
+            outcome: "no-expectations",
             ok: false,
             detail: json!({"review_id": error.review_id.0}),
         },

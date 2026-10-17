@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 7d8468225c0615bc54d37ab20d8a5ed011c6af620b27b8f62299e46196457ec1
-// contract digest e28cd1562bab08223ec6f65f42a29bccbb41a2ebb899f233ef6abd757672022d
+// model digest dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda
+// contract digest 7d415de25a37eea36ac6425b96c4fa73b380215c1b617c8e06d0464a3499f204
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -95,6 +95,7 @@ where
             crate::instance::AddEvalCaseOutcome::SetInvalid { .. } => {}
             crate::instance::AddEvalCaseOutcome::NoSuchReview { .. } => {}
             crate::instance::AddEvalCaseOutcome::ReviewOpen { .. } => {}
+            crate::instance::AddEvalCaseOutcome::NoExpectations { .. } => {}
             crate::instance::AddEvalCaseOutcome::CaseExists { .. } => {}
             crate::instance::AddEvalCaseOutcome::Added { eval_case_added, .. } => {
                 self.outbox.push(PublishedEvent::EvalCaseAdded(eval_case_added.clone()));

@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 7d8468225c0615bc54d37ab20d8a5ed011c6af620b27b8f62299e46196457ec1
-// contract digest e28cd1562bab08223ec6f65f42a29bccbb41a2ebb899f233ef6abd757672022d
+// model digest dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda
+// contract digest 7d415de25a37eea36ac6425b96c4fa73b380215c1b617c8e06d0464a3499f204
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -1810,6 +1810,13 @@ pub enum AddEvalCaseOutcome {
         /// Why it was refused: `cortex.instance.EvalReviewOpen`.
         error: EvalReviewOpen,
     },
+    /// `no-expectations` — externally decided (The review item from_review names is closed with no expected fact and no expected node).
+    ///
+    /// A case with nothing expected passes every answer; the set file is unchanged and not created.
+    NoExpectations {
+        /// Why it was refused: `cortex.instance.EvalNoExpectations`.
+        error: EvalNoExpectations,
+    },
     /// `case-exists` — externally decided (The set already holds a case with the review id as its id or its review_id).
     ///
     /// The set file is unchanged.
@@ -3002,6 +3009,15 @@ pub struct ConnectionUnavailable {
 /// The set already holds the case of this review item, or a case with its id; one review item yields one case in a set.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EvalCaseExists {
+    /// `review_id` — `cortex.ask.ReviewId`.
+    pub review_id: crate::ask::ReviewId,
+}
+
+/// The declared error `cortex.instance.EvalNoExpectations`.
+///
+/// The review item is closed but its reviewer wrote no expected fact and no expected node (an item closed before the answer records held expectations has none): a case with nothing expected passes every answer, so no case was added.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalNoExpectations {
     /// `review_id` — `cortex.ask.ReviewId`.
     pub review_id: crate::ask::ReviewId,
 }
