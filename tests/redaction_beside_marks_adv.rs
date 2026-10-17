@@ -90,7 +90,10 @@ fn the_gate_finds_a_name_after_an_upper_case_letter_or_digit_and_an_underscore()
 fn a_hyphenated_name_after_an_upper_case_letter_and_an_underscore_is_not_shown_in_part() {
     let r = policy(true, &[], false);
     let (shown, _) = one(&r, "attached: CV_Jean-Luc.pdf");
-    assert!(!shown.contains("Jean"), "half a name reaches the model: {shown}");
+    assert!(
+        !shown.contains("Jean"),
+        "half a name reaches the model: {shown}"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -177,7 +180,10 @@ fn a_name_with_a_footnote_digit_is_not_shown() {
 #[ignore = "adversary finding: spec-sanctioned (identifier through underscores); judgement"]
 fn a_name_in_a_lower_case_prefixed_file_name_is_not_shown() {
     let r = policy(true, &[], true);
-    let (shown, left) = one(&r, "Rowan sent lebenslauf_Rowan_Quill.pdf and re_Jean-Luc.txt");
+    let (shown, left) = one(
+        &r,
+        "Rowan sent lebenslauf_Rowan_Quill.pdf and re_Jean-Luc.txt",
+    );
     for name in ["Rowan", "Quill", "Jean", "Luc"] {
         assert!(
             !shown.contains(name),
