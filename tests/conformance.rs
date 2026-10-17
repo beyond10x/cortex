@@ -714,6 +714,10 @@ impl Scenario {
                     "batch-too-large",
                     Some(("BatchTooLarge", json!({"reason": error.reason}))),
                 ),
+                m::RunSourceOutcome::Terminated { error } => (
+                    "terminated",
+                    Some(("RunTerminated", json!({"reason": error.reason}))),
+                ),
                 m::RunSourceOutcome::Ran { .. } => ("ran", None),
                 m::RunSourceOutcome::FetchOnlyFailed { error } => (
                     "fetch-only-failed",
