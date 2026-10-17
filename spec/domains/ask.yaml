@@ -226,7 +226,8 @@ entities:
   # milliseconds from the question to the last event; `at` when the question was asked.
   # `question` and `answer` are kept with every credential shape masked (`[masked:<shape>]`,
   # `crate::mask`), whatever the instance's `redaction` policy, as everywhere cortex writes text;
-  # the mask is irreversible. A vote's `comment` and a review item's `close_reason` are kept so too.
+  # the mask is irreversible. A vote's `comment` and a review item's `close_reason` and
+  # `expect_facts` are kept so too.
   - name: cortex.ask.AnswerRecord
     identity:
       name: answer_id
@@ -291,6 +292,9 @@ entities:
 
   # An answer in the review queue for one cause (`cortex.ask.ReviewId`), open until a reviewer
   # closes it with a reason. A `voted-down` item stays open when the vote is changed to `up`.
+  # `expect_facts` and `expect_nodes` are what the reviewer says a right answer contains and
+  # cites, written at close and absent while the item is open; `cortex eval case add
+  # --from-review` makes them an eval case's expectations (`cortex.instance.AddEvalCase`).
   - name: cortex.ask.ReviewItem
     identity:
       name: review_id
@@ -301,6 +305,8 @@ entities:
       - {name: opened_at, type: Timestamp}
       - {name: close_reason, type: Optional<String>}
       - {name: closed_at, type: Optional<Timestamp>}
+      - {name: expect_facts, type: Optional<List<String>>}
+      - {name: expect_nodes, type: Optional<List<String>>}
     lifecycle:
       initial: Open
       states: [Open, Closed]
@@ -611,14 +617,19 @@ commands:
     naming:
       wire: close-review
       display: Close a review item
-    # `POST /review/{review_id}/close` with the JSON body `{"reason": …}`, a reason that is not
-    # empty; it answers 200 with the item. `GET /review` lists the open items
-    # (`cortex.ask.OpenReviews`). Both answer 401 without an identity, as `POST /ask` does.
-    # A close writes only an item that is still open: of two closes of one item at once, one is
-    # `closed` and the other `wrong-state`, and the item keeps the first one's reason.
+    # `POST /review/{review_id}/close` with the JSON body `{"reason": …, "expect_facts": […],
+    # "expect_nodes": […]}`, a reason that is not empty and two optional lists of strings that are
+    # not blank (absent is empty; anything else answers 400); it answers 200 with the item.
+    # `GET /review` lists the open items (`cortex.ask.OpenReviews`). Both answer 401 without an
+    # identity, as `POST /ask` does. A close writes only an item that is still open: of two closes
+    # of one item at once, one is `closed` and the other `wrong-state`, and the item keeps the
+    # first one's reason and expectations. The expected facts are kept with their credential
+    # shapes masked, as the reason is.
     input:
       - {name: review_id, type: cortex.ask.ReviewId}
       - {name: reason, type: String}
+      - {name: expect_facts, type: List<String>}
+      - {name: expect_nodes, type: List<String>}
     outcomes:
       - name: closed
         moves: cortex.ask.ReviewItem.close
@@ -626,6 +637,8 @@ commands:
         sets:
           close_reason: input.reason
           closed_at: {generated: true}
+          expect_facts: input.expect_facts
+          expect_nodes: input.expect_nodes
         emits:
           - cortex.ask.ReviewClosed
         payload:

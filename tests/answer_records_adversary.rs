@@ -138,12 +138,12 @@ fn two_closes_of_one_review_item_at_once_close_it_once() {
     {
         let (direct, second) = (direct.clone(), second.clone());
         *store.before_review.lock().unwrap() = Some(Box::new(move || {
-            let (outcome, _) = direct.close("a:failed", "second").unwrap();
+            let (outcome, _) = direct.close("a:failed", "second", vec![], vec![]).unwrap();
             *second.lock().unwrap() = Some(outcome);
         }));
     }
     let (first, _) = keeper(Arc::new(store), 90)
-        .close("a:failed", "first")
+        .close("a:failed", "first", vec![], vec![])
         .unwrap();
     let second = second.lock().unwrap().take().expect("the second close ran");
 
@@ -267,7 +267,7 @@ fn ids_shaped_like_sql_find_nothing_and_change_nothing() {
             k.vote(id, "bob", ma::VoteValue::Down, None),
             Err(cortex_cli::ask::records::VoteRefused::NoSuchAnswer)
         ));
-        let (outcome, item) = k.close(id, "reason").unwrap();
+        let (outcome, item) = k.close(id, "reason", vec![], vec![]).unwrap();
         assert!(
             matches!(outcome, ma::CloseReviewOutcome::NoSuchReview { .. }),
             "{id}: {outcome:?}"

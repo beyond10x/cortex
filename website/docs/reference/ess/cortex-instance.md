@@ -118,7 +118,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 
 ### `EvalCase`
 
-`cortex.instance.EvalCase` is a record of six fields:
+`cortex.instance.EvalCase` is a record of seven fields:
 
 - `format` — `String`
 - `id` — `String`
@@ -126,6 +126,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 - `expect_facts` — `List<String>`
 - `expect_nodes` — `List<String>`
 - `source` — `Optional<String>`, which may be absent
+- `review_id` — `Optional<cortex.ask.ReviewId>`, which may be absent
 
 ### `EvalResult`
 
@@ -863,6 +864,30 @@ A generated scenario asserts it once, immediately after the command: a view prom
 
 ## Commands
 
+### `AddEvalCase`
+
+`cortex.instance.AddEvalCase`, shown to a person as "Add an eval case from a review" and called `case` on the wire.
+
+It takes:
+
+- `name` — `cortex.instance.InstanceName`
+- `set` — `String`
+- `from_review` — `cortex.ask.ReviewId`
+
+It has six outcomes.
+
+**`set-invalid`** — The set file is unchanged. Decided outside the input: The set file exists and cannot be read or is not a cortex.eval-case/1 set. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.EvalSetInvalid`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`no-such-review`** — The set file is unchanged. Decided outside the input: The instance's answer records hold no review item from_review names, or not its answer. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.EvalReviewNotFound`, carrying `review_id`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`review-open`** — The item has no expectations until a reviewer closes it; the set file is unchanged. Decided outside the input: The review item from_review names is still open. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.EvalReviewOpen`, carrying `review_id`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`case-exists`** — The set file is unchanged. Decided outside the input: The set already holds a case with the review id as its id or its review_id. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.EvalCaseExists`, carrying `review_id`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`added`** — The set file ends with the new case; `id` is the case's id and `cases` counts the set's cases with it. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.EvalCaseAdded`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+
+**`no-such-instance`** — Nothing was read or written. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
+
 ### `AddSource`
 
 `cortex.instance.AddSource`, shown to a person as "Add a source" and called `add` on the wire.
@@ -1194,6 +1219,22 @@ It has four outcomes.
 
 ## Events
 
+### `EvalCaseAdded`
+
+`cortex.instance.EvalCaseAdded`.
+
+It carries:
+
+- `name` — `cortex.instance.InstanceName`
+- `set` — `String`
+- `review_id` — `cortex.ask.ReviewId`
+- `id` — `String`
+- `cases` — `Integer`
+
+Emitted by `cortex.instance.AddEvalCase` on its `added` outcome.
+
+Nothing in this system reacts to it.
+
 ### `EvalRan`
 
 `cortex.instance.EvalRan`.
@@ -1524,6 +1565,36 @@ It carries:
 
 Reported by `cortex.instance.RunSource` on its `connection-unavailable` outcome.
 
+### `EvalCaseExists`
+
+The set already holds the case of this review item, or a case with its id; one review item yields one case in a set.
+
+It carries:
+
+- `review_id` — `cortex.ask.ReviewId`
+
+Reported by `cortex.instance.AddEvalCase` on its `case-exists` outcome.
+
+### `EvalReviewNotFound`
+
+The instance's answer records hold no review item with this id, or not the answer record it belongs to (a purge took them); no case was added.
+
+It carries:
+
+- `review_id` — `cortex.ask.ReviewId`
+
+Reported by `cortex.instance.AddEvalCase` on its `no-such-review` outcome.
+
+### `EvalReviewOpen`
+
+The review item is still open: its expected facts and nodes are written when a reviewer closes it, so it yields no case yet.
+
+It carries:
+
+- `review_id` — `cortex.ask.ReviewId`
+
+Reported by `cortex.instance.AddEvalCase` on its `review-open` outcome.
+
 ### `EvalRunnerFailed`
 
 The runner could not answer a case: the model call failed, timed out, answered no valid answer or found the budget or the instance's daily ceiling spent; no `cortex ask serve` answered; or the run `replay` names holds no recorded answer for a case. `results.jsonl` keeps the results of the cases answered before; no `summary.json` was written.
@@ -1541,6 +1612,8 @@ The eval set cannot be read, or is not a `cortex.eval-case/1` set: a case of ano
 It carries:
 
 - `reason` — `String`
+
+Reported by `cortex.instance.AddEvalCase` on its `set-invalid` outcome.
 
 Reported by `cortex.instance.RunEval` on its `set-invalid` outcome.
 
@@ -1593,6 +1666,8 @@ No instance has this name.
 It carries:
 
 - `name` — `cortex.instance.InstanceName`
+
+Reported by `cortex.instance.AddEvalCase` on its `no-such-instance` outcome.
 
 Reported by `cortex.instance.ApplySchemaProposals` on its `no-such-instance` outcome.
 
@@ -1837,7 +1912,7 @@ An actor is who may ask this context for something. Every grant below points at 
 
 `cortex.instance.Operator`, shown to a person as "Operator".
 
-It may invoke [`AddSource`](#addsource), [`AdoptInstance`](#adoptinstance), [`ApplySchemaProposals`](#applyschemaproposals), [`ApproveSchemaProposals`](#approveschemaproposals), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`MeasureQuality`](#measurequality), [`ProposeSchemaChanges`](#proposeschemachanges), [`RejectSchemaProposals`](#rejectschemaproposals), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot), [`RunEval`](#runeval) and [`UpdateInstance`](#updateinstance).
+It may invoke [`AddEvalCase`](#addevalcase), [`AddSource`](#addsource), [`AdoptInstance`](#adoptinstance), [`ApplySchemaProposals`](#applyschemaproposals), [`ApproveSchemaProposals`](#approveschemaproposals), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`MeasureQuality`](#measurequality), [`ProposeSchemaChanges`](#proposeschemachanges), [`RejectSchemaProposals`](#rejectschemaproposals), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot), [`RunEval`](#runeval) and [`UpdateInstance`](#updateinstance).
 
 ### `Scheduler`
 
@@ -1848,4 +1923,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168` · contract digest `slice-sha256/2:91e0e586bfd696fc723d02c0bbbd922744c1f898631cd43c71da5e79af3d4227`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `785a52f01fac9f330a345df82303219f49a355f40ae72a498b663dbb8a26c5e6` · contract digest `slice-sha256/2:93b4c00c765763959669f5f5333ef6dfa793b0ff25b467db479758b74cffc93a`. Do not edit this file; change the specification and regenerate it with `task generate`.

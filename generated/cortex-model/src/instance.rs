@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168
-// contract digest 8430bcd9044fb62ace879bb3f848bc003309cb17d8528501327ed301f98ec627
+// model digest 785a52f01fac9f330a345df82303219f49a355f40ae72a498b663dbb8a26c5e6
+// contract digest ea271169878b423bc3c2b22eb59a3d14dea5eb2f741ac5807d5ea0e053e37b22
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -181,6 +181,8 @@ pub struct EvalCase {
     pub expect_nodes: Vec<String>,
     /// `source` — `Optional<String>`.
     pub source: Option<String>,
+    /// `review_id` — `Optional<cortex.ask.ReviewId>`.
+    pub review_id: Option<crate::ask::ReviewId>,
 }
 
 /// EvalResult — `cortex.instance.EvalResult`.
@@ -1767,6 +1769,70 @@ impl AnySource {
     }
 }
 
+/// Add an eval case from a review — the input of `cortex.instance.AddEvalCase`.
+///
+/// Everything it can result in is [`AddEvalCaseOutcome`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddEvalCase {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `set` — `String`.
+    pub set: String,
+    /// `from_review` — `cortex.ask.ReviewId`.
+    pub from_review: crate::ask::ReviewId,
+}
+
+/// Everything `cortex.instance.AddEvalCase` can result in — one variant per declared outcome.
+///
+/// An infrastructure failure is deliberately not in here: a refusal is a fact about the domain,
+/// a transport fault is a fact about the run, and conflating the two is what the declared
+/// outcomes exist to prevent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AddEvalCaseOutcome {
+    /// `set-invalid` — externally decided (The set file exists and cannot be read or is not a cortex.eval-case/1 set).
+    ///
+    /// The set file is unchanged.
+    SetInvalid {
+        /// Why it was refused: `cortex.instance.EvalSetInvalid`.
+        error: EvalSetInvalid,
+    },
+    /// `no-such-review` — externally decided (The instance's answer records hold no review item from_review names, or not its answer).
+    ///
+    /// The set file is unchanged.
+    NoSuchReview {
+        /// Why it was refused: `cortex.instance.EvalReviewNotFound`.
+        error: EvalReviewNotFound,
+    },
+    /// `review-open` — externally decided (The review item from_review names is still open).
+    ///
+    /// The item has no expectations until a reviewer closes it; the set file is unchanged.
+    ReviewOpen {
+        /// Why it was refused: `cortex.instance.EvalReviewOpen`.
+        error: EvalReviewOpen,
+    },
+    /// `case-exists` — externally decided (The set already holds a case with the review id as its id or its review_id).
+    ///
+    /// The set file is unchanged.
+    CaseExists {
+        /// Why it was refused: `cortex.instance.EvalCaseExists`.
+        error: EvalCaseExists,
+    },
+    /// `added` — otherwise.
+    ///
+    /// The set file ends with the new case; `id` is the case's id and `cases` counts the set's cases with it.
+    Added {
+        /// The `cortex.instance.EvalCaseAdded` this outcome publishes.
+        eval_case_added: EvalCaseAdded,
+    },
+    /// `no-such-instance` — for an identity no record carries.
+    ///
+    /// Nothing was read or written.
+    NoSuchInstance {
+        /// Why it was refused: `cortex.instance.InstanceNotFound`.
+        error: InstanceNotFound,
+    },
+}
+
 /// Add a source — the input of `cortex.instance.AddSource`.
 ///
 /// Everything it can result in is [`AddSourceOutcome`].
@@ -2608,6 +2674,21 @@ pub enum UpdateInstanceOutcome {
     },
 }
 
+/// EvalCaseAdded — the event `cortex.instance.EvalCaseAdded`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalCaseAdded {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `set` — `String`.
+    pub set: String,
+    /// `review_id` — `cortex.ask.ReviewId`.
+    pub review_id: crate::ask::ReviewId,
+    /// `id` — `String`.
+    pub id: String,
+    /// `cases` — `Integer`.
+    pub cases: i64,
+}
+
 /// EvalRan — the event `cortex.instance.EvalRan`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EvalRan {
@@ -2916,6 +2997,33 @@ pub struct ConnectionUnavailable {
     pub reason: String,
 }
 
+/// The declared error `cortex.instance.EvalCaseExists`.
+///
+/// The set already holds the case of this review item, or a case with its id; one review item yields one case in a set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalCaseExists {
+    /// `review_id` — `cortex.ask.ReviewId`.
+    pub review_id: crate::ask::ReviewId,
+}
+
+/// The declared error `cortex.instance.EvalReviewNotFound`.
+///
+/// The instance's answer records hold no review item with this id, or not the answer record it belongs to (a purge took them); no case was added.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalReviewNotFound {
+    /// `review_id` — `cortex.ask.ReviewId`.
+    pub review_id: crate::ask::ReviewId,
+}
+
+/// The declared error `cortex.instance.EvalReviewOpen`.
+///
+/// The review item is still open: its expected facts and nodes are written when a reviewer closes it, so it yields no case yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalReviewOpen {
+    /// `review_id` — `cortex.ask.ReviewId`.
+    pub review_id: crate::ask::ReviewId,
+}
+
 /// The declared error `cortex.instance.EvalRunnerFailed`.
 ///
 /// The runner could not answer a case: the model call failed, timed out, answered no valid answer or found the budget or the instance's daily ceiling spent; no `cortex ask serve` answered; or the run `replay` names holds no recorded answer for a case. `results.jsonl` keeps the results of the cases answered before; no `summary.json` was written.
@@ -3219,6 +3327,17 @@ pub struct Sources {
 /// per generated behaviour, which [`Generated`](crate::behaviour::Generated) implements.
 /// [`Unimplemented`](obligations::Unimplemented) satisfies every owed trait by refusing in the type system.
 pub mod obligations {
+    /// The behaviour `cortex.instance.AddEvalCase` — generated.
+    ///
+    /// The specification fully determines it: [`crate::behaviour::Generated`] implements it
+    /// over the storage and context ports. Implement it yourself to replace that behaviour.
+    pub trait AddEvalCaseBehavior {
+        /// Decides and enacts exactly one declared outcome of `cortex.instance.AddEvalCase`.
+        ///
+        /// `Err` is the typed refusal of a request the model declares no outcome for.
+        fn add_eval_case(&mut self, input: super::AddEvalCase) -> Result<super::AddEvalCaseOutcome, crate::obligation::UnmetObligation>;
+    }
+
     /// The behaviour `cortex.instance.AddSource` — generated.
     ///
     /// The specification fully determines it: [`crate::behaviour::Generated`] implements it

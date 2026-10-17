@@ -4,11 +4,17 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168",
-    "contract_digest": "slice-sha256/2:81d8372727c5cb56eaa3ae900a6d01e6ba7340b66baf38c4e17e653012e4fc07",
+    "source_digest": "785a52f01fac9f330a345df82303219f49a355f40ae72a498b663dbb8a26c5e6",
+    "contract_digest": "slice-sha256/2:26086163a57ca7eeb10ee24860ae68b06cc5dde85e9371d3d6015581b1c2591b",
     "regenerate": "ess generate"
   },
   "$defs": {
+    "cortex.ask.ReviewId": {
+      "title": "ReviewId",
+      "x-ess-name": "cortex.ask.ReviewId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
     "cortex.instance.EvalCase": {
       "title": "EvalCase",
       "x-ess-name": "cortex.instance.EvalCase",
@@ -38,6 +44,9 @@
         },
         "source": {
           "type": "string"
+        },
+        "review_id": {
+          "$ref": "#/$defs/cortex.ask.ReviewId"
         }
       },
       "required": [

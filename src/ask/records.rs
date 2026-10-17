@@ -91,7 +91,8 @@ pub trait RecordStore: Send + Sync {
 /// The schema of `ask.sqlite`, one step per version: step `i` takes version `i` to `i + 1`, and
 /// `PRAGMA user_version` holds the version a file is at. A file at a version past the last step
 /// was written by a newer cortex and is refused.
-const MIGRATIONS: &[&str] = &["
+const MIGRATIONS: &[&str] = &[
+    "
     CREATE TABLE answers (
         answer_id TEXT PRIMARY KEY,
         instance_name TEXT NOT NULL,
@@ -130,7 +131,12 @@ const MIGRATIONS: &[&str] = &["
     );
     CREATE INDEX reviews_answer ON reviews (answer_id);
     CREATE INDEX reviews_state ON reviews (state, opened_ms);
-"];
+",
+    "
+    ALTER TABLE reviews ADD COLUMN expect_facts TEXT;
+    ALTER TABLE reviews ADD COLUMN expect_nodes TEXT;
+",
+];
 
 /// The schema version this cortex writes.
 pub const SCHEMA_VERSION: i64 = MIGRATIONS.len() as i64;
@@ -240,7 +246,7 @@ const ANSWER: &str = "SELECT answer_id, instance_name, identity, question, answe
     steps, at_ms FROM answers";
 const VOTE: &str = "SELECT vote_id, answer_id, identity, value, comment, at_ms FROM votes";
 const REVIEW: &str = "SELECT review_id, answer_id, cause, state, opened_ms, close_reason, \
-    closed_ms FROM reviews";
+    closed_ms, expect_facts, expect_nodes FROM reviews";
 
 /// A row of `answers`; a value the schema cannot hold (an unknown outcome, broken tool calls) is
 /// the inner `Err`.
@@ -299,6 +305,12 @@ fn review_row(r: &rusqlite::Row) -> rusqlite::Result<Result<ma::ReviewItemSnapsh
         )));
     };
     let closed: Option<i64> = r.get(6)?;
+    let (facts, nodes): (Option<String>, Option<String>) = (r.get(7)?, r.get(8)?);
+    let (Some(expect_facts), Some(expect_nodes)) =
+        (list_of(facts.as_deref()), list_of(nodes.as_deref()))
+    else {
+        return Ok(Err(format!("review item {id}: expectations")));
+    };
     Ok(Ok(ma::ReviewItemSnapshot {
         state,
         data: ma::ReviewItemData {
@@ -308,8 +320,24 @@ fn review_row(r: &rusqlite::Row) -> rusqlite::Result<Result<ma::ReviewItemSnapsh
             opened_at: stamp(r.get(4)?),
             close_reason: r.get(5)?,
             closed_at: closed.map(stamp),
+            expect_facts,
+            expect_nodes,
         },
     }))
+}
+
+/// A list column: JSON text, or NULL for a list never written (an item still open, or closed
+/// before the column existed). The outer `None` is text that is not a JSON list of strings.
+fn list_of(text: Option<&str>) -> Option<Option<Vec<String>>> {
+    match text {
+        None => Some(None),
+        Some(t) => serde_json::from_str(t).ok().map(Some),
+    }
+}
+
+/// A list as its column holds it.
+fn list_text(list: &Option<Vec<String>>) -> Option<String> {
+    list.as_ref().map(|l| Value::from(l.clone()).to_string())
 }
 
 impl RecordStore for Records {
@@ -470,14 +498,17 @@ impl RecordStore for Records {
             ma::ReviewItemState::Closed => {
                 let written = self.with(|db| {
                     db.execute(
-                        "UPDATE reviews SET state = ?2, close_reason = ?3, closed_ms = ?4 \
+                        "UPDATE reviews SET state = ?2, close_reason = ?3, closed_ms = ?4, \
+                         expect_facts = ?6, expect_nodes = ?7 \
                          WHERE review_id = ?1 AND state = ?5",
                         params![
                             d.review_id.0,
                             review_state_name(item.state),
                             d.close_reason,
                             closed,
-                            review_state_name(ma::ReviewItemState::Open)
+                            review_state_name(ma::ReviewItemState::Open),
+                            list_text(&d.expect_facts),
+                            list_text(&d.expect_nodes)
                         ],
                     )
                 })?;
@@ -937,18 +968,23 @@ impl Keeper {
     }
 
     /// Closes a review item with `reason` (`cortex.ask.CloseReview`): the outcome, and the item as
-    /// it is kept after it. The reason is kept with its credential shapes masked. Of two closes of
+    /// it is kept after it, with the reviewer's expected facts and nodes. The reason and the
+    /// expected facts are kept with their credential shapes masked. Of two closes of
     /// one item at once, the one whose write finds the item closed answers `wrong-state`, and one
     /// whose item a purge took answers `no-such-review`.
     pub fn close(
         &self,
         review_id: &str,
         reason: &str,
+        expect_facts: Vec<String>,
+        expect_nodes: Vec<String>,
     ) -> Result<(ma::CloseReviewOutcome, Option<ma::ReviewItemSnapshot>), String> {
         let id = ma::ReviewId(review_id.into());
         let input = ma::CloseReview {
             review_id: id.clone(),
             reason: masked(reason),
+            expect_facts: expect_facts.iter().map(|f| masked(f)).collect(),
+            expect_nodes,
         };
         let outcome = match self.run(|_| {}, |app| app.close_review(input)) {
             Err(e) if e == REVIEW_NOT_OPEN => None,
@@ -1096,5 +1132,31 @@ mod tests {
             .unwrap();
         drop(db);
         assert!(Records::open(&path).is_ok());
+    }
+
+    #[test]
+    fn a_file_of_the_first_version_keeps_its_closed_items_with_no_expectations() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(FILE);
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch(MIGRATIONS[0]).unwrap();
+        db.pragma_update(None, "user_version", 1).unwrap();
+        db.execute(
+            "INSERT INTO reviews (review_id, answer_id, cause, state, opened_ms, close_reason, \
+             closed_ms) VALUES ('a:failed', 'a', 'failed', 'Closed', 1, 'done', 2)",
+            [],
+        )
+        .unwrap();
+        drop(db);
+        let records = Records::open(&path).unwrap();
+        let item = records
+            .review(&ma::ReviewId("a:failed".into()))
+            .unwrap()
+            .expect("kept");
+        assert_eq!(item.data.close_reason.as_deref(), Some("done"));
+        assert_eq!(
+            (item.data.expect_facts, item.data.expect_nodes),
+            (None, None)
+        );
     }
 }
