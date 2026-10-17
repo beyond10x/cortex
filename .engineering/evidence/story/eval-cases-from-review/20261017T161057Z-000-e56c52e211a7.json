@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-17T16:10:57Z",
+  "actor": "human:timo",
+  "artifact": "story:eval-cases-from-review",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "~/.cache/cortex-w17b/gate/test-21bc1de8.log"
+  }
+}
