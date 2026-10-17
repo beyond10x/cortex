@@ -574,7 +574,7 @@ fn a_record_past_retention_is_purged_with_its_votes_and_reviews_and_a_new_one_st
         .into_iter()
         .map(|r| r.answer_id.0)
         .collect();
-    assert_eq!(kept, [new.clone()]);
+    assert_eq!(kept, std::slice::from_ref(&new));
     assert!(records.votes(&old).unwrap().is_empty());
     assert!(records.reviews(&old).unwrap().is_empty());
     assert_eq!(records.votes(&new).unwrap().len(), 1);

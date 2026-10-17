@@ -97,6 +97,17 @@ fn same(a: &Value, b: &Value) -> bool {
     }
 }
 
+/// Two row values ordered, or `None` for a missing value or two kinds nothing orders. Texts order
+/// by their bytes: every timestamp a view of this harness publishes is written in one UTC form.
+fn rank(a: &Value, b: &Value) -> Option<std::cmp::Ordering> {
+    match (a, b) {
+        (Value::Number(_), Value::Number(_)) => a.as_f64()?.partial_cmp(&b.as_f64()?),
+        (Value::String(x), Value::String(y)) => Some(x.as_bytes().cmp(y.as_bytes())),
+        (Value::Bool(x), Value::Bool(y)) => Some(x.cmp(y)),
+        _ => None,
+    }
+}
+
 fn event(e: PublishedEvent) -> (String, Value) {
     let (name, payload) = match e {
         PublishedEvent::InstanceCreated(e) => (
@@ -486,10 +497,11 @@ impl Scenario {
                 .get(spec["instance"].as_str().unwrap())
                 .cloned()
                 .unwrap_or_else(|| panic!("nothing captured as {}", spec["instance"])),
+            // The first publication of the event, as the ESS reference runner resolves it: a
+            // scenario's own subject publishes before any later step's sibling row does.
             Some("observed") => self
                 .observed
                 .iter()
-                .rev()
                 .find(|(name, _)| name == spec["event"].as_str().unwrap())
                 .map(|(_, payload)| payload[spec["field"].as_str().unwrap()].clone())
                 .unwrap_or_else(|| panic!("no {} observed", spec["event"])),
@@ -1361,6 +1373,42 @@ impl Scenario {
                             "{view} holds {} rows, not at least {at_least}",
                             rows.len()
                         );
+                    }
+                    "ranked" => {
+                        // As the ESS reference runner ranks: each neighbouring pair in order on
+                        // its first key that differs; a tie on every key is in order.
+                        let keys: Vec<(&str, bool)> = expectation["order_by"]
+                            .as_array()
+                            .expect("order_by")
+                            .iter()
+                            .map(|k| {
+                                let k = k.as_str().unwrap();
+                                match k.rsplit_once(' ') {
+                                    Some((field, "desc")) => (field, false),
+                                    Some((field, "asc")) => (field, true),
+                                    _ => (k, true),
+                                }
+                            })
+                            .collect();
+                        for pair in rows.windows(2) {
+                            for (field, ascending) in &keys {
+                                let order =
+                                    rank(&pair[0][field], &pair[1][field]).unwrap_or_else(|| {
+                                        panic!("{view}: `{field}` has no order in {pair:?}")
+                                    });
+                                if order == std::cmp::Ordering::Equal {
+                                    continue;
+                                }
+                                assert_eq!(
+                                    order == std::cmp::Ordering::Less,
+                                    *ascending,
+                                    "{view}: {} then {} is not ordered by {keys:?}",
+                                    pair[0],
+                                    pair[1]
+                                );
+                                break;
+                            }
+                        }
                     }
                     other => panic!("unsupported expectation {other}"),
                 }
