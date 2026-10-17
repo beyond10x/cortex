@@ -9,7 +9,8 @@ relations:
 - specifies: story:eval-run
 - specifies: story:answer-records-and-review
 - specifies: story:eval-cases-from-review
-revision: 3
+- specifies: story:ask-redaction
+revision: 4
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-17T03:37:09Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-17T03:37:09Z", actor: "human:timo", revision: 3}
@@ -38,3 +39,10 @@ for the optional `ask` field ask-service adds to `cortex.instance.InstanceSpec`.
 `src/lib.rs` and `generated/` are shared; the integration branch merges the first two additively
 and regenerates the third. The tool loop over `ekr mcp` belongs to ask-service; eval-run's `mcp`
 runner uses it once both are merged.
+
+## Added 2026-10-17: store contents redacted before the model
+
+`story:ask-redaction`: the ask service and the eval `mcp` runner apply the instance's redaction
+policy to store contents (tool results) before the model sees them, and restore placeholders in
+the answer. Decided by the operator on 2026-10-17; it lands in this wave, before the ask service
+ships in a release. It runs once ask and eval are merged, as it changes both.

@@ -2,17 +2,18 @@
 format: aep.planning-md/3
 id: story:schema-proposals-on-approval
 kind: story
-status: active
+status: implemented
 title: Schema proposals are recorded, decided one by one, and only the approved ones applied in a gated stage
 summary: cortex schema --review records pending proposals; approve and reject decide each; apply runs exactly the approved ones in an EKR stage or after a snapshot, with no second model call
 relations:
 - decomposes: epic:organisation-scale-instance
 - serves: vision:self-updating-instances
 - informed_by: story:schema-emergence
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-17T02:21:55Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-10-17T02:21:56Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-10-17T03:58:40Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 
