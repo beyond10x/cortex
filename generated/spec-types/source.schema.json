@@ -1049,6 +1049,12 @@
     "cortex.instance.RecordMapping": {
       "additionalProperties": false,
       "properties": {
+        "alias_templates": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "aliases": {
           "items": {
             "type": "string"
@@ -1830,8 +1836,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:7a4a9d280f6dd245837da09ff77a16b7f1848b57183c83183296e7dacfe3c4f8",
-    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:435d3fafd34d698d3b812b2ab8cce21380be213ab6d89504dd7819d628d6805c",
+    "source_digest": "aa803d5fc727448fdc67db2b62ea07416e47fd00e48479e5419e9c0ab02ee313",
     "specification_version": "v1",
     "system": "cortex"
   }

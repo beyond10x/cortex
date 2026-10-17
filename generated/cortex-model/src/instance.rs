@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda
-// contract digest 7d415de25a37eea36ac6425b96c4fa73b380215c1b617c8e06d0464a3499f204
+// model digest aa803d5fc727448fdc67db2b62ea07416e47fd00e48479e5419e9c0ab02ee313
+// contract digest fc938cf590397daaea314b0d740cec2f7eec65097ef799a6d0f3db60df721a9c
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -352,6 +352,28 @@ pub struct InstanceSpec {
     pub ask: Option<crate::ask::AskSpec>,
 }
 
+/// KnownEntity — `cortex.instance.KnownEntity`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnownEntity {
+    /// `node_type` — `String`.
+    pub node_type: String,
+    /// `name` — `String`.
+    pub name: String,
+    /// `aliases` — `List<String>`.
+    pub aliases: Vec<String>,
+    /// `origin` — `cortex.instance.KnownOrigin`.
+    pub origin: KnownOrigin,
+}
+
+/// KnownOrigin — `cortex.instance.KnownOrigin`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KnownOrigin {
+    /// `Store`.
+    Store,
+    /// `Run`.
+    Run,
+}
+
 /// ModelBackend — `cortex.instance.ModelBackend`: one of a closed set of names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelBackend {
@@ -570,6 +592,8 @@ pub struct RecordMapping {
     pub properties: Vec<PropertyMapping>,
     /// `relations` — `List<cortex.instance.RelationMapping>`.
     pub relations: Vec<RelationMapping>,
+    /// `alias_templates` — `Optional<List<String>>`.
+    pub alias_templates: Option<Vec<String>>,
 }
 
 /// RedactionClass — `cortex.instance.RedactionClass`: one of a closed set of names.

@@ -1579,6 +1579,7 @@ mod tests {
                 target_type: "Team".into(),
                 target_name: "$.teams".into(),
             }],
+            alias_templates: None,
         }
     }
 
@@ -1872,6 +1873,7 @@ mod tests {
                 aliases: Vec::new(),
                 properties: Vec::new(),
                 relations: Vec::new(),
+                alias_templates: None,
             },
             time: Some("$.at".into()),
             parent: "IN_PROJECT".into(),
