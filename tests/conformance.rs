@@ -1539,7 +1539,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        111,
+        113,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

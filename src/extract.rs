@@ -113,6 +113,8 @@ pub struct Refused {
     pub error_answer: bool,
     /// The error answer said the request did not fit the model's window ([`unfit`]).
     pub unfit: Option<Unfit>,
+    /// The call was ended because the run was sent SIGTERM ([`crate::terminate`]).
+    pub terminated: bool,
     /// The model calls made: `0` when no model was asked.
     pub calls: i64,
     /// The tokens those calls reported.
@@ -208,6 +210,7 @@ impl Refused {
             cost_usd: Some(0.0),
             error_answer: false,
             unfit: None,
+            terminated: false,
             calls: 0,
             usage: Usage::ZERO,
         }
@@ -220,8 +223,18 @@ impl Refused {
             cost_usd: None,
             error_answer: false,
             unfit: None,
+            terminated: false,
             calls: 1,
             usage: Usage::UNKNOWN,
+        }
+    }
+
+    /// A call ended because the run was sent SIGTERM: a model was asked, and what it cost is not
+    /// known.
+    fn terminated() -> Self {
+        Self {
+            terminated: true,
+            ..Self::uncosted("the model call was ended: the run was sent SIGTERM".into())
         }
     }
 
@@ -499,6 +512,86 @@ impl Drop for PrivateFile {
     }
 }
 
+/// How a model call's process ended.
+enum Waited {
+    Done(std::process::Output),
+    /// It could not be waited for, or the prompt not sent: why.
+    Failed(String),
+    /// The run was sent SIGTERM, and the call was ended.
+    Terminated,
+}
+
+/// How long a model call ended on SIGTERM may take to exit before its process group is killed.
+const TERMINATE_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Sends `prompt` to `child` and waits for it, reading its output, until it exits or the run is
+/// sent SIGTERM ([`crate::terminate::requested`]). Then the child's process group, `timeout` and
+/// what it started (`timeout` runs in a group of its own), is sent SIGTERM, and SIGKILL after
+/// [`TERMINATE_GRACE`]. A child that exits before reading the prompt closes the pipe; its exit
+/// status and stderr say why, so a broken pipe is not the error reported.
+fn wait_or_terminate(child: &mut std::process::Child, prompt: &str) -> Waited {
+    use std::io::Read;
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let text = prompt.to_owned();
+    let writer = std::thread::spawn(move || stdin.write_all(text.as_bytes()));
+    let read = |pipe: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.read_to_end(&mut bytes);
+            }
+            bytes
+        })
+    };
+    let stdout = read(child.stdout.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
+    let stderr = read(child.stderr.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if crate::terminate::requested() => {
+                end(child);
+                return Waited::Terminated;
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(20)),
+            Err(e) => {
+                end(child);
+                return Waited::Failed(format!("claude did not finish: {e}"));
+            }
+        }
+    };
+    match writer.join() {
+        Ok(Err(e)) if e.kind() != std::io::ErrorKind::BrokenPipe => {
+            return Waited::Failed(format!("cannot send the prompt: {e}"));
+        }
+        _ => {}
+    }
+    Waited::Done(std::process::Output {
+        status,
+        stdout: stdout.join().unwrap_or_default(),
+        stderr: stderr.join().unwrap_or_default(),
+    })
+}
+
+/// Ends a model call's process and its group: SIGTERM, then SIGKILL after [`TERMINATE_GRACE`].
+fn end(child: &mut std::process::Child) {
+    use rustix::process::{kill_process, kill_process_group, Pid, Signal};
+    let pid = Pid::from_child(child);
+    let signal = |s: Signal| {
+        let _ = kill_process_group(pid, s);
+        let _ = kill_process(pid, s);
+    };
+    signal(Signal::TERM);
+    let until = std::time::Instant::now() + TERMINATE_GRACE;
+    while std::time::Instant::now() < until {
+        if !matches!(child.try_wait(), Ok(None)) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    signal(Signal::KILL);
+    let _ = child.wait();
+}
+
 impl Model {
     /// One extraction call for one batch, through the spec's backend, run in `dir`: [`ask_with`]
     /// and the extraction prompt [`SYSTEM_PROMPT`]. An error answer that cost zero is asked once
@@ -517,6 +610,14 @@ impl Model {
         match self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd) {
             Err(first) if first.free_error_answer() => {
                 std::thread::sleep(retry_wait());
+                if crate::terminate::requested() {
+                    return Err(Refused {
+                        calls: first.calls,
+                        usage: first.usage,
+                        cost_usd: first.cost_usd,
+                        ..Refused::terminated()
+                    });
+                }
                 match self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd) {
                     Ok(mut answer) => {
                         answer.calls += first.calls;
@@ -661,22 +762,13 @@ impl Model {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| Refused::free(format!("cannot run claude: {e}")))?;
-        // A `claude` that exits before reading the prompt closes the pipe; its exit status and
-        // stderr, read below, say why, so a broken pipe is not the error reported.
-        match child
-            .stdin
-            .take()
-            .expect("piped stdin")
-            .write_all(prompt.as_bytes())
-        {
-            Err(e) if e.kind() != std::io::ErrorKind::BrokenPipe => {
-                return Err(Refused::uncosted(format!("cannot send the prompt: {e}")));
-            }
-            _ => {}
-        }
-        let out = child
-            .wait_with_output()
-            .map_err(|e| Refused::uncosted(format!("claude did not finish: {e}")))?;
+        // The prompt is written, and the answer read, on threads of their own, so a run sent
+        // SIGTERM ends the call however far it got ([`crate::terminate`]).
+        let out = match wait_or_terminate(&mut child, prompt) {
+            Waited::Done(out) => out,
+            Waited::Failed(e) => return Err(Refused::uncosted(e)),
+            Waited::Terminated => return Err(Refused::terminated()),
+        };
         let answer: Value = serde_json::from_slice(&out.stdout).map_err(|_| {
             Refused::uncosted(format!(
                 "claude exited {} without a JSON answer: {}",
@@ -706,6 +798,7 @@ impl Model {
                 cost_usd,
                 error_answer: true,
                 unfit,
+                terminated: false,
                 calls: 1,
                 usage,
             });
@@ -725,6 +818,7 @@ impl Model {
                 cost_usd,
                 error_answer: false,
                 unfit: None,
+                terminated: false,
                 calls: 1,
                 usage,
             }),

@@ -2398,6 +2398,12 @@ const EXIT_CONNECTION_UNAVAILABLE: u8 = 5;
 /// the model's window after it was split as far as it may be: not counted against the source.
 const EXIT_BATCH_TOO_LARGE: u8 = 6;
 
+/// The exit status of a `run` that was sent SIGTERM and stopped at its next safe point (a gated
+/// run undone first): distinct from every failure's, so a wrapper tells a stopped run, which is
+/// not counted against the source, from a broken source, and from a process killed before it
+/// handled the signal (143).
+const EXIT_TERMINATED: u8 = 8;
+
 /// The exit status of each `run` outcome, which an external scheduler reads instead of the line.
 fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
     match outcome {
@@ -2406,6 +2412,7 @@ fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
         m::RunSourceOutcome::StoreOutcomeUnknown { .. } => EXIT_STORE_OUTCOME_UNKNOWN,
         m::RunSourceOutcome::ConnectionUnavailable { .. } => EXIT_CONNECTION_UNAVAILABLE,
         m::RunSourceOutcome::BatchTooLarge { .. } => EXIT_BATCH_TOO_LARGE,
+        m::RunSourceOutcome::Terminated { .. } => EXIT_TERMINATED,
         m::RunSourceOutcome::FetchOnlyFailed { .. }
         | m::RunSourceOutcome::FetchFailed { .. }
         | m::RunSourceOutcome::ExtractionFailed { .. }
@@ -2421,6 +2428,13 @@ fn run_source(
     record: bool,
     fetch_only: bool,
 ) -> ExitCode {
+    // A run that is sent SIGTERM stops at its next safe point and answers `terminated`; a
+    // fetch-only run, which writes nothing, keeps the default and ends at once.
+    if !fetch_only {
+        if let Err(e) = cortex_cli::terminate::install() {
+            return fail(e);
+        }
+    }
     let outcome = match app.run_source(m::RunSource {
         source_id: m::SourceId(source_id.to_string()),
         fetch_only: fetch_only.then_some(true),
@@ -2429,9 +2443,20 @@ fn run_source(
         Err(e) => return fail(e),
     };
     let status = run_status(&outcome);
+    let mut figures = None;
     let (done, failure) = match outcome {
         m::RunSourceOutcome::Ran { source_ran } => {
             let report = ctx.shared.borrow_mut().last_run.take().unwrap_or_default();
+            let count = |n: Option<i64>| n.and_then(|n| u64::try_from(n).ok());
+            figures = Some(cortex_cli::status::Figures {
+                read: count(Some(source_ran.documents_new)).unwrap_or(0),
+                applied: count(Some(source_ran.documents_applied)).unwrap_or(0),
+                input_tokens: count(source_ran.input_tokens)
+                    .zip(count(source_ran.cache_creation_input_tokens))
+                    .map(|(a, b)| a.saturating_add(b)),
+                cached_tokens: count(source_ran.cache_read_input_tokens),
+                output_tokens: count(source_ran.output_tokens),
+            });
             let mut detail = json!({
                 "source_id": source_ran.source_id.0,
                 "documents_new": source_ran.documents_new,
@@ -2607,6 +2632,16 @@ fn run_source(
             },
             None,
         ),
+        // Not a failure of the source either: the run was stopped. No `RecordFailure`; status,
+        // metric and hook report it.
+        m::RunSourceOutcome::Terminated { error } => (
+            Done {
+                outcome: "terminated",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            None,
+        ),
         m::RunSourceOutcome::Disabled { run_skipped } => (
             Done {
                 outcome: "disabled",
@@ -2631,7 +2666,7 @@ fn run_source(
     };
     // A fetch-only run reports nothing: no status file, no metric, no hook.
     if !fetch_only {
-        report_run(ctx, source_id, disabled);
+        report_run(ctx, source_id, disabled, figures);
     }
     ExitCode::from(status)
 }
@@ -2639,7 +2674,12 @@ fn run_source(
 /// Writes the source's status from the outcome the run recorded on it, then the metric file and
 /// the hook call its instance's `monitoring` asks for. A run that named no source (the seed, an
 /// unknown id) recorded nothing and reports nothing.
-fn report_run(ctx: &Ctx, source_id: &str, disabled: bool) {
+fn report_run(
+    ctx: &Ctx,
+    source_id: &str,
+    disabled: bool,
+    figures: Option<cortex_cli::status::Figures>,
+) {
     let (row, sources, at_ms) = {
         let shared = ctx.shared.borrow();
         let Some(row) = shared.registry.sources.get(source_id).cloned() else {
@@ -2669,6 +2709,8 @@ fn report_run(ctx: &Ctx, source_id: &str, disabled: bool) {
             at_ms,
             reason: row.data.last_reason.as_deref(),
             disabled,
+            duration_ms: Some(cortex_cli::instance::now_ms().saturating_sub(at_ms).max(0)),
+            figures,
         },
     );
 }

@@ -484,6 +484,9 @@ impl Ports {
             Err(Failure::BatchTooLarge(reason)) => m::RunSourceOutcome::BatchTooLarge {
                 error: m::BatchTooLarge { reason },
             },
+            Err(Failure::Terminated(reason)) => m::RunSourceOutcome::Terminated {
+                error: m::RunTerminated { reason },
+            },
             Ok(report) => {
                 let ran = source_ran(source_id, &report);
                 self.shared.borrow_mut().last_run = Some(report);
@@ -558,7 +561,8 @@ impl Ports {
                 | Failure::Apply(reason)
                 | Failure::StoreOutcomeUnknown(reason)
                 | Failure::ConnectionUnavailable(reason)
-                | Failure::BatchTooLarge(reason),
+                | Failure::BatchTooLarge(reason)
+                | Failure::Terminated(reason),
             ) => failed(reason),
             Ok(c) => m::RunSourceOutcome::Fetched {
                 source_fetched: m::SourceFetched {
@@ -613,6 +617,7 @@ impl RunSourceBehavior for Ports {
             ("store-outcome-unknown", Failure::StoreOutcomeUnknown),
             ("connection-unavailable", Failure::ConnectionUnavailable),
             ("batch-too-large", Failure::BatchTooLarge),
+            ("terminated", Failure::Terminated),
         ]
         .into_iter()
         .find(|(outcome, _)| self.decided(RUN, outcome));
@@ -672,6 +677,13 @@ impl RunSourceBehavior for Ports {
                 self.note(found, m::RunOutcome::BatchTooLarge, Some(reason.clone()));
                 return Ok(m::RunSourceOutcome::BatchTooLarge {
                     error: m::BatchTooLarge { reason },
+                });
+            }
+            // Recorded on the source like a failure; the scheduler counts none for it (main.rs).
+            Err(Failure::Terminated(reason)) => {
+                self.note(found, m::RunOutcome::Terminated, Some(reason.clone()));
+                return Ok(m::RunSourceOutcome::Terminated {
+                    error: m::RunTerminated { reason },
                 });
             }
             Ok(report) => report,

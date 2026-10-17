@@ -24,3 +24,4 @@ pub mod spend;
 pub mod state;
 pub mod status;
 pub mod structured;
+pub mod terminate;

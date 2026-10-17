@@ -44,6 +44,9 @@ pub enum Failure {
     /// A part of an extraction batch still did not fit the model's window after the batch was
     /// split as far as it may be: not a fault of the source, so it is not counted.
     BatchTooLarge(String),
+    /// The run was sent SIGTERM and stopped at its next safe point ([`crate::terminate`]): not a
+    /// fault of the source, so it is not counted. A gated run is undone ([`settle`]).
+    Terminated(String),
 }
 
 #[derive(Debug)]
@@ -410,6 +413,7 @@ pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Rep
     let planned = Planned::of(layout, source)?;
     let (window, seen_path) = (planned.window, planned.seen_path.clone());
     let ran = planned.fetch(tools).and_then(|fetched| {
+        stop_point("before it used the documents it fetched")?;
         process(
             layout,
             tools,
@@ -914,6 +918,7 @@ fn process_in(
     // Why the run ended `batch-too-large`, when a part still did not fit.
     let mut too_large: Option<String> = None;
     while let Some((batch, depth)) = queue.pop_front() {
+        stop_point(&format!("before batch {n}"))?;
         let dir = run_dir.join(format!("batch-{n}"));
         n += 1;
         // Behind a gateway no dollar amount bounds the call, and none is passed to `claude`.
@@ -999,6 +1004,13 @@ fn process_in(
         report.add_calls(calls, usage, fixed_bytes, prompt.len() - fixed);
         let answer = match asked {
             Ok(answer) => answer,
+            Err(refused) if refused.terminated => {
+                return Err(Failure::Terminated(format!(
+                    "the run was sent SIGTERM while the model was asked for batch {}; the call \
+                     was ended",
+                    n - 1
+                )))
+            }
             // Too long for the model's window, or cut off at the output limit: split in two by
             // documents and ask each half, down to one document and at most 3 splits deep. A part
             // of one document is left out alone, as a record that does not convert is: named in
@@ -1192,6 +1204,20 @@ fn settle(
     ran: Result<Report, Failure>,
     mut before: Undo,
 ) -> Result<Report, Failure> {
+    // A run sent SIGTERM is undone when it is gated: its stage abandoned, or its kept snapshot
+    // restored, as a run its gate refuses is; an ungated run keeps the batches it applied.
+    if let Err(Failure::Terminated(why)) = &ran {
+        return Err(Failure::Terminated(match before.staged.take() {
+            Some(staged) => format!("{why}; {}", staged.abandon()),
+            None if gated(spec) && before.kept.is_some() => {
+                undo_stopped(layout, spec, label, "terminated", why, &before)
+            }
+            None if before.applied => {
+                format!("{why}; the batches applied before it stay applied and seen")
+            }
+            None => format!("{why}; nothing was applied"),
+        }));
+    }
     let Some(staged) = before.staged.take() else {
         return match ran {
             // A gated run outside a stage whose write was unknown: an earlier batch committed
@@ -1252,6 +1278,27 @@ fn undo_unknown(
     why: String,
     before: &Undo,
 ) -> Failure {
+    Failure::StoreOutcomeUnknown(undo_stopped(
+        layout,
+        spec,
+        label,
+        "store-outcome-unknown",
+        &why,
+        before,
+    ))
+}
+
+/// Undoes a gated run outside a stage that ended as `outcome` after a batch committed, from its
+/// kept snapshot, with [`undo`]: the reason `why`, followed by what was done, which `cortex.log`
+/// records beside the snapshot restored.
+fn undo_stopped(
+    layout: &Layout,
+    spec: &m::InstanceSpec,
+    label: &str,
+    outcome: &str,
+    why: &str,
+    before: &Undo,
+) -> String {
     let home = layout
         .dir
         .parent()
@@ -1267,11 +1314,22 @@ fn undo_unknown(
     layout.log_line(&json!({
         "at": now_ms(),
         "source": label,
-        "outcome": "store-outcome-unknown",
+        "outcome": outcome,
         "restored": restored,
         "reason": reason,
     }));
-    Failure::StoreOutcomeUnknown(reason)
+    reason
+}
+
+/// A safe point of the run: [`Failure::Terminated`] once the run was sent SIGTERM, saying where
+/// it stopped.
+fn stop_point(at: &str) -> Result<(), Failure> {
+    if crate::terminate::requested() {
+        return Err(Failure::Terminated(format!(
+            "the run was sent SIGTERM and stopped {at}"
+        )));
+    }
+    Ok(())
 }
 
 /// The failure a stage verb's error is: [`Failure::StoreOutcomeUnknown`] when EKR could not say
@@ -1296,6 +1354,7 @@ impl Failure {
                 Failure::ConnectionUnavailable(format!("{m}; {more}"))
             }
             Failure::BatchTooLarge(m) => Failure::BatchTooLarge(format!("{m}; {more}")),
+            Failure::Terminated(m) => Failure::Terminated(format!("{m}; {more}")),
         }
     }
 
@@ -1307,7 +1366,8 @@ impl Failure {
             | Failure::Apply(m)
             | Failure::StoreOutcomeUnknown(m)
             | Failure::ConnectionUnavailable(m)
-            | Failure::BatchTooLarge(m) => m,
+            | Failure::BatchTooLarge(m)
+            | Failure::Terminated(m) => m,
         }
     }
 }
@@ -1820,6 +1880,7 @@ fn apply_records(
     }
     let index = r.source.index(&issued, r.parents);
     for (n, batch) in batches(issued, BATCH_CHARS).into_iter().enumerate() {
+        stop_point(&format!("before record batch {n}"))?;
         let mapped = r.source.document(&batch, &index);
         let (doc, refused) = extract::merge(&mapped.document, &batch);
         report.facts_refused += refused;
