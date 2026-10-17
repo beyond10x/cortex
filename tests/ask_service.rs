@@ -326,7 +326,11 @@ fn parse_stream(text: &str) -> Vec<(String, Value)> {
             wire,
             "`{name}` carries what the contract does not state"
         );
-        assert_eq!(wire["event"], json!(name), "the SSE name and the tag differ");
+        assert_eq!(
+            wire["event"],
+            json!(name),
+            "the SSE name and the tag differ"
+        );
         events.push((name, wire["value"].clone()));
     }
     events
@@ -352,7 +356,10 @@ fn one_tool_call_then_an_answer_streams_status_tool_delta_and_done() {
     assert_eq!(answer.status, 200, "{:?}", answer.events);
     let names = answer.names();
     assert_eq!(names.first(), Some(&"status"), "{names:?}");
-    let tool = names.iter().position(|n| *n == "tool").expect("a tool event");
+    let tool = names
+        .iter()
+        .position(|n| *n == "tool")
+        .expect("a tool event");
     let delta = names
         .iter()
         .rposition(|n| *n == "delta")
@@ -404,7 +411,10 @@ fn one_tool_call_then_an_answer_streams_status_tool_delta_and_done() {
         .find(|m| m["role"] == "tool")
         .expect("a tool message");
     assert_eq!(tool_message["tool_call_id"], "call-1");
-    assert_eq!(tool_message["content"], "Widget engine, made by Example Labs");
+    assert_eq!(
+        tool_message["content"],
+        "Widget engine, made by Example Labs"
+    );
     assert!(gateway
         .authorizations
         .lock()
@@ -492,7 +502,11 @@ fn the_question_past_the_per_identity_limit_answers_429_with_retry_after() {
     let retry = error["retry_after"].as_i64().expect("retry_after");
     assert!((1..=60).contains(&retry), "{error}");
     assert_eq!(answer.retry_after, Some(retry.to_string()));
-    assert_eq!(gateway.requests().len(), asked, "a refused question asked the model");
+    assert_eq!(
+        gateway.requests().len(),
+        asked,
+        "a refused question asked the model"
+    );
     let other = ask(&service, Some("carol"), "Me?");
     assert_eq!(other.status, 200);
     assert_eq!(other.last().0, "done");

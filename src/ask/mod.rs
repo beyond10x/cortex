@@ -33,9 +33,11 @@ pub fn check(spec: &m::InstanceSpec) -> Result<&ma::AskSpec, String> {
         .as_ref()
         .ok_or("ask: the spec has no `ask` section to serve")?;
     if spec.model.gateway.is_none() {
-        return Err("model.gateway: the ask service speaks to the instance's model gateway, and \
+        return Err(
+            "model.gateway: the ask service speaks to the instance's model gateway, and \
              the spec names none"
-            .into());
+                .into(),
+        );
     }
     let limits = &ask.limits;
     for (field, value) in [
@@ -240,9 +242,7 @@ pub fn final_event(outcome: &ma::AskOutcome) -> ma::AskEvent {
             None,
         ),
         ma::AskOutcome::ModelFailed { error: e } => error("model-failed", e.reason.clone(), None),
-        ma::AskOutcome::ReaderFailed { error: e } => {
-            error("reader-failed", e.reason.clone(), None)
-        }
+        ma::AskOutcome::ReaderFailed { error: e } => error("reader-failed", e.reason.clone(), None),
     }
 }
 
@@ -321,7 +321,6 @@ pub fn answer(
         json!({"role": "user", "content": question}),
     ];
     let mut usage = model::Usage::default();
-    let mut context = 0;
     for step in 1..=limits.max_steps {
         if Instant::now() >= deadline {
             return limit("time-limit");
@@ -335,7 +334,7 @@ pub fn answer(
             Err(CallError::Failed(reason)) => return model_failed(reason),
         };
         usage.add(&reply.usage);
-        context = reply.usage.input;
+        let context = reply.usage.input;
         if reply.tool_calls.is_empty() {
             let text = reply.content.unwrap_or_default();
             let cited = cite::cite(&text, settings.ask.link_templates.as_ref());

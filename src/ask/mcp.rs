@@ -66,14 +66,14 @@ impl Reader {
         };
         reader
             .request(
-            "initialize",
-            json!({
-                "protocolVersion": PROTOCOL,
-                "capabilities": {},
-                "clientInfo": {"name": "cortex-ask", "version": env!("CARGO_PKG_VERSION")},
-            }),
-            deadline,
-        )?
+                "initialize",
+                json!({
+                    "protocolVersion": PROTOCOL,
+                    "capabilities": {},
+                    "clientInfo": {"name": "cortex-ask", "version": env!("CARGO_PKG_VERSION")},
+                }),
+                deadline,
+            )?
             .map_err(CallError::Failed)?;
         reader.send(&json!({"jsonrpc": "2.0", "method": "notifications/initialized"}))?;
         Ok(reader)
@@ -152,7 +152,9 @@ impl Reader {
                     .get("message")
                     .and_then(Value::as_str)
                     .unwrap_or("no message");
-                return Ok(Err(format!("the reader answered `{method}` with an error: {text}")));
+                return Ok(Err(format!(
+                    "the reader answered `{method}` with an error: {text}"
+                )));
             }
             return Ok(Ok(message.get("result").cloned().unwrap_or(Value::Null)));
         }
