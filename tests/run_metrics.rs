@@ -153,8 +153,18 @@ fn finish(mut child: Child, bound: Duration) -> (ExitStatus, Value, String, Dura
     };
     let mut stdout = String::new();
     let mut stderr = String::new();
-    child.stdout.take().unwrap().read_to_string(&mut stdout).unwrap();
-    child.stderr.take().unwrap().read_to_string(&mut stderr).unwrap();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut stdout)
+        .unwrap();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
     let first = stdout
         .lines()
         .next()
@@ -165,10 +175,7 @@ fn finish(mut child: Child, bound: Duration) -> (ExitStatus, Value, String, Dura
 
 /// Runs `source` to its end with `claude`, within 60 s.
 fn run(w: &World, source: &str, claude: &Path) -> (ExitStatus, Value) {
-    let (status, first, _, _) = finish(
-        start(w, source, claude, &w.home),
-        Duration::from_secs(60),
-    );
+    let (status, first, _, _) = finish(start(w, source, claude, &w.home), Duration::from_secs(60));
     (status, first)
 }
 
@@ -183,19 +190,12 @@ fn wait_for(path: &Path) {
 
 /// Starts a run of `source` with a `claude` that hangs on its `hang_at`-th call, sends the run
 /// SIGTERM once that call started, and waits [`STOP_BOUND`] at most for it to end.
-fn terminated_run(
-    w: &World,
-    source: &str,
-    hang_at: u32,
-) -> (ExitStatus, Value, String, Duration) {
+fn terminated_run(w: &World, source: &str, hang_at: u32) -> (ExitStatus, Value, String, Duration) {
     let claude = hanging_claude(w, hang_at);
     let child = start(w, source, &claude, &w.home);
     wait_for(&w.root.join("claude-started"));
     let pid = child.id().to_string();
-    let sent = Command::new("kill")
-        .args(["-TERM", &pid])
-        .status()
-        .unwrap();
+    let sent = Command::new("kill").args(["-TERM", &pid]).status().unwrap();
     assert!(sent.success());
     finish(child, STOP_BOUND)
 }
@@ -269,13 +269,34 @@ fn after_one_run_the_metric_file_holds_its_duration_documents_and_tokens() {
         "the claude call alone took a second: {duration}\n{text}"
     );
     for (series, want) in [
-        ("cortex_source_last_run_documents{source=\"t/news\",kind=\"read\"}", 2.0),
-        ("cortex_source_last_run_documents{source=\"t/news\",kind=\"applied\"}", 2.0),
-        ("cortex_source_documents_total{source=\"t/news\",kind=\"read\"}", 2.0),
-        ("cortex_source_documents_total{source=\"t/news\",kind=\"applied\"}", 2.0),
-        ("cortex_source_model_tokens_total{source=\"t/news\",kind=\"input\"}", 105.0),
-        ("cortex_source_model_tokens_total{source=\"t/news\",kind=\"cached\"}", 30.0),
-        ("cortex_source_model_tokens_total{source=\"t/news\",kind=\"output\"}", 40.0),
+        (
+            "cortex_source_last_run_documents{source=\"t/news\",kind=\"read\"}",
+            2.0,
+        ),
+        (
+            "cortex_source_last_run_documents{source=\"t/news\",kind=\"applied\"}",
+            2.0,
+        ),
+        (
+            "cortex_source_documents_total{source=\"t/news\",kind=\"read\"}",
+            2.0,
+        ),
+        (
+            "cortex_source_documents_total{source=\"t/news\",kind=\"applied\"}",
+            2.0,
+        ),
+        (
+            "cortex_source_model_tokens_total{source=\"t/news\",kind=\"input\"}",
+            105.0,
+        ),
+        (
+            "cortex_source_model_tokens_total{source=\"t/news\",kind=\"cached\"}",
+            30.0,
+        ),
+        (
+            "cortex_source_model_tokens_total{source=\"t/news\",kind=\"output\"}",
+            40.0,
+        ),
     ] {
         assert_eq!(s(series), Some(want), "{series}\n{text}");
     }
@@ -355,7 +376,11 @@ fn a_run_sent_sigterm_mid_extraction_ends_terminated_and_is_counted_once() {
         "{text}"
     );
     assert!(
-        sample(&text, "cortex_source_last_run_duration_seconds{source=\"t/news\"}").is_some(),
+        sample(
+            &text,
+            "cortex_source_last_run_duration_seconds{source=\"t/news\"}"
+        )
+        .is_some(),
         "{text}"
     );
     // No document was applied, and the last run's documents are not reported for a run that
@@ -402,7 +427,9 @@ fn a_gated_run_sent_sigterm_after_a_batch_committed_is_undone_from_its_snapshot(
         "{status:?} {out} {stderr}"
     );
     assert_eq!(
-        std::fs::read_to_string(w.root.join("hang-calls")).unwrap().trim(),
+        std::fs::read_to_string(w.root.join("hang-calls"))
+            .unwrap()
+            .trim(),
         "2",
         "the first batch was asked and applied before the second hung"
     );
@@ -515,7 +542,9 @@ gate:
     ]);
     assert_eq!(code, 0, "{out}");
     let dir = instance_dir(&w, "pg");
-    let head = pg_ekr_json(&w, &dir, &["head"])["revision"].as_i64().unwrap();
+    let head = pg_ekr_json(&w, &dir, &["head"])["revision"]
+        .as_i64()
+        .unwrap();
 
     let (status, out, stderr, _) = terminated_run(&w, "pg/docs", 2);
     assert_eq!(
@@ -535,7 +564,9 @@ gate:
         .collect();
     assert!(begun.is_empty(), "the stage was left begun: {begun:?}");
     assert_eq!(
-        pg_ekr_json(&w, &dir, &["head"])["revision"].as_i64().unwrap(),
+        pg_ekr_json(&w, &dir, &["head"])["revision"]
+            .as_i64()
+            .unwrap(),
         head,
         "nothing was published"
     );
@@ -590,7 +621,15 @@ fn no_line_of_the_metric_file_holds_a_secret_a_prompt_or_document_content() {
     let text = metrics(&w, "t");
     assert!(text.contains("cortex_source_model_tokens_total"), "{text}");
     for line in text.lines() {
-        for needle in [secret, "ghp_", PROMPT, "password", CONTENT, "example.org", "Widget"] {
+        for needle in [
+            secret,
+            "ghp_",
+            PROMPT,
+            "password",
+            CONTENT,
+            "example.org",
+            "Widget",
+        ] {
             assert!(!line.contains(needle), "{needle:?} in {line:?}");
         }
         // Every label is the source id or a fixed name.

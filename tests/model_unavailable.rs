@@ -212,7 +212,9 @@ fn a_gateway_that_refuses_connections_ends_three_runs_model_unavailable_none_cou
     assert_eq!(w.head("t"), head, "nothing was applied");
     let text = metrics(&w);
     assert!(
-        text.contains("cortex_source_runs_total{source=\"t/news\",outcome=\"model-unavailable\"} 3\n"),
+        text.contains(
+            "cortex_source_runs_total{source=\"t/news\",outcome=\"model-unavailable\"} 3\n"
+        ),
         "{text}"
     );
     assert!(
@@ -225,7 +227,10 @@ fn a_gateway_that_refuses_connections_ends_three_runs_model_unavailable_none_cou
 fn a_gateway_answering_502_503_or_504_ends_the_run_model_unavailable_gateway_down() {
     for status in [502, 503, 504] {
         let w = World::new();
-        create(&w, &spec(&w, &gateway(status, "{\"error\":\"upstream\"}"), ""));
+        create(
+            &w,
+            &spec(&w, &gateway(status, "{\"error\":\"upstream\"}"), ""),
+        );
         let (code, out) = run(&w, &gateway_claude(&w, 1));
         assert_eq!(
             (code, out["outcome"].as_str()),
