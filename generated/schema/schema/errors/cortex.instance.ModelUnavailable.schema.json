@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ModelUnavailable payload",
+  "description": "The run's model could not be reached: `cause` says how (`refused`, `not-loaded`, `gateway-down`), and `reason` holds the model call's error text, masked for credential shapes and bounded, never a prompt. Nothing about the source was wrong: the failure is not counted against it, and the next run asks the model again.",
+  "x-ess-name": "cortex.instance.ModelUnavailable",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "cause": {
+      "$ref": "#/$defs/cortex.instance.ModelUnavailableCause"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "cause",
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "57db63ce0b43f5d7b96521425419010f5043db39909f5255cd50a95d4f409cfe",
+    "contract_digest": "slice-sha256/2:29a466862019607aa33d62e79059e06b2a99b6de69cb9510de6893938404ad54",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.ModelUnavailableCause": {
+      "title": "ModelUnavailableCause",
+      "x-ess-name": "cortex.instance.ModelUnavailableCause",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "refused",
+        "not-loaded",
+        "gateway-down"
+      ]
+    }
+  }
+}

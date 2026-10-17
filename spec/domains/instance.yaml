@@ -612,11 +612,19 @@ types:
   # (`cortex sources`) and the metric file report.
   - name: cortex.instance.RunOutcome
     kind: enum
-    variants: [ran, fetch-failed, extraction-failed, apply-refused, store-outcome-unknown, connection-unavailable, batch-too-large, terminated, disabled]
+    variants: [ran, fetch-failed, extraction-failed, apply-refused, store-outcome-unknown, connection-unavailable, batch-too-large, terminated, model-unavailable, disabled]
+
+  # Why a run's model could not be reached (`cortex.instance.ModelUnavailable`): `refused`, the
+  # model process could not be started or its connection was refused; `not-loaded`, the server
+  # behind the gateway answered that the model is not loaded or still loading; `gateway-down`,
+  # the gateway or the API answered HTTP 502, 503 or 504.
+  - name: cortex.instance.ModelUnavailableCause
+    kind: enum
+    variants: [refused, not-loaded, gateway-down]
 
   # A command cortex calls once for each run of a source that answers `fetch-failed`,
   # `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable`,
-  # `batch-too-large` or `terminated`:
+  # `batch-too-large`, `terminated` or `model-unavailable`:
   # `command` is its argument vector (no shell), started in
   # the instance directory, in a process group of its own, with the source id and the outcome
   # appended as its last two arguments. A relative program path holding a `/` is read against the
@@ -1211,6 +1219,16 @@ errors:
     fields:
       - {name: reason, type: String}
 
+  - name: cortex.instance.ModelUnavailable
+    summary: >-
+      The run's model could not be reached: `cause` says how (`refused`, `not-loaded`,
+      `gateway-down`), and `reason` holds the model call's error text, masked for credential
+      shapes and bounded, never a prompt. Nothing about the source was wrong: the failure is not
+      counted against it, and the next run asks the model again.
+    fields:
+      - {name: cause, type: cortex.instance.ModelUnavailableCause}
+      - {name: reason, type: String}
+
   - name: cortex.instance.SampleFailed
     summary: >-
       EKR could not draw the sample (`ekr sample`): the size is outside 1 to 1000, or the store
@@ -1612,9 +1630,10 @@ commands:
       # UNMAPPED: the exit status of each outcome, which an external scheduler reads instead of
       # the printed line: `ran` 0; `fetch-failed`, `extraction-failed`, `apply-refused` and
       # `no-such-source` 1; `disabled` 3; `store-outcome-unknown` 4; `connection-unavailable` 5; `batch-too-large` 6;
-      # `terminated` 8; and 2 for an error before any outcome. ESS declares no exit status for a
+      # `model-unavailable` 7; `terminated` 8; and 2 for an error before any outcome. ESS declares no exit status for a
       # command line's outcomes; tests/e2e.rs, tests/run_status.rs, tests/store_outcome_unknown.rs,
-      # tests/connections_revalidate_retry.rs and tests/run_metrics.rs hold it.
+      # tests/connections_revalidate_retry.rs, tests/run_metrics.rs and
+      # tests/model_unavailable.rs hold it.
       # UNMAPPED: `<instance>/seed`, when the instance is active and has no source named `seed`,
       # names the instance's seed documents: it extracts those no seed extraction applied yet (what
       # a `partial` create left) and answers these outcomes with no Source to update. Like a source
@@ -1641,7 +1660,8 @@ commands:
       # `metrics.prom` is rewritten with the source's run counted under its outcome, its duration,
       # and for `ran` its documents and model tokens (`cortex.instance.MonitoringSpec`), and for
       # `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`,
-      # `connection-unavailable`, `batch-too-large` and `terminated` the hook is called once, with
+      # `connection-unavailable`, `batch-too-large`, `terminated` and `model-unavailable` the hook
+      # is called once, with
       # `disabled` instead when the recorded failure disabled the source. ESS declares no effect
       # outside the model's records and no metric; tests/run_status.rs,
       # tests/store_outcome_unknown.rs, tests/connections_revalidate_retry.rs and
@@ -1729,7 +1749,7 @@ commands:
           scheduler then sends RecordFailure.
 
       - name: extraction-failed
-        external: The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait
+        external: The model call fails (other than as `model-unavailable` says), times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait
         error: cortex.instance.ExtractionFailed
         compensates: true
         updates: cortex.instance.Source
@@ -1889,6 +1909,41 @@ commands:
           reason, which says what was undone, and the scheduler sends no RecordFailure: the run
           was stopped, the source did not fail, so the failure is not counted and never disables
           the source. The next scheduled run starts as usual.
+
+      # UNMAPPED: how a model call's failure is told to be `model-unavailable`: by its error text,
+      # in any case. `refused`: `claude` (through `timeout`) could not be started (exit 126 or
+      # 127), or its error says `connection refused`, `ECONNREFUSED`, `Connection error` or
+      # `Unable to connect`; `not-loaded`: `model not loaded`, `no models loaded`, `model is
+      # loading` or `currently loading`; `gateway-down`: an `API Error` with status 502, 503 or
+      # 504, `Bad Gateway`, `Service Unavailable` or `Gateway Timeout`. A call that timed out, an
+      # answer that is not valid, and every other error stay `extraction-failed`. An error answer
+      # that cost zero is asked once more first, as any is. What the run leaves: the batches before
+      # it are applied, held to the gate and seen, as for `batch-too-large`; that batch and every
+      # later one are not marked seen. `model-unavailable` exits 7; its status, metric and hook
+      # report it while the scheduler counts nothing. ESS states neither a classification of
+      # text nor an exit status; tests/model_unavailable.rs holds it.
+      - name: model-unavailable
+        external: >-
+          The run's model cannot be reached: its process cannot be started, its connection is
+          refused, the server behind the gateway has not loaded the model, or the gateway answers
+          HTTP 502, 503 or 504
+        error: cortex.instance.ModelUnavailable
+        compensates: true
+        updates: cortex.instance.Source
+        instance: source_id
+        sets:
+          last_outcome: model-unavailable
+          last_run_at: {generated: true}
+          last_reason: {generated: true}
+        payload:
+          cortex.instance.ModelUnavailable:
+            cause: {generated: true}
+            reason: {generated: true}
+        summary: >-
+          The source's status records the outcome and its reason, and the scheduler sends no
+          RecordFailure: the model, not the source, failed, so the failure is not counted and
+          never disables the source, however often the model is down. The batches before it stay
+          applied; the rest are extracted by a later run.
 
       # UNMAPPED: a part of one document that still does not fit the model's window is left out
       # alone, as a record whose value does not convert is: it is named, by its key, in the run's
