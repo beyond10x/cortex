@@ -30,7 +30,7 @@ pub const HOOK_TIMEOUT_S: u64 = 10;
 pub const METRICS: &str = "metrics.prom";
 
 /// Every outcome a source's run records, in the order the spec declares them.
-pub const OUTCOMES: [m::RunOutcome; 8] = [
+pub const OUTCOMES: [m::RunOutcome; 10] = [
     m::RunOutcome::Ran,
     m::RunOutcome::FetchFailed,
     m::RunOutcome::ExtractionFailed,
@@ -38,6 +38,8 @@ pub const OUTCOMES: [m::RunOutcome; 8] = [
     m::RunOutcome::StoreOutcomeUnknown,
     m::RunOutcome::ConnectionUnavailable,
     m::RunOutcome::BatchTooLarge,
+    m::RunOutcome::Terminated,
+    m::RunOutcome::ModelUnavailable,
     m::RunOutcome::Disabled,
 ];
 
@@ -50,6 +52,8 @@ pub fn outcome_name(outcome: m::RunOutcome) -> &'static str {
         m::RunOutcome::StoreOutcomeUnknown => "store-outcome-unknown",
         m::RunOutcome::ConnectionUnavailable => "connection-unavailable",
         m::RunOutcome::BatchTooLarge => "batch-too-large",
+        m::RunOutcome::Terminated => "terminated",
+        m::RunOutcome::ModelUnavailable => "model-unavailable",
         m::RunOutcome::Disabled => "disabled",
     }
 }
@@ -69,6 +73,64 @@ pub struct Status {
     /// The source's runs by outcome, since its first status was written.
     #[serde(default)]
     pub runs: BTreeMap<String, u64>,
+    /// How long the last run took, in milliseconds, to the moment it recorded its outcome.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_duration_ms: Option<i64>,
+    /// The last run's documents by kind (`read`, `applied`): present only when it ended `ran`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_documents: Option<BTreeMap<String, u64>>,
+    /// The documents of every run that ended `ran`, by kind (`read`, `applied`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub documents: BTreeMap<String, u64>,
+    /// The model tokens those runs reported, by kind (`input`, `cached`, `output`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tokens: BTreeMap<String, u64>,
+}
+
+/// What a run that ended `ran` did, as `metrics.prom` reports it: the documents it read (the new
+/// or changed ones it selected, `SourceRan.documents_new`) and applied, and the model tokens its
+/// answers reported, each `None` when an answer did not report it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Figures {
+    pub read: u64,
+    pub applied: u64,
+    /// `input_tokens` and `cache_creation_input_tokens`.
+    pub input_tokens: Option<u64>,
+    /// `cache_read_input_tokens`.
+    pub cached_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+}
+
+/// The kinds of documents a run reports, in the order the metric file lists them.
+const DOCUMENT_KINDS: [&str; 2] = ["read", "applied"];
+/// The kinds of model tokens a run reports, in the order the metric file lists them.
+const TOKEN_KINDS: [&str; 3] = ["input", "cached", "output"];
+
+impl Status {
+    /// Sets the last run's duration and figures, and adds the figures to the totals. A run that
+    /// did not end `ran` (no `figures`) reports no documents.
+    fn add(&mut self, duration_ms: Option<i64>, figures: Option<&Figures>) {
+        self.last_duration_ms = duration_ms;
+        self.last_documents = figures.map(|f| {
+            DOCUMENT_KINDS
+                .into_iter()
+                .zip([f.read, f.applied])
+                .map(|(k, n)| (k.to_string(), n))
+                .collect()
+        });
+        let Some(f) = figures else {
+            return;
+        };
+        for (kind, n) in DOCUMENT_KINDS.into_iter().zip([f.read, f.applied]) {
+            let total = self.documents.entry(kind.into()).or_default();
+            *total = total.saturating_add(n);
+        }
+        let tokens = [f.input_tokens, f.cached_tokens, f.output_tokens];
+        for (kind, n) in TOKEN_KINDS.into_iter().zip(tokens) {
+            let total = self.tokens.entry(kind.into()).or_default();
+            *total = total.saturating_add(n.unwrap_or(0));
+        }
+    }
 }
 
 fn path(layout: &Layout, source: &str) -> PathBuf {
@@ -103,7 +165,21 @@ pub fn record(
     at_ms: i64,
     reason: Option<&str>,
 ) -> Result<(), String> {
+    record_run(layout, source, outcome, at_ms, reason, None, None)
+}
+
+/// [`record`], with the run's duration and, for a run that ended `ran`, its figures.
+pub fn record_run(
+    layout: &Layout,
+    source: &str,
+    outcome: m::RunOutcome,
+    at_ms: i64,
+    reason: Option<&str>,
+    duration_ms: Option<i64>,
+    figures: Option<&Figures>,
+) -> Result<(), String> {
     let mut status = load(layout, source);
+    status.add(duration_ms, figures);
     status.format = "cortex.source-status/1".into();
     status.last_outcome = Some(outcome_name(outcome).into());
     status.last_run_at = Some(at_ms);
@@ -127,7 +203,9 @@ pub fn hook_outcome(outcome: m::RunOutcome, disabled: bool) -> Option<m::RunOutc
         | m::RunOutcome::ApplyRefused
         | m::RunOutcome::StoreOutcomeUnknown
         | m::RunOutcome::ConnectionUnavailable
-        | m::RunOutcome::BatchTooLarge => Some(if disabled {
+        | m::RunOutcome::BatchTooLarge
+        | m::RunOutcome::Terminated
+        | m::RunOutcome::ModelUnavailable => Some(if disabled {
             m::RunOutcome::Disabled
         } else {
             outcome
@@ -146,6 +224,10 @@ pub struct Run<'a> {
     pub at_ms: i64,
     pub reason: Option<&'a str>,
     pub disabled: bool,
+    /// How long the run took, in milliseconds.
+    pub duration_ms: Option<i64>,
+    /// What a run that ended `ran` did; `None` for every other outcome.
+    pub figures: Option<Figures>,
 }
 
 pub fn report(
@@ -167,7 +249,16 @@ pub fn report(
     match lock(layout) {
         Err(e) => failed("status", e),
         Ok(_held) => {
-            if let Err(e) = record(layout, name, run.outcome, run.at_ms, run.reason) {
+            let recorded = record_run(
+                layout,
+                name,
+                run.outcome,
+                run.at_ms,
+                run.reason,
+                run.duration_ms,
+                run.figures.as_ref(),
+            );
+            if let Err(e) = recorded {
                 failed("status", e);
             }
             if metrics {
@@ -253,6 +344,58 @@ pub fn metrics_text(layout: &Layout, sources: &[String]) -> String {
                 "cortex_source_last_run_timestamp_seconds{{source=\"{id}\"}} {}.{:03}\n",
                 ms.div_euclid(1000),
                 ms.rem_euclid(1000)
+            ));
+        }
+    }
+    text.push_str(
+        "# HELP cortex_source_last_run_duration_seconds How long the source's last run took.\n\
+         # TYPE cortex_source_last_run_duration_seconds gauge\n",
+    );
+    for (id, status) in &statuses {
+        if let Some(ms) = status.last_duration_ms {
+            text.push_str(&format!(
+                "cortex_source_last_run_duration_seconds{{source=\"{id}\"}} {}.{:03}\n",
+                ms.div_euclid(1000),
+                ms.rem_euclid(1000)
+            ));
+        }
+    }
+    text.push_str(
+        "# HELP cortex_source_last_run_documents The documents the source's last run read and \
+         applied, when it ended ran.\n\
+         # TYPE cortex_source_last_run_documents gauge\n",
+    );
+    for (id, status) in &statuses {
+        if let Some(last) = &status.last_documents {
+            for kind in DOCUMENT_KINDS {
+                let n = last.get(kind).copied().unwrap_or(0);
+                text.push_str(&format!(
+                    "cortex_source_last_run_documents{{source=\"{id}\",kind=\"{kind}\"}} {n}\n"
+                ));
+            }
+        }
+    }
+    text.push_str(
+        "# HELP cortex_source_documents_total The documents the source's runs read and applied.\n\
+         # TYPE cortex_source_documents_total counter\n",
+    );
+    for (id, status) in &statuses {
+        for kind in DOCUMENT_KINDS {
+            let n = status.documents.get(kind).copied().unwrap_or(0);
+            text.push_str(&format!(
+                "cortex_source_documents_total{{source=\"{id}\",kind=\"{kind}\"}} {n}\n"
+            ));
+        }
+    }
+    text.push_str(
+        "# HELP cortex_source_model_tokens_total The model tokens the source's runs reported.\n\
+         # TYPE cortex_source_model_tokens_total counter\n",
+    );
+    for (id, status) in &statuses {
+        for kind in TOKEN_KINDS {
+            let n = status.tokens.get(kind).copied().unwrap_or(0);
+            text.push_str(&format!(
+                "cortex_source_model_tokens_total{{source=\"{id}\",kind=\"{kind}\"}} {n}\n"
             ));
         }
     }
@@ -458,6 +601,73 @@ mod tests {
         assert!(!text.contains("last_run_timestamp_seconds{source=\"t/other\"}"));
         let status = load(&layout, "news");
         assert_eq!(status.last_reason.as_deref(), Some("y"));
+    }
+
+    /// `story:run-metrics`: a run that ended `ran` sets the last run's documents and adds them
+    /// and its tokens to the totals; a run that did not clears the last run's documents and adds
+    /// nothing; a token count no answer reported adds nothing.
+    #[test]
+    fn the_metric_file_reports_the_last_runs_figures_and_their_totals() {
+        let tmp = tempfile::tempdir().unwrap();
+        let layout = Layout::new(tmp.path().to_path_buf());
+        let figures = Figures {
+            read: 3,
+            applied: 2,
+            input_tokens: Some(105),
+            cached_tokens: None,
+            output_tokens: Some(40),
+        };
+        let ran = |at, duration| {
+            record_run(
+                &layout,
+                "news",
+                m::RunOutcome::Ran,
+                at,
+                None,
+                Some(duration),
+                Some(&figures),
+            )
+            .unwrap()
+        };
+        ran(1_000, 1_250);
+        ran(5_000, 750);
+        let text = metrics_text(&layout, &["t/news".into()]);
+        for line in [
+            "cortex_source_last_run_duration_seconds{source=\"t/news\"} 0.750\n",
+            "cortex_source_last_run_documents{source=\"t/news\",kind=\"read\"} 3\n",
+            "cortex_source_last_run_documents{source=\"t/news\",kind=\"applied\"} 2\n",
+            "cortex_source_documents_total{source=\"t/news\",kind=\"read\"} 6\n",
+            "cortex_source_documents_total{source=\"t/news\",kind=\"applied\"} 4\n",
+            "cortex_source_model_tokens_total{source=\"t/news\",kind=\"input\"} 210\n",
+            "cortex_source_model_tokens_total{source=\"t/news\",kind=\"cached\"} 0\n",
+            "cortex_source_model_tokens_total{source=\"t/news\",kind=\"output\"} 80\n",
+        ] {
+            assert!(text.contains(line), "{line}{text}");
+        }
+        record_run(
+            &layout,
+            "news",
+            m::RunOutcome::Terminated,
+            9_000,
+            Some("stopped"),
+            Some(2_000),
+            None,
+        )
+        .unwrap();
+        let text = metrics_text(&layout, &["t/news".into()]);
+        assert!(
+            !text.contains("cortex_source_last_run_documents{"),
+            "{text}"
+        );
+        assert!(text.contains("cortex_source_documents_total{source=\"t/news\",kind=\"read\"} 6\n"));
+        assert!(text.contains("cortex_source_last_run_duration_seconds{source=\"t/news\"} 2.000\n"));
+        assert!(
+            text.contains("cortex_source_runs_total{source=\"t/news\",outcome=\"terminated\"} 1\n")
+        );
+        assert_eq!(
+            hook_outcome(m::RunOutcome::Terminated, false),
+            Some(m::RunOutcome::Terminated)
+        );
     }
 
     /// `story:store-outcome-unknown-not-counted`: the hook is called for an unknown store outcome,

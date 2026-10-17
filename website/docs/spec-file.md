@@ -848,7 +848,7 @@ monitoring:
 
 | field | meaning |
 |---|---|
-| `metrics` | `true` rewrites `metrics.prom` in the instance directory after every run of a source, in the Prometheus text format, for a textfile collector or a sidecar to read. Without it, no metric file is written |
+| `metrics` | `true` rewrites `metrics.prom` in the instance directory after every run of a source, in the Prometheus text format, for a textfile collector or a sidecar to read: runs by outcome, the last run's time, duration and documents, and documents and model tokens over time (see [Failures](./operating.md#failures)). Without it, no metric file is written |
 | `hook` | optional: a command called once for each run that fails, with the source id and the outcome appended as its last two arguments |
 | `hook.command` | the program and its first arguments, run without a shell in the instance directory, in a process group of its own. It must name a program. A relative path holding a `/` is read against the spec file's directory; a bare name is looked up on `PATH`. It holds no secret: a hook that needs one reads it itself |
 | `hook.timeout_s` | how long the call may last, in seconds, above 0; then the hook's process group is killed. Without it, 10 |

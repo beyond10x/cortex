@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 33b99b070654ace12840af9a0ffd38b5565691f60a37e5e0795d7c799d5ad121
-// contract digest f931c0a4605acc8bda17aba87eb5f8f31cdf6c1d7e01f81e01dca43dfdb8c3a4
+// model digest 24c0be63b0ac8909a4418f8bda3826cc00258b3c28ae48431724fdcd0dc89777
+// contract digest 266423a3947c5f387a0a46a6e969117b34839d872885bacc3cd725312a6e4050
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -368,6 +368,8 @@ where
             crate::instance::RunSourceOutcome::StoreOutcomeUnknown { .. } => {}
             crate::instance::RunSourceOutcome::ConnectionUnavailable { .. } => {}
             crate::instance::RunSourceOutcome::BatchTooLarge { .. } => {}
+            crate::instance::RunSourceOutcome::Terminated { .. } => {}
+            crate::instance::RunSourceOutcome::ModelUnavailable { .. } => {}
             crate::instance::RunSourceOutcome::Ran { source_ran, .. } => {
                 self.outbox.push(PublishedEvent::SourceRan(source_ran.clone()));
             }
