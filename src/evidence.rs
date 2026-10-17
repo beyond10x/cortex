@@ -144,7 +144,13 @@ fn date(text: &str) -> Option<i64> {
 /// milliseconds since the epoch.
 pub(crate) fn rfc3339_ms(text: &str) -> Option<i64> {
     let b = text.as_bytes();
-    if b.len() < 20 || !matches!(b[10], b'T' | b't' | b' ') || b[13] != b':' || b[16] != b':' {
+    // The byte offsets below slice the text: anything outside ASCII is not an instant.
+    if !text.is_ascii()
+        || b.len() < 20
+        || !matches!(b[10], b'T' | b't' | b' ')
+        || b[13] != b':'
+        || b[16] != b':'
+    {
         return None;
     }
     let days = date(text.get(..10)?)?;
@@ -166,7 +172,7 @@ pub(crate) fn rfc3339_ms(text: &str) -> Option<i64> {
     };
     let offset_s = match zone {
         "Z" | "z" => 0,
-        _ => {
+        _ if zone.starts_with(['+', '-']) => {
             let sign = if zone.starts_with('-') { -1 } else { 1 };
             let z = &zone[1..];
             if z.len() != 5 || z.as_bytes()[2] != b':' {
@@ -178,6 +184,7 @@ pub(crate) fn rfc3339_ms(text: &str) -> Option<i64> {
             }
             sign * (oh * 3600 + om * 60)
         }
+        _ => return None,
     };
     let secs = days * 86_400 + h * 3600 + mi * 60 + s - offset_s;
     Some(secs * 1000 + ms)
@@ -359,6 +366,17 @@ mod tests {
             "1970-01-01T01:00:00+02:00",
         ] {
             assert_eq!(at(text), None, "{text}");
+        }
+        // Read without the ASCII guard of a document's time (a figure's or a record's instant):
+        // a character across a slice boundary and a zone that is neither `Z` nor an offset.
+        for text in [
+            "2026-01-01T00:00:0éZ",
+            "2026-01-01T00:0é:00Z",
+            "2026-01-01T00:00:00.é5Z",
+            "2026-01-01T00:00:00Z01:00",
+            "2026-01-01T00:00:00z+01:00",
+        ] {
+            assert_eq!(rfc3339_ms(text), None, "{text}");
         }
         assert_eq!(document_time_ms(&doc("d", "t")), None);
         assert_eq!(

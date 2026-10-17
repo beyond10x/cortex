@@ -19,10 +19,33 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   (`refused`, `not-loaded`, `gateway-down`), instead of `extraction-failed`; `--record-failure`
   does not count it, so a model outage never disables a source. Batches applied before it stay.
 
+- Before each batch, a run looks the batch's document keys and record ids up in the store, across
+  every node type, and shows the model each node it finds (type, name, aliases, marked as in the
+  store) ahead of its own known names, so a node an adoption or another writer stored is reused
+  instead of created again under another type. The 50-per-type bound holds for the run's own
+  names only. Names match lowercased. A store node's name and aliases are masked for credential
+  shapes on every run and written on one line, and behind a model window they count in the
+  batch's fixed part.
+- A structured mapping's `alias_templates` add fixed-format aliases from record fields
+  (`repo:{namespace}/{path}`), so a source's records resolve to an adopted store's nodes. A
+  template whose field a record lacks yields no alias; another placeholder syntax is refused when
+  the spec is read.
+- A figure renderer for the ask service (`cortex.ask.FigureSpec`): a bar chart, a timeline or a
+  relationship graph drawn as SVG by cortex's own code, from typed values only. The SVG holds only
+  allow-listed elements and attributes, with every label as escaped text; the same figure gives
+  the same bytes; a figure over a cap (50 bars, 200 timeline entries, 100 nodes, 300 edges,
+  256 KiB) is refused whole. No endpoint draws one yet.
+
 ### Changed
 
 - The reason of a model call that exited without a JSON answer is masked for credential shapes
   and bounded, as an error answer's is.
+
+### Fixed
+
+- An RFC 3339 instant with a character outside ASCII (`2026-01-01T00:00:0éZ`) made a figure's
+  timeline or a structured record's date panic; it is now refused as no instant. `Z` followed by
+  an offset (`…00Z01:00`) is refused instead of read as the offset.
 
 ### What 1.0 holds
 
@@ -54,25 +77,6 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - `model.backend: Codex` is accepted and fails every run; extraction uses `claude -p` only.
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
-
-### Added
-
-- Before each batch, a run looks the batch's document keys and record ids up in the store, across
-  every node type, and shows the model each node it finds (type, name, aliases, marked as in the
-  store) ahead of its own known names, so a node an adoption or another writer stored is reused
-  instead of created again under another type. The 50-per-type bound holds for the run's own
-  names only. Names match lowercased. A store node's name and aliases are masked for credential
-  shapes on every run and written on one line, and behind a model window they count in the
-  batch's fixed part.
-- A structured mapping's `alias_templates` add fixed-format aliases from record fields
-  (`repo:{namespace}/{path}`), so a source's records resolve to an adopted store's nodes. A
-  template whose field a record lacks yields no alias; another placeholder syntax is refused when
-  the spec is read.
-- A figure renderer for the ask service (`cortex.ask.FigureSpec`): a bar chart, a timeline or a
-  relationship graph drawn as SVG by cortex's own code, from typed values only. The SVG holds only
-  allow-listed elements and attributes, with every label as escaped text; the same figure gives
-  the same bytes; a figure over a cap (50 bars, 200 timeline entries, 100 nodes, 300 edges,
-  256 KiB) is refused whole. No endpoint draws one yet.
 
 ## 0.6.0 — 2026-10-17
 
