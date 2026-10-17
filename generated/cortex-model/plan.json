@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "785a52f01fac9f330a345df82303219f49a355f40ae72a498b663dbb8a26c5e6",
-    "contract_digest": "ea271169878b423bc3c2b22eb59a3d14dea5eb2f741ac5807d5ea0e053e37b22"
+    "source_digest": "7d8404d5ca39588d21ed4055451f1ea351db5ca69f68cb24cf53efa405606548",
+    "contract_digest": "13af80bede279cc14efbdae1297781d102fbbed93aa5261bae001aa124156555"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -1360,6 +1360,13 @@
     {
       "kind": "error_type",
       "source": "cortex.instance.EvalCaseExists",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.instance.EvalNoExpectations",
       "disposition": {
         "disposition": "generated"
       }

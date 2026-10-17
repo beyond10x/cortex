@@ -45,7 +45,7 @@ naming `story:codex-model-backend`, and `codex` is never started; `cortex qualit
 | `cortex restore <name> <snapshot>` | put a `sqlite` store and the instance's `state/` back to a snapshot a run took before it applied anything (see [Operating](./operating.md#undoing-a-run)). It snapshots what it replaces as `<ms>-before-restore` and reports the name as `before_restore`, and `state_restored`; a running viewer is stopped and started again. It does not wait for the home's lock | `restored`, `busy`, `no-such-snapshot`, `backend-unsupported`, `no-such-instance` |
 | `cortex quality <name> --sample <n>` | measure how often the instance's facts are supported by the evidence they cite (see [Measuring fact quality](#measuring-fact-quality)). It reads the store and writes nothing to it, so a removed instance is measured too. It holds the home's lock only while it draws the sample, so the timers' runs do not wait behind the model calls | `measured`, `sample-failed`, `judge-failed`, `no-such-instance` |
 | `cortex eval run <name> --set <file> --runner mcp\|ask\|replay [--from <stamp>]` | ask each case of an eval set and score each answer with no model, by the fact strings it must contain and the node ids it must cite (see [Running an eval set](#running-an-eval-set)). It reads the store and writes nothing to it. It holds the home's lock only while it reads the set, the spec and a replayed run | `evaluated`, `set-invalid`, `runner-failed`, `no-such-instance` |
-| `cortex eval case add <name> --set <file> --from-review <review id>` | append the case of a closed review item of the answer service to an eval set, creating the file when it does not exist (see [Adding a case from a review](#adding-a-case-from-a-review)). An open item is refused and the set file is left as it was | `added`, `set-invalid`, `no-such-review`, `review-open`, `case-exists`, `no-such-instance` |
+| `cortex eval case add <name> --set <file> --from-review <review id>` | append the case of a closed review item of the answer service to an eval set, creating the file when it does not exist (see [Adding a case from a review](#adding-a-case-from-a-review)). An open item is refused and the set file is left as it was | `added`, `set-invalid`, `no-such-review`, `review-open`, `no-expectations`, `case-exists`, `no-such-instance` |
 | `cortex schema <name> [--sample <n>] [--dry-run \| --review]` | have the instance's model propose changes to the store's ontology from a sample of its facts (default 40) and apply each one EKR applies as a schema transaction of its own (see [Proposing schema changes](#proposing-schema-changes)). `--dry-run` records the proposals and applies none; `--review` records each one `pending` for a decision (see [Reviewing schema changes](#reviewing-schema-changes)). It holds the home's lock while it draws the sample and while it applies, not during the model calls | `applied`, `proposed` (a dry run), `reviewed`, `sample-failed`, `propose-failed`, `no-such-instance` |
 | `cortex schema approve <name> <stamp> [--only <n>]… [--by <who>]` | approve the pending proposals of a review run: those `--only` names by their line (from 1), or every pending one | `approved`, `not-pending`, `no-such-run`, `no-such-instance` |
 | `cortex schema reject <name> <stamp> [--only <n>]… --reason <text> [--by <who>]` | reject them, with the reason | `rejected`, `not-pending`, `no-such-run`, `no-such-instance` |
@@ -150,8 +150,10 @@ into one case appended to the set file. The case's `id` and `review_id` are the 
 (`<answer id>:<cause>`), its `question` is the question of the item's answer record, and its
 `expect_facts` and `expect_nodes` are those the reviewer sent when closing the item (empty when
 they sent none). A set file that does not exist yet is created holding the one case; an existing
-one is rewritten whole, through a temporary file renamed into place. It reads the answer records
-and writes nothing to them or to the store.
+one is rewritten whole, through a temporary file renamed into place; a set path that is a symbolic
+link is written at its target. It opens the answer records read-only: it creates no `ask.sqlite` (an
+instance that served no question answers `no-such-review`) and migrates none, and writes nothing to
+them or to the store.
 
 | outcome | when | the set file |
 |---|---|---|
@@ -159,6 +161,7 @@ and writes nothing to them or to the store.
 | `set-invalid` | the file exists and cannot be read or is not a `cortex.eval-case/1` set | unchanged |
 | `no-such-review` | no review item carries the id, or its answer record is gone | unchanged |
 | `review-open` | the item is still open: its expectations are written when it is closed | unchanged |
+| `no-expectations` | the item is closed with no expected fact and no expected node (one closed before expectations were recorded has none): such a case passes every answer | unchanged, a missing file not created |
 | `case-exists` | the set already holds a case with the review id as its `id` or `review_id` | unchanged |
 | `no-such-instance` | no instance has the name | unchanged |
 

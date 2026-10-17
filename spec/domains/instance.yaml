@@ -1233,6 +1233,14 @@ errors:
     fields:
       - {name: review_id, type: cortex.ask.ReviewId}
 
+  - name: cortex.instance.EvalNoExpectations
+    summary: >-
+      The review item is closed but its reviewer wrote no expected fact and no expected node (an
+      item closed before the answer records held expectations has none): a case with nothing
+      expected passes every answer, so no case was added.
+    fields:
+      - {name: review_id, type: cortex.ask.ReviewId}
+
   - name: cortex.instance.EvalCaseExists
     summary: >-
       The set already holds the case of this review item, or a case with its id; one review item
@@ -2178,8 +2186,12 @@ commands:
     # review id, its `question` that of the item's answer record (`cortex.ask.AnswerRecord`), and
     # its `expect_facts` and `expect_nodes` those the reviewer wrote when closing the item
     # (`cortex.ask.CloseReview`). A set file that does not exist yet is created holding the one
-    # case. The records are read, never written; nothing but the set file changes, and a refusal
-    # leaves it as it was. One review item yields at most one case in a set.
+    # case. The records are read, never written: the file `ask.sqlite` is opened read-only, never
+    # created (an instance that served no question has none: `no-such-review`) and never migrated
+    # (a file of schema version 1 reads with no expectations). An item with no expected fact and
+    # no expected node is refused (`no-expectations`). A set path that is a symbolic link is
+    # written through to its target. Nothing but the set file changes, and a refusal leaves it as
+    # it was, a missing file not created. One review item yields at most one case in a set.
     # UNMAPPED: the command line is `eval case add`, a word below the group the specification's
     # one level of command groups cannot name; the wire `case` is that word, `add` is clap's, and
     # the clap ⇔ spec test in `src/main.rs` walks it.
@@ -2216,6 +2228,16 @@ commands:
             review_id: input.from_review
         summary: >-
           The item has no expectations until a reviewer closes it; the set file is unchanged.
+
+      - name: no-expectations
+        external: The review item from_review names is closed with no expected fact and no expected node
+        error: cortex.instance.EvalNoExpectations
+        payload:
+          cortex.instance.EvalNoExpectations:
+            review_id: input.from_review
+        summary: >-
+          A case with nothing expected passes every answer; the set file is unchanged and not
+          created.
 
       - name: case-exists
         external: The set already holds a case with the review id as its id or its review_id

@@ -688,6 +688,7 @@ pub enum CaseRefused {
     SetInvalid(String),
     NoSuchReview,
     ReviewOpen,
+    NoExpectations,
     CaseExists,
     Failed(String),
 }
@@ -730,7 +731,10 @@ pub fn add_case(
         }
     };
     let spec = layout.load_spec().map_err(CaseRefused::Failed)?;
-    let records = crate::ask::records::Keeper::open(home, &spec).map_err(CaseRefused::Failed)?;
+    // Read-only: no `ask.sqlite` is created or migrated for a read.
+    let records = crate::ask::records::Keeper::open_read_only(home, &spec)
+        .map_err(CaseRefused::Failed)?
+        .ok_or(CaseRefused::NoSuchReview)?;
     let item = records
         .store
         .review(&ReviewId(review_id.into()))
@@ -738,6 +742,12 @@ pub fn add_case(
         .ok_or(CaseRefused::NoSuchReview)?;
     if item.state != ReviewItemState::Closed {
         return Err(CaseRefused::ReviewOpen);
+    }
+    let expect_facts = item.data.expect_facts.clone().unwrap_or_default();
+    let expect_nodes = item.data.expect_nodes.clone().unwrap_or_default();
+    // A case with nothing expected passes every answer.
+    if expect_facts.is_empty() && expect_nodes.is_empty() {
+        return Err(CaseRefused::NoExpectations);
     }
     let answer = records
         .store
@@ -754,13 +764,18 @@ pub fn add_case(
         "format": CASE_FORMAT,
         "id": review_id,
         "question": answer.data.question,
-        "expect_facts": item.data.expect_facts.unwrap_or_default(),
-        "expect_nodes": item.data.expect_nodes.unwrap_or_default(),
+        "expect_facts": expect_facts,
+        "expect_nodes": expect_nodes,
         "review_id": review_id,
     }));
     let count = cases.len() as i64;
     let mut text = serde_json::to_string_pretty(&doc).expect("a JSON value serializes");
     text.push('\n');
+    // A set reached through a symbolic link is written at the link's target.
+    let set = &match std::fs::canonicalize(set) {
+        Ok(real) => real,
+        Err(_) => set.to_path_buf(),
+    };
     let name = set
         .file_name()
         .ok_or_else(|| CaseRefused::SetInvalid(format!("{} names no file", set.display())))?;

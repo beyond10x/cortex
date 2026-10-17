@@ -892,6 +892,13 @@ impl Scenario {
                     "review-open",
                     Some(("EvalReviewOpen", json!({"review_id": error.review_id.0}))),
                 ),
+                m::AddEvalCaseOutcome::NoExpectations { error } => (
+                    "no-expectations",
+                    Some((
+                        "EvalNoExpectations",
+                        json!({"review_id": error.review_id.0}),
+                    )),
+                ),
                 m::AddEvalCaseOutcome::CaseExists { error } => (
                     "case-exists",
                     Some(("EvalCaseExists", json!({"review_id": error.review_id.0}))),
@@ -1528,7 +1535,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        110,
+        111,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

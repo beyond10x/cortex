@@ -145,6 +145,8 @@ pub const SCHEMA_VERSION: i64 = MIGRATIONS.len() as i64;
 pub struct Records {
     db: Mutex<Connection>,
     at: PathBuf,
+    /// A file opened read-only at schema version 1: its reviews hold no expectation columns.
+    legacy: bool,
 }
 
 fn sql(at: &Path) -> impl Fn(rusqlite::Error) -> String + '_ {
@@ -195,7 +197,48 @@ impl Records {
         Ok(Self {
             db: Mutex::new(db),
             at,
+            legacy: false,
         })
+    }
+
+    /// Opens `path` for reading only: `None` when no file is there (it is never created), and the
+    /// file is never migrated. A file of schema version 1 reads with its review items holding no
+    /// expectations; one newer than [`SCHEMA_VERSION`] is refused.
+    pub fn open_read_only(path: &Path) -> Result<Option<Self>, String> {
+        if !path.exists() {
+            return Ok(None);
+        }
+        let db = Connection::open_with_flags(
+            path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(sql(path))?;
+        db.busy_timeout(std::time::Duration::from_secs(10))
+            .map_err(sql(path))?;
+        let version: i64 = db
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .map_err(sql(path))?;
+        if version > SCHEMA_VERSION {
+            return Err(format!(
+                "{}: schema version {version} is newer than this cortex's {SCHEMA_VERSION}; \
+                 a newer cortex wrote it",
+                path.display()
+            ));
+        }
+        Ok(Some(Self {
+            db: Mutex::new(db),
+            at: path.to_path_buf(),
+            legacy: version < 2,
+        }))
+    }
+
+    /// The select of a review item; a version-1 file has no expectation columns.
+    fn review_select(&self) -> &'static str {
+        if self.legacy {
+            REVIEW_V1
+        } else {
+            REVIEW
+        }
     }
 
     fn with<T>(&self, f: impl FnOnce(&mut Connection) -> rusqlite::Result<T>) -> Result<T, String> {
@@ -230,9 +273,10 @@ impl Records {
 
     /// The review items of one answer, open and closed, oldest first.
     pub fn reviews(&self, answer_id: &str) -> Result<Vec<ma::ReviewItemSnapshot>, String> {
+        let select = self.review_select();
         let rows = self.with(|db| {
             let mut q = db.prepare(&format!(
-                "{REVIEW} WHERE answer_id = ?1 ORDER BY opened_ms, rowid"
+                "{select} WHERE answer_id = ?1 ORDER BY opened_ms, rowid"
             ))?;
             let rows = q.query_map([answer_id], review_row)?;
             rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -245,6 +289,8 @@ const ANSWER: &str = "SELECT answer_id, instance_name, identity, question, answe
     outcome, tool_calls, latency_ms, input_tokens, output_tokens, cached_tokens, context_tokens, \
     steps, at_ms FROM answers";
 const VOTE: &str = "SELECT vote_id, answer_id, identity, value, comment, at_ms FROM votes";
+const REVIEW_V1: &str = "SELECT review_id, answer_id, cause, state, opened_ms, close_reason, \
+    closed_ms, NULL, NULL FROM reviews";
 const REVIEW: &str = "SELECT review_id, answer_id, cause, state, opened_ms, close_reason, \
     closed_ms, expect_facts, expect_nodes FROM reviews";
 
@@ -446,7 +492,7 @@ impl RecordStore for Records {
     fn review(&self, id: &ma::ReviewId) -> Result<Option<ma::ReviewItemSnapshot>, String> {
         let row = self.with(|db| {
             db.query_row(
-                &format!("{REVIEW} WHERE review_id = ?1"),
+                &format!("{} WHERE review_id = ?1", self.review_select()),
                 [&id.0],
                 review_row,
             )
@@ -542,7 +588,8 @@ impl RecordStore for Records {
     fn open_reviews(&self) -> Result<Vec<ma::OpenReviews>, String> {
         let rows = self.with(|db| {
             let mut q = db.prepare(&format!(
-                "{REVIEW} WHERE state = 'Open' ORDER BY opened_ms, rowid"
+                "{} WHERE state = 'Open' ORDER BY opened_ms, rowid",
+                self.review_select()
             ))?;
             let rows = q.query_map([], review_row)?;
             rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -782,6 +829,24 @@ pub struct Keeper {
 }
 
 impl Keeper {
+    /// The records of the instance `spec` names, opened read-only: `None` when the instance has
+    /// no `ask.sqlite` (none is created), and the file is never migrated.
+    pub fn open_read_only(home: &Home, spec: &m::InstanceSpec) -> Result<Option<Self>, String> {
+        if let Some(m::StoreSpec::Postgres(_)) = &spec.store {
+            return Err(POSTGRES_NOT_YET.into());
+        }
+        let path = home.instance_dir(&spec.name.0).join(FILE);
+        let ask = spec.ask.as_ref();
+        Ok(Records::open_read_only(&path)?.map(|records| Self {
+            store: Arc::new(records),
+            instance: spec.name.0.clone(),
+            retention_days: ask
+                .and_then(|a| a.retention_days)
+                .unwrap_or(DEFAULT_RETENTION_DAYS),
+            slow_after_ms: ask.and_then(|a| a.slow_after_ms),
+        }))
+    }
+
     /// The records of the instance `spec` names, in `home`: `ask.sqlite` in its instance
     /// directory. A `postgres` store has no backend yet (`ask::check` refuses it first).
     pub fn open(home: &Home, spec: &m::InstanceSpec) -> Result<Self, String> {

@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 785a52f01fac9f330a345df82303219f49a355f40ae72a498b663dbb8a26c5e6
-  contract digest ea271169878b423bc3c2b22eb59a3d14dea5eb2f741ac5807d5ea0e053e37b22
+  model digest 7d8404d5ca39588d21ed4055451f1ea351db5ca69f68cb24cf53efa405606548
+  contract digest 13af80bede279cc14efbdae1297781d102fbbed93aa5261bae001aa124156555
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-234 capabilities: **226 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+235 capabilities: **227 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -204,6 +204,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | error type | `cortex.instance.ConnectionMissing` |
 | error type | `cortex.instance.ConnectionUnavailable` |
 | error type | `cortex.instance.EvalCaseExists` |
+| error type | `cortex.instance.EvalNoExpectations` |
 | error type | `cortex.instance.EvalReviewNotFound` |
 | error type | `cortex.instance.EvalReviewOpen` |
 | error type | `cortex.instance.EvalRunnerFailed` |

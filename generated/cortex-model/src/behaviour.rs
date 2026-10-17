@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 785a52f01fac9f330a345df82303219f49a355f40ae72a498b663dbb8a26c5e6
-// contract digest ea271169878b423bc3c2b22eb59a3d14dea5eb2f741ac5807d5ea0e053e37b22
+// model digest 7d8404d5ca39588d21ed4055451f1ea351db5ca69f68cb24cf53efa405606548
+// contract digest 13af80bede279cc14efbdae1297781d102fbbed93aa5261bae001aa124156555
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -458,6 +458,10 @@ where
         // `review-open`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceAddEvalCase(&input), "review-open")? {
             return Ok(crate::instance::AddEvalCaseOutcome::ReviewOpen { error: crate::instance::EvalReviewOpen { review_id: input.from_review.clone() } });
+        }
+        // `no-expectations`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceAddEvalCase(&input), "no-expectations")? {
+            return Ok(crate::instance::AddEvalCaseOutcome::NoExpectations { error: crate::instance::EvalNoExpectations { review_id: input.from_review.clone() } });
         }
         // `case-exists`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceAddEvalCase(&input), "case-exists")? {
