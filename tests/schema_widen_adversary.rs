@@ -254,7 +254,10 @@ fn the_wire_form_of_a_widening_reads_back_and_the_answer_schema_carries_it() {
             "{field} in {value} / {def}"
         );
     }
-    assert!(SYSTEM_PROMPT.contains("`widen_edge_type`"), "{SYSTEM_PROMPT}");
+    assert!(
+        SYSTEM_PROMPT.contains("`widen_edge_type`"),
+        "{SYSTEM_PROMPT}"
+    );
 }
 
 /// The model is asked with the variant in its schema and its instruction, and is shown each edge
@@ -265,10 +268,14 @@ fn the_model_is_shown_the_widening_and_a_malformed_one_is_dropped() {
     answer(
         &w,
         json!([
-            with(json!({"kind": "widen_edge_type", "value": {"name": "DEVELOPS",
-                "add_source_types": "Product", "add_target_types": []}})),
-            with(json!({"kind": "widen_edge_type", "value": {"name": "DEVELOPS",
-                "add_source_types": ["Product"]}})),
+            with(
+                json!({"kind": "widen_edge_type", "value": {"name": "DEVELOPS",
+                "add_source_types": "Product", "add_target_types": []}})
+            ),
+            with(
+                json!({"kind": "widen_edge_type", "value": {"name": "DEVELOPS",
+                "add_source_types": ["Product"]}})
+            ),
             widen("DEVELOPS", &["Product"], &[]),
         ]),
     );
@@ -304,7 +311,11 @@ fn a_round_without_review_widens_whole_with_a_node_type_it_defined_first() {
         &w,
         json!([
             node_type("Vendor"),
-            widen("DEVELOPS", &["Vendor", "Vendor", "Organization"], &["Product"]),
+            widen(
+                "DEVELOPS",
+                &["Vendor", "Vendor", "Organization"],
+                &["Product"]
+            ),
         ]),
     );
     let head = w.head("wn");
@@ -515,7 +526,10 @@ fn ekr_refusing_a_widening_records_it_refused_with_ekrs_code() {
             "EKR's code in codes: {l}"
         );
         let ontology = ekr(w, "wf", &["ontology"]);
-        assert_eq!(ends(&ontology, "DEVELOPS", "source_types"), ["Organization"]);
+        assert_eq!(
+            ends(&ontology, "DEVELOPS", "source_types"),
+            ["Organization"]
+        );
     };
 
     let (code, out) = w.cortex(&["schema", "wf", "--sample", "5"]);
