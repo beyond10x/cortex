@@ -5,6 +5,25 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+### Added
+
+- `metrics.prom` reports what each run of a source did: `cortex_source_last_run_duration_seconds`,
+  `cortex_source_last_run_documents{kind="read|applied"}`, `cortex_source_documents_total{kind}`
+  and `cortex_source_model_tokens_total{kind="input|cached|output"}`, beside the runs by outcome.
+  No series holds a credential, a prompt or document content.
+- `cortex run` handles SIGTERM: the run stops at its next safe point (ending a model call in
+  flight), a gated run is undone, and it ends `terminated`, exit 8, with its status, metric file
+  and hook written; `--record-failure` does not count it. A second SIGTERM exits 143 at once.
+- A run whose model cannot be reached (connection refused, `claude` not startable, the model not
+  loaded, a gateway answering 502, 503 or 504) ends `model-unavailable`, exit 7, with its cause
+  (`refused`, `not-loaded`, `gateway-down`), instead of `extraction-failed`; `--record-failure`
+  does not count it, so a model outage never disables a source. Batches applied before it stay.
+
+### Changed
+
+- The reason of a model call that exited without a JSON answer is masked for credential shapes
+  and bounded, as an error answer's is.
+
 ### What 1.0 holds
 
 1.0 is the first release whose interface is stable. It adds no feature over 0.5.0; it is 0.5.0's

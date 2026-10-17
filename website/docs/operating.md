@@ -125,14 +125,32 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 4 | `store-outcome-unknown` | EKR could not say whether a store write of the run took effect (`publication outcome is unknown` from a stage verb, `apply-extraction` or a transaction's commit); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage or extracts the batch again, and a gated `sqlite` run that had kept its snapshot is undone from it (see [Undoing a run](#undoing-a-run)) |
 | 5 | `connection-unavailable` | Connectors answered a retryable failure to every attempt of `connections revalidate` (or of the `connections list` read before it) before the run fetched anything; not a failure of the source, so `--record-failure` counts nothing, and the next scheduled run starts as usual (see [Failures](#failures)) |
 | 6 | `batch-too-large` | a part of several documents of an extraction batch was still too long for the model's window, or its answer still cut off, after the batch was split 3 deep; the reason names that part's documents and the batch size used. Not a failure of the source, so `--record-failure` counts nothing; the batches before it stay applied, and a later run extracts the rest. A part of one document does not end the run: it is left out alone, named in `too_large` and marked seen (see [The batch size](./spec-file.md#the-batch-size)) |
+| 7 | `model-unavailable` | the model could not be reached: `detail.cause` is `refused` (`claude` could not be started, or the connection was refused), `not-loaded` (the server behind the gateway has not loaded the model) or `gateway-down` (HTTP 502, 503 or 504). Not a failure of the source, so `--record-failure` counts nothing, however long the model is down; the batches before it stay applied, and a later run extracts the rest (see [When the model cannot be reached](#when-the-model-cannot-be-reached)) |
+| 8 | `terminated` | the run was sent SIGTERM and stopped at its next safe point; a gated run was undone first. Not a failure of the source, so `--record-failure` counts nothing (see [Stopping a run](#stopping-a-run)) |
+| 143 | none | a second SIGTERM ended the process at once; nothing was recorded |
 
 With `--fetch-only` (see [Counting what a run would extract](#counting-what-a-run-would-extract)),
 `fetched` exits 0 and a fetch that failed exits 1 as `fetch-failed`.
 
 The JSON line on stdout says the same, with its `detail`. With `--record-failure`, a failed run
 prints a second line, the recorded failure's (`counted` or `disabled`); the exit status is the
-run's. A `store-outcome-unknown`, `connection-unavailable` or `batch-too-large` run records no failure and prints
-no second line.
+run's. A `store-outcome-unknown`, `connection-unavailable`, `batch-too-large`,
+`model-unavailable` or `terminated` run records no failure and prints no second line.
+
+## Stopping a run
+
+`cortex run` handles SIGTERM, which a Kubernetes Job's deadline or `systemctl stop` sends. The
+run stops at its next safe point: once its fetch returns, before each batch, or at once during a
+model call, whose process group is sent SIGTERM and, after 5 seconds, SIGKILL. A structured
+source stops before each record batch. A gated run is then undone as a run its gate refuses is:
+on `postgres` its stage is abandoned and `state/` put back, on `sqlite` its kept snapshot is
+restored once a batch committed. An ungated run keeps the batches it applied, each marked seen,
+and the next run extracts the rest. The run prints `terminated` with a `reason` saying where it
+stopped and what was undone, records it in the source's status, the metric file and the hook,
+and exits 8. A fetch from Connectors is not interrupted: the run stops when it returns, so leave
+a grace period (Kubernetes' `terminationGracePeriodSeconds`, systemd's `TimeoutStopSec`) longer
+than a fetch takes. A second SIGTERM ends the process at once with exit status 143, recording
+nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
 
 ## What one run does
 
@@ -296,26 +314,45 @@ concurrent writer; it is held for milliseconds, never during a run or a hook. A 
 With [`monitoring.metrics`](./spec-file.md#monitoring), every run of a source then rewrites
 `instances/<name>/metrics.prom` whole, through a temporary file and a rename, in the Prometheus
 text format. Point a node exporter's textfile collector, or a sidecar, at it; cortex serves no
-port. It holds two series per source of the instance:
+port. It holds these series per source of the instance:
 
 ```text
 # TYPE cortex_source_runs_total counter
 cortex_source_runs_total{source="example/news",outcome="fetch-failed"} 1
 # TYPE cortex_source_last_run_timestamp_seconds gauge
 cortex_source_last_run_timestamp_seconds{source="example/news"} 1791962441.269
+# TYPE cortex_source_last_run_duration_seconds gauge
+cortex_source_last_run_duration_seconds{source="example/news"} 12.408
+# TYPE cortex_source_last_run_documents gauge
+cortex_source_last_run_documents{source="example/news",kind="read"} 3
+cortex_source_last_run_documents{source="example/news",kind="applied"} 3
+# TYPE cortex_source_documents_total counter
+cortex_source_documents_total{source="example/news",kind="read"} 41
+cortex_source_documents_total{source="example/news",kind="applied"} 40
+# TYPE cortex_source_model_tokens_total counter
+cortex_source_model_tokens_total{source="example/news",kind="input"} 52310
+cortex_source_model_tokens_total{source="example/news",kind="cached"} 18004
+cortex_source_model_tokens_total{source="example/news",kind="output"} 6120
 ```
 
-`cortex_source_runs_total` counts the source's runs under each outcome (`ran`,
-`fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`,
-`connection-unavailable`, `batch-too-large`, `disabled`),
-every outcome written, 0 for
-one that never happened. The counts are kept in the status file and start from the first run
-cortex recorded one for.
+| series | type | holds |
+|---|---|---|
+| `cortex_source_runs_total{source, outcome}` | counter | the source's runs under each outcome (`ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable`, `batch-too-large`, `terminated`, `model-unavailable`, `disabled`), every outcome written, 0 for one that never happened |
+| `cortex_source_last_run_timestamp_seconds{source}` | gauge | when the last run started |
+| `cortex_source_last_run_duration_seconds{source}` | gauge | how long the last run took, to the moment it recorded its outcome, whatever the outcome |
+| `cortex_source_last_run_documents{source, kind}` | gauge | the last run's documents: `read`, the new or changed documents it selected to extract (`documents_new`), and `applied` (`documents_applied`). Present only when the last run ended `ran` |
+| `cortex_source_documents_total{source, kind}` | counter | the same, added up over the runs that ended `ran` |
+| `cortex_source_model_tokens_total{source, kind}` | counter | the model tokens those runs reported: `input` (`input_tokens` and `cache_creation_input_tokens`), `cached` (`cache_read_input_tokens`) and `output` (`output_tokens`). A run whose answers did not report a count adds nothing to it |
+
+A run that did not end `ran` adds no documents or tokens, even when it applied batches before it
+stopped (`batch-too-large`, `model-unavailable`, `terminated`). Every label is the source id or a
+fixed name: no series holds a credential, a prompt, a question or a document's content. The
+figures are kept in the status file and start from the first run cortex recorded them for.
 
 With [`monitoring.hook`](./spec-file.md#monitoring), each run that fails calls the hook once,
 after its line is printed and its failure recorded: `<command…> <instance>/<source> <outcome>`, with
 the outcome `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`,
-`connection-unavailable` or `batch-too-large`, or
+`connection-unavailable`, `batch-too-large`, `terminated` or `model-unavailable`, or
 `disabled` when that run's
 recorded failure disabled the source. A run that ran or found the source disabled calls no
 hook. The hook runs in the instance directory, in a process group of its own, with cortex's
@@ -353,6 +390,21 @@ not marked seen, so a later run extracts them. No failure is recorded, so it nev
 source; its status, metric and hook report it as for `store-outcome-unknown`. A gated run that
 fails its gate ends `apply-refused` as any other, and its reason also names the part that did not
 fit.
+
+### When the model cannot be reached
+
+A model call that fails because the model cannot be reached ends the run as `model-unavailable`,
+exit status 7, instead of `extraction-failed`, so a model outage never disables a healthy source.
+cortex tells it by the call's error text, in any case: `refused` when `claude` could not be
+started (or `timeout` could not run it) or the error says `connection refused`, `ECONNREFUSED`,
+`Connection error` or `Unable to connect`; `not-loaded` for `model not loaded`, `no models loaded`,
+`model is loading` or `currently loading`; `gateway-down` for an `API Error` with status 502, 503
+or 504, `Bad Gateway`, `Service Unavailable` or `Gateway Timeout`. A call that timed out, any other
+error and an answer that is not a valid document still end `extraction-failed`, which
+`--record-failure` counts. An error answer that cost zero is asked once more first, as every one
+is. The `reason` holds the call's error text, masked for credential shapes and bounded; never the
+prompt. The batches applied before the model became unavailable stay applied and seen, and are
+held to the gate; the rest are extracted by a later run.
 
 ## Undoing a run
 
