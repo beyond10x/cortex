@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.KnownOrigin",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "aa803d5fc727448fdc67db2b62ea07416e47fd00e48479e5419e9c0ab02ee313",
+    "contract_digest": "slice-sha256/2:6358e1eb94a4c3c495158a75524a91498e1bd5c6827265bf8f3754388da9db9a",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.KnownOrigin": {
+      "title": "KnownOrigin",
+      "x-ess-name": "cortex.instance.KnownOrigin",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Store",
+        "Run"
+      ]
+    }
+  }
+}

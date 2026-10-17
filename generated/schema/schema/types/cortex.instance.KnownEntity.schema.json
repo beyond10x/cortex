@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.KnownEntity",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "aa803d5fc727448fdc67db2b62ea07416e47fd00e48479e5419e9c0ab02ee313",
+    "contract_digest": "slice-sha256/2:c6d8de0bc71d7d79a3289ff074c1332024ec329ff33377258677b46fa55a111b",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.KnownEntity": {
+      "title": "KnownEntity",
+      "x-ess-name": "cortex.instance.KnownEntity",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "node_type": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "origin": {
+          "$ref": "#/$defs/cortex.instance.KnownOrigin"
+        }
+      },
+      "required": [
+        "node_type",
+        "name",
+        "aliases",
+        "origin"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.KnownOrigin": {
+      "title": "KnownOrigin",
+      "x-ess-name": "cortex.instance.KnownOrigin",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Store",
+        "Run"
+      ]
+    }
+  }
+}

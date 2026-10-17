@@ -212,6 +212,9 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
     if let Some(reason) = reference_refusal(spec) {
         return Err(reason);
     }
+    if let Some(reason) = alias_template_refusal(spec) {
+        return Err(reason);
+    }
     // A `connectors` source cites a record as `record:<adapter>:<operation>:<id>`, as a structured
     // source does, so a structured source that ends what it no longer lists would claim the
     // values the model extracted from that operation's records.
@@ -369,6 +372,39 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Why an alias template of a structured mapping (`alias_templates`, the source's own mapping or a
+/// child's) is no alias template ([`crate::structured::template_refusal`]): the specification
+/// cannot state the grammar of a String; this is its `UNMAPPED:` rule. Names the place and the
+/// template.
+fn alias_template_refusal(spec: &m::InstanceSpec) -> Option<String> {
+    for source in &spec.sources {
+        let m::SourceSettings::Structured(st) = &source.settings else {
+            continue;
+        };
+        let at = format!("sources.{}.settings.value", source.name);
+        let children = match &st.input {
+            m::StructuredInput::Connectors(c) => c.children.iter().flatten().collect(),
+            m::StructuredInput::Files(_) => Vec::new(),
+        };
+        let mappings = std::iter::once((format!("{at}.mapping"), &st.mapping)).chain(
+            children.into_iter().enumerate().map(|(i, c)| {
+                (
+                    format!("{at}.input.value.children[{i}].mapping"),
+                    &c.mapping,
+                )
+            }),
+        );
+        for (place, mapping) in mappings {
+            for template in mapping.alias_templates.iter().flatten() {
+                if let Some(why) = crate::structured::template_refusal(template) {
+                    return Some(format!("{place}.alias_templates: {template:?}: {why}"));
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Why a connection the spec names cannot be used: it names both an id (`connection`) and a

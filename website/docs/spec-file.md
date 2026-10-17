@@ -91,7 +91,11 @@ characters of the request's fixed part (the system prompt, the answer's schema, 
 description and instructions, the ontology and the known entity names), at least 4,000 and at most
 60,000. Otherwise it is 60,000. A gateway with `max_context_tokens: 65536` and
 `max_output_tokens: 24000` leaves 41,536 tokens of room, 62,304 characters before the fixed part.
-A run's report and its `cortex.log` line state the size it used as `batch_chars`.
+A run's report and its `cortex.log` line state the size it used as `batch_chars`. A batch's own
+fixed part counts too: when the store nodes its documents name (the
+[known entities](./operating.md)) make its fixed part longer than the one the size
+was derived with, and its documents' text plus that growth is over the size, a batch of more than
+one document is split in two before it is sent, and the split is counted in `splits`.
 
 When `claude` answers that a request is too long for the model's window (`Prompt is too long`,
 or `maximum context length` from an OpenAI-compatible server behind a gateway),
@@ -533,6 +537,7 @@ and `$` alone is the answer itself.
 | `aliases` | paths to further names; each holds a value or a list of values. A mapped alias resolves across records and sources (below) |
 | `properties` | `property`, `path` and an optional `value_kind`: the value at the path is asserted for the property, in the property's value kind (below) |
 | `relations` | `relation`, `target_type` and `target_name`: a relation from the record's entity to the entity of `target_type` named by the value at the `target_name` path, one per value when it holds a list |
+| `alias_templates` | optional: fixed-format aliases, each a text with `{path}` placeholders filled from the record (below) |
 
 A record without an id or a name is skipped, and a record whose id was already read in the run
 counts once.
@@ -551,7 +556,8 @@ type that share any alias as one thing, so the entity's aliases are, in order:
 
 1. `<name> (<identity>)`, which names the node, for example `Ada Lovelace (directory:people.list:P-1)`;
 2. the identity;
-3. the mapped `aliases`, as the spec lists them.
+3. the mapped `aliases`, as the spec lists them;
+4. each of `alias_templates`, rendered from the record.
 
 The bare name and the bare id are not aliases. Two records of one name, or one record's id equal
 to another's alias, are two nodes, and a record whose name changes stays the same node. A mapped
@@ -560,6 +566,31 @@ merge a record with nodes known by its plain name, map the name as an alias too
 (`aliases: ["$.name"]`). EKR adds no alias to a node an extraction matches, so a record whose
 mapped alias changes (a renamed path) keeps its node and its old alias, and the new value is not
 added as an alias; the property holding it is set as any changed value is.
+
+**Alias templates.** An alias template matches a source's key scheme to the aliases another writer
+gave a store's nodes, for example a store adopted with repositories known as `repo:acme/api`:
+
+```yaml
+mapping:
+  node_type: Repository
+  id: "$.id"
+  name: "$.path"
+  aliases: []
+  properties: []
+  relations: []
+  alias_templates: ["repo:{namespace}/{path}"]
+```
+
+A record `{"id": 7, "namespace": "acme", "path": "api"}` then has the alias `repo:acme/api`, and
+EKR resolves it to the store's `Repository` node of that alias instead of creating another. A
+placeholder is `{path}`, a dotted path into the record as in `aliases` (`$.` allowed before it);
+the value there must be a scalar. A record that lacks a field a template names, or holds no scalar
+or blank text there, gets no alias from that template, with no error. The spec check refuses
+(`create`, `update`, `adopt` and a run alike, naming the source and the template) an empty
+template, a template that names no field (every record would share its alias), and any other
+placeholder syntax: an unclosed `{`, a lone `}`, `{}`, a nested `{`, or a character in a path
+other than ASCII letters, digits, `_`, `-` and the dots between names (a non-ASCII letter is
+refused). A template alias matches a store node of the mapping's own `node_type` only.
 
 **Values.** Each mapped property is declared and written in one value kind: the `value_kind` its
 mapping names (`String`, `Integer`, `Decimal`, `Boolean` or `Timestamp`), else the kind the

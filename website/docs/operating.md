@@ -157,9 +157,9 @@ no second line.
    batch too long for the model's window is split and asked again. Each batch is one `claude -p` call that
    answers in the JSON form of `ekr schema ekr.extraction-document/1`. The prompt carries the
    instance's description, its instructions, the store's node types with each property's value
-   kind (`Release(version: String, release_date: String)`), its edge types, and up to 50 known
-   entity names per type. When the spec has a `redaction` policy, every value it finds in the
-   documents and the known names is shown to the model as a placeholder (`[Email-1]`), and each
+   kind (`Release(version: String, release_date: String)`), its edge types, and the known
+   entities (below). When the spec has a `redaction` policy, every value it finds in the
+   documents and the known entities is shown to the model as a placeholder (`[Email-1]`), and each
    placeholder in the answer is put back before merging; the mapping exists for that one call.
    When a document says a property's value changed (a new owner, a new status), the model marks
    that fact `replaces: true`, and EKR supersedes every active value of the same entity and
@@ -180,6 +180,34 @@ no second line.
    taken fails the run with nothing applied.
 8. **Check** the run against the spec's [`gate`](./spec-file.md#gate), when it applied
    something. A failed check undoes the run (see [Failures](#failures)).
+
+**Known entities.** Before each batch is sent, the run reads the store once (`ekr snapshot`) and
+takes every node, of any type, whose canonical name or one of whose aliases equals one of the
+batch's terms, both lowercased: each document's key and, for a record, its id (after the first
+`#` of a file record's key `<path>#<id>`, so an id holding `#` is taken whole, after
+`<adapter>:<operation>:` of a Connectors record's). The prompt lists these nodes first, under
+their own type, marked as in the store and with their other aliases:
+
+```text
+Known entities:
+- Repository: acme/api (in the store; also repo:acme/api); billing-service
+```
+
+so the model reuses a node that an adoption or another writer put in the store instead of
+creating it again under another type. Then come the names the run's own earlier batches
+extracted (`state/entities.json`), at most 50 per type; a run name that a store hit of its type
+already shows is left out. The 50 bound holds for run names only: every store hit of the batch is
+listed. Matching is exact after lowercasing (`str::to_lowercase`, not full case folding: `STRASSE`
+does not match `Straße`); a similar name is not a hit. A store node's name and aliases are another
+writer's text: they are masked for credential shapes on every run, with or without a `redaction`
+policy, and then pass through the policy like every known name; a line break or another control
+character in a type, name or alias is written as a space, so each type keeps its one line. Behind
+a model window, a batch whose store hits make its prompt's fixed part longer than the batch size
+allowed for is split in two before it is sent (see
+[the batch size](./spec-file.md#the-batch-size)). `ekr snapshot` reads the
+whole graph (nodes, edges, assertions and evidence) at the head, once per batch, so on a large
+store each batch takes that read's time on top of the model call; a `structured` source calls no
+model and makes no such read.
 
 A `structured` source skips steps 5 and 6: each batch of records is mapped to an extraction
 document by the source's `mapping` and applied without a model call, at a cost of 0 (see
