@@ -612,10 +612,11 @@ types:
   # (`cortex sources`) and the metric file report.
   - name: cortex.instance.RunOutcome
     kind: enum
-    variants: [ran, fetch-failed, extraction-failed, apply-refused, store-outcome-unknown, connection-unavailable, batch-too-large, disabled]
+    variants: [ran, fetch-failed, extraction-failed, apply-refused, store-outcome-unknown, connection-unavailable, batch-too-large, terminated, disabled]
 
   # A command cortex calls once for each run of a source that answers `fetch-failed`,
-  # `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable` or `batch-too-large`:
+  # `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable`,
+  # `batch-too-large` or `terminated`:
   # `command` is its argument vector (no shell), started in
   # the instance directory, in a process group of its own, with the source id and the outcome
   # appended as its last two arguments. A relative program path holding a `/` is read against the
@@ -639,9 +640,24 @@ types:
   # Where a run reports besides its printed line, `cortex.log` and the source's status. With
   # `metrics: true`, every run of a source rewrites `metrics.prom` in the instance directory whole
   # (a temporary file, then a rename), in the Prometheus text format, for a textfile collector or a
-  # sidecar; cortex serves no port. It holds `cortex_source_runs_total{source, outcome}`, the runs
-  # of each source by outcome, and `cortex_source_last_run_timestamp_seconds{source}`. A metric
-  # file cortex cannot write is recorded in `cortex.log` and changes no run's outcome.
+  # sidecar; cortex serves no port. It holds, per source:
+  # - `cortex_source_runs_total{source, outcome}` (counter), the runs by outcome;
+  # - `cortex_source_last_run_timestamp_seconds{source}` (gauge), when the last run started;
+  # - `cortex_source_last_run_duration_seconds{source}` (gauge), how long it took, to the moment
+  #   it recorded its outcome;
+  # - `cortex_source_last_run_documents{source, kind}` (gauge), the last run's documents: `read`,
+  #   the new or changed documents it selected to extract (`SourceRan.documents_new`), and
+  #   `applied` (`SourceRan.documents_applied`); present only when the last run ended `ran`;
+  # - `cortex_source_documents_total{source, kind}` (counter), the same, added up over every run
+  #   that ended `ran`;
+  # - `cortex_source_model_tokens_total{source, kind}` (counter), the model tokens those runs
+  #   reported: `input` (`input_tokens` and `cache_creation_input_tokens`), `cached`
+  #   (`cache_read_input_tokens`) and `output` (`output_tokens`); a run whose answers did not
+  #   report a count adds nothing to it.
+  # Every label is the source id or a fixed name: no series holds a credential, a prompt, a
+  # question or document content. A source's status file (`status/<source>.json`) keeps these
+  # figures, so the whole file is rewritten from the status files. A metric file cortex cannot
+  # write is recorded in `cortex.log` and changes no run's outcome.
   - name: cortex.instance.MonitoringSpec
     kind: struct
     fields:
@@ -1185,6 +1201,16 @@ errors:
     fields:
       - {name: reason, type: String}
 
+  - name: cortex.instance.RunTerminated
+    summary: >-
+      The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended,
+      and stopped at the next safe point: a model call in flight was ended. A gated run is undone
+      (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it
+      applied, and a later run extracts the rest. Nothing about the source was wrong: the failure
+      is not counted against it.
+    fields:
+      - {name: reason, type: String}
+
   - name: cortex.instance.SampleFailed
     summary: >-
       EKR could not draw the sample (`ekr sample`): the size is outside 1 to 1000, or the store
@@ -1586,9 +1612,9 @@ commands:
       # UNMAPPED: the exit status of each outcome, which an external scheduler reads instead of
       # the printed line: `ran` 0; `fetch-failed`, `extraction-failed`, `apply-refused` and
       # `no-such-source` 1; `disabled` 3; `store-outcome-unknown` 4; `connection-unavailable` 5; `batch-too-large` 6;
-      # and 2 for an error before any outcome. ESS declares no exit status for a command line's
-      # outcomes; tests/e2e.rs, tests/run_status.rs, tests/store_outcome_unknown.rs and
-      # tests/connections_revalidate_retry.rs hold it.
+      # `terminated` 8; and 2 for an error before any outcome. ESS declares no exit status for a
+      # command line's outcomes; tests/e2e.rs, tests/run_status.rs, tests/store_outcome_unknown.rs,
+      # tests/connections_revalidate_retry.rs and tests/run_metrics.rs hold it.
       # UNMAPPED: `<instance>/seed`, when the instance is active and has no source named `seed`,
       # names the instance's seed documents: it extracts those no seed extraction applied yet (what
       # a `partial` create left) and answers these outcomes with no Source to update. Like a source
@@ -1612,12 +1638,14 @@ commands:
       # refused on `creates:`, `affects:` only updates), so the per-source state file holds it and
       # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.
       # UNMAPPED: after every outcome that names a source, the instance's `monitoring` reports it:
-      # `metrics.prom` is rewritten with the source's run counted under its outcome, and for
+      # `metrics.prom` is rewritten with the source's run counted under its outcome, its duration,
+      # and for `ran` its documents and model tokens (`cortex.instance.MonitoringSpec`), and for
       # `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`,
-      # `connection-unavailable` and `batch-too-large` the hook is called once, with `disabled` instead when the
-      # recorded failure disabled the source. ESS declares no effect outside the model's records;
-      # tests/run_status.rs, tests/store_outcome_unknown.rs and
-      # tests/connections_revalidate_retry.rs hold it.
+      # `connection-unavailable`, `batch-too-large` and `terminated` the hook is called once, with
+      # `disabled` instead when the recorded failure disabled the source. ESS declares no effect
+      # outside the model's records and no metric; tests/run_status.rs,
+      # tests/store_outcome_unknown.rs, tests/connections_revalidate_retry.rs and
+      # tests/run_metrics.rs hold it.
       # UNMAPPED: with `fetch_only` (`cortex run --fetch-only`), `fetched` exits 0 and
       # `fetch-only-failed` exits 1 and prints `fetch-failed`. Neither writes the source's status
       # file, `metrics.prom`, `cortex.log`, the seen documents or the window (`pending_since`),
@@ -1832,6 +1860,35 @@ commands:
           the batch, not the source, failed, so the failure is not counted and never disables the
           source. The batches before it stay applied; the rest are extracted by a later run.
           A part of one document is not this outcome: the run leaves it out and goes on.
+
+      # UNMAPPED: the signal and the safe point. `cortex run` (not `--fetch-only`) handles SIGTERM:
+      # the run stops at its next safe point, before a fetch result is used, before each batch, or
+      # by ending the model call in flight (its process group is sent SIGTERM, then SIGKILL after
+      # 5 s); a structured source stops before each record batch. A gated run is undone as a run
+      # its gate refuses is: its stage abandoned and `state/` put back, or its kept snapshot
+      # restored; an ungated run keeps the batches it applied, each marked seen, and its window
+      # is kept pending, as a failed run's is. A second SIGTERM ends the process at once, exit
+      # 143, recording nothing. `terminated` exits 8; its status, metric and hook report it while
+      # the scheduler counts nothing. ESS has no signal construct and declares no exit status;
+      # tests/run_metrics.rs holds it.
+      - name: terminated
+        external: The run is sent SIGTERM before it ends
+        error: cortex.instance.RunTerminated
+        compensates: true
+        updates: cortex.instance.Source
+        instance: source_id
+        sets:
+          last_outcome: terminated
+          last_run_at: {generated: true}
+          last_reason: {generated: true}
+        payload:
+          cortex.instance.RunTerminated:
+            reason: {generated: true}
+        summary: >-
+          The run stopped at its next safe point; the source's status records the outcome and its
+          reason, which says what was undone, and the scheduler sends no RecordFailure: the run
+          was stopped, the source did not fail, so the failure is not counted and never disables
+          the source. The next scheduled run starts as usual.
 
       # UNMAPPED: a part of one document that still does not fit the model's window is left out
       # alone, as a record whose value does not convert is: it is named, by its key, in the run's

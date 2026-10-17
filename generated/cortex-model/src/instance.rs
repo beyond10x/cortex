@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda
-// contract digest 7d415de25a37eea36ac6425b96c4fa73b380215c1b617c8e06d0464a3499f204
+// model digest 5508669d5e89427e17c83dc48387d544745e5deb4938f533bef694ab7ba2878f
+// contract digest accefdf70bd94821fe9ac953d1be7be820e1849f20208c855add4c0a5f42e76f
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -661,6 +661,8 @@ pub enum RunOutcome {
     ConnectionUnavailable,
     /// `batch-too-large`.
     BatchTooLarge,
+    /// `terminated`.
+    Terminated,
     /// `disabled`.
     Disabled,
 }
@@ -2611,6 +2613,13 @@ pub enum RunSourceOutcome {
         /// Why it was refused: `cortex.instance.BatchTooLarge`.
         error: BatchTooLarge,
     },
+    /// `terminated` — externally decided (The run is sent SIGTERM before it ends).
+    ///
+    /// The run stopped at its next safe point; the source's status records the outcome and its reason, which says what was undone, and the scheduler sends no RecordFailure: the run was stopped, the source did not fail, so the failure is not counted and never disables the source. The next scheduled run starts as usual.
+    Terminated {
+        /// Why it was refused: `cortex.instance.RunTerminated`.
+        error: RunTerminated,
+    },
     /// `ran` — otherwise.
     ///
     /// Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it. `cost_counted` is false behind a model gateway, where `cost_usd` is as reported and bounded nothing.
@@ -3139,6 +3148,15 @@ pub struct RestoreUnsupported {
     pub name: InstanceName,
 }
 
+/// The declared error `cortex.instance.RunTerminated`.
+///
+/// The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended, and stopped at the next safe point: a model call in flight was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about the source was wrong: the failure is not counted against it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunTerminated {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
 /// The declared error `cortex.instance.SampleFailed`.
 ///
 /// EKR could not draw the sample (`ekr sample`): the size is outside 1 to 1000, or the store cannot be read under the instance's host. No model was asked and nothing was written.
@@ -3503,7 +3521,7 @@ pub mod obligations {
     ///
     /// Why it is not generated: kept an obligation by a refusal that compensates (`compensates: true`), on `fetch-failed`.
     ///
-    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)`, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-only-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents in a fetch-only run) when eligible ((defined(fetch_only) and fetch_only == true)), error `cortex.instance.FetchFailed`; `fetched` when `(defined(fetch_only) and fetch_only == true)`, updates `cortex.instance.Source`, emits `cortex.instance.SourceFetched`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `store-outcome-unknown` externally decided (EKR answers that the publication outcome of a store write of the run (a stage verb or `apply-extraction`) is unknown), updates `cortex.instance.Source`, error `cortex.instance.StoreOutcomeUnknown`; `connection-unavailable` externally decided (Connectors answers a retryable operational failure to every attempt of `connections revalidate` (or of the `connections list` read before it, which for a source naming a profile is also the read that resolves the profile) before the run's first fetch), updates `cortex.instance.Source`, error `cortex.instance.ConnectionUnavailable`; `batch-too-large` externally decided (`claude` answers that a part of several documents of an extraction batch is too long for the model's window, or that its answer was cut off at the output limit, after the batch was split 3 deep), updates `cortex.instance.Source`, error `cortex.instance.BatchTooLarge`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
+    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)`, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-only-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents in a fetch-only run) when eligible ((defined(fetch_only) and fetch_only == true)), error `cortex.instance.FetchFailed`; `fetched` when `(defined(fetch_only) and fetch_only == true)`, updates `cortex.instance.Source`, emits `cortex.instance.SourceFetched`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `store-outcome-unknown` externally decided (EKR answers that the publication outcome of a store write of the run (a stage verb or `apply-extraction`) is unknown), updates `cortex.instance.Source`, error `cortex.instance.StoreOutcomeUnknown`; `connection-unavailable` externally decided (Connectors answers a retryable operational failure to every attempt of `connections revalidate` (or of the `connections list` read before it, which for a source naming a profile is also the read that resolves the profile) before the run's first fetch), updates `cortex.instance.Source`, error `cortex.instance.ConnectionUnavailable`; `batch-too-large` externally decided (`claude` answers that a part of several documents of an extraction batch is too long for the model's window, or that its answer was cut off at the output limit, after the batch was split 3 deep), updates `cortex.instance.Source`, error `cortex.instance.BatchTooLarge`; `terminated` externally decided (The run is sent SIGTERM before it ends), updates `cortex.instance.Source`, error `cortex.instance.RunTerminated`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
     pub trait RunSourceBehavior {
         /// Decides and enacts exactly one declared outcome of `cortex.instance.RunSource`.
         ///

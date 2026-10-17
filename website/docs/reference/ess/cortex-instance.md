@@ -401,7 +401,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 
 ### `RunOutcome`
 
-`cortex.instance.RunOutcome` is one of `ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable`, `batch-too-large` and `disabled`.
+`cortex.instance.RunOutcome` is one of `ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable`, `batch-too-large`, `terminated` and `disabled`.
 
 ### `SchemaCardinality`
 
@@ -1173,7 +1173,7 @@ It takes:
 - `source_id` — `cortex.instance.SourceId`
 - `fetch_only` — `Optional<Boolean>`, which may be absent
 
-It has 11 outcomes.
+It has 12 outcomes.
 
 **`disabled`** — The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome. Taken when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)` holds of the input. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.RunSkipped`. It sets `last_outcome` from `"disabled"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test establishes the declared subject state and constructs input selecting this branch in that state.
 
@@ -1192,6 +1192,8 @@ It has 11 outcomes.
 **`connection-unavailable`** — Nothing was fetched or applied; the source's status records the outcome and its reason, naming the last error, and the scheduler sends no RecordFailure: Connectors, not the source, failed, so the failure is not counted and never disables the source. The next scheduled run starts as usual. Decided outside the input: Connectors answers a retryable operational failure to every attempt of `connections revalidate` (or of the `connections list` read before it, which for a source naming a profile is also the read that resolves the profile) before the run's first fetch. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.ConnectionUnavailable`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"connection-unavailable"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
 **`batch-too-large`** — The source's status records the outcome and its reason, which names the documents of the part that did not fit and the batch size used, and the scheduler sends no RecordFailure: the batch, not the source, failed, so the failure is not counted and never disables the source. The batches before it stay applied; the rest are extracted by a later run. A part of one document is not this outcome: the run leaves it out and goes on. Decided outside the input: `claude` answers that a part of several documents of an extraction batch is too long for the model's window, or that its answer was cut off at the output limit, after the batch was split 3 deep. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.BatchTooLarge`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"batch-too-large"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
+
+**`terminated`** — The run stopped at its next safe point; the source's status records the outcome and its reason, which says what was undone, and the scheduler sends no RecordFailure: the run was stopped, the source did not fail, so the failure is not counted and never disables the source. The next scheduled run starts as usual. Decided outside the input: The run is sent SIGTERM before it ends. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.RunTerminated`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"terminated"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
 **`ran`** — Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it. `cost_counted` is false behind a model gateway, where `cost_usd` is as reported and bounded nothing. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceRan`. It sets `runs` from `its previous value plus 1`, `consecutive_failures` from `"0"`, `last_outcome` from `"ran"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -1741,6 +1743,16 @@ It carries:
 
 Reported by `cortex.instance.RestoreSnapshot` on its `backend-unsupported` outcome.
 
+### `RunTerminated`
+
+The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended, and stopped at the next safe point: a model call in flight was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about the source was wrong: the failure is not counted against it.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.RunSource` on its `terminated` outcome.
+
 ### `SampleFailed`
 
 EKR could not draw the sample (`ekr sample`): the size is outside 1 to 1000, or the store cannot be read under the instance's host. No model was asked and nothing was written.
@@ -1935,4 +1947,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda` · contract digest `slice-sha256/2:65119c41fb707475d9790ee12866a656f96befebd4326bf4ad791ee82cf708d5`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `5508669d5e89427e17c83dc48387d544745e5deb4938f533bef694ab7ba2878f` · contract digest `slice-sha256/2:b554de36ee08fa796539545d25cd62ce39a95dc4c7f8734b5710843249c36d94`. Do not edit this file; change the specification and regenerate it with `task generate`.
