@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.EvalRun.State",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "4eb207af007604622af5b1e8338e5745fdc644480429be61c94de61f5bfcb6bf",
+    "contract_digest": "slice-sha256/2:a0327bec88590fc252cc55dc1e8c656cb7b26e6f642b2eac36a73cfa9726c476",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.EvalRun.State": {
+      "title": "State",
+      "x-ess-name": "cortex.instance.EvalRun.State",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Recorded"
+      ]
+    }
+  }
+}

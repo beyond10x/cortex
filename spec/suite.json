@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64",
-    "contract_digest": "38571540d03e174471671e428e08bfba610dca6caa7e6de6077494ad0f35ae34",
+    "spec_digest": "4eb207af007604622af5b1e8338e5745fdc644480429be61c94de61f5bfcb6bf",
+    "contract_digest": "811aa6ae9a8971fe65cccfb2b29e907d470c5d9121e668b7a67c517bdf4fc87d",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
@@ -75,6 +75,10 @@
               "kind": "string"
             }
           }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
         },
         {
           "step": "expect_no_event",
@@ -160,6 +164,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -273,6 +281,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -351,6 +363,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -468,6 +484,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -546,6 +566,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -666,6 +690,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -744,6 +772,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -861,6 +893,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -939,6 +975,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -1056,6 +1096,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -1134,6 +1178,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -1410,6 +1458,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -1557,6 +1609,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -1786,6 +1842,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
         },
         {
           "step": "expect_no_event",
@@ -2128,6 +2188,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -2344,6 +2408,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
         },
         {
           "step": "expect_no_event",
@@ -2645,6 +2713,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -3053,6 +3125,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -3150,6 +3226,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -3376,6 +3456,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -3677,6 +3761,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -3893,6 +3981,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
         },
         {
           "step": "expect_no_event",
@@ -4194,6 +4286,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -4416,6 +4512,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -4714,6 +4814,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -4998,6 +5102,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -5131,6 +5239,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -5245,6 +5357,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -5327,6 +5443,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -5444,6 +5564,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -5526,6 +5650,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -5639,6 +5767,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -5721,6 +5853,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -5841,6 +5977,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -5923,6 +6063,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -6040,6 +6184,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -6122,6 +6270,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -6239,6 +6391,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -6321,6 +6477,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -6605,6 +6765,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -6738,6 +6902,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -6856,6 +7024,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -6938,6 +7110,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -7066,6 +7242,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -7148,6 +7328,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -7273,6 +7457,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -7355,6 +7543,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -7570,6 +7762,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
         },
         {
           "step": "expect_no_event",
@@ -7874,6 +8070,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -8092,6 +8292,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
         },
         {
           "step": "expect_no_event",
@@ -8431,6 +8635,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -8838,6 +9046,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -9230,6 +9442,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -9334,6 +9550,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -9566,6 +9786,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
         },
         {
           "step": "expect_no_event",
@@ -9908,6 +10132,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -10120,6 +10348,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
         },
         {
           "step": "expect_no_event",
@@ -10421,6 +10653,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -10814,6 +11050,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -10984,6 +11224,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -11090,6 +11334,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -11172,6 +11420,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -11486,6 +11738,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -11597,6 +11853,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -11853,6 +12113,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -11986,6 +12250,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -12100,6 +12368,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -12182,6 +12454,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -12480,6 +12756,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -12613,6 +12893,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -12723,6 +13007,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -12805,6 +13093,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -12922,6 +13214,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -13004,6 +13300,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -13309,6 +13609,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -13442,6 +13746,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -13560,6 +13868,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -13642,6 +13954,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -13767,6 +14083,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -13849,6 +14169,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -14154,6 +14478,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -14284,6 +14612,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -14589,6 +14921,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -14722,6 +15058,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -14844,6 +15184,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -14926,6 +15270,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -15259,6 +15607,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -15433,6 +15785,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -15820,6 +16176,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -16004,6 +16364,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -16118,6 +16482,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -16200,6 +16568,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -16325,6 +16697,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -16407,6 +16783,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -16539,6 +16919,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -16621,6 +17005,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -16750,6 +17138,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -16832,6 +17224,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -17120,6 +17516,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -17253,6 +17653,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -17359,6 +17763,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -17441,6 +17849,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -17693,6 +18105,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -17826,6 +18242,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -17943,6 +18363,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -18025,6 +18449,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -18142,6 +18570,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -18224,6 +18656,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -18337,6 +18773,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -18419,6 +18859,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -18539,6 +18983,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -18621,6 +19069,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -18885,6 +19337,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -19018,6 +19474,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -19083,6 +19543,1120 @@
         {
           "kind": "view",
           "name": "cortex.instance.Instances"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.RunEval/outcome/evaluated": {
+      "purpose": "`cortex.instance.RunEval` answers `evaluated` for an input no other branch's guard claims",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "ask": {
+                  "guidance": "spec.ask.guidance",
+                  "identity_header": "spec.ask.identity_header",
+                  "limits": {
+                    "max_result_bytes": 1.0,
+                    "max_seconds": 1.0,
+                    "max_steps": 1.0,
+                    "per_identity_per_minute": 1.0
+                  },
+                  "link_templates": {
+                    "evidence": "spec.ask.link_templates.evidence",
+                    "node": "spec.ask.link_templates.node"
+                  },
+                  "listen": "spec.ask.listen"
+                },
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "batch_chars": 1.0,
+                  "budget_tokens": 1.0,
+                  "budget_usd": 1.0,
+                  "daily_ceiling_tokens": 1.0,
+                  "daily_ceiling_usd": 1.0,
+                  "gateway": {
+                    "base_url": "spec.model.gateway.base_url",
+                    "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
+                    "token_env": "spec.model.gateway.token_env"
+                  },
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RunEval",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "from": {
+              "kind": "literal",
+              "value": "from"
+            },
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "runner": {
+              "kind": "literal",
+              "value": "mcp"
+            },
+            "set": {
+              "kind": "literal",
+              "value": "set"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RunEval",
+            "outcome": "evaluated"
+          }
+        },
+        {
+          "step": "expect_event_values",
+          "event": "cortex.instance.EvalRan",
+          "payload": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "runner": {
+              "kind": "literal",
+              "value": "mcp"
+            }
+          },
+          "shape": {
+            "cases": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "cost_usd": {
+              "holds": "primitive",
+              "kind": "decimal",
+              "optional": true
+            },
+            "facts_expected": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "facts_found": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "input_tokens": {
+              "holds": "primitive",
+              "kind": "integer",
+              "optional": true
+            },
+            "model_calls": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "name": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "nodes_expected": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "nodes_found": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "output_tokens": {
+              "holds": "primitive",
+              "kind": "integer",
+              "optional": true
+            },
+            "passed": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "runner": {
+              "holds": "enum",
+              "variants": [
+                "mcp",
+                "ask",
+                "replay"
+              ]
+            },
+            "stamp": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Instances"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Instances",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "description": {
+                "kind": "literal",
+                "value": "description"
+              },
+              "ekr_version": {
+                "kind": "literal",
+                "value": "ekr_version"
+              },
+              "model": {
+                "kind": "literal",
+                "value": "model"
+              },
+              "name": {
+                "kind": "instance",
+                "instance": "instance"
+              },
+              "seed_digest": {
+                "kind": "literal",
+                "value": "seed_digest"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Active"
+              }
+            }
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.EvalRunner"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RunEval"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RunEval",
+            "outcome": "evaluated"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Instances"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.RunEval/outcome/no-such-instance": {
+      "purpose": "`cortex.instance.RunEval` for an identity no record carries takes `no-such-instance` and reports `cortex.instance.InstanceNotFound`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RunEval",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "from": {
+              "kind": "literal",
+              "value": "from"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name-1048576"
+            },
+            "runner": {
+              "kind": "literal",
+              "value": "mcp"
+            },
+            "set": {
+              "kind": "literal",
+              "value": "set"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RunEval",
+            "outcome": "no-such-instance"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.InstanceNotFound",
+          "fields": {
+            "name": "name-1048576"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RunEval"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RunEval",
+            "outcome": "no-such-instance"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.InstanceNotFound"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.RunEval/outcome/runner-failed": {
+      "purpose": "`cortex.instance.RunEval` answers `runner-failed` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.RunEval",
+            "outcome": "runner-failed"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RunEval",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "from": {
+              "kind": "literal",
+              "value": "from"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "runner": {
+              "kind": "literal",
+              "value": "mcp"
+            },
+            "set": {
+              "kind": "literal",
+              "value": "set"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RunEval",
+            "outcome": "runner-failed"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.EvalRunnerFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.EvalRunner"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RunEval"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RunEval",
+            "outcome": "runner-failed"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.EvalRunnerFailed"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.RunEval/outcome/set-invalid": {
+      "purpose": "`cortex.instance.RunEval` answers `set-invalid` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.RunEval",
+            "outcome": "set-invalid"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RunEval",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "from": {
+              "kind": "literal",
+              "value": "from"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "runner": {
+              "kind": "literal",
+              "value": "mcp"
+            },
+            "set": {
+              "kind": "literal",
+              "value": "set"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RunEval",
+            "outcome": "set-invalid"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.EvalSetInvalid"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.EvalRunner"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RunEval"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RunEval",
+            "outcome": "set-invalid"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.EvalSetInvalid"
         },
         {
           "kind": "actor",
@@ -19328,6 +20902,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -19485,6 +21063,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -19806,6 +21388,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -19963,6 +21549,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -20284,6 +21874,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -20441,6 +22035,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -20888,6 +22486,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -21063,6 +22665,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -21376,6 +22982,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -21533,6 +23143,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -21854,6 +23468,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -22011,6 +23629,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -22432,6 +24054,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -22554,6 +24180,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -23028,6 +24658,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -23198,6 +24832,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -23308,6 +24946,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -23390,6 +25032,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -23792,6 +25438,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -23949,6 +25599,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -24266,6 +25920,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -24423,6 +26081,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -29380,6 +31042,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -29509,6 +31175,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -29900,6 +31570,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -30022,6 +31696,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -30409,6 +32087,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -30590,6 +32272,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -30987,6 +32673,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -31154,6 +32844,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -31364,6 +33058,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -31446,6 +33144,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -31639,6 +33341,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
         },
         {
           "step": "expect_no_event",
@@ -32027,6 +33733,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -32379,6 +34089,10 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.InstanceAdopted"
         },
         {
@@ -32573,6 +34287,10 @@
         {
           "step": "expect_no_event",
           "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
         },
         {
           "step": "expect_no_event",
@@ -32943,6 +34661,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -33277,6 +34999,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",
@@ -33662,6 +35388,10 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.InstanceAdopted"
         },
         {
@@ -34033,6 +35763,10 @@
         {
           "kind": "event",
           "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
         },
         {
           "kind": "event",

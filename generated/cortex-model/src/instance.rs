@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64
-// contract digest 38571540d03e174471671e428e08bfba610dca6caa7e6de6077494ad0f35ae34
+// model digest 4eb207af007604622af5b1e8338e5745fdc644480429be61c94de61f5bfcb6bf
+// contract digest 811aa6ae9a8971fe65cccfb2b29e907d470c5d9121e668b7a67c517bdf4fc87d
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -164,6 +164,72 @@ pub struct EkrPin {
     pub version: String,
     /// `bin` — `Optional<String>`.
     pub bin: Option<String>,
+}
+
+/// EvalCase — `cortex.instance.EvalCase`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalCase {
+    /// `format` — `String`.
+    pub format: String,
+    /// `id` — `String`.
+    pub id: String,
+    /// `question` — `String`.
+    pub question: String,
+    /// `expect_facts` — `List<String>`.
+    pub expect_facts: Vec<String>,
+    /// `expect_nodes` — `List<String>`.
+    pub expect_nodes: Vec<String>,
+    /// `source` — `Optional<String>`.
+    pub source: Option<String>,
+}
+
+/// EvalResult — `cortex.instance.EvalResult`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalResult {
+    /// `format` — `String`.
+    pub format: String,
+    /// `id` — `String`.
+    pub id: String,
+    /// `question` — `String`.
+    pub question: String,
+    /// `answer` — `String`.
+    pub answer: String,
+    /// `cited_nodes` — `List<String>`.
+    pub cited_nodes: Vec<String>,
+    /// `passed` — `Boolean`.
+    pub passed: bool,
+    /// `missing_facts` — `List<String>`.
+    pub missing_facts: Vec<String>,
+    /// `missing_nodes` — `List<String>`.
+    pub missing_nodes: Vec<String>,
+}
+
+/// The states of `cortex.instance.EvalRun`, as runtime values.
+///
+/// Synthesised from the lifecycle, so the two cannot disagree. Which *moves* are legal is not
+/// carried here — it is carried by `EvalRun<S>`, where an undeclared move does not compile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvalRunState {
+    /// `Recorded`.
+    Recorded,
+}
+
+/// EvalRunner — `cortex.instance.EvalRunner`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvalRunner {
+    /// `mcp`.
+    Mcp,
+    /// `ask`.
+    Ask,
+    /// `replay`.
+    Replay,
+}
+
+/// EvalSet — `cortex.instance.EvalSet`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalSet {
+    /// `cases` — `List<cortex.instance.EvalCase>`.
+    pub cases: Vec<EvalCase>,
 }
 
 /// FetchPolicy — `cortex.instance.FetchPolicy`.
@@ -1013,6 +1079,166 @@ pub struct WebSource {
     pub profile: Option<String>,
     /// `input` — `cortex.instance.WebInput`.
     pub input: WebInput,
+}
+
+/// What EvalRun — `cortex.instance.EvalRun` — holds, apart from where it is in its lifecycle.
+///
+/// The identity and every declared field. The state is deliberately not one: inside the domain it
+/// is carried by the type parameter of [`EvalRun<S>`], and at a boundary by [`EvalRunSnapshot::state`].
+///
+/// Every value satisfies `cases >= 0` — checked by [`EvalRunData::broken_invariant`].
+/// Every value satisfies `passed >= 0` — checked by [`EvalRunData::broken_invariant`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalRunData {
+    /// The identity: `stamp` — `String`.
+    pub stamp: String,
+    /// `instance_name` — `cortex.instance.InstanceName`.
+    ///
+    /// Carries `eval_runs`: `cortex.instance.Instance` owns many `cortex.instance.EvalRun`.
+    pub instance_name: InstanceName,
+    /// `runner` — `cortex.instance.EvalRunner`.
+    pub runner: EvalRunner,
+    /// `cases` — `Integer`.
+    pub cases: i64,
+    /// `passed` — `Integer`.
+    pub passed: i64,
+    /// `cost_usd` — `Optional<Decimal>`.
+    pub cost_usd: Option<crate::primitives::Decimal>,
+}
+
+impl EvalRunData {
+    /// The first declared invariant of `cortex.instance.EvalRun` this value breaks, as the specification declares it,
+    /// or `None` when it breaks none.
+    ///
+    /// An invariant is broken only when it is false of this value. One that reads something
+    /// absent — an empty `Optional`, a list position past the end, or `state`, which this
+    /// type does not hold — decides nothing, as the conformance interpreter reads it.
+    pub fn broken_invariant(&self) -> Option<&'static str> {
+        use crate::primitives::invariant as iv;
+        if iv::broken(iv::compare(Some(iv::Fact::integer(self.cases)), iv::Op::Ge, iv::Fact::number("0"), false, true)) {
+            return Some("cases >= 0");
+        }
+        if iv::broken(iv::compare(Some(iv::Fact::integer(self.passed)), iv::Op::Ge, iv::Fact::number("0"), false, true)) {
+            return Some("passed >= 0");
+        }
+        None
+    }
+}
+
+/// The states of `cortex.instance.EvalRun`, at the type level.
+///
+/// One marker type per declared state, sealed: a state the lifecycle does not declare cannot
+/// implement [`Marker`](eval_run_state::Marker), so [`EvalRun<S>`](EvalRun) can only ever rest in a real state.
+pub mod eval_run_state {
+    /// Closes [`Marker`] over the declared states.
+    mod sealed {
+        /// Implemented only by the marker types beside this module.
+        pub trait Sealed {}
+        impl Sealed for super::Recorded {}
+    }
+
+    /// A declared state of `EvalRun`, as a type.
+    pub trait Marker: sealed::Sealed {
+        /// The same state, as the runtime value.
+        const STATE: super::EvalRunState;
+    }
+
+    /// `Recorded`. Where a new instance starts.
+    pub struct Recorded;
+
+    impl Marker for Recorded {
+        const STATE: super::EvalRunState = super::EvalRunState::Recorded;
+    }
+}
+
+/// EvalRun — `cortex.instance.EvalRun` — with its lifecycle state carried by the type.
+///
+/// The one constructor rests in `Recorded`, and the only way to change `S` is a method generated from
+/// a declared transition. A move the specification does not declare is therefore not an error
+/// case: it does not compile. Where the state is data — wire, storage — use [`EvalRunSnapshot`]
+/// and [`EvalRunSnapshot::refine`].
+pub struct EvalRun<S: eval_run_state::Marker> {
+    data: EvalRunData,
+    state: core::marker::PhantomData<S>,
+}
+
+impl<S: eval_run_state::Marker> EvalRun<S> {
+    /// The state this instance rests in, as the runtime value.
+    pub fn state(&self) -> EvalRunState {
+        S::STATE
+    }
+
+    /// What it holds.
+    pub fn data(&self) -> &EvalRunData {
+        &self.data
+    }
+
+    /// Hands the data back, giving up the typed state.
+    pub fn into_data(self) -> EvalRunData {
+        self.data
+    }
+}
+
+impl EvalRun<eval_run_state::Recorded> {
+    /// A new instance, resting in `Recorded` — the only state the lifecycle starts one in.
+    pub fn new(data: EvalRunData) -> Self {
+        Self {
+            data,
+            state: core::marker::PhantomData,
+        }
+    }
+}
+
+/// `cortex.instance.EvalRun` as it crosses a boundary: the state as a value beside the data.
+///
+/// Wire and storage know states only at runtime; [`EvalRunSnapshot::refine`] is the one door back
+/// into the typed lifecycle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalRunSnapshot {
+    /// Where the instance is in its lifecycle.
+    pub state: EvalRunState,
+    /// What it holds.
+    pub data: EvalRunData,
+}
+
+/// An `EvalRun` in whichever declared state it was found.
+pub enum AnyEvalRun {
+    /// Resting in `Recorded`.
+    Recorded(EvalRun<eval_run_state::Recorded>),
+}
+
+impl EvalRunSnapshot {
+    /// Refines the runtime state into the typed one.
+    ///
+    /// Total: every declared state has an arm, and an undeclared state cannot reach here because
+    /// `EvalRunState` cannot spell one.
+    pub fn refine(self) -> AnyEvalRun {
+        match self.state {
+            EvalRunState::Recorded => AnyEvalRun::Recorded(EvalRun {
+                data: self.data,
+                state: core::marker::PhantomData,
+            }),
+        }
+    }
+}
+
+impl AnyEvalRun {
+    /// The state, as the runtime value.
+    pub fn state(&self) -> EvalRunState {
+        match self {
+            Self::Recorded(_) => EvalRunState::Recorded,
+        }
+    }
+
+    /// Back to the boundary shape.
+    pub fn snapshot(self) -> EvalRunSnapshot {
+        match self {
+            Self::Recorded(instance) => EvalRunSnapshot {
+                state: EvalRunState::Recorded,
+                data: instance.into_data(),
+            },
+        }
+    }
 }
 
 /// What Instance — `cortex.instance.Instance` — holds, apart from where it is in its lifecycle.
@@ -2179,6 +2405,58 @@ pub enum RestoreSnapshotOutcome {
     },
 }
 
+/// Run an eval set — the input of `cortex.instance.RunEval`.
+///
+/// Everything it can result in is [`RunEvalOutcome`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunEval {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `set` — `String`.
+    pub set: String,
+    /// `runner` — `cortex.instance.EvalRunner`.
+    pub runner: EvalRunner,
+    /// `from` — `Optional<String>`.
+    pub from: Option<String>,
+}
+
+/// Everything `cortex.instance.RunEval` can result in — one variant per declared outcome.
+///
+/// An infrastructure failure is deliberately not in here: a refusal is a fact about the domain,
+/// a transport fault is a fact about the run, and conflating the two is what the declared
+/// outcomes exist to prevent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunEvalOutcome {
+    /// `set-invalid` — externally decided (The set cannot be read or is not a cortex.eval-case/1 set, or from is missing for replay or given for another runner).
+    ///
+    /// No model was asked and nothing was written.
+    SetInvalid {
+        /// Why it was refused: `cortex.instance.EvalSetInvalid`.
+        error: EvalSetInvalid,
+    },
+    /// `runner-failed` — externally decided (The runner cannot answer a case, its model call fails or finds the budget or the daily ceiling spent, no ask service answers, or the replayed run recorded no answer for a case).
+    ///
+    /// No summary was written; the results of the cases answered before stay.
+    RunnerFailed {
+        /// Why it was refused: `cortex.instance.EvalRunnerFailed`.
+        error: EvalRunnerFailed,
+    },
+    /// `evaluated` — otherwise.
+    ///
+    /// Every case was answered and scored. `cases` counts them and `passed` those that passed; `facts_expected` and `facts_found` count the expected fact strings and those the answers contain, `nodes_expected` and `nodes_found` the expected node ids and those the answers cite. `model_calls` counts the model calls, 0 for `replay`; `input_tokens` and `output_tokens` are their tokens, absent as soon as one answer carried no count; `cost_usd` is what they cost in USD, absent as soon as one answer carried no cost.
+    Evaluated {
+        /// The `cortex.instance.EvalRan` this outcome publishes.
+        eval_ran: EvalRan,
+    },
+    /// `no-such-instance` — for an identity no record carries.
+    ///
+    /// Nothing was asked or written.
+    NoSuchInstance {
+        /// Why it was refused: `cortex.instance.InstanceNotFound`.
+        error: InstanceNotFound,
+    },
+}
+
 /// Run a source once — the input of `cortex.instance.RunSource`.
 ///
 /// Everything it can result in is [`RunSourceOutcome`].
@@ -2328,6 +2606,37 @@ pub enum UpdateInstanceOutcome {
         /// Why it was refused: `cortex.instance.InstanceNotFound`.
         error: InstanceNotFound,
     },
+}
+
+/// EvalRan — the event `cortex.instance.EvalRan`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalRan {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `stamp` — `String`.
+    pub stamp: String,
+    /// `runner` — `cortex.instance.EvalRunner`.
+    pub runner: EvalRunner,
+    /// `cases` — `Integer`.
+    pub cases: i64,
+    /// `passed` — `Integer`.
+    pub passed: i64,
+    /// `facts_expected` — `Integer`.
+    pub facts_expected: i64,
+    /// `facts_found` — `Integer`.
+    pub facts_found: i64,
+    /// `nodes_expected` — `Integer`.
+    pub nodes_expected: i64,
+    /// `nodes_found` — `Integer`.
+    pub nodes_found: i64,
+    /// `model_calls` — `Integer`.
+    pub model_calls: i64,
+    /// `input_tokens` — `Optional<Integer>`.
+    pub input_tokens: Option<i64>,
+    /// `output_tokens` — `Optional<Integer>`.
+    pub output_tokens: Option<i64>,
+    /// `cost_usd` — `Optional<Decimal>`.
+    pub cost_usd: Option<crate::primitives::Decimal>,
 }
 
 /// InstanceAdopted — the event `cortex.instance.InstanceAdopted`.
@@ -2603,6 +2912,24 @@ pub struct ConnectionMissing {
 /// Connectors answered a retryable operational failure (`kind` `operational`, `next_action` `retry_explicitly`) to every attempt of the run's revalidation of its connection, or of the `connections list` read that resolves a profile-named connection, at most 4 attempts with pauses of 5 s, 10 s and 20 s, before the run fetched any document. Nothing about the source was wrong: the failure is not counted against it, and the next run starts as usual.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConnectionUnavailable {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
+/// The declared error `cortex.instance.EvalRunnerFailed`.
+///
+/// The runner could not answer a case: the model call failed, timed out, answered no valid answer or found the budget or the instance's daily ceiling spent; no `cortex ask serve` answered; or the run `replay` names holds no recorded answer for a case. `results.jsonl` keeps the results of the cases answered before; no `summary.json` was written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalRunnerFailed {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
+/// The declared error `cortex.instance.EvalSetInvalid`.
+///
+/// The eval set cannot be read, or is not a `cortex.eval-case/1` set: a case of another `format`, a case without an id or a question, two cases with one id, or no case; or `--from` is missing for `replay`, or given for another runner. No model was asked and nothing was written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalSetInvalid {
     /// `reason` — `String`.
     pub reason: String,
 }
@@ -3024,6 +3351,17 @@ pub mod obligations {
         ///
         /// `Err` is the typed refusal of a request the model declares no outcome for.
         fn restore_snapshot(&mut self, input: super::RestoreSnapshot) -> Result<super::RestoreSnapshotOutcome, crate::obligation::UnmetObligation>;
+    }
+
+    /// The behaviour `cortex.instance.RunEval` — generated.
+    ///
+    /// The specification fully determines it: [`crate::behaviour::Generated`] implements it
+    /// over the storage and context ports. Implement it yourself to replace that behaviour.
+    pub trait RunEvalBehavior {
+        /// Decides and enacts exactly one declared outcome of `cortex.instance.RunEval`.
+        ///
+        /// `Err` is the typed refusal of a request the model declares no outcome for.
+        fn run_eval(&mut self, input: super::RunEval) -> Result<super::RunEvalOutcome, crate::obligation::UnmetObligation>;
     }
 
     /// The behaviour `cortex.instance.RunSource` — an implementation obligation.

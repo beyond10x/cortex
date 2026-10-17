@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Run an eval set input",
+  "x-ess-name": "cortex.instance.RunEval",
+  "x-ess-kind": "command-input",
+  "type": "object",
+  "properties": {
+    "name": {
+      "$ref": "#/$defs/cortex.instance.InstanceName"
+    },
+    "set": {
+      "type": "string"
+    },
+    "runner": {
+      "$ref": "#/$defs/cortex.instance.EvalRunner"
+    },
+    "from": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "set",
+    "runner"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "4eb207af007604622af5b1e8338e5745fdc644480429be61c94de61f5bfcb6bf",
+    "contract_digest": "slice-sha256/2:6a1ecb0d22212f463d361288790b8e43007135587bf05282e9e739fa58ff4c07",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.EvalRunner": {
+      "title": "EvalRunner",
+      "x-ess-name": "cortex.instance.EvalRunner",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "mcp",
+        "ask",
+        "replay"
+      ]
+    },
+    "cortex.instance.InstanceName": {
+      "title": "InstanceName",
+      "x-ess-name": "cortex.instance.InstanceName",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

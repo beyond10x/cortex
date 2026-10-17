@@ -138,6 +138,28 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "cost_usd": e.cost_usd.map(|c| c.0),
             }),
         ),
+        PublishedEvent::EvalRan(e) => (
+            "EvalRan",
+            json!({
+                "name": e.name.0,
+                "stamp": e.stamp,
+                "runner": match e.runner {
+                    m::EvalRunner::Mcp => "mcp",
+                    m::EvalRunner::Ask => "ask",
+                    m::EvalRunner::Replay => "replay",
+                },
+                "cases": e.cases,
+                "passed": e.passed,
+                "facts_expected": e.facts_expected,
+                "facts_found": e.facts_found,
+                "nodes_expected": e.nodes_expected,
+                "nodes_found": e.nodes_found,
+                "model_calls": e.model_calls,
+                "input_tokens": e.input_tokens,
+                "output_tokens": e.output_tokens,
+                "cost_usd": e.cost_usd.map(|c| c.0),
+            }),
+        ),
         PublishedEvent::SchemaChangesProposed(e) => (
             "SchemaChangesProposed",
             json!({
@@ -301,7 +323,7 @@ fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Val
             .unwrap_or_else(|| panic!("{event}.{field}: unsupported shape {descriptor}"));
         if let Some(key) = descriptor
             .keys()
-            .find(|k| !matches!(k.as_str(), "holds" | "kind" | "optional"))
+            .find(|k| !matches!(k.as_str(), "holds" | "kind" | "optional" | "variants"))
         {
             panic!("{event}.{field}: unsupported shape key {key}");
         }
@@ -316,6 +338,24 @@ fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Val
             match fields.get(field) {
                 None => assert!(optional, "{event} lacks {field}"),
                 Some(value) => assert!(value.is_array(), "{event}.{field}: {value} is no list"),
+            }
+            continue;
+        }
+        // An enum is present unless optional, and one of the variants the suite states.
+        if holds == Some("enum") {
+            let variants: Vec<&str> = descriptor
+                .get("variants")
+                .and_then(Value::as_array)
+                .unwrap_or_else(|| panic!("{event}.{field}: an enum states no variants"))
+                .iter()
+                .map(|v| v.as_str().expect("a variant is a string"))
+                .collect();
+            match fields.get(field) {
+                None => assert!(optional, "{event} lacks {field}"),
+                Some(value) => assert!(
+                    value.as_str().is_some_and(|v| variants.contains(&v)),
+                    "{event}.{field}: {value} is none of {variants:?}"
+                ),
             }
             continue;
         }
@@ -719,6 +759,36 @@ impl Scenario {
                     Some(("JudgeFailed", json!({"reason": error.reason}))),
                 ),
                 m::MeasureQualityOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+            },
+            "cortex.instance.RunEval" => match app
+                .run_eval(m::RunEval {
+                    name: m::InstanceName(s("name")),
+                    set: s("set"),
+                    runner: match s("runner").as_str() {
+                        "ask" => m::EvalRunner::Ask,
+                        "replay" => m::EvalRunner::Replay,
+                        _ => m::EvalRunner::Mcp,
+                    },
+                    from: input
+                        .get("from")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                })
+                .unwrap()
+            {
+                m::RunEvalOutcome::Evaluated { .. } => ("evaluated", None),
+                m::RunEvalOutcome::SetInvalid { error } => (
+                    "set-invalid",
+                    Some(("EvalSetInvalid", json!({"reason": error.reason}))),
+                ),
+                m::RunEvalOutcome::RunnerFailed { error } => (
+                    "runner-failed",
+                    Some(("EvalRunnerFailed", json!({"reason": error.reason}))),
+                ),
+                m::RunEvalOutcome::NoSuchInstance { error } => (
                     "no-such-instance",
                     Some(("InstanceNotFound", json!({"name": error.name.0}))),
                 ),
@@ -1152,7 +1222,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        89,
+        93,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

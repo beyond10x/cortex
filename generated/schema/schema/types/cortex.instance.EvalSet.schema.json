@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.EvalSet",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "4eb207af007604622af5b1e8338e5745fdc644480429be61c94de61f5bfcb6bf",
+    "contract_digest": "slice-sha256/2:5c81fc6843774cc7696a6d24dd2ae545575c3ad3dac812976a640ba6cbea3cb6",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.EvalCase": {
+      "title": "EvalCase",
+      "x-ess-name": "cortex.instance.EvalCase",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "question": {
+          "type": "string"
+        },
+        "expect_facts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expect_nodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "id",
+        "question",
+        "expect_facts",
+        "expect_nodes"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.EvalSet": {
+      "title": "EvalSet",
+      "x-ess-name": "cortex.instance.EvalSet",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.EvalCase"
+          }
+        }
+      },
+      "required": [
+        "cases"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
