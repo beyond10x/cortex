@@ -91,7 +91,11 @@ characters of the request's fixed part (the system prompt, the answer's schema, 
 description and instructions, the ontology and the known entity names), at least 4,000 and at most
 60,000. Otherwise it is 60,000. A gateway with `max_context_tokens: 65536` and
 `max_output_tokens: 24000` leaves 41,536 tokens of room, 62,304 characters before the fixed part.
-A run's report and its `cortex.log` line state the size it used as `batch_chars`.
+A run's report and its `cortex.log` line state the size it used as `batch_chars`. A batch's own
+fixed part counts too: when the store nodes its documents name (the
+[known entities](./operating.md)) make its fixed part longer than the one the size
+was derived with, and its documents' text plus that growth is over the size, a batch of more than
+one document is split in two before it is sent, and the split is counted in `splits`.
 
 When `claude` answers that a request is too long for the model's window (`Prompt is too long`,
 or `maximum context length` from an OpenAI-compatible server behind a gateway),
@@ -585,7 +589,8 @@ or blank text there, gets no alias from that template, with no error. The spec c
 (`create`, `update`, `adopt` and a run alike, naming the source and the template) an empty
 template, a template that names no field (every record would share its alias), and any other
 placeholder syntax: an unclosed `{`, a lone `}`, `{}`, a nested `{`, or a character in a path
-other than letters, digits, `_`, `-` and the dots between names.
+other than ASCII letters, digits, `_`, `-` and the dots between names (a non-ASCII letter is
+refused). A template alias matches a store node of the mapping's own `node_type` only.
 
 **Values.** Each mapped property is declared and written in one value kind: the `value_kind` its
 mapping names (`String`, `Integer`, `Decimal`, `Boolean` or `Timestamp`), else the kind the

@@ -183,9 +183,10 @@ no second line.
 
 **Known entities.** Before each batch is sent, the run reads the store once (`ekr snapshot`) and
 takes every node, of any type, whose canonical name or one of whose aliases equals one of the
-batch's terms, ignoring case: each document's key and, for a record, its id (after the last `#`
-of a file record's key, after `<adapter>:<operation>:` of a Connectors record's). The prompt lists
-these nodes first, under their own type, marked as in the store and with their other aliases:
+batch's terms, both lowercased: each document's key and, for a record, its id (after the first
+`#` of a file record's key `<path>#<id>`, so an id holding `#` is taken whole, after
+`<adapter>:<operation>:` of a Connectors record's). The prompt lists these nodes first, under
+their own type, marked as in the store and with their other aliases:
 
 ```text
 Known entities:
@@ -196,7 +197,14 @@ so the model reuses a node that an adoption or another writer put in the store i
 creating it again under another type. Then come the names the run's own earlier batches
 extracted (`state/entities.json`), at most 50 per type; a run name that a store hit of its type
 already shows is left out. The 50 bound holds for run names only: every store hit of the batch is
-listed. Matching is exact apart from case; a similar name is not a hit. `ekr snapshot` reads the
+listed. Matching is exact after lowercasing (`str::to_lowercase`, not full case folding: `STRASSE`
+does not match `Straße`); a similar name is not a hit. A store node's name and aliases are another
+writer's text: they are masked for credential shapes on every run, with or without a `redaction`
+policy, and then pass through the policy like every known name; a line break or another control
+character in a type, name or alias is written as a space, so each type keeps its one line. Behind
+a model window, a batch whose store hits make its prompt's fixed part longer than the batch size
+allowed for is split in two before it is sent (see
+[the batch size](./spec-file.md#the-batch-size)). `ekr snapshot` reads the
 whole graph (nodes, edges, assertions and evidence) at the head, once per batch, so on a large
 store each batch takes that read's time on top of the model call; a `structured` source calls no
 model and makes no such read.

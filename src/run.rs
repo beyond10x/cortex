@@ -882,12 +882,17 @@ fn process_in(
 
     // The fixed part as the first request will carry it: the system prompt and the answer's
     // schema (both sent as flags) and the prompt up to the documents.
+    // `assumed`: that fixed part, when the size was derived from the model's window; each batch's
+    // own fixed part (its store hits' known-entity lines) is held to it before the batch is sent.
+    let mut assumed: Option<usize> = None;
     let size = batch_size(&spec.model, || {
         let ontology = store.ontology().map_err(Failure::Apply)?;
         let known = Known::from_ontology(&ontology, crate::known::merge(Vec::new(), &entities));
         let (_, fixed) =
             extract::prompt_split(&spec.description, instructions.as_deref(), &known, &[]);
-        Ok(extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed)
+        let fixed = extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed;
+        assumed = Some(fixed);
+        Ok(fixed)
     })?;
     report.batch_chars = size;
     let issued: Vec<_> = selected
@@ -918,8 +923,6 @@ fn process_in(
     // Why the run ended `batch-too-large`, when a part still did not fit.
     let mut too_large: Option<String> = None;
     while let Some((batch, depth)) = queue.pop_front() {
-        let dir = run_dir.join(format!("batch-{n}"));
-        n += 1;
         // Behind a gateway no dollar amount bounds the call, and none is passed to `claude`.
         let remaining = match budget {
             Some(budget) if budget - spent <= 0.0 => {
@@ -977,14 +980,30 @@ fn process_in(
                     &known,
                     &shown,
                 );
-                if let Some(counts) = report.redacted.as_mut() {
-                    for (name, n) in p.counts() {
-                        *counts.entry(name.clone()).or_default() += n;
-                    }
-                }
                 (prompt, Some(p))
             }
         };
+        // The system prompt, the answer's schema (both sent as flags) and the prompt up to the
+        // documents.
+        let fixed_bytes = extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed;
+        // Behind a model window, the batch's own fixed part counts against the size: its store
+        // hits' known-entity lines may be longer than the part the size was derived with, so a
+        // batch they push past the size is split in two before it is sent.
+        if assumed.is_some_and(|assumed| over_size(&batch, size, assumed, fixed_bytes)) {
+            let mut first = batch;
+            let second = first.split_off(first.len() / 2);
+            queue.push_front((second, depth));
+            queue.push_front((first, depth));
+            report.splits += 1;
+            continue;
+        }
+        if let (Some(p), Some(counts)) = (&pseudonyms, report.redacted.as_mut()) {
+            for (name, n) in p.counts() {
+                *counts.entry(name.clone()).or_default() += n;
+            }
+        }
+        let dir = run_dir.join(format!("batch-{n}"));
+        n += 1;
         let asked = model.ask(&dir.join("claude"), &schema, &prompt, remaining);
         let (calls, usage) = match &asked {
             Ok(answer) => (answer.calls, answer.usage),
@@ -1000,9 +1019,7 @@ fn process_in(
             &usage,
         );
         tokens.add(&usage);
-        // Every model call counts, a failed one included. The fixed part is the system prompt,
-        // the answer's schema (both sent as flags) and the prompt up to the documents.
-        let fixed_bytes = extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed;
+        // Every model call counts, a failed one included.
         report.add_calls(calls, usage, fixed_bytes, prompt.len() - fixed);
         let answer = match asked {
             Ok(answer) => answer,
@@ -1734,6 +1751,16 @@ impl Held {
     }
 }
 
+/// Whether `batch`, of more than one document, is over `size` as it would be sent: its documents'
+/// text (counted as [`batches`] counts it) plus what its request's fixed part (`fixed`) grew past
+/// the fixed part the size was derived with (`assumed`), chiefly the batch's store hits'
+/// known-entity lines. A batch of one document never is: it is asked alone, and the model's
+/// window decides.
+fn over_size(batch: &[evidence::Issued], size: usize, assumed: usize, fixed: usize) -> bool {
+    let text: usize = batch.iter().map(|i| i.doc.text.len()).sum();
+    batch.len() > 1 && text + fixed.saturating_sub(assumed) > size
+}
+
 /// `issued` in batches of at most `size` characters of text, counted as UTF-8 bytes (as before
 /// `model.batch_chars`: a non-Latin character counts 2 to 3), a longer document alone.
 fn batches(issued: Vec<evidence::Issued>, size: usize) -> Vec<Vec<evidence::Issued>> {
@@ -2232,6 +2259,45 @@ fn pseudonymise(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_heavily_aliased_store_hit_counts_in_the_fixed_part_and_pushes_its_batch_over_the_size() {
+        let doc = |key: &str| evidence::Issued {
+            id: "e".into(),
+            item: serde_yaml_ng::Value::Null,
+            doc: sources::Document {
+                key: key.into(),
+                origin: sources::Origin::FileRecord,
+                title: None,
+                description: None,
+                published: None,
+                text: "x".repeat(1_000),
+                hash: None,
+            },
+        };
+        let batch = vec![doc("a.jsonl#1"), doc("a.jsonl#2")];
+        let fixed = |entities: Vec<m::KnownEntity>| {
+            let known = Known::from_ontology(&serde_json::json!({}), entities);
+            extract::prompt_split("d", None, &known, &[]).1
+        };
+        // The size was derived with the run's own names only: 2,000 bytes of text fit 2,500.
+        let run = BTreeMap::from([("Repository".to_string(), vec!["billing".to_string()])]);
+        let assumed = fixed(crate::known::merge(Vec::new(), &run));
+        assert!(!over_size(&batch, 2_500, assumed, assumed));
+        // One store hit of 200 aliases adds well over 500 bytes of known-entity lines.
+        let hit = m::KnownEntity {
+            node_type: "Repository".into(),
+            name: "acme/api".into(),
+            aliases: (0..200).map(|n| format!("repo:acme/api-{n}")).collect(),
+            origin: m::KnownOrigin::Store,
+        };
+        let grown = fixed(crate::known::merge(vec![hit], &run));
+        assert!(grown > assumed + 500, "{grown} {assumed}");
+        assert!(over_size(&batch, 2_500, assumed, grown));
+        // Its halves are one document each: asked alone, whatever the fixed part.
+        assert!(!over_size(&batch[..1], 2_500, assumed, grown));
+        assert!(!over_size(&batch[1..], 2_500, assumed, grown));
+    }
 
     #[test]
     fn a_run_costs_zero_without_a_model_call_the_sum_when_all_are_costed_and_none_otherwise() {

@@ -42,7 +42,9 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   every node type, and shows the model each node it finds (type, name, aliases, marked as in the
   store) ahead of its own known names, so a node an adoption or another writer stored is reused
   instead of created again under another type. The 50-per-type bound holds for the run's own
-  names only.
+  names only. Names match lowercased. A store node's name and aliases are masked for credential
+  shapes on every run and written on one line, and behind a model window they count in the
+  batch's fixed part.
 - A structured mapping's `alias_templates` add fixed-format aliases from record fields
   (`repo:{namespace}/{path}`), so a source's records resolve to an adopted store's nodes. A
   template whose field a record lacks yields no alias; another placeholder syntax is refused when

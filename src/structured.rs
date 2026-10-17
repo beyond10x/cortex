@@ -555,8 +555,8 @@ enum TemplatePart<'t> {
 }
 
 /// The parts of `template`, or why it is no alias template: it is empty, names no field, or has a
-/// placeholder other than `{path}` with a dotted path (`$.` allowed before it) of letters, digits,
-/// `_` and `-`.
+/// placeholder other than `{path}` with a dotted path (`$.` allowed before it) of ASCII letters,
+/// digits, `_` and `-` (a non-ASCII letter is refused).
 fn template_parts(template: &str) -> Result<Vec<TemplatePart<'_>>, String> {
     if template.is_empty() {
         return Err("an empty template".into());
@@ -597,8 +597,8 @@ fn template_parts(template: &str) -> Result<Vec<TemplatePart<'_>>, String> {
                 };
                 if !steps.split('.').all(step_ok) {
                     return Err(format!(
-                        "the placeholder {{{path}}}: a path is dotted names of letters, digits, \
-                         `_` and `-`"
+                        "the placeholder {{{path}}}: a path is dotted names of ASCII letters, \
+                         digits, `_` and `-`"
                     ));
                 }
                 parts.push(TemplatePart::Field(path));

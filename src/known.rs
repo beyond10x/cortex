@@ -15,21 +15,22 @@ use crate::sources::Origin;
 /// Known entity names per node type, of origin `Run`, given to the model.
 pub const RUN_PER_TYPE: usize = 50;
 
-/// How a name is compared: case folded.
+/// How a name is compared: lowercased (`str::to_lowercase`, not full case folding: `ß` stays `ß`).
 pub fn fold(text: &str) -> String {
     text.to_lowercase()
 }
 
 /// The terms of `batch` a store node may be named by, each [`fold`]ed: each document's key and, for
-/// a record, its id: after the last `#` of a file record's key, after `<adapter>:<operation>:` of
-/// a Connectors record's.
+/// a record, its id: after the first `#` of a file record's key `<path>#<id>` (`src/sources.rs`
+/// writes the path, then `#`, then the id, so an id holding `#` stays whole), after
+/// `<adapter>:<operation>:` of a Connectors record's.
 pub fn terms(batch: &[Issued]) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for issued in batch {
         let key = &issued.doc.key;
         out.insert(fold(key));
         let id = match issued.doc.origin {
-            Origin::FileRecord => key.rsplit_once('#').map(|(_, id)| id),
+            Origin::FileRecord => key.split_once('#').map(|(_, id)| id),
             Origin::Record => key.splitn(3, ':').nth(2),
             Origin::Url | Origin::File => None,
         };
@@ -131,8 +132,28 @@ pub fn merge(
     out
 }
 
+/// `hits` with every credential shape in their names and aliases masked (`crate::mask`), as a
+/// document's text is on every run, with or without a redaction policy: a store node's name and
+/// aliases are another writer's text. An alias that masks to the name or to an earlier alias is
+/// kept once.
+pub fn masked(hits: Vec<m::KnownEntity>) -> Vec<m::KnownEntity> {
+    hits.into_iter()
+        .map(|e| {
+            let name = crate::mask::mask(&e.name).0;
+            let mut aliases: Vec<String> = Vec::new();
+            for alias in &e.aliases {
+                let alias = crate::mask::mask(alias).0;
+                if alias != name && !aliases.contains(&alias) {
+                    aliases.push(alias);
+                }
+            }
+            m::KnownEntity { name, aliases, ..e }
+        })
+        .collect()
+}
+
 /// The known entities of `batch`: [`store_hits`] of one read of `store` (`ekr snapshot`),
-/// [`merge`]d with the run's own names `run`.
+/// [`masked`], then [`merge`]d with the run's own names `run`.
 pub fn for_batch(
     store: &crate::ekr::Store,
     ontology: &Value,
@@ -145,26 +166,44 @@ pub fn for_batch(
     } else {
         store_hits(&store.snapshot()?, ontology, &terms)
     };
-    Ok(merge(hits, run))
+    Ok(merge(masked(hits), run))
+}
+
+/// `text` on one line: each line break (`\n`, `\r`, U+2028, U+2029) and every other control
+/// character written as a space, so a name cannot add a line to the prompt.
+pub fn one_line(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect()
 }
 
 /// The known-entity lines of a prompt, one per node type in name order: `- <type>: ` and each
 /// entity of it, store hits first, separated by `; `. A run name is written as it is; a store hit
-/// as `<name> (in the store; also <alias>, <alias>)`.
+/// as `<name> (in the store; also <alias>, <alias>)`. Every type, name and alias is written
+/// [`one_line`], so each line is one type's.
 pub fn lines(entities: &[m::KnownEntity]) -> Vec<String> {
-    let mut by_type: BTreeMap<&str, (Vec<String>, Vec<String>)> = BTreeMap::new();
+    let mut by_type: BTreeMap<String, (Vec<String>, Vec<String>)> = BTreeMap::new();
     for e in entities {
-        let (store, run) = by_type.entry(e.node_type.as_str()).or_default();
+        let (store, run) = by_type.entry(one_line(&e.node_type)).or_default();
+        let name = one_line(&e.name);
         match e.origin {
             m::KnownOrigin::Store if e.aliases.is_empty() => {
-                store.push(format!("{} (in the store)", e.name));
+                store.push(format!("{name} (in the store)"));
             }
-            m::KnownOrigin::Store => store.push(format!(
-                "{} (in the store; also {})",
-                e.name,
-                e.aliases.join(", ")
-            )),
-            m::KnownOrigin::Run => run.push(e.name.clone()),
+            m::KnownOrigin::Store => {
+                let aliases: Vec<String> = e.aliases.iter().map(|a| one_line(a)).collect();
+                store.push(format!(
+                    "{name} (in the store; also {})",
+                    aliases.join(", ")
+                ))
+            }
+            m::KnownOrigin::Run => run.push(name),
         }
     }
     by_type
@@ -234,7 +273,7 @@ mod tests {
     }
 
     #[test]
-    fn a_batch_names_its_keys_and_each_records_id_folded() {
+    fn a_batch_names_its_keys_and_each_records_id_lowercased() {
         let batch = [
             issued("https://Example.org/a", Origin::Url),
             issued("/data/repos.jsonl#Acme/API", Origin::FileRecord),
@@ -253,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn the_store_is_looked_up_across_types_by_name_or_alias_case_folded() {
+    fn the_store_is_looked_up_across_types_by_name_or_alias_lowercased() {
         let (snapshot, ontology) = graph();
         assert_eq!(
             store_hits(&snapshot, &ontology, &set(&["acme/api", "acme"])),
@@ -329,6 +368,44 @@ mod tests {
                 "- Organization: Acme (in the store)",
                 "- Person: Ada",
                 "- Repository: acme/api (in the store; also repo:acme/api, api); billing",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_store_hit_is_masked_for_credential_shapes_and_an_alias_masked_twice_is_kept_once() {
+        // Assembled at runtime so no credential-shaped literal sits in the source.
+        let one = format!("gh{}_{}", "p", "Ab1".repeat(13));
+        let two = format!("gh{}_{}", "p", "Cd2".repeat(13));
+        let hit = masked(vec![store("Repository", "acme/api", &[&one, &two, "api"])]);
+        assert_eq!(hit.len(), 1);
+        assert_eq!(hit[0].name, "acme/api");
+        assert!(
+            hit[0]
+                .aliases
+                .iter()
+                .all(|a| !a.contains(&one) && !a.contains(&two)),
+            "{hit:?}"
+        );
+        assert_eq!(hit[0].aliases.len(), 2, "{hit:?}");
+        assert_eq!(hit[0].aliases[1], "api");
+    }
+
+    #[test]
+    fn a_line_break_or_a_control_character_in_a_type_name_or_alias_is_written_as_a_space() {
+        let shown = lines(&[
+            store(
+                "Repo\nsitory",
+                "acme\r\napi",
+                &["x\u{2028}y", "a\tb\u{85}c"],
+            ),
+            run("Repository", "bill\ning"),
+        ]);
+        assert_eq!(
+            shown,
+            [
+                "- Repo sitory: acme  api (in the store; also x y, a b c)",
+                "- Repository: bill ing",
             ]
         );
     }
