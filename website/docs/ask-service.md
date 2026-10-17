@@ -10,7 +10,9 @@ description: cortex ask serve answers questions over an instance's store as a st
 names. It is a long-running process of its own: `POST /ask` answers `text/event-stream`, one event
 per step of a tool loop over the EKR MCP reader (`ekr mcp`, as [`cortex mcp-line`](./commands.md)
 starts it) against the instance's model gateway. It reads the store only through the reader and
-writes nothing to it; an answer is streamed, not stored. The specification is the domain
+writes nothing to it. Each answer is streamed, and kept as a record in cortex's own file beside the
+store, where readers vote on it and a review queue collects the answers to look at
+([Answer records, votes and review](#answer-records-votes-and-review)). The specification is the domain
 [`cortex.ask`](./reference/ess/cortex-ask.md).
 
 ## The `ask` section
@@ -30,6 +32,8 @@ ask:
   limits: {max_steps: 8, max_result_bytes: 16384, max_seconds: 120, per_identity_per_minute: 10}
   link_templates: {node: "https://view.example/node/{id}", evidence: "https://view.example/evidence/{id}"}
   guidance: Answer in English, in at most five sentences.
+  retention_days: 90
+  slow_after_ms: 20000
 ```
 
 | field | meaning |
@@ -42,10 +46,14 @@ ask:
 | `limits.per_identity_per_minute` | the most questions of one identity in a sliding minute |
 | `link_templates` | optional: the URL of a cited node or evidence, `{id}` replaced by its percent-encoded id |
 | `guidance` | optional: text added to the service's system prompt |
+| `retention_days` | optional: how many days an answer record is kept, with its votes and review items (default 90) |
+| `slow_after_ms` | optional: an answer that took longer opens a `slow` review item; without it none does |
 
 `cortex ask serve` refuses to start (exit 2, naming the field) a spec with no `ask` section, no
-`model.gateway`, a limit of 0 or less, or an `identity_header` that is no header name. Once bound it
-prints one line, `{"listening": "<address>"}`, and serves until it is stopped.
+`model.gateway`, a limit, `retention_days` or `slow_after_ms` of 0 or less, an `identity_header`
+that is no header name, or an instance on a `postgres` store (see below). It then opens its records
+(exit 1 when it cannot) and purges the expired ones. Once bound it prints one line,
+`{"listening": "<address>"}`, and serves until it is stopped.
 
 :::note[Identity]
 cortex verifies no token. The guard in front of the service verifies the asker and hands the
@@ -74,14 +82,15 @@ the event's name and its `data:` line the event as one JSON object, `{"event": <
 | `tool` | `step`, `name`, `arguments`, `result_bytes`, `truncated`, `failed`, `withheld` | after each tool call the model asked for |
 | `delta` | `text` | a piece of the model's text, in order |
 | `discard` | `step` | withdraws the `delta`s since the last `discard`: text before a tool call, not the answer |
-| `done` | `answer`, `nodes`, `evidence`, `input_tokens`, `output_tokens`, `cached_tokens`, `context_tokens`, `steps`, `unrestored` | the last event of an answer |
+| `done` | `answer_id`, `answer`, `nodes`, `evidence`, `input_tokens`, `output_tokens`, `cached_tokens`, `context_tokens`, `steps`, `unrestored` | the last event of an answer |
 | `error` | `reason`, `message`, `retry_after` (with `rate-limit` only) | the last event of a request with no answer |
 
 `done.answer` is the answer with each citation marker, `[node:<id>]` or `[evidence:<id>]`, turned
 into a Markdown link from `link_templates` (left as written without a template); `nodes` and
 `evidence` are the cited ids, each once, in order. The token counts add up the gateway's `usage`
 over every model call (`prompt_tokens`, `completion_tokens`, `prompt_tokens_details.cached_tokens`;
-0 where not reported); `context_tokens` is the prompt tokens of the last call.
+0 where not reported); `context_tokens` is the prompt tokens of the last call. `answer_id` is the
+answer's UUIDv7, the id its record and its votes carry.
 
 `error.reason` is one of:
 
@@ -137,5 +146,44 @@ event: tool
 data: {"event":"tool","value":{"arguments":"{\"query\":\"widget\"}","failed":false,"name":"search","result_bytes":35,"step":1,"truncated":false,"withheld":false}}
 
 event: done
-data: {"event":"done","value":{"answer":"…","cached_tokens":100,"context_tokens":200,"evidence":[],"input_tokens":300,"nodes":["n-42"],"output_tokens":30,"steps":2,"unrestored":0}}
+data: {"event":"done","value":{"answer":"…","answer_id":"0192f3a1-7c2e-7d41-9b0a-3f5e6d7c8b9a","cached_tokens":100,"context_tokens":200,"evidence":[],"input_tokens":300,"nodes":["n-42"],"output_tokens":30,"steps":2,"unrestored":0}}
 ```
+
+## Answer records, votes and review
+
+Every answer the service gives, and every one that failed or hit a limit, is kept as a record
+(`cortex.ask.AnswerRecord`) before its last event is sent: the question, the identity, the answer or
+the reason there is none, the outcome (`answered`, `failed`, `limited`), the `tool` events, the
+latency, the token counts of its `done` event and the time. A request refused before it started
+(401, 429, 400) leaves no record. The records are cortex's own: they live in
+`instances/<name>/ask.sqlite` in the instance directory, never in the EKR store, and the file
+carries its schema version, migrated when the service starts. A file written by a newer cortex is
+refused.
+
+The record routes need the identity header too (401 without it) and answer JSON; a refusal is
+`{"error": <reason>, "message": <text>}`.
+
+| route | body | answers |
+|---|---|---|
+| `POST /ask/{answer_id}/vote` | `{"value": "up" \| "down", "comment"?: <text>}` | the vote as kept: `vote_id`, `answer_id`, `identity`, `value`, `comment`, `at`. 400 `bad-request` for another value, 404 `no-such-answer` for an id no record carries |
+| `GET /review` | none | `{"reviews": [...]}`: every open review item, oldest first, with `review_id`, `answer_id`, `cause` and `opened_at` |
+| `POST /review/{review_id}/close` | `{"reason": <text>}` | the item as closed. 400 without a reason, 404 `no-such-review` for an unknown id, 409 `review-not-open` for an item closed already |
+
+An identity has one vote per answer: voting again changes it. An answer opens one review item per
+cause, and an item, once opened, stays as it was whatever happens after:
+
+| cause | opened when |
+|---|---|
+| `voted-down` | a `down` vote is cast on the answer, by anyone |
+| `failed` | the answer's outcome is `failed` or `limited` |
+| `slow` | the answer took longer than `slow_after_ms` |
+
+A record older than `retention_days` is deleted with its votes and review items, in one
+transaction, when the service starts (before the ready line) and every 24 hours after.
+
+:::note[PostgreSQL stores]
+On a `postgres` store the records belong in a schema of their own, opened through a Connectors
+connection of their own; that backend is not built yet. Until it is, `cortex ask serve` refuses an
+instance whose spec names `store.backend: postgres` (exit 2, naming `store.backend`) and writes no
+`ask.sqlite` for it.
+:::

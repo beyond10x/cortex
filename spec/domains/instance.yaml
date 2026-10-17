@@ -896,6 +896,13 @@ entities:
         target: cortex.instance.Source
         cardinality: many
         via: instance_name
+      # The answers its ask service gave (`cortex ask serve`), kept in `ask.sqlite` in its
+      # directory, never in its store.
+      - name: answers
+        kind: owns
+        target: cortex.ask.AnswerRecord
+        cardinality: many
+        via: instance_name
       # An eval run is a directory of the instance's, `eval/<stamp>/`.
       - name: eval_runs
         kind: owns

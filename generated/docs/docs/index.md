@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 5b8d449a9b5dd33fe4da24d7b0507f49b8bbbd969b3c9007942d6f34fea63878
-contract digest 2f5be3eec0297f1a905f33f1e2355526c36078813e7f121ca0bb406b9b6ef9be
+model digest 1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168
+contract digest 8430bcd9044fb62ace879bb3f848bc003309cb17d8528501327ed301f98ec627
 do not edit: regenerate with `ess generate`
 -->
 
@@ -15,94 +15,117 @@ Spin up knowledge brains from a spec. Each instance is one EKR store fed on a sc
 flowchart TB
     subgraph who["who may ask"]
         who0["cortex.ask.Asker"]
-        who1["cortex.instance.Operator"]
-        who2["cortex.instance.Scheduler"]
+        who1["cortex.ask.Reviewer"]
+        who2["cortex.ask.Service"]
+        who3["cortex.instance.Operator"]
+        who4["cortex.instance.Scheduler"]
     end
     subgraph unit0["cortex"]
-        cmd1["cortex.instance.AddSource"]
-        cmd2["cortex.instance.AdoptInstance"]
-        cmd3["cortex.instance.ApplySchemaProposals"]
-        cmd4["cortex.instance.ApproveSchemaProposals"]
-        cmd5["cortex.instance.CreateInstance"]
-        cmd6["cortex.instance.EnableSource"]
-        cmd7["cortex.instance.MeasureQuality"]
-        cmd8["cortex.instance.ProposeSchemaChanges"]
-        cmd9["cortex.instance.RecordFailure"]
-        cmd10["cortex.instance.RejectSchemaProposals"]
-        cmd11["cortex.instance.RemoveInstance"]
-        cmd12["cortex.instance.RestoreSnapshot"]
-        cmd13["cortex.instance.RunEval"]
-        cmd14["cortex.instance.RunSource"]
-        cmd15["cortex.instance.UpdateInstance"]
-        evt1["cortex.instance.EvalRan"]
-        evt2["cortex.instance.InstanceAdopted"]
-        evt3["cortex.instance.InstanceCreated"]
-        evt4["cortex.instance.InstanceRemoved"]
-        evt5["cortex.instance.InstanceUpdated"]
-        evt6["cortex.instance.QualityMeasured"]
-        evt7["cortex.instance.RunFailed"]
-        evt9["cortex.instance.SchemaChangesProposed"]
-        evt10["cortex.instance.SchemaProposalsApplied"]
-        evt11["cortex.instance.SchemaProposalsDecided"]
-        evt12["cortex.instance.SnapshotRestored"]
-        evt13["cortex.instance.SourceAdded"]
-        evt14["cortex.instance.SourceDisabled"]
-        evt15["cortex.instance.SourceEnabled"]
-        evt17["cortex.instance.SourceRan"]
+        cmd6["cortex.instance.AddSource"]
+        cmd7["cortex.instance.AdoptInstance"]
+        cmd8["cortex.instance.ApplySchemaProposals"]
+        cmd9["cortex.instance.ApproveSchemaProposals"]
+        cmd10["cortex.instance.CreateInstance"]
+        cmd11["cortex.instance.EnableSource"]
+        cmd12["cortex.instance.MeasureQuality"]
+        cmd13["cortex.instance.ProposeSchemaChanges"]
+        cmd14["cortex.instance.RecordFailure"]
+        cmd15["cortex.instance.RejectSchemaProposals"]
+        cmd16["cortex.instance.RemoveInstance"]
+        cmd17["cortex.instance.RestoreSnapshot"]
+        cmd18["cortex.instance.RunEval"]
+        cmd19["cortex.instance.RunSource"]
+        cmd20["cortex.instance.UpdateInstance"]
+        evt6["cortex.instance.EvalRan"]
+        evt7["cortex.instance.InstanceAdopted"]
+        evt8["cortex.instance.InstanceCreated"]
+        evt9["cortex.instance.InstanceRemoved"]
+        evt10["cortex.instance.InstanceUpdated"]
+        evt11["cortex.instance.QualityMeasured"]
+        evt12["cortex.instance.RunFailed"]
+        evt14["cortex.instance.SchemaChangesProposed"]
+        evt15["cortex.instance.SchemaProposalsApplied"]
+        evt16["cortex.instance.SchemaProposalsDecided"]
+        evt17["cortex.instance.SnapshotRestored"]
+        evt18["cortex.instance.SourceAdded"]
+        evt19["cortex.instance.SourceDisabled"]
+        evt20["cortex.instance.SourceEnabled"]
+        evt22["cortex.instance.SourceRan"]
     end
     subgraph unit1["cortex-ask"]
         cmd0["cortex.ask.Ask"]
-        evt0["cortex.ask.Answered"]
+        cmd1["cortex.ask.CastVote"]
+        cmd2["cortex.ask.CloseReview"]
+        cmd3["cortex.ask.OpenReview"]
+        cmd4["cortex.ask.PurgeExpired"]
+        cmd5["cortex.ask.RecordAnswer"]
+        evt0["cortex.ask.AnswerRecorded"]
+        evt1["cortex.ask.Answered"]
+        evt2["cortex.ask.Purged"]
+        evt3["cortex.ask.ReviewClosed"]
+        evt4["cortex.ask.ReviewOpened"]
+        evt5["cortex.ask.Voted"]
     end
     subgraph unowned["owned by no component"]
-        evt8["cortex.instance.RunSkipped"]
-        evt16["cortex.instance.SourceFetched"]
+        evt13["cortex.instance.RunSkipped"]
+        evt21["cortex.instance.SourceFetched"]
     end
     who0 -->|"may invoke"| cmd0
-    who1 -->|"may invoke"| cmd1
+    who0 -->|"may invoke"| cmd1
     who1 -->|"may invoke"| cmd2
-    who1 -->|"may invoke"| cmd3
-    who1 -->|"may invoke"| cmd4
-    who1 -->|"may invoke"| cmd5
-    who1 -->|"may invoke"| cmd6
-    who1 -->|"may invoke"| cmd7
-    who1 -->|"may invoke"| cmd8
-    who1 -->|"may invoke"| cmd10
-    who1 -->|"may invoke"| cmd11
-    who1 -->|"may invoke"| cmd12
-    who1 -->|"may invoke"| cmd13
-    who1 -->|"may invoke"| cmd15
-    who2 -->|"may invoke"| cmd9
-    who2 -->|"may invoke"| cmd14
-    cmd0 -->|"answered"| evt0
-    cmd1 -->|"added"| evt13
-    cmd2 -->|"adopted"| evt2
-    cmd3 -->|"applied"| evt10
-    cmd4 -->|"approved"| evt11
-    cmd5 -->|"partial"| evt3
-    cmd5 -->|"created"| evt3
-    cmd6 -->|"enabled"| evt15
-    cmd7 -->|"measured"| evt6
-    cmd8 -->|"proposed"| evt9
-    cmd8 -->|"reviewed"| evt9
-    cmd8 -->|"applied"| evt9
-    cmd9 -->|"disabled"| evt14
-    cmd9 -->|"counted"| evt7
-    cmd10 -->|"rejected"| evt11
-    cmd11 -->|"removed"| evt4
-    cmd12 -->|"restored"| evt12
-    cmd13 -->|"evaluated"| evt1
-    cmd14 -->|"disabled"| evt8
-    cmd14 -->|"fetched"| evt16
-    cmd14 -->|"ran"| evt17
-    cmd15 -->|"updated"| evt5
+    who2 -->|"may invoke"| cmd3
+    who2 -->|"may invoke"| cmd4
+    who2 -->|"may invoke"| cmd5
+    who3 -->|"may invoke"| cmd6
+    who3 -->|"may invoke"| cmd7
+    who3 -->|"may invoke"| cmd8
+    who3 -->|"may invoke"| cmd9
+    who3 -->|"may invoke"| cmd10
+    who3 -->|"may invoke"| cmd11
+    who3 -->|"may invoke"| cmd12
+    who3 -->|"may invoke"| cmd13
+    who3 -->|"may invoke"| cmd15
+    who3 -->|"may invoke"| cmd16
+    who3 -->|"may invoke"| cmd17
+    who3 -->|"may invoke"| cmd18
+    who3 -->|"may invoke"| cmd20
+    who4 -->|"may invoke"| cmd14
+    who4 -->|"may invoke"| cmd19
+    cmd0 -->|"answered"| evt1
+    cmd1 -->|"changed"| evt5
+    cmd1 -->|"cast"| evt5
+    cmd2 -->|"closed"| evt3
+    cmd3 -->|"opened"| evt4
+    cmd4 -->|"purged"| evt2
+    cmd5 -->|"recorded"| evt0
+    cmd6 -->|"added"| evt18
+    cmd7 -->|"adopted"| evt7
+    cmd8 -->|"applied"| evt15
+    cmd9 -->|"approved"| evt16
+    cmd10 -->|"partial"| evt8
+    cmd10 -->|"created"| evt8
+    cmd11 -->|"enabled"| evt20
+    cmd12 -->|"measured"| evt11
+    cmd13 -->|"proposed"| evt14
+    cmd13 -->|"reviewed"| evt14
+    cmd13 -->|"applied"| evt14
+    cmd14 -->|"disabled"| evt19
+    cmd14 -->|"counted"| evt12
+    cmd15 -->|"rejected"| evt16
+    cmd16 -->|"removed"| evt9
+    cmd17 -->|"restored"| evt17
+    cmd18 -->|"evaluated"| evt6
+    cmd19 -->|"disabled"| evt13
+    cmd19 -->|"fetched"| evt21
+    cmd19 -->|"ran"| evt22
+    cmd20 -->|"updated"| evt10
 ```
 
 A command is accepted by the component that owns its context, emits the events one of its outcomes declares, and a dashed edge is a binding carrying an event into the next command. Design §9 begins one step earlier, at the actor who invokes the first command, and so does this graph: a solid edge out of an actor is a grant, and an actor drawn with no edge at all may invoke nothing — which is something the model says, not an arrow somebody forgot.
 
 ## Bounded contexts
 
-- **[Answers](domains/cortex-ask.md)** (`cortex.ask`) — The answer service of an instance: `cortex ask serve` answers a question over the instance's store as a stream of events. It reads the store only through the EKR MCP reader (`ekr mcp`) and writes nothing to it; its model is the instance's model gateway, spoken to as an OpenAI-compatible endpoint. An answer is streamed, not stored. 10 types, no entities, no views, one command, one event, five errors and one actor.
+- **[Answers](domains/cortex-ask.md)** (`cortex.ask`) — The answer service of an instance: `cortex ask serve` answers a question over the instance's store as a stream of events. It reads the store only through the EKR MCP reader (`ekr mcp`) and writes nothing to it; its model is the instance's model gateway, spoken to as an OpenAI-compatible endpoint. Every answer is streamed and kept as an answer record, with the votes of its readers; an answer voted down, failed or slow is queued for review. The records are cortex's own, in `ask.sqlite` in the instance directory, never in the store, and are purged after the spec's `retention_days`. 16 types, three entities, one view, six commands, six events, nine errors and three actors.
 - **[Instances](domains/cortex-instance.md)** (`cortex.instance`) — Instances of a knowledge brain and the data sources that feed them. An instance owns one EKR store, created from the instance spec's seed. A source fetches documents on its own schedule, keeps those that are new or changed, has a model extract them into an EKR extraction document and applies it to the instance's store. 79 types, four entities, two views, 15 commands, 17 events, 32 errors and two actors.
 
 ## Components
@@ -111,7 +134,7 @@ A component is a unit of ownership, not a deployment. How many of each runs, and
 
 **`cortex`** — The operator's command line: create, update, run and remove instances, and switch a source off and on. A systemd user timer per source calls the same binary. It owns [`cortex.instance`](domains/cortex-instance.md). It accepts `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.ApplySchemaProposals`, `cortex.instance.ApproveSchemaProposals`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.ProposeSchemaChanges`, `cortex.instance.RecordFailure`, `cortex.instance.RejectSchemaProposals`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.RunEval`, `cortex.instance.RunSource` and `cortex.instance.UpdateInstance`. It publishes `cortex.instance.EvalRan`, `cortex.instance.InstanceAdopted`, `cortex.instance.InstanceCreated`, `cortex.instance.InstanceRemoved`, `cortex.instance.InstanceUpdated`, `cortex.instance.QualityMeasured`, `cortex.instance.RunFailed`, `cortex.instance.SchemaChangesProposed`, `cortex.instance.SchemaProposalsApplied`, `cortex.instance.SchemaProposalsDecided`, `cortex.instance.SnapshotRestored`, `cortex.instance.SourceAdded`, `cortex.instance.SourceDisabled`, `cortex.instance.SourceEnabled` and `cortex.instance.SourceRan`.
 
-**`cortex-ask`** — The answer service, `cortex ask serve --spec <instance spec>`: a long-running process that answers `POST /ask` as a stream of events over the instance's store, read through the EKR MCP reader. The batch component `cortex` serves no port; this one serves the spec's `ask.listen`. It owns [`cortex.ask`](domains/cortex-ask.md). It accepts `cortex.ask.Ask`. It publishes `cortex.ask.Answered`.
+**`cortex-ask`** — The answer service, `cortex ask serve --spec <instance spec>`: a long-running process that answers `POST /ask` as a stream of events over the instance's store, read through the EKR MCP reader. The batch component `cortex` serves no port; this one serves the spec's `ask.listen`. It keeps every answer with its votes and a review queue in `ask.sqlite` in the instance directory, and purges them after the spec's `retention_days`. It owns [`cortex.ask`](domains/cortex-ask.md). It accepts `cortex.ask.Ask`, `cortex.ask.CastVote`, `cortex.ask.CloseReview`, `cortex.ask.OpenReview`, `cortex.ask.PurgeExpired` and `cortex.ask.RecordAnswer`. It publishes `cortex.ask.AnswerRecorded`, `cortex.ask.Answered`, `cortex.ask.Purged`, `cortex.ask.ReviewClosed`, `cortex.ask.ReviewOpened` and `cortex.ask.Voted`.
 
 ## The other pages
 
@@ -126,4 +149,4 @@ A component is a unit of ownership, not a deployment. How many of each runs, and
 
 ---
 
-Generated from cortex v1 · model digest `5b8d449a9b5dd33fe4da24d7b0507f49b8bbbd969b3c9007942d6f34fea63878` · contract digest `2f5be3eec0297f1a905f33f1e2355526c36078813e7f121ca0bb406b9b6ef9be`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168` · contract digest `8430bcd9044fb62ace879bb3f848bc003309cb17d8528501327ed301f98ec627`. Do not edit this file; change the specification and regenerate it with `ess generate`.

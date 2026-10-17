@@ -36,6 +36,9 @@
         "answer": {
           "type": "string"
         },
+        "answer_id": {
+          "type": "string"
+        },
         "cached_tokens": {
           "type": "integer"
         },
@@ -68,6 +71,7 @@
         }
       },
       "required": [
+        "answer_id",
         "answer",
         "nodes",
         "evidence",
@@ -265,6 +269,12 @@
         },
         "listen": {
           "type": "string"
+        },
+        "retention_days": {
+          "type": "integer"
+        },
+        "slow_after_ms": {
+          "type": "integer"
         }
       },
       "required": [
@@ -1791,8 +1801,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:d8dc04a7ce5bb1c1958341ce69663fdf0f9ccb833f67a16b9832d5949c987119",
-    "source_digest": "5b8d449a9b5dd33fe4da24d7b0507f49b8bbbd969b3c9007942d6f34fea63878",
+    "contract_digest": "slice-sha256/2:c697b14e667ced4ca382b84ef1dc84ac2f3bef6079e79b2f32d4202467860c72",
+    "source_digest": "1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168",
     "specification_version": "v1",
     "system": "cortex"
   }

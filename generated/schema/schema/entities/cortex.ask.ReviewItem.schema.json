@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewItem",
+  "x-ess-name": "cortex.ask.ReviewItem",
+  "x-ess-kind": "entity",
+  "type": "object",
+  "properties": {
+    "review_id": {
+      "$ref": "#/$defs/cortex.ask.ReviewId"
+    },
+    "answer_id": {
+      "$ref": "#/$defs/cortex.ask.AnswerId",
+      "x-ess-relation": {
+        "name": "reviews",
+        "kind": "owns",
+        "source": "cortex.ask.AnswerRecord",
+        "target": "cortex.ask.ReviewItem",
+        "cardinality": "many",
+        "via": "answer_id"
+      }
+    },
+    "cause": {
+      "$ref": "#/$defs/cortex.ask.ReviewCause"
+    },
+    "opened_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "close_reason": {
+      "type": "string"
+    },
+    "closed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "state": {
+      "$ref": "#/$defs/cortex.ask.ReviewItem.State"
+    }
+  },
+  "required": [
+    "review_id",
+    "answer_id",
+    "cause",
+    "opened_at",
+    "state"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168",
+    "contract_digest": "slice-sha256/2:bc62c537b2312a10c361b7b25e5f84e4c379696e5b94236f9ef2548436937ac2",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AnswerId": {
+      "title": "AnswerId",
+      "x-ess-name": "cortex.ask.AnswerId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "cortex.ask.ReviewCause": {
+      "title": "ReviewCause",
+      "x-ess-name": "cortex.ask.ReviewCause",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "voted-down",
+        "failed",
+        "slow"
+      ]
+    },
+    "cortex.ask.ReviewId": {
+      "title": "ReviewId",
+      "x-ess-name": "cortex.ask.ReviewId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "cortex.ask.ReviewItem.State": {
+      "title": "State",
+      "x-ess-name": "cortex.ask.ReviewItem.State",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Closed",
+        "Open"
+      ]
+    }
+  }
+}

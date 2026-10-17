@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.VoteId",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168",
+    "contract_digest": "slice-sha256/2:13b4aa7661db4631e656364afcc0a7323b1c3661f29f57dba653e28060959f02",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.VoteId": {
+      "title": "VoteId",
+      "x-ess-name": "cortex.ask.VoteId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

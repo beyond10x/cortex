@@ -16,6 +16,7 @@ pub mod limit;
 pub mod mcp;
 pub mod model;
 pub mod proxy;
+pub mod records;
 pub mod serve;
 
 use std::collections::BTreeSet;
@@ -34,7 +35,8 @@ use crate::redact::Batch;
 pub const EVENTS_FORMAT: &str = "cortex.ask-events/1";
 
 /// Why a spec cannot be served, naming the field: no `ask` section, no model gateway, a limit of
-/// 0 or less, an identity header that is no header name, or an empty listen address.
+/// 0 or less (a retention or slow threshold included), an identity header that is no header name,
+/// an empty listen address, or a `postgres` store, whose records backend is not built yet.
 pub fn check(spec: &m::InstanceSpec) -> Result<&ma::AskSpec, String> {
     let ask = spec
         .ask
@@ -60,6 +62,17 @@ pub fn check(spec: &m::InstanceSpec) -> Result<&ma::AskSpec, String> {
         if value <= 0 {
             return Err(format!("{field}: {value} is not above 0"));
         }
+    }
+    for (field, value) in [
+        ("ask.retention_days", ask.retention_days),
+        ("ask.slow_after_ms", ask.slow_after_ms),
+    ] {
+        if let Some(value) = value.filter(|v| *v <= 0) {
+            return Err(format!("{field}: {value} is not above 0"));
+        }
+    }
+    if let Some(m::StoreSpec::Postgres(_)) = &spec.store {
+        return Err(records::POSTGRES_NOT_YET.into());
     }
     let header = &ask.identity_header;
     if header.is_empty()
@@ -349,11 +362,12 @@ fn model_failed(reason: String) -> ma::AskOutcome {
     }
 }
 
-/// Answers `question` for `identity`: the tool loop. Each event before the last is handed to
+/// Answers `question` for `identity`, under `answer_id`: the tool loop. Each event before the last is handed to
 /// `emit` as it happens; `emit` answers false once nobody reads the stream, which ends the loop.
 /// The outcome is the answer or why there is none; [`final_event`] makes it the last event.
 pub fn answer(
     settings: &Settings,
+    answer_id: &str,
     identity: &str,
     question: &str,
     emit: &mut dyn FnMut(ma::AskEvent) -> bool,
@@ -464,6 +478,7 @@ pub fn answer(
                 answered: ma::Answered {
                     identity: identity.into(),
                     done: ma::AskDone {
+                        answer_id: answer_id.into(),
                         answer,
                         nodes: cited.nodes,
                         evidence: cited.evidence,

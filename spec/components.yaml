@@ -78,12 +78,24 @@ components:
       The answer service, `cortex ask serve --spec <instance spec>`: a long-running process that
       answers `POST /ask` as a stream of events over the instance's store, read through the EKR MCP
       reader. The batch component `cortex` serves no port; this one serves the spec's `ask.listen`.
+      It keeps every answer with its votes and a review queue in `ask.sqlite` in the instance
+      directory, and purges them after the spec's `retention_days`.
     owns:
       domains:
         - cortex.ask
     accepts:
       commands:
         - cortex.ask.Ask
+        - cortex.ask.RecordAnswer
+        - cortex.ask.CastVote
+        - cortex.ask.OpenReview
+        - cortex.ask.CloseReview
+        - cortex.ask.PurgeExpired
     publishes:
       events:
         - cortex.ask.Answered
+        - cortex.ask.AnswerRecorded
+        - cortex.ask.Voted
+        - cortex.ask.ReviewOpened
+        - cortex.ask.ReviewClosed
+        - cortex.ask.Purged

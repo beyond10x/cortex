@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Purge expired answers input",
+  "x-ess-name": "cortex.ask.PurgeExpired",
+  "x-ess-kind": "command-input",
+  "type": "object",
+  "properties": {
+    "before": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "before"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168",
+    "contract_digest": "slice-sha256/2:056dc915fb4b26d29db3efe9e861b7e803a2293a330cd45362840a3cb9f81b3b",
+    "regenerate": "ess generate"
+  }
+}

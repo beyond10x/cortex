@@ -20,8 +20,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "5b8d449a9b5dd33fe4da24d7b0507f49b8bbbd969b3c9007942d6f34fea63878",
-    "contract_digest": "slice-sha256/2:1d63a2bcd23d4f4c6a64073e634bfea42da1976232adaca3e01301dff1916467",
+    "source_digest": "1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168",
+    "contract_digest": "slice-sha256/2:342ed83e1f329e1f0cd863924c691436fbedb6f1c00c9180fd6b7a325a97bb42",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -31,6 +31,9 @@
       "x-ess-kind": "struct",
       "type": "object",
       "properties": {
+        "answer_id": {
+          "type": "string"
+        },
         "answer": {
           "type": "string"
         },
@@ -66,6 +69,7 @@
         }
       },
       "required": [
+        "answer_id",
         "answer",
         "nodes",
         "evidence",

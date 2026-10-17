@@ -192,6 +192,14 @@ fn ask_spec(a: &s::CortexAskAskSpec) -> Result<ma::AskSpec, MapError> {
             }),
         },
         guidance: opt(&a.guidance),
+        retention_days: match &a.retention_days {
+            EssPresence::Absent => None,
+            EssPresence::Present(d) => Some(int(d, "ask.retention_days")?),
+        },
+        slow_after_ms: match &a.slow_after_ms {
+            EssPresence::Absent => None,
+            EssPresence::Present(t) => Some(int(t, "ask.slow_after_ms")?),
+        },
     })
 }
 
@@ -214,6 +222,7 @@ pub fn ask_event(event: &ma::AskEvent) -> s::CortexAskAskEvent {
             event: s::CortexAskAskEventVariant2Event::V0,
             value: Box::new(s::CortexAskAskDone {
                 answer: d.answer.clone(),
+                answer_id: d.answer_id.clone(),
                 cached_tokens: n(d.cached_tokens),
                 context_tokens: n(d.context_tokens),
                 evidence: d.evidence.clone(),

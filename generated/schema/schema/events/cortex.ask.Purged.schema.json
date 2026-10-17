@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Purged payload",
+  "x-ess-name": "cortex.ask.Purged",
+  "x-ess-kind": "event-payload",
+  "type": "object",
+  "properties": {
+    "before": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "records": {
+      "type": "integer"
+    },
+    "votes": {
+      "type": "integer"
+    },
+    "reviews": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "before",
+    "records",
+    "votes",
+    "reviews"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168",
+    "contract_digest": "slice-sha256/2:e394d10b6093c943b4b076b65804a270671d2a75e419f9955bbc31e7bc36c034",
+    "regenerate": "ess generate"
+  }
+}

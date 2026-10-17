@@ -1,19 +1,22 @@
 <!--
   generated from cortex v1
-  model digest 5b8d449a9b5dd33fe4da24d7b0507f49b8bbbd969b3c9007942d6f34fea63878
-  contract digest 2f5be3eec0297f1a905f33f1e2355526c36078813e7f121ca0bb406b9b6ef9be
+  model digest 1a8b2b2fdcd1c2fa99e3ef30ae0308905274ee31ed5cdcbd8ffa361e90854168
+  contract digest 8430bcd9044fb62ace879bb3f848bc003309cb17d8528501327ed301f98ec627
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-193 capabilities: **188 generated**, **2 obligations**, **3 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+228 capabilities: **220 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
 | capability | source |
 | --- | --- |
+| domain type | `cortex.ask.AnswerId` |
+| domain type | `cortex.ask.AnswerOutcome` |
+| domain type | `cortex.ask.AnswerRecord.State` |
 | domain type | `cortex.ask.AskDelta` |
 | domain type | `cortex.ask.AskDiscard` |
 | domain type | `cortex.ask.AskDone` |
@@ -24,6 +27,12 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.ask.AskStatus` |
 | domain type | `cortex.ask.AskTool` |
 | domain type | `cortex.ask.LinkTemplates` |
+| domain type | `cortex.ask.ReviewCause` |
+| domain type | `cortex.ask.ReviewId` |
+| domain type | `cortex.ask.ReviewItem.State` |
+| domain type | `cortex.ask.Vote.State` |
+| domain type | `cortex.ask.VoteId` |
+| domain type | `cortex.ask.VoteValue` |
 | domain type | `cortex.instance.ChangeDetection` |
 | domain type | `cortex.instance.ChildCall` |
 | domain type | `cortex.instance.CompareLink` |
@@ -107,12 +116,25 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.WebInput` |
 | domain type | `cortex.instance.WebMode` |
 | domain type | `cortex.instance.WebSource` |
+| entity lifecycle | `cortex.ask.AnswerRecord` |
+| entity lifecycle | `cortex.ask.ReviewItem` |
+| entity lifecycle | `cortex.ask.Vote` |
 | entity lifecycle | `cortex.instance.EvalRun` |
 | entity lifecycle | `cortex.instance.Instance` |
 | entity lifecycle | `cortex.instance.SeenDocument` |
 | entity lifecycle | `cortex.instance.Source` |
 | command contract | `cortex.ask.Ask` |
 | command behaviour | `cortex.ask.Ask` |
+| command contract | `cortex.ask.CastVote` |
+| command behaviour | `cortex.ask.CastVote` |
+| command contract | `cortex.ask.CloseReview` |
+| command behaviour | `cortex.ask.CloseReview` |
+| command contract | `cortex.ask.OpenReview` |
+| command behaviour | `cortex.ask.OpenReview` |
+| command contract | `cortex.ask.PurgeExpired` |
+| command behaviour | `cortex.ask.PurgeExpired` |
+| command contract | `cortex.ask.RecordAnswer` |
+| command behaviour | `cortex.ask.RecordAnswer` |
 | command contract | `cortex.instance.AddSource` |
 | command behaviour | `cortex.instance.AddSource` |
 | command contract | `cortex.instance.AdoptInstance` |
@@ -141,7 +163,12 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | command contract | `cortex.instance.RunSource` |
 | command contract | `cortex.instance.UpdateInstance` |
 | command behaviour | `cortex.instance.UpdateInstance` |
+| event type | `cortex.ask.AnswerRecorded` |
 | event type | `cortex.ask.Answered` |
+| event type | `cortex.ask.Purged` |
+| event type | `cortex.ask.ReviewClosed` |
+| event type | `cortex.ask.ReviewOpened` |
+| event type | `cortex.ask.Voted` |
 | event type | `cortex.instance.EvalRan` |
 | event type | `cortex.instance.InstanceAdopted` |
 | event type | `cortex.instance.InstanceCreated` |
@@ -159,10 +186,14 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | event type | `cortex.instance.SourceEnabled` |
 | event type | `cortex.instance.SourceFetched` |
 | event type | `cortex.instance.SourceRan` |
+| error type | `cortex.ask.AnswerNotFound` |
 | error type | `cortex.ask.LimitReached` |
 | error type | `cortex.ask.ModelFailed` |
 | error type | `cortex.ask.RateLimited` |
 | error type | `cortex.ask.ReaderFailed` |
+| error type | `cortex.ask.ReviewExists` |
+| error type | `cortex.ask.ReviewNotFound` |
+| error type | `cortex.ask.ReviewNotOpen` |
 | error type | `cortex.ask.Unidentified` |
 | error type | `cortex.instance.ApplyRefused` |
 | error type | `cortex.instance.BackendMismatch` |
@@ -196,6 +227,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | error type | `cortex.instance.StoreHeld` |
 | error type | `cortex.instance.StoreOutcomeUnknown` |
 | error type | `cortex.instance.StoreUnreadable` |
+| view type | `cortex.ask.OpenReviews` |
 | view type | `cortex.instance.Instances` |
 | view query | `cortex.instance.Instances` |
 | view type | `cortex.instance.Sources` |
@@ -218,11 +250,14 @@ What the specification fully determines is generated; what it cannot determine i
 | --- | --- | --- | --- |
 | command behaviour | `cortex.instance.RecordFailure` | kept an obligation by a subject predicate choosing between a move and an update | given `cortex.instance.RecordFailure` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject's stored fields satisfy `consecutive_failures >= 1`, takes `disable` of `cortex.instance.Source`, emits `cortex.instance.SourceDisabled`; `counted` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.RunFailed`; `already-disabled` from a state no declared move starts in, error `cortex.instance.SourceDisabledError`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound` |
 | command behaviour | `cortex.instance.RunSource` | kept an obligation by a refusal that compensates (`compensates: true`), on `fetch-failed` | given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)`, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `fetch-only-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents in a fetch-only run) when eligible ((defined(fetch_only) and fetch_only == true)), error `cortex.instance.FetchFailed`; `fetched` when `(defined(fetch_only) and fetch_only == true)`, updates `cortex.instance.Source`, emits `cortex.instance.SourceFetched`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `store-outcome-unknown` externally decided (EKR answers that the publication outcome of a store write of the run (a stage verb or `apply-extraction`) is unknown), updates `cortex.instance.Source`, error `cortex.instance.StoreOutcomeUnknown`; `connection-unavailable` externally decided (Connectors answers a retryable operational failure to every attempt of `connections revalidate` (or of the `connections list` read before it, which for a source naming a profile is also the read that resolves the profile) before the run's first fetch), updates `cortex.instance.Source`, error `cortex.instance.ConnectionUnavailable`; `batch-too-large` externally decided (`claude` answers that a part of several documents of an extraction batch is too long for the model's window, or that its answer was cut off at the output limit, after the batch was split 3 deep), updates `cortex.instance.Source`, error `cortex.instance.BatchTooLarge`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound` |
+| view query | `cortex.ask.OpenReviews` | kept an obligation by an order over the `Timestamp` field `opened_at`, which the suite ranks by its instant and a generated query does not | a query answering `cortex.ask.OpenReviews` with rows projected from `cortex.ask.ReviewItem` at `read_your_writes` consistency, containing instances where `state == Open` |
 
 ## Refused — not represented by this synthesis
 
 | capability | source | stage | why |
 | --- | --- | --- | --- |
-| actor grants | `cortex.ask.Asker` | planning | may invoke `cortex.ask.Ask`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |
+| actor grants | `cortex.ask.Asker` | planning | may invoke `cortex.ask.Ask`, `cortex.ask.CastVote`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |
+| actor grants | `cortex.ask.Reviewer` | planning | may invoke `cortex.ask.CloseReview`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |
+| actor grants | `cortex.ask.Service` | planning | may invoke `cortex.ask.OpenReview`, `cortex.ask.PurgeExpired`, `cortex.ask.RecordAnswer`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |
 | actor grants | `cortex.instance.Operator` | planning | may invoke `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.ApplySchemaProposals`, `cortex.instance.ApproveSchemaProposals`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.ProposeSchemaChanges`, `cortex.instance.RejectSchemaProposals`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.RunEval`, `cortex.instance.UpdateInstance`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |
 | actor grants | `cortex.instance.Scheduler` | planning | may invoke `cortex.instance.RecordFailure`, `cortex.instance.RunSource`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |
