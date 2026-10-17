@@ -1404,7 +1404,7 @@ pub fn apply_run(layout: &Layout, stamp: &str) -> Result<AppliedRun, Refusal> {
         Ok::<(), String>(())
     })();
     if let Err(e) = decided {
-        let undone = held.undo();
+        let undone = held.undo_after_error();
         return Err(Refusal::ApplyFailed(format!(
             "{e}; {undone}; every approved proposal is still approved"
         )));
