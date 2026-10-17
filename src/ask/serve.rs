@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use axum::body::Bytes;
+use axum::extract::rejection::BytesRejection;
 use axum::extract::State;
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::sse::{Event, Sse};
@@ -67,7 +68,14 @@ fn bad_request(message: &str) -> Response {
     )
 }
 
-async fn ask(State(service): State<Arc<Service>>, headers: HeaderMap, body: Bytes) -> Response {
+/// The most bytes of a request body: a question is text, and a body above this is refused.
+const BODY_LIMIT: usize = 1024 * 1024;
+
+async fn ask(
+    State(service): State<Arc<Service>>,
+    headers: HeaderMap,
+    body: Result<Bytes, BytesRejection>,
+) -> Response {
     let header = &service.settings.ask.identity_header;
     let identity = headers
         .get(header.as_str())
@@ -85,6 +93,27 @@ async fn ask(State(service): State<Arc<Service>>, headers: HeaderMap, body: Byte
             }),
         );
     };
+    let body = match body {
+        Ok(body) => body,
+        Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+            return refusal(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ma::AskEvent::Error(ma::AskError {
+                    reason: "bad-request".into(),
+                    message: format!("the body is above {BODY_LIMIT} bytes"),
+                    retry_after: None,
+                }),
+            )
+        }
+        Err(_) => return bad_request("the body cannot be read"),
+    };
+    let question = match serde_json::from_slice::<Value>(&body) {
+        Ok(v) => match v.get("question").and_then(Value::as_str).map(str::trim) {
+            Some(q) if !q.is_empty() => q.to_string(),
+            _ => return bad_request("the body names no `question`"),
+        },
+        Err(_) => return bad_request("the body is not JSON"),
+    };
     let admitted = service
         .limiter
         .lock()
@@ -101,13 +130,6 @@ async fn ask(State(service): State<Arc<Service>>, headers: HeaderMap, body: Byte
             }),
         );
     }
-    let question = match serde_json::from_slice::<Value>(&body) {
-        Ok(v) => match v.get("question").and_then(Value::as_str).map(str::trim) {
-            Some(q) if !q.is_empty() => q.to_string(),
-            _ => return bad_request("the body names no `question`"),
-        },
-        Err(_) => return bad_request("the body is not JSON"),
-    };
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let service = service.clone();
     tokio::task::spawn_blocking(move || {
@@ -141,7 +163,10 @@ pub fn serve(settings: Settings) -> Result<(), String> {
             settings,
             limiter: Mutex::new(RateLimiter::new(per_minute)),
         });
-        let app = Router::new().route("/ask", post(ask)).with_state(service);
+        let app = Router::new()
+            .route("/ask", post(ask))
+            .layer(axum::extract::DefaultBodyLimit::max(BODY_LIMIT))
+            .with_state(service);
         println!("{}", json!({"listening": address.to_string()}));
         axum::serve(listener, app)
             .await
