@@ -39,6 +39,9 @@ evidence it cites.
 Propose a change only where the facts and their evidence show that the ontology lacks something \
 they need, or holds something that does not fit them:
 - `add_node_type`, `add_edge_type`, `add_property`: a type or property the ontology lacks.
+- `widen_edge_type`: node types an edge type the ontology declares should also connect, added to \
+its source end (`add_source_types`), its target end (`add_target_types`) or both. An end never \
+loses a type.
 - `redeclare_property`: a property the ontology declares whose value kind or cardinality does not \
 fit the values the evidence gives it.
 - `remove_node_type`, `remove_edge_type`, `remove_property`, `merge_types`, `split_type`: \
@@ -249,6 +252,11 @@ pub fn change_of(v: &Value) -> Option<m::SchemaChange> {
             source_types: texts(&value["source_types"])?,
             target_types: texts(&value["target_types"])?,
         }),
+        "widen_edge_type" => m::SchemaChange::WidenEdgeType(m::EdgeTypeWidening {
+            name: text(&value["name"])?,
+            add_source_types: texts(&value["add_source_types"])?,
+            add_target_types: texts(&value["add_target_types"])?,
+        }),
         "add_property" => m::SchemaChange::AddProperty(property_change_of(value)?),
         "redeclare_property" => m::SchemaChange::RedeclareProperty(property_change_of(value)?),
         "remove_node_type" => m::SchemaChange::RemoveNodeType(removal(value)?),
@@ -290,6 +298,11 @@ pub fn change_json(c: &m::SchemaChange) -> Value {
             "add_edge_type",
             json!({"name": t.name, "source_types": t.source_types,
                    "target_types": t.target_types}),
+        ),
+        m::SchemaChange::WidenEdgeType(t) => (
+            "widen_edge_type",
+            json!({"name": t.name, "add_source_types": t.add_source_types,
+                   "add_target_types": t.add_target_types}),
         ),
         m::SchemaChange::AddProperty(p) => ("add_property", property_change_json(p)),
         m::SchemaChange::RedeclareProperty(p) => ("redeclare_property", property_change_json(p)),
@@ -614,6 +627,9 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn, home: &Home) -> Result<
 struct TypeEntry {
     id: String,
     parents: Vec<String>,
+    /// An edge type's ends, node type ids; empty for a node type.
+    sources: Vec<String>,
+    targets: Vec<String>,
     /// `property name → declaration` (`id`, `value_type`, `cardinality`, `required`,
     /// `constraints`).
     props: BTreeMap<String, Value>,
@@ -647,16 +663,20 @@ impl Names {
                         .flatten()
                         .filter_map(|p| Some((text(&p["name"])?, p.clone())))
                         .collect();
-                    // A parent is written as its id, or as `{id, name}`.
-                    let parents = t["parents"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .filter_map(|p| text(p).or_else(|| text(&p["id"])))
-                        .collect();
+                    // A parent or an end is written as its id, or as `{id, name}`.
+                    let ids = |key: &str| {
+                        t[key]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|p| text(p).or_else(|| text(&p["id"])))
+                            .collect()
+                    };
                     let entry = TypeEntry {
                         id: text(&t["id"])?,
-                        parents,
+                        parents: ids("parents"),
+                        sources: ids("source_types"),
+                        targets: ids("target_types"),
                         props,
                     };
                     Some((text(&t["name"])?, entry))
@@ -757,17 +777,34 @@ impl Names {
                     .collect();
                 let entry = TypeEntry {
                     id: id.clone(),
-                    parents: Vec::new(),
                     props,
+                    ..TypeEntry::default()
                 };
                 self.nodes.insert(name.clone(), entry);
             }
-            Operation::DefineEdgeType { id, name, .. } => {
+            Operation::DefineEdgeType {
+                id,
+                name,
+                source_types,
+                target_types,
+            } => {
                 let entry = TypeEntry {
                     id: id.clone(),
+                    sources: source_types.clone(),
+                    targets: target_types.clone(),
                     ..TypeEntry::default()
                 };
                 self.edges.insert(name.clone(), entry);
+            }
+            Operation::WidenEdgeType {
+                edge_type,
+                source_types,
+                target_types,
+            } => {
+                if let Some(t) = self.edges.values_mut().find(|t| &t.id == edge_type) {
+                    t.sources = source_types.clone();
+                    t.targets = target_types.clone();
+                }
             }
             Operation::ModifyProperty { owner, property } => {
                 if let Some(t) = self
@@ -945,6 +982,46 @@ fn plan(
                     required: held["required"].as_bool().unwrap_or(false),
                     constraints: texts(&held["constraints"]).unwrap_or_default(),
                 },
+            }))
+        }
+        m::SchemaChange::WidenEdgeType(t) => {
+            let Some(edge) = names.edges.get(&t.name) else {
+                return invalid(format!("the ontology declares no edge type {}", t.name));
+            };
+            // Each end is written whole: what it holds now, then each named type it lacks.
+            let mut grows = false;
+            let mut ends: Vec<Vec<String>> = Vec::new();
+            for (held, added) in [
+                (&edge.sources, &t.add_source_types),
+                (&edge.targets, &t.add_target_types),
+            ] {
+                let mut ids = held.clone();
+                for name in added {
+                    let Some(node) = names.nodes.get(name) else {
+                        return invalid(format!(
+                            "{} names {name}, which is not a node type of the ontology",
+                            t.name
+                        ));
+                    };
+                    if !ids.contains(&node.id) {
+                        ids.push(node.id.clone());
+                        grows = true;
+                    }
+                }
+                ends.push(ids);
+            }
+            if !grows {
+                return invalid(format!(
+                    "the widening of {} adds no node type new to either end",
+                    t.name
+                ));
+            }
+            let target_types = ends.pop().unwrap_or_default();
+            let source_types = ends.pop().unwrap_or_default();
+            Ok(Plan::Write(Operation::WidenEdgeType {
+                edge_type: edge.id.clone(),
+                source_types,
+                target_types,
             }))
         }
         m::SchemaChange::RemoveNodeType(_)

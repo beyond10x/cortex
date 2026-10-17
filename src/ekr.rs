@@ -678,6 +678,14 @@ pub enum Operation {
         owner: String,
         property: PropertyDecl,
     },
+    /// `!WidenEdgeType`, a schema change: the ends of the edge type `edge_type`, each written whole
+    /// (every node type id it holds now and the ones added), since EKR refuses an end that loses
+    /// a type.
+    WidenEdgeType {
+        edge_type: String,
+        source_types: Vec<String>,
+        target_types: Vec<String>,
+    },
 }
 
 impl Operation {
@@ -747,6 +755,18 @@ impl Operation {
                 m.insert(s("owner"), s(owner));
                 m.insert(s("property"), property.yaml());
                 ("ModifyProperty", Yaml::Mapping(m))
+            }
+            Operation::WidenEdgeType {
+                edge_type,
+                source_types,
+                target_types,
+            } => {
+                let ids = |v: &[String]| Yaml::Sequence(v.iter().map(|t| s(t)).collect());
+                let mut m = Mapping::new();
+                m.insert(s("edge_type"), s(edge_type));
+                m.insert(s("source_types"), ids(source_types));
+                m.insert(s("target_types"), ids(target_types));
+                ("WidenEdgeType", Yaml::Mapping(m))
             }
         };
         Yaml::Tagged(Box::new(TaggedValue {
@@ -900,6 +920,11 @@ mod tests {
                     owner: "n-0".into(),
                     property: prop("p-2"),
                 },
+                Operation::WidenEdgeType {
+                    edge_type: "e-1".into(),
+                    source_types: vec!["n-0".into(), "n-2".into()],
+                    target_types: vec!["n-1".into()],
+                },
             ],
             Some("v-1"),
         );
@@ -925,6 +950,8 @@ mod tests {
             "required: false",
             "required: true",
             "constraints: []",
+            "- !WidenEdgeType",
+            "edge_type: e-1",
         ] {
             assert!(text.contains(part), "{part} in {text}");
         }

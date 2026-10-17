@@ -1939,7 +1939,8 @@ fn end_dropped(
                 crate::ekr::Operation::DeleteEdge(_)
                 | crate::ekr::Operation::DefineNodeType { .. }
                 | crate::ekr::Operation::DefineEdgeType { .. }
-                | crate::ekr::Operation::ModifyProperty { .. } => {}
+                | crate::ekr::Operation::ModifyProperty { .. }
+                | crate::ekr::Operation::WidenEdgeType { .. } => {}
             }
         }
     }
