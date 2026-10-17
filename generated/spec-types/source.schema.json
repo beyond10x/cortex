@@ -62,6 +62,9 @@
         },
         "steps": {
           "type": "integer"
+        },
+        "unrestored": {
+          "type": "integer"
         }
       },
       "required": [
@@ -72,7 +75,8 @@
         "output_tokens",
         "cached_tokens",
         "context_tokens",
-        "steps"
+        "steps",
+        "unrestored"
       ],
       "title": "AskDone",
       "type": "object",
@@ -316,6 +320,9 @@
         },
         "truncated": {
           "type": "boolean"
+        },
+        "withheld": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -324,7 +331,8 @@
         "arguments",
         "result_bytes",
         "truncated",
-        "failed"
+        "failed",
+        "withheld"
       ],
       "title": "AskTool",
       "type": "object",
@@ -1783,8 +1791,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:43fae8d94ef675b56c249e98cf42937d18914b07adfafb42d775797043941a27",
-    "source_digest": "4eb207af007604622af5b1e8338e5745fdc644480429be61c94de61f5bfcb6bf",
+    "contract_digest": "slice-sha256/2:d8dc04a7ce5bb1c1958341ce69663fdf0f9ccb833f67a16b9832d5949c987119",
+    "source_digest": "5b8d449a9b5dd33fe4da24d7b0507f49b8bbbd969b3c9007942d6f34fea63878",
     "specification_version": "v1",
     "system": "cortex"
   }

@@ -494,3 +494,93 @@ echo '{{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.
     assert_eq!(verdicts(&dirs[0]), vec![("widget".to_string(), true)]);
     assert!(!dirs[0].join("summary.json").exists());
 }
+
+// `story:ask-redaction`: under the instance's `redaction` policy the `mcp` runner's model reads
+// the store only redacted, and the case is scored on the restored answer.
+
+/// A stand-in `ekr` whose `mcp` speaks MCP over stdio: one tool, `search`, answering `text`.
+fn mcp_reader(w: &World, text: &str) -> PathBuf {
+    let path = w.root.join("reader/ekr");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    executable(
+        &path,
+        &format!(
+            r#"[ "$1" = mcp ] || {{ echo "ekr 0.0.34"; exit 0; }}
+while IFS= read -r line; do
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  case "$line" in
+    *'"method":"initialize"'*) printf '{{"jsonrpc":"2.0","id":%s,"result":{{"protocolVersion":"2025-06-18","capabilities":{{"tools":{{}}}},"serverInfo":{{"name":"ekr","version":"0"}}}}}}\n' "$id" ;;
+    *'"method":"tools/list"'*) printf '{{"jsonrpc":"2.0","id":%s,"result":{{"tools":[{{"name":"search","description":"Search the store","inputSchema":{{"type":"object"}}}}]}}}}\n' "$id" ;;
+    *'"method":"tools/call"'*) printf '{{"jsonrpc":"2.0","id":%s,"result":{{"content":[{{"type":"text","text":"{text}"}}]}}}}\n' "$id" ;;
+  esac
+done
+"#
+        ),
+    );
+    path
+}
+
+/// A stand-in `claude` that reads the store through the MCP server its `--mcp-config` names
+/// over HTTP (`initialize`, then `tools/call search`), records its prompt and each response in
+/// `<root>/model-saw.log`, and answers with both placeholders.
+fn mcp_client(w: &World) {
+    executable(
+        &w.bin.join("claude"),
+        &format!(
+            r#"R="{root}"
+url=$(printf '%s' "$*" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
+cat >> "$R/model-saw.log"
+post() {{ curl -s -X POST "$url" -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' -d "$1"; echo; }}
+post '{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"protocolVersion":"2025-06-18","capabilities":{{}},"clientInfo":{{"name":"stand-in","version":"0"}}}}}}' >> "$R/model-saw.log"
+post '{{"jsonrpc":"2.0","method":"notifications/initialized"}}' >> "$R/model-saw.log"
+post '{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}' >> "$R/model-saw.log"
+post '{{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{{"name":"search","arguments":{{"query":"widget"}}}}}}' >> "$R/model-saw.log"
+echo '{{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.01,"usage":{{"input_tokens":100,"output_tokens":10}},"structured_output":{{"answer":"[Name-1] leads the widget team; write to [Email-1].","cited_nodes":["node-team"]}}}}'
+"#,
+            root = w.root.display()
+        ),
+    );
+}
+
+#[test]
+fn the_mcp_runner_under_a_policy_shows_the_model_no_value_and_scores_the_restored_answer() {
+    let w = instance("hidden");
+    let reader = mcp_reader(
+        &w,
+        "Zorblat leads the widget team, write to help@acme.example.",
+    );
+    mcp_client(&w);
+    let spec_path = w.home.join("instances/hidden/instance.yaml");
+    let spec = std::fs::read_to_string(&spec_path).unwrap();
+    let real = common::ekr().display().to_string();
+    assert!(spec.contains(&real), "{spec}");
+    let spec = spec.replace(&real, &reader.display().to_string())
+        + "redaction:\n  classes: [Email]\n  rules: []\n  known_names: [Zorblat]\n";
+    std::fs::write(&spec_path, spec).unwrap();
+    let set = w.root.join("set.json");
+    let mut team = case(
+        "team",
+        "What does Zorblat lead?",
+        "Zorblat leads the widget team",
+        "node-team",
+    );
+    team["expect_facts"] = json!(["Zorblat leads the widget team", "help@acme.example"]);
+    std::fs::write(&set, json!({"cases": [team]}).to_string()).unwrap();
+
+    let dir = mcp_run(&w, "hidden", &set);
+    let saw = std::fs::read_to_string(w.root.join("model-saw.log")).unwrap();
+    assert!(saw.contains("What does [Name-1] lead?"), "{saw}");
+    assert!(
+        saw.contains("[Name-1] leads the widget team, write to [Email-1]."),
+        "{saw}"
+    );
+    assert!(!saw.contains("Zorblat"), "{saw}");
+    assert!(!saw.contains("help@acme.example"), "{saw}");
+    let result = &results(&dir)[0];
+    assert_eq!(
+        result["answer"], "Zorblat leads the widget team; write to help@acme.example.",
+        "{result}"
+    );
+    assert_eq!(result["passed"], true, "{result}");
+    assert_eq!(result["question"], "What does Zorblat lead?", "{result}");
+}

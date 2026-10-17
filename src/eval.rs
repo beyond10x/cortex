@@ -9,16 +9,21 @@
 //!
 //! The `mcp` runner's tool loop is `claude`'s own: `claude -p` is given the store's MCP reader as
 //! its one MCP server (`--mcp-config`, `--strict-mcp-config`) and only its tools
-//! (`--allowedTools mcp__ekr`), with every built-in tool off. What the reader answers reaches
-//! the model as the store holds it: the instance's redaction policy does not apply to it.
+//! (`--allowedTools mcp__ekr`), with every built-in tool off. Without a redaction policy what the
+//! reader answers reaches the model as the store holds it. Under the instance's `redaction`
+//! policy the MCP server is a redacting one in this process (`ask::proxy`), in front of the
+//! reader: one batch per case, the question and each tool result redacted, a result in which a
+//! `refuse_if_left` class is still detected withheld, and the answer restored before it is scored.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use cortex_model::instance as m;
 use serde_json::{json, Value};
 
+use crate::ask::{proxy, ReaderCommand};
 use crate::ekr::{self, Store};
 use crate::extract::Model;
 use crate::home::Home;
@@ -473,6 +478,15 @@ pub fn run(
     let mut model_calls = 0;
     let mut results: Vec<m::EvalResult> = Vec::new();
     let of = set.cases.len();
+    // Under a redaction policy each case's model reads the store through a redacting server in
+    // this process (`ask::proxy`), one batch per case, and its answer is restored with that batch.
+    let redactor = crate::redact::compile(spec.redaction.as_ref()).map_err(Failure::Runner)?;
+    let reader = match (&redactor, &answers) {
+        (Some(_), Answers::Mcp(_)) => {
+            Some(ReaderCommand::of(home, &spec).map_err(Failure::Runner)?)
+        }
+        _ => None,
+    };
     for (n, case) in set.cases.iter().enumerate() {
         let (answer, cited) = match &answers {
             Answers::Replay(recorded) => {
@@ -499,17 +513,43 @@ pub fn run(
                 let remaining = daily.allow_bound(remaining).map_err(|why| {
                     Failure::Runner(format!("{why}; {}", so_far(n, of, cost_usd)))
                 })?;
-                let prompt = format!("Question: {}\n", case.question);
-                let asked = model.ask_with_mcp(
-                    ANSWER_PROMPT,
-                    &dir.join(format!("case-{n}")),
-                    &schema,
-                    &prompt,
-                    remaining,
-                    &config.to_string(),
-                    &format!("mcp__{MCP_SERVER}"),
-                );
-                let answer = match asked {
+                let ask = |question: &str, config: &Value| {
+                    model.ask_with_mcp(
+                        ANSWER_PROMPT,
+                        &dir.join(format!("case-{n}")),
+                        &schema,
+                        &format!("Question: {question}\n"),
+                        remaining,
+                        &config.to_string(),
+                        &format!("mcp__{MCP_SERVER}"),
+                    )
+                };
+                let (asked, batch) = match (&redactor, &reader) {
+                    (Some(redactor), Some(reader)) => {
+                        // The reader may answer as long as the model call may last.
+                        let seconds =
+                            (spec.model.timeout_s.max(1) as u64).min(10 * 365 * 24 * 3600);
+                        let deadline = Instant::now() + Duration::from_secs(seconds);
+                        let served = proxy::serve(
+                            redactor,
+                            reader,
+                            MCP_SERVER,
+                            &case.question,
+                            deadline,
+                            ask,
+                        )
+                        .map_err(|why| {
+                            Failure::Runner(format!(
+                                "case {:?}: {why}; {}",
+                                case.id,
+                                so_far(n, of, cost_usd)
+                            ))
+                        })?;
+                        (served.answer, Some(served.batch))
+                    }
+                    _ => (ask(&case.question, config), None),
+                };
+                let mut answer = match asked {
                     Ok(answer) => answer,
                     Err(refused) => {
                         daily.add_answer(refused.cost_usd, &refused.usage);
@@ -522,6 +562,9 @@ pub fn run(
                         )));
                     }
                 };
+                if let Some(batch) = &batch {
+                    batch.restore(&mut answer.document);
+                }
                 daily.add_answer(answer.cost_usd, &answer.usage);
                 tokens.add(&answer.usage);
                 spent += answer.cost_usd.unwrap_or(0.0);

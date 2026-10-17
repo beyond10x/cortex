@@ -183,6 +183,11 @@ done
 /// Starts `cortex ask serve` over a spec whose `ask.limits` are `limits` (YAML flow text), with
 /// the gateway at `gateway` and the stand-in reader's tool answering `tool_result`.
 fn serve(gateway: &Gateway, limits: &str, tool_result: &str) -> Service {
+    serve_with(gateway, limits, tool_result, "")
+}
+
+/// [`serve`] over a spec that ends with `extra` (top-level YAML, such as a `redaction` policy).
+fn serve_with(gateway: &Gateway, limits: &str, tool_result: &str, extra: &str) -> Service {
     let tmp = tempfile::Builder::new()
         .prefix("cortex-ask")
         .tempdir_in(
@@ -216,7 +221,7 @@ ask:
   identity_header: {HEADER}
   limits: {limits}
   link_templates: {{node: "https://brain.example/node/{{id}}"}}
-"#,
+{extra}"#,
             ekr = ekr.display(),
             url = gateway.url,
         ),
@@ -561,4 +566,149 @@ fn a_spec_without_ask_or_with_a_zero_limit_does_not_serve() {
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert!(stderr.contains(field), "{name}: {stderr}");
     }
+}
+
+// `story:ask-redaction`: the instance's `redaction` policy holds wherever the model reads its
+// store. One question is one redaction batch; the question and each tool result are redacted
+// before the model is given them, and the answer is restored before the client sees it.
+
+/// The document the stand-in reader's tool answers: a known name and an email address.
+const PERSONAL: &str = "Zorblat leads the widget team, write to help@acme.example.";
+
+/// A policy that hides email addresses and the known name `Zorblat`.
+const POLICY: &str = "redaction:\n  classes: [Email]\n  rules: []\n  known_names: [Zorblat]\n";
+
+/// The text of each `delta` after the last `discard`, joined: the answer as the client saw it.
+fn streamed(answer: &Answer) -> String {
+    let after_discard = answer
+        .names()
+        .iter()
+        .rposition(|n| *n == "discard")
+        .map_or(0, |i| i + 1);
+    answer.events[after_discard..]
+        .iter()
+        .filter(|(n, _)| n == "delta")
+        .map(|(_, v)| v["text"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// The content of the first `tool` message of a request the model received.
+fn tool_content(request: &Value) -> String {
+    request["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["role"] == "tool")
+        .expect("a tool message")["content"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+#[test]
+fn with_a_policy_the_model_sees_placeholders_and_the_client_the_restored_answer() {
+    let gateway = Gateway::start(vec![
+        tool_reply(1, (100, 10, 0)),
+        text_reply(
+            "[Name-1] leads the widget team.\nWrite to [Email-1], not [Email-7].",
+            (200, 20, 0),
+        ),
+    ]);
+    let service = serve_with(&gateway, LIMITS, PERSONAL, POLICY);
+    let answer = ask(&service, Some("alice"), "What does Zorblat lead?");
+    assert_eq!(answer.names().last(), Some(&"done"), "{:?}", answer.events);
+
+    // The model received placeholders, never a value: in the question and in the tool result.
+    let requests = gateway.requests();
+    assert_eq!(requests.len(), 2, "{requests:?}");
+    for request in &requests {
+        let sent = request.to_string();
+        assert!(!sent.contains("Zorblat"), "{sent}");
+        assert!(!sent.contains("help@acme.example"), "{sent}");
+    }
+    let question = requests[0]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["role"] == "user")
+        .expect("the question")["content"]
+        .clone();
+    assert_eq!(question, "What does [Name-1] lead?");
+    assert_eq!(
+        tool_content(&requests[1]),
+        "[Name-1] leads the widget team, write to [Email-1]."
+    );
+
+    // The client sees the values, in the deltas and in `done`; a placeholder with no value stays
+    // as written and is counted.
+    let (_, done) = answer.last();
+    let restored = "Zorblat leads the widget team.\nWrite to help@acme.example, not [Email-7].";
+    assert_eq!(done["answer"], restored, "{done}");
+    assert_eq!(streamed(&answer), restored);
+    assert_eq!(done["unrestored"], 1, "{done}");
+    let tool = answer
+        .events
+        .iter()
+        .find(|(n, _)| n == "tool")
+        .expect("a tool event");
+    assert_eq!(tool.1["withheld"], false, "{tool:?}");
+}
+
+#[test]
+fn a_tool_result_still_holding_a_refused_class_is_withheld_and_the_answer_completes() {
+    let gateway = Gateway::start(vec![
+        tool_reply(1, (100, 10, 0)),
+        text_reply("The store would not say.", (200, 20, 0)),
+    ]);
+    // The rule's replacement is itself an address the `Email` detector finds.
+    let policy = "redaction:\n  classes: [Email]\n  rules:\n    - {name: Team, pattern: \"widget team\", replacement: \"ops@acme.example\"}\n  known_names: [Zorblat]\n  refuse_if_left: [Email]\n";
+    let service = serve_with(&gateway, LIMITS, PERSONAL, policy);
+    let answer = ask(&service, Some("alice"), "Who leads the widget team?");
+    let names = answer.names();
+    assert_eq!(names.last(), Some(&"done"), "{:?}", answer.events);
+    assert!(!names.contains(&"error"), "{names:?}");
+    let tool = answer
+        .events
+        .iter()
+        .find(|(n, _)| n == "tool")
+        .expect("a tool event");
+    assert_eq!(tool.1["withheld"], true, "{tool:?}");
+    let requests = gateway.requests();
+    assert_eq!(requests.len(), 2, "{requests:?}");
+    let content = tool_content(&requests[1]);
+    assert!(content.contains("withheld by policy"), "{content}");
+    for value in ["ops@acme.example", "help@acme.example", "Zorblat"] {
+        assert!(!content.contains(value), "{content}");
+    }
+    assert_eq!(answer.last().1["answer"], "The store would not say.");
+}
+
+#[test]
+fn without_a_policy_the_model_receives_the_tool_result_byte_for_byte() {
+    let gateway = Gateway::start(vec![
+        tool_reply(1, (100, 10, 0)),
+        text_reply("[Name-1] is not a placeholder here.", (200, 20, 0)),
+    ]);
+    let service = serve(&gateway, LIMITS, PERSONAL);
+    let answer = ask(&service, Some("alice"), "What does Zorblat lead?");
+    let requests = gateway.requests();
+    assert_eq!(requests.len(), 2, "{requests:?}");
+    assert_eq!(tool_content(&requests[1]), PERSONAL);
+    let question = requests[0]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["role"] == "user")
+        .expect("the question")["content"]
+        .clone();
+    assert_eq!(question, "What does Zorblat lead?");
+    let (_, done) = answer.last();
+    assert_eq!(done["answer"], "[Name-1] is not a placeholder here.");
+    assert_eq!(done["unrestored"], 0, "{done}");
+    let tool = answer
+        .events
+        .iter()
+        .find(|(n, _)| n == "tool")
+        .expect("a tool event");
+    assert_eq!(tool.1["withheld"], false, "{tool:?}");
 }

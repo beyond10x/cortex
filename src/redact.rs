@@ -9,6 +9,12 @@
 //! no value (mangled or invented by the model) stays as it is and is counted as unrestored. The
 //! mapping lives in memory for one batch only. The stored evidence is the original text.
 //!
+//! One answer of the ask service, and one case of the eval `mcp` runner, is one batch whose texts
+//! (the question, then each tool result) arrive one by one: each is reserved just before it is
+//! replaced, and a word once replaced as a rare name keeps its placeholder in later texts. The
+//! answer arrives in pieces too; [`Restoring`] restores them, holding back a tail that may be the
+//! start of a placeholder.
+//!
 //! `known_names` are names replaced wherever they appear as whole words, however often, in any case
 //! and either Unicode normal form. `RareName` replaces a capitalised word (one capital and at least
 //! one lower-case letter) seen at most `rare_limit` times (default 1) in the batch's document texts,
@@ -1112,6 +1118,7 @@ impl Redactor {
             next: HashMap::new(),
             reserved: HashSet::new(),
             words: HashMap::new(),
+            named: HashSet::new(),
             counts: self.counts(),
         }
     }
@@ -1139,13 +1146,18 @@ pub struct Batch<'a> {
     /// How often the batch's originals hold each capitalised word, when `RareName` is replaced or
     /// checked.
     words: HashMap<String, usize>,
+    /// The words already replaced as a rare name. A batch that reserves its texts as they arrive
+    /// (an answer's tool results) counts these no further, so a name a later text repeats keeps
+    /// its placeholder.
+    named: HashSet<String>,
     counts: BTreeMap<String, usize>,
 }
 
-impl Batch<'_> {
+impl<'a> Batch<'a> {
     /// Notes the placeholder-shaped text in an original, so no placeholder of this batch
     /// collides with it, and counts its capitalised words. Call it for every text of the batch
-    /// before the first `replace`.
+    /// before the first `replace`; a batch whose texts arrive one by one (the tool results of one
+    /// answer) reserves each before it replaces it, and a word replaced as a rare name stays one.
     pub fn reserve(&mut self, text: &str) {
         if self.redactor.words {
             // A word inside what another step hides (an address, a link, a known name, a
@@ -1160,6 +1172,7 @@ impl Batch<'_> {
                 let r = found.range();
                 if capitalised(text, r.clone()).is_some()
                     && !hidden.iter().any(|h| h.start < r.end && r.start < h.end)
+                    && !self.named.contains(found.as_str())
                 {
                     *self.words.entry(found.as_str().to_string()).or_default() += 1;
                 }
@@ -1197,6 +1210,9 @@ impl Batch<'_> {
                 break p;
             }
         };
+        if self.redactor.steps[step].rare {
+            self.named.insert(value.to_string());
+        }
         self.forward.insert((step, value.to_string()), p.clone());
         self.back.insert(p.clone(), value.to_string());
         p
@@ -1277,6 +1293,15 @@ impl Batch<'_> {
         &self.counts
     }
 
+    /// A restorer for a text that arrives in pieces (an answer's deltas).
+    pub fn restoring(&self) -> Restoring<'_, 'a> {
+        Restoring {
+            batch: self,
+            held: String::new(),
+            unrestored: 0,
+        }
+    }
+
     /// The classes `refuse_if_left` names that are still detected in `text`, a text as the model
     /// would be shown it. A capitalised word counts as a rare name only when the batch's
     /// originals hold it at most `rare_limit` times, and not when it ends the text and begins a
@@ -1306,6 +1331,56 @@ impl Batch<'_> {
             && self.words.iter().any(|(word, n)| {
                 *n > self.redactor.rare_limit && word.len() > tail.len() && word.starts_with(tail)
             })
+    }
+}
+
+/// The longest tail a [`Restoring`] holds back as a possible start of a placeholder.
+const HELD_MAX: usize = 128;
+
+/// Restores the pieces of one text as they arrive: each piece is restored up to a tail that may
+/// be the start of a placeholder the next piece completes (an `[` with no `]` after it, no white
+/// space and at most [`HELD_MAX`] bytes); that tail is held back until the next piece or
+/// [`Restoring::finish`] decides it. So no reader of the pieces sees half a placeholder.
+pub struct Restoring<'b, 'a> {
+    batch: &'b Batch<'a>,
+    held: String,
+    unrestored: usize,
+}
+
+impl Restoring<'_, '_> {
+    /// `piece` after what was held back, restored up to a tail that may be a split placeholder.
+    pub fn push(&mut self, piece: &str) -> String {
+        self.held.push_str(piece);
+        let keep = match self.held.rfind('[') {
+            Some(at)
+                if self.held.len() - at <= HELD_MAX
+                    && !self.held[at..]
+                        .chars()
+                        .any(|c| c == ']' || c.is_whitespace()) =>
+            {
+                at
+            }
+            _ => self.held.len(),
+        };
+        let ready: String = self.held.drain(..keep).collect();
+        self.restore(ready)
+    }
+
+    /// What is still held back, restored, and how many placeholder-shaped strings of the whole
+    /// text had no value.
+    pub fn finish(mut self) -> (String, usize) {
+        let rest = std::mem::take(&mut self.held);
+        let out = self.restore(rest);
+        (out, self.unrestored)
+    }
+
+    fn restore(&mut self, text: String) -> String {
+        let mut value = Value::String(text);
+        self.unrestored += self.batch.restore(&mut value);
+        match value {
+            Value::String(s) => s,
+            _ => unreachable!("restore keeps a string a string"),
+        }
     }
 }
 
@@ -2424,5 +2499,41 @@ mod tests {
             stored.contains("oauth2-pkce"),
             "a non-secret fact was masked irreversibly: {stored}"
         );
+    }
+
+    #[test]
+    fn a_placeholder_split_across_two_pieces_is_held_back_and_restored_whole() {
+        let r = redactor(&[m::RedactionClass::Email], &[]);
+        let mut batch = r.batch();
+        batch.reserve("write to help@acme.example");
+        assert_eq!(
+            batch.replace("write to help@acme.example"),
+            "write to [Email-1]"
+        );
+        let mut restoring = batch.restoring();
+        assert_eq!(restoring.push("Write to [Ema"), "Write to ");
+        assert_eq!(restoring.push("il-1] or [Email-"), "help@acme.example or ");
+        assert_eq!(restoring.push("7], [x y"), "[Email-7], [x y");
+        assert_eq!(restoring.push(" [Ema"), " ");
+        let (rest, unrestored) = restoring.finish();
+        assert_eq!(rest, "[Ema");
+        assert_eq!(unrestored, 1, "[Email-7] has no value");
+    }
+
+    #[test]
+    fn a_rare_name_a_later_text_of_the_batch_repeats_keeps_its_placeholder() {
+        let r = redactor(&[m::RedactionClass::RareName], &[]);
+        let mut batch = r.batch();
+        batch.reserve("Zorblat leads the team.");
+        assert_eq!(
+            batch.replace("Zorblat leads the team."),
+            "[Name-1] leads the team."
+        );
+        batch.reserve("then ask Zorblat, Zorblat knows.");
+        assert_eq!(
+            batch.replace("then ask Zorblat, Zorblat knows."),
+            "then ask [Name-1], [Name-1] knows."
+        );
+        assert!(batch.left("then ask [Name-1], [Name-1] knows.").is_empty());
     }
 }
