@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.EdgeTypeWidening",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7",
+    "contract_digest": "slice-sha256/2:8c8a70777d638087a8c23a26622b5e8e2f6fede213e8b34b22c6a115e92031b5",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.EdgeTypeWidening": {
+      "title": "EdgeTypeWidening",
+      "x-ess-name": "cortex.instance.EdgeTypeWidening",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "add_source_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "add_target_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "add_source_types",
+        "add_target_types"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
