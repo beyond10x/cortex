@@ -2,14 +2,17 @@
 format: aep.planning-md/3
 id: story:schema-widens-edge-type
 kind: story
-status: draft
+status: active
 title: A schema proposal widens which node types an existing edge type connects
 summary: SchemaChange gains widen_edge_type, written as EKR's WidenEdgeType with each end whole, reviewed and applied like any proposal
 relations:
 - decomposes: epic:organisation-scale-instance
 - serves: vision:self-updating-instances
 - depends_on: story:schema-proposals-on-approval
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-17T02:21:56Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-17T02:21:56Z", actor: "human:timo", revision: 3}
 ---
 ## Outcome
 
