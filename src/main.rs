@@ -18,7 +18,7 @@ use cortex_cli::instance::{Layout, Meta};
 use cortex_cli::ports::{cost_decimal, Ports, Shared, SharedRef};
 use cortex_cli::schedule::{self, Systemd};
 use cortex_cli::snapshot::{self, Refusal, RestoreError};
-use cortex_cli::{ekr, home, instance, model_map, quality, run, schema, spec, structured};
+use cortex_cli::{ekr, eval, home, instance, model_map, quality, run, schema, spec, structured};
 
 /// Spin up EKR knowledge brains from a spec, fed on a schedule by Connectors data sources.
 #[derive(Parser)]
@@ -152,6 +152,11 @@ enum Command {
         #[arg(long)]
         sample: i64,
     },
+    /// Eval sets asked of an instance end to end and scored.
+    Eval {
+        #[command(subcommand)]
+        command: EvalCommand,
+    },
     /// One data source of an instance.
     Source {
         #[command(subcommand)]
@@ -222,6 +227,26 @@ enum SchemaCommand {
     /// (`cortex.instance.ApplySchemaProposals`): in an EKR stage on a `postgres` store, after a
     /// snapshot on a `sqlite` store, held to the spec's gate.
     Apply { name: String, stamp: String },
+}
+
+#[derive(Subcommand)]
+enum EvalCommand {
+    /// Ask each case of an eval set and score each answer with no model, by the fact strings it
+    /// must contain and the node ids it must cite; write `eval/<UTC stamp>/results.jsonl` and
+    /// `summary.json` (`cortex.instance.RunEval`).
+    Run {
+        name: String,
+        /// The set: a JSON object whose `cases` are `cortex.eval-case/1` cases.
+        #[arg(long)]
+        set: PathBuf,
+        /// `mcp`: the instance's model with the store's MCP reader; `ask`: a running
+        /// `cortex ask serve`; `replay`: the answers of the eval run `--from` names.
+        #[arg(long, value_parser = ["mcp", "ask", "replay"])]
+        runner: String,
+        /// For `replay`: the stamp of the eval run under `eval/` whose answers to score again.
+        #[arg(long)]
+        from: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -408,6 +433,15 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
         Command::Remove { name } => remove(app, ctx, &name),
         Command::Restore { name, snapshot } => restore(app, ctx, &name, &snapshot),
         Command::Quality { name, sample } => quality(app, ctx, &name, sample),
+        Command::Eval {
+            command:
+                EvalCommand::Run {
+                    name,
+                    set,
+                    runner,
+                    from,
+                },
+        } => eval_run(app, ctx, &name, &set, &runner, from.as_deref()),
         Command::Schema {
             decide: Some(decide),
             ..
@@ -1723,6 +1757,109 @@ fn quality(app: &mut App, ctx: &Ctx, name: &str, sample: i64) -> ExitCode {
         },
     };
     print("quality", &done)
+}
+
+fn eval_run(
+    app: &mut App,
+    ctx: &Ctx,
+    name: &str,
+    set: &Path,
+    runner: &str,
+    from: Option<&str>,
+) -> ExitCode {
+    const CMD: &str = "cortex.instance.RunEval";
+    let runner = eval::runner_of(runner).expect("clap admits only the three runners");
+    // An unknown name asks nothing; the generated behaviour answers `no-such-instance`.
+    let known = ctx.shared.borrow().registry.instances.contains_key(name);
+    let mut dir = None;
+    if known {
+        let layout = Layout::new(ctx.home.instance_dir(name));
+        // As `quality`: the set, the spec and a replayed run are read under the lock; the model
+        // calls and the files under `eval/<stamp>/` need none, so scheduled runs do not wait.
+        let prepared = eval::prepare(&layout, set, runner, from);
+        drop(ctx.lock.borrow_mut().take());
+        let result = prepared.and_then(|p| eval::run(&layout, &ctx.tools, p, ctx.home));
+        let mut shared = ctx.shared.borrow_mut();
+        // The order the generated behaviour takes the values in: the stamp, the seven counts,
+        // the two token counts, the cost.
+        match result {
+            Ok(e) => {
+                shared.strings.push_back(e.stamp.clone());
+                shared.integers.extend([
+                    e.cases,
+                    e.passed,
+                    e.facts_expected,
+                    e.facts_found,
+                    e.nodes_expected,
+                    e.nodes_found,
+                    e.model_calls,
+                ]);
+                shared
+                    .optional_integers
+                    .extend([e.input_tokens, e.output_tokens]);
+                shared.optional_decimals.push_back(cost_decimal(e.cost_usd));
+                dir = Some(e.dir);
+            }
+            Err(eval::Failure::Set(reason)) => {
+                shared.external.insert((CMD, "set-invalid"), true);
+                shared.strings.push_back(reason);
+            }
+            Err(eval::Failure::Runner(reason)) => {
+                shared.external.insert((CMD, "runner-failed"), true);
+                shared.strings.push_back(reason);
+            }
+        }
+    }
+    let done = match app.run_eval(m::RunEval {
+        name: m::InstanceName(name.to_string()),
+        set: set.display().to_string(),
+        runner,
+        from: from.map(str::to_string),
+    }) {
+        Err(e) => return fail(e),
+        Ok(m::RunEvalOutcome::Evaluated { eval_ran: e }) => {
+            let mut detail = json!({
+                "name": e.name.0,
+                "stamp": e.stamp,
+                "runner": eval::runner_name(e.runner),
+                "cases": e.cases,
+                "passed": e.passed,
+                "facts_expected": e.facts_expected,
+                "facts_found": e.facts_found,
+                "nodes_expected": e.nodes_expected,
+                "nodes_found": e.nodes_found,
+                "model_calls": e.model_calls,
+                "input_tokens": e.input_tokens,
+                "output_tokens": e.output_tokens,
+                "cost_usd": e.cost_usd.map(|c| c.0),
+            });
+            // The run's directory is not on the event.
+            if let Some(dir) = dir {
+                detail["dir"] = json!(dir);
+            }
+            Done {
+                outcome: "evaluated",
+                ok: true,
+                detail,
+            }
+        }
+        Ok(m::RunEvalOutcome::SetInvalid { error }) => Done {
+            outcome: "set-invalid",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
+        Ok(m::RunEvalOutcome::RunnerFailed { error }) => Done {
+            outcome: "runner-failed",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
+        Ok(m::RunEvalOutcome::NoSuchInstance { error }) => Done {
+            outcome: "no-such-instance",
+            ok: false,
+            detail: json!({"name": error.name.0}),
+        },
+    };
+    print("eval run", &done)
 }
 
 fn propose_schema(

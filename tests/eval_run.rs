@@ -112,27 +112,41 @@ fn eval(w: &World, args: &[&str]) -> (i32, Value) {
 
 /// The `mcp` run of the acceptance; answers its directory.
 fn mcp_run(w: &World, name: &str, set: &Path) -> PathBuf {
-    let (code, out) = eval(w, &[name, "--set", set.to_str().unwrap(), "--runner", "mcp"]);
+    let (code, out) = eval(
+        w,
+        &[name, "--set", set.to_str().unwrap(), "--runner", "mcp"],
+    );
     assert_eq!(
         (code, out["outcome"].as_str()),
         (0, Some("evaluated")),
         "{out}"
     );
-    PathBuf::from(out["detail"]["dir"].as_str().expect("the detail names the run's directory"))
+    PathBuf::from(
+        out["detail"]["dir"]
+            .as_str()
+            .expect("the detail names the run's directory"),
+    )
 }
 
 #[test]
 fn two_cases_one_answered_with_its_fact_and_node_score_one_of_two_and_name_the_missing_fact() {
     let w = instance("asked");
     let set = two_cases(&w);
-    let (code, out) = eval(&w, &["asked", "--set", set.to_str().unwrap(), "--runner", "mcp"]);
+    let (code, out) = eval(
+        &w,
+        &["asked", "--set", set.to_str().unwrap(), "--runner", "mcp"],
+    );
     assert_eq!(
         (code, out["outcome"].as_str()),
         (0, Some("evaluated")),
         "{out}"
     );
     let d = &out["detail"];
-    assert_eq!((d["cases"].clone(), d["passed"].clone()), (json!(2), json!(1)), "{out}");
+    assert_eq!(
+        (d["cases"].clone(), d["passed"].clone()),
+        (json!(2), json!(1)),
+        "{out}"
+    );
     assert_eq!(d["runner"], "mcp", "{out}");
     assert_eq!(
         (d["facts_expected"].clone(), d["facts_found"].clone()),
@@ -171,8 +185,18 @@ fn two_cases_one_answered_with_its_fact_and_node_score_one_of_two_and_name_the_m
     assert_eq!(lines[0]["cited_nodes"], json!(["node-widget"]));
     assert_eq!(lines[1]["id"], "gadget");
     assert_eq!(lines[1]["passed"], false, "{}", lines[1]);
-    assert_eq!(lines[1]["missing_facts"], json!(["Gadget runtime"]), "{}", lines[1]);
-    assert_eq!(lines[1]["missing_nodes"], json!(["node-gadget"]), "{}", lines[1]);
+    assert_eq!(
+        lines[1]["missing_facts"],
+        json!(["Gadget runtime"]),
+        "{}",
+        lines[1]
+    );
+    assert_eq!(
+        lines[1]["missing_nodes"],
+        json!(["node-gadget"]),
+        "{}",
+        lines[1]
+    );
 
     let summary: Value =
         serde_json::from_slice(&std::fs::read(dirs[0].join("summary.json")).unwrap()).unwrap();
@@ -227,14 +251,21 @@ fn replay_of_a_run_gives_its_verdicts_again_and_starts_no_model() {
         "replay started the model"
     );
     let d = &out["detail"];
-    assert_eq!((d["cases"].clone(), d["passed"].clone()), (json!(2), json!(1)), "{out}");
+    assert_eq!(
+        (d["cases"].clone(), d["passed"].clone()),
+        (json!(2), json!(1)),
+        "{out}"
+    );
     assert_eq!(d["runner"], "replay", "{out}");
     assert_eq!(d["model_calls"], json!(0), "{out}");
     assert_eq!(d["cost_usd"], "0.0000", "{out}");
     let again = PathBuf::from(d["dir"].as_str().unwrap());
     assert_ne!(again, first);
     assert_eq!(verdicts(&again), verdicts(&first));
-    assert_eq!(results(&again)[1]["missing_facts"], json!(["Gadget runtime"]));
+    assert_eq!(
+        results(&again)[1]["missing_facts"],
+        json!(["Gadget runtime"])
+    );
 }
 
 #[test]
@@ -276,7 +307,16 @@ fn a_set_that_is_not_cortex_eval_case_1_is_set_invalid_and_asks_no_model() {
     let mut bad = case("q", "Who develops the Widget engine?", "widget", "n");
     bad["format"] = json!("cortex.eval-case/2");
     std::fs::write(&path, json!({"cases": [bad]}).to_string()).unwrap();
-    let (code, out) = eval(&w, &["invalid", "--set", path.to_str().unwrap(), "--runner", "mcp"]);
+    let (code, out) = eval(
+        &w,
+        &[
+            "invalid",
+            "--set",
+            path.to_str().unwrap(),
+            "--runner",
+            "mcp",
+        ],
+    );
     assert_eq!(
         (code, out["outcome"].as_str()),
         (1, Some("set-invalid")),
@@ -298,8 +338,16 @@ fn a_set_that_is_not_cortex_eval_case_1_is_set_invalid_and_asks_no_model() {
         json!({"cases": [case("q", "a?", "x", "n"), case("q", "b?", "y", "m")]}).to_string(),
     ] {
         std::fs::write(&path, text).unwrap();
-        let (code, out) =
-            eval(&w, &["invalid", "--set", path.to_str().unwrap(), "--runner", "mcp"]);
+        let (code, out) = eval(
+            &w,
+            &[
+                "invalid",
+                "--set",
+                path.to_str().unwrap(),
+                "--runner",
+                "mcp",
+            ],
+        );
         assert_eq!(
             (code, out["outcome"].as_str()),
             (1, Some("set-invalid")),
@@ -315,12 +363,28 @@ fn replay_without_from_and_from_beside_another_runner_are_set_invalid() {
     let set = two_cases(&w);
     let s = set.to_str().unwrap();
     let (code, out) = eval(&w, &["fromless", "--set", s, "--runner", "replay"]);
-    assert_eq!((code, out["outcome"].as_str()), (1, Some("set-invalid")), "{out}");
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("set-invalid")),
+        "{out}"
+    );
     let (code, out) = eval(
         &w,
-        &["fromless", "--set", s, "--runner", "mcp", "--from", "20261017T000000Z"],
+        &[
+            "fromless",
+            "--set",
+            s,
+            "--runner",
+            "mcp",
+            "--from",
+            "20261017T000000Z",
+        ],
     );
-    assert_eq!((code, out["outcome"].as_str()), (1, Some("set-invalid")), "{out}");
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("set-invalid")),
+        "{out}"
+    );
     assert!(eval_dirs(&w, "fromless").is_empty());
 }
 
@@ -354,7 +418,13 @@ fn the_ask_runner_without_a_running_service_is_runner_failed() {
     let set = two_cases(&w);
     let (code, out) = eval(
         &w,
-        &["serviceless", "--set", set.to_str().unwrap(), "--runner", "ask"],
+        &[
+            "serviceless",
+            "--set",
+            set.to_str().unwrap(),
+            "--runner",
+            "ask",
+        ],
     );
     assert_eq!(
         (code, out["outcome"].as_str()),
@@ -379,7 +449,10 @@ fn the_ask_runner_without_a_running_service_is_runner_failed() {
 fn an_unknown_instance_is_no_such_instance() {
     let w = instance("known");
     let set = two_cases(&w);
-    let (code, out) = eval(&w, &["unknown", "--set", set.to_str().unwrap(), "--runner", "mcp"]);
+    let (code, out) = eval(
+        &w,
+        &["unknown", "--set", set.to_str().unwrap(), "--runner", "mcp"],
+    );
     assert_eq!(
         (code, out["outcome"].as_str()),
         (1, Some("no-such-instance")),
@@ -407,7 +480,10 @@ echo '{{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.
             root = w.root.display()
         ),
     );
-    let (code, out) = eval(&w, &["broken", "--set", set.to_str().unwrap(), "--runner", "mcp"]);
+    let (code, out) = eval(
+        &w,
+        &["broken", "--set", set.to_str().unwrap(), "--runner", "mcp"],
+    );
     assert_eq!(
         (code, out["outcome"].as_str()),
         (1, Some("runner-failed")),

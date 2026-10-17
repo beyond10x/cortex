@@ -129,8 +129,7 @@ fn case_of(v: &Value, n: usize) -> Result<m::EvalCase, String> {
 /// The `cortex.instance.EvalSet` of `text`: an object whose `cases` are `cortex.eval-case/1`
 /// cases, at least one, with distinct ids.
 pub fn parse_set(text: &str) -> Result<m::EvalSet, String> {
-    let doc: Value =
-        serde_json::from_str(text).map_err(|e| format!("the set is not JSON: {e}"))?;
+    let doc: Value = serde_json::from_str(text).map_err(|e| format!("the set is not JSON: {e}"))?;
     let items = doc
         .get("cases")
         .and_then(Value::as_array)
@@ -284,10 +283,17 @@ pub struct Prepared {
 }
 
 /// The answers `results.jsonl` of the run `from` recorded, by case id.
-fn recorded(layout: &Layout, from: &str) -> Result<BTreeMap<String, (String, Vec<String>)>, String> {
+fn recorded(
+    layout: &Layout,
+    from: &str,
+) -> Result<BTreeMap<String, (String, Vec<String>)>, String> {
     let path = layout.dir.join("eval").join(from).join("results.jsonl");
-    let text = std::fs::read_to_string(&path)
-        .map_err(|e| format!("the eval run {from} recorded no results ({}: {e})", path.display()))?;
+    let text = std::fs::read_to_string(&path).map_err(|e| {
+        format!(
+            "the eval run {from} recorded no results ({}: {e})",
+            path.display()
+        )
+    })?;
     let mut answers = BTreeMap::new();
     for (n, line) in text.lines().enumerate() {
         let v: Value = serde_json::from_str(line)
@@ -340,30 +346,29 @@ pub fn prepare(
         _ => {}
     }
     let spec = layout.load_spec().map_err(Failure::Runner)?;
-    let answers = match runner {
-        m::EvalRunner::Mcp => {
-            let store = layout.store_handle(&spec);
-            Answers::Mcp(mcp_config(&store).map_err(Failure::Runner)?)
-        }
-        m::EvalRunner::Replay => {
-            let from = from.unwrap_or_default();
-            let answers = recorded(layout, from).map_err(Failure::Runner)?;
-            if let Some(c) = set.cases.iter().find(|c| !answers.contains_key(&c.id)) {
-                return Err(Failure::Runner(format!(
-                    "the eval run {from} recorded no answer for the case {:?}",
-                    c.id
-                )));
+    let answers =
+        match runner {
+            m::EvalRunner::Mcp => {
+                let store = layout.store_handle(&spec);
+                Answers::Mcp(mcp_config(&store).map_err(Failure::Runner)?)
             }
-            Answers::Replay(answers)
-        }
-        m::EvalRunner::Ask => {
-            return Err(Failure::Runner(
+            m::EvalRunner::Replay => {
+                let from = from.unwrap_or_default();
+                let answers = recorded(layout, from).map_err(Failure::Runner)?;
+                if let Some(c) = set.cases.iter().find(|c| !answers.contains_key(&c.id)) {
+                    return Err(Failure::Runner(format!(
+                        "the eval run {from} recorded no answer for the case {:?}",
+                        c.id
+                    )));
+                }
+                Answers::Replay(answers)
+            }
+            m::EvalRunner::Ask => return Err(Failure::Runner(
                 "no cortex ask serve answered for this instance: this cortex has no ask service \
                  to ask"
                     .into(),
-            ))
-        }
-    };
+            )),
+        };
     Ok(Prepared {
         spec,
         set,
@@ -433,11 +438,14 @@ pub fn run(
                     None => None,
                 };
                 if let Err(why) = tokens.check() {
-                    return Err(Failure::Runner(format!("{why}; {}", so_far(n, of, cost_usd))));
+                    return Err(Failure::Runner(format!(
+                        "{why}; {}",
+                        so_far(n, of, cost_usd)
+                    )));
                 }
-                let remaining = daily
-                    .allow_bound(remaining)
-                    .map_err(|why| Failure::Runner(format!("{why}; {}", so_far(n, of, cost_usd))))?;
+                let remaining = daily.allow_bound(remaining).map_err(|why| {
+                    Failure::Runner(format!("{why}; {}", so_far(n, of, cost_usd)))
+                })?;
                 let prompt = format!("Question: {}\n", case.question);
                 let asked = model.ask_with_mcp(
                     ANSWER_PROMPT,

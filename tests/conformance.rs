@@ -270,7 +270,7 @@ fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Val
             .unwrap_or_else(|| panic!("{event}.{field}: unsupported shape {descriptor}"));
         if let Some(key) = descriptor
             .keys()
-            .find(|k| !matches!(k.as_str(), "holds" | "kind" | "optional"))
+            .find(|k| !matches!(k.as_str(), "holds" | "kind" | "optional" | "variants"))
         {
             panic!("{event}.{field}: unsupported shape key {key}");
         }
@@ -285,6 +285,24 @@ fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Val
             match fields.get(field) {
                 None => assert!(optional, "{event} lacks {field}"),
                 Some(value) => assert!(value.is_array(), "{event}.{field}: {value} is no list"),
+            }
+            continue;
+        }
+        // An enum is present unless optional, and one of the variants the suite states.
+        if holds == Some("enum") {
+            let variants: Vec<&str> = descriptor
+                .get("variants")
+                .and_then(Value::as_array)
+                .unwrap_or_else(|| panic!("{event}.{field}: an enum states no variants"))
+                .iter()
+                .map(|v| v.as_str().expect("a variant is a string"))
+                .collect();
+            match fields.get(field) {
+                None => assert!(optional, "{event} lacks {field}"),
+                Some(value) => assert!(
+                    value.as_str().is_some_and(|v| variants.contains(&v)),
+                    "{event}.{field}: {value} is none of {variants:?}"
+                ),
             }
             continue;
         }
