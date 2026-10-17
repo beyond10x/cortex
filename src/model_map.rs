@@ -200,6 +200,15 @@ fn ask_spec(a: &s::CortexAskAskSpec) -> Result<ma::AskSpec, MapError> {
             EssPresence::Absent => None,
             EssPresence::Present(t) => Some(int(t, "ask.slow_after_ms")?),
         },
+        records: match &a.records {
+            EssPresence::Absent => None,
+            EssPresence::Present(r) => Some(ma::PostgresRecords {
+                url: r.url.clone(),
+                schema: r.schema.clone(),
+                ca_file: opt(&r.ca_file),
+                connection: connection_ref(&r.connection),
+            }),
+        },
     })
 }
 

@@ -212,6 +212,18 @@ enum AskCommand {
         #[arg(long)]
         spec: PathBuf,
     },
+    /// The records process of an instance on a `postgres` store, which the service starts
+    /// through `connectors connections launch --consumer cortex-records`: reads the role's
+    /// password from descriptor 3, migrates the schema, then runs the service's statements, one
+    /// JSON line each way on its standard input and output.
+    Records {
+        #[arg(long)]
+        url: String,
+        #[arg(long)]
+        schema: String,
+        #[arg(long)]
+        ca_file: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -366,6 +378,25 @@ fn main() -> ExitCode {
         Command::Ask {
             command: AskCommand::Serve { spec },
         } => ask_serve(&home, &spec),
+        Command::Ask {
+            command:
+                AskCommand::Records {
+                    url,
+                    schema,
+                    ca_file,
+                },
+        } => match cortex_cli::ask::records::postgres::serve_process(
+            &url,
+            &schema,
+            ca_file.as_deref(),
+            std::path::Path::new(cortex_cli::instance::LAUNCH_PASSWORD_FILE),
+        ) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("cortex: {e}");
+                ExitCode::from(1)
+            }
+        },
         command => {
             // `restore` does not wait for the lock: while another command holds it, it answers
             // `busy` and writes nothing.

@@ -82,7 +82,9 @@ components:
       answers `POST /ask` as a stream of events over the instance's store, read through the EKR MCP
       reader. The batch component `cortex` serves no port; this one serves the spec's `ask.listen`.
       It keeps every answer with its votes and a review queue in `ask.sqlite` in the instance
-      directory, and purges them after the spec's `retention_days`.
+      directory, or, for an instance on a `postgres` store, in a PostgreSQL schema of their own
+      through a records process launched by Connectors (`cortex ask records`), and purges them
+      after the spec's `retention_days`.
     owns:
       domains:
         - cortex.ask

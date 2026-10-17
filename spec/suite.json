@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "785a52f01fac9f330a345df82303219f49a355f40ae72a498b663dbb8a26c5e6",
-    "contract_digest": "ea271169878b423bc3c2b22eb59a3d14dea5eb2f741ac5807d5ea0e053e37b22",
+    "spec_digest": "7d8468225c0615bc54d37ab20d8a5ed011c6af620b27b8f62299e46196457ec1",
+    "contract_digest": "e28cd1562bab08223ec6f65f42a29bccbb41a2ebb899f233ef6abd757672022d",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
@@ -1598,6 +1598,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -2142,6 +2152,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -3287,6 +3307,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -3697,6 +3727,16 @@
                     "node": "spec.ask.link_templates.node-1"
                   },
                   "listen": "spec.ask.listen-1",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file-1",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter-1",
+                      "connection": "spec.ask.records.connection.connection-1",
+                      "profile": "spec.ask.records.connection.profile-1"
+                    },
+                    "schema": "spec.ask.records.schema-1",
+                    "url": "spec.ask.records.url-1"
+                  },
                   "retention_days": 2.0,
                   "slow_after_ms": 2.0
                 },
@@ -3957,6 +3997,16 @@
                     "node": "spec.ask.link_templates.node-2"
                   },
                   "listen": "spec.ask.listen-2",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file-2",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter-2",
+                      "connection": "spec.ask.records.connection.connection-2",
+                      "profile": "spec.ask.records.connection.profile-2"
+                    },
+                    "schema": "spec.ask.records.schema-2",
+                    "url": "spec.ask.records.url-2"
+                  },
                   "retention_days": 3.0,
                   "slow_after_ms": 3.0
                 },
@@ -4678,6 +4728,16 @@
                     "node": "spec.ask.link_templates.node-1048594"
                   },
                   "listen": "spec.ask.listen-1048594",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file-1048594",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter-1048594",
+                      "connection": "spec.ask.records.connection.connection-1048594",
+                      "profile": "spec.ask.records.connection.profile-1048594"
+                    },
+                    "schema": "spec.ask.records.schema-1048594",
+                    "url": "spec.ask.records.url-1048594"
+                  },
                   "retention_days": 1048595.0,
                   "slow_after_ms": 1048595.0
                 },
@@ -5287,6 +5347,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -5668,6 +5738,16 @@
                     "node": "spec.ask.link_templates.node-1"
                   },
                   "listen": "spec.ask.listen-1",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file-1",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter-1",
+                      "connection": "spec.ask.records.connection.connection-1",
+                      "profile": "spec.ask.records.connection.profile-1"
+                    },
+                    "schema": "spec.ask.records.schema-1",
+                    "url": "spec.ask.records.url-1"
+                  },
                   "retention_days": 2.0,
                   "slow_after_ms": 2.0
                 },
@@ -6385,6 +6465,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -6872,6 +6962,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -7282,6 +7382,16 @@
                     "node": "spec.ask.link_templates.node-1"
                   },
                   "listen": "spec.ask.listen-1",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file-1",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter-1",
+                      "connection": "spec.ask.records.connection.connection-1",
+                      "profile": "spec.ask.records.connection.profile-1"
+                    },
+                    "schema": "spec.ask.records.schema-1",
+                    "url": "spec.ask.records.url-1"
+                  },
                   "retention_days": 2.0,
                   "slow_after_ms": 2.0
                 },
@@ -7542,6 +7652,16 @@
                     "node": "spec.ask.link_templates.node-2"
                   },
                   "listen": "spec.ask.listen-2",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file-2",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter-2",
+                      "connection": "spec.ask.records.connection.connection-2",
+                      "profile": "spec.ask.records.connection.profile-2"
+                    },
+                    "schema": "spec.ask.records.schema-2",
+                    "url": "spec.ask.records.url-2"
+                  },
                   "retention_days": 3.0,
                   "slow_after_ms": 3.0
                 },
@@ -8000,6 +8120,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -9792,6 +9922,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -10273,6 +10413,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -10524,6 +10674,10 @@
         {
           "kind": "type",
           "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
         },
         {
           "kind": "type",
@@ -10906,6 +11060,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -11106,6 +11270,10 @@
         {
           "kind": "type",
           "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
         },
         {
           "kind": "type",
@@ -11477,6 +11645,16 @@
                     "node": "spec.ask.link_templates.node-1048594"
                   },
                   "listen": "spec.ask.listen-1048594",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file-1048594",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter-1048594",
+                      "connection": "spec.ask.records.connection.connection-1048594",
+                      "profile": "spec.ask.records.connection.profile-1048594"
+                    },
+                    "schema": "spec.ask.records.schema-1048594",
+                    "url": "spec.ask.records.url-1048594"
+                  },
                   "retention_days": 1048595.0,
                   "slow_after_ms": 1048595.0
                 },
@@ -11669,6 +11847,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -12053,6 +12241,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -12253,6 +12451,10 @@
         {
           "kind": "type",
           "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
         },
         {
           "kind": "type",
@@ -12631,6 +12833,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -12831,6 +13043,10 @@
         {
           "kind": "type",
           "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
         },
         {
           "kind": "type",
@@ -13209,6 +13425,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -13409,6 +13635,10 @@
         {
           "kind": "type",
           "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
         },
         {
           "kind": "type",
@@ -13780,6 +14010,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -15781,6 +16021,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -17048,6 +17298,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -17244,6 +17504,10 @@
         {
           "kind": "type",
           "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
         },
         {
           "kind": "type",
@@ -17615,6 +17879,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -17858,6 +18132,10 @@
         {
           "kind": "type",
           "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
         },
         {
           "kind": "type",
@@ -18240,6 +18518,16 @@
                     "node": "spec.ask.link_templates.node-1048594"
                   },
                   "listen": "spec.ask.listen-1048594",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file-1048594",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter-1048594",
+                      "connection": "spec.ask.records.connection.connection-1048594",
+                      "profile": "spec.ask.records.connection.profile-1048594"
+                    },
+                    "schema": "spec.ask.records.schema-1048594",
+                    "url": "spec.ask.records.url-1048594"
+                  },
                   "retention_days": 1048595.0,
                   "slow_after_ms": 1048595.0
                 },
@@ -18428,6 +18716,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -18664,6 +18962,16 @@
                     "node": "spec.ask.link_templates.node-1048595"
                   },
                   "listen": "spec.ask.listen-1048595",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file-1048595",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter-1048595",
+                      "connection": "spec.ask.records.connection.connection-1048595",
+                      "profile": "spec.ask.records.connection.profile-1048595"
+                    },
+                    "schema": "spec.ask.records.schema-1048595",
+                    "url": "spec.ask.records.url-1048595"
+                  },
                   "retention_days": 1048596.0,
                   "slow_after_ms": 1048596.0
                 },
@@ -18852,6 +19160,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -19239,6 +19557,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -19482,6 +19810,10 @@
         {
           "kind": "type",
           "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
         },
         {
           "kind": "type",
@@ -19864,6 +20196,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -20060,6 +20402,10 @@
         {
           "kind": "type",
           "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
         },
         {
           "kind": "type",
@@ -20431,6 +20777,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -21296,6 +21652,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -21783,6 +22149,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -22478,6 +22854,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -23470,6 +23856,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -24485,6 +24881,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -24978,6 +25384,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -25734,6 +26150,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -26303,6 +26729,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -27980,6 +28416,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -28703,6 +29149,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -30165,6 +30621,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -30617,6 +31083,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -31925,6 +32401,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -32461,6 +32947,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -32997,6 +33493,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -33533,6 +34039,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -34205,6 +34721,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -34741,6 +35267,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -35277,6 +35813,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -35874,6 +36420,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -36820,6 +37376,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -37441,6 +38007,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -37977,6 +38553,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -38228,6 +38814,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -38629,6 +39225,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -38948,6 +39554,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -39324,6 +39940,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -39643,6 +40269,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -39962,6 +40598,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -40281,6 +40927,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -40728,6 +41384,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -41047,6 +41713,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -41366,6 +42042,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -41813,6 +42499,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -42146,6 +42842,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -42465,6 +43171,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -43147,6 +43863,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -43714,6 +44440,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -44340,6 +45076,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -44954,6 +45700,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -45304,6 +46060,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -45535,6 +46301,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -45710,6 +46486,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -45931,6 +46717,10 @@
         {
           "kind": "type",
           "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
         },
         {
           "kind": "type",
@@ -46328,6 +47118,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -46559,6 +47359,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -46716,6 +47526,16 @@
                     "node": "spec.ask.link_templates.node-1"
                   },
                   "listen": "spec.ask.listen-1",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file-1",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter-1",
+                      "connection": "spec.ask.records.connection.connection-1",
+                      "profile": "spec.ask.records.connection.profile-1"
+                    },
+                    "schema": "spec.ask.records.schema-1",
+                    "url": "spec.ask.records.url-1"
+                  },
                   "retention_days": 2.0,
                   "slow_after_ms": 2.0
                 },
@@ -46937,6 +47757,10 @@
         {
           "kind": "type",
           "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
         },
         {
           "kind": "type",
@@ -47323,6 +48147,16 @@
                     "node": "spec.ask.link_templates.node-1"
                   },
                   "listen": "spec.ask.listen-1",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file-1",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter-1",
+                      "connection": "spec.ask.records.connection.connection-1",
+                      "profile": "spec.ask.records.connection.profile-1"
+                    },
+                    "schema": "spec.ask.records.schema-1",
+                    "url": "spec.ask.records.url-1"
+                  },
                   "retention_days": 2.0,
                   "slow_after_ms": 2.0
                 },
@@ -47480,6 +48314,16 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "records": {
+                    "ca_file": "spec.ask.records.ca_file",
+                    "connection": {
+                      "adapter": "spec.ask.records.connection.adapter",
+                      "connection": "spec.ask.records.connection.connection",
+                      "profile": "spec.ask.records.connection.profile"
+                    },
+                    "schema": "spec.ask.records.schema",
+                    "url": "spec.ask.records.url"
+                  },
                   "retention_days": 1.0,
                   "slow_after_ms": 1.0
                 },
@@ -47749,6 +48593,10 @@
         {
           "kind": "type",
           "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
         },
         {
           "kind": "type",

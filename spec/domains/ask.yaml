@@ -6,8 +6,9 @@ summary: >-
   writes nothing to it; its model is the instance's model gateway, spoken to as an
   OpenAI-compatible endpoint. Every answer is streamed and kept as an answer record, with the votes
   of its readers; an answer voted down, failed or slow is queued for review. The records are
-  cortex's own, in `ask.sqlite` in the instance directory, never in the store, and are purged after
-  the spec's `retention_days`.
+  cortex's own, never in the store: in `ask.sqlite` in the instance directory on a `sqlite` store,
+  in a PostgreSQL schema of their own on a `postgres` one; they are purged after the spec's
+  `retention_days`.
 
 naming:
   wire: ask
@@ -66,12 +67,16 @@ types:
   # UNMAPPED: the refusal of a `retention_days` or `slow_after_ms` of 0 or less (the service does
   # not start, exit 2, naming the field) is a check on an Integer the specification has no
   # construct for; `ask::check` holds it and `tests/answer_records.rs` tests it.
-  # For an instance whose store is `postgres`, the records belong in a schema of their own (never
-  # EKR's), reached through a Connectors connection of their own. That backend is not built yet:
-  # until it is, the service does not start on such an instance (exit 2, naming `store.backend`).
-  # UNMAPPED: that refusal reads the instance's `store` beside its `ask` section, a rule across two
-  # fields of `cortex.instance.InstanceSpec` the specification has no construct for; `ask::check`
-  # holds it and `tests/answer_records.rs` tests it.
+  # For an instance whose store is `sqlite`, the records live in `ask.sqlite` in the instance
+  # directory and `records` is absent. For an instance whose store is `postgres`, they live in a
+  # schema of their own, never EKR's, named by `records` (`cortex.ask.PostgresRecords`), which such
+  # an instance must give.
+  # UNMAPPED: `records` is required on a `postgres` store and refused on a `sqlite` one (the service
+  # does not start, exit 2, naming `ask.records`), and its `schema` is refused when it is the
+  # schema of the store's `ekr.postgres/1` file (naming `ask.records.schema`): each reads the
+  # instance's `store` beside its `ask` section, a rule across two fields of
+  # `cortex.instance.InstanceSpec` the specification has no construct for; `ask::check` holds them
+  # and `tests/answer_records.rs` tests them.
   - name: cortex.ask.AskSpec
     kind: struct
     fields:
@@ -82,6 +87,33 @@ types:
       - {name: guidance, type: Optional<String>}
       - {name: retention_days, type: Optional<Integer>}
       - {name: slow_after_ms, type: Optional<Integer>}
+      - {name: records, type: Optional<cortex.ask.PostgresRecords>}
+
+  # Where the answer records of an instance on a `postgres` store live: the tables `answers`,
+  # `votes`, `reviews` and `schema_version` in the PostgreSQL schema `schema`, which is never the
+  # store's (EKR's) schema. `url` is a PostgreSQL connection URL with no password
+  # (`postgres://<role>@<host>:<port>/<database>`); TLS is required unless it says
+  # `sslmode=disable`, and the server's certificate is verified against `ca_file` when given, else
+  # against the public web roots. `connection` is the Connectors connection that holds the role's
+  # `{"password": …}` document: the service starts its records process,
+  # `cortex ask records --url <url> --schema <schema> [--ca-file <file>]`, through
+  # `connectors connections launch --consumer cortex-records`, which hands that process the
+  # document on descriptor 3. Only that process reads it, to connect; the service itself, its log
+  # and its files never see it. The records process creates the schema when it is missing and
+  # migrates its tables to the schema version of this cortex when it starts; a schema at a newer
+  # version is refused. No field carries a credential.
+  # UNMAPPED: `schema` must be a lowercase PostgreSQL identifier (`[a-z_][a-z0-9_]*`, at most 63
+  # bytes, not starting with `pg_`), `url` must carry no password and be a `postgres://` or
+  # `postgresql://` URL, and `connection` names an id or a profile, not both: checks on Strings the
+  # specification has no construct for; `ask::check` and `spec::check` hold them and
+  # `tests/answer_records.rs` tests them.
+  - name: cortex.ask.PostgresRecords
+    kind: struct
+    fields:
+      - {name: url, type: String}
+      - {name: schema, type: String}
+      - {name: ca_file, type: Optional<String>}
+      - {name: connection, type: cortex.instance.ConnectionRef}
 
   # The identity of one answer the service gave or failed to give: a UUIDv7, so ids sort by time.
   - name: cortex.ask.AnswerId
@@ -218,8 +250,9 @@ types:
       error: cortex.ask.AskError
 
 entities:
-  # One answer the service gave or failed to give, kept in `ask.sqlite` in the instance directory
-  # (a table of cortex's own, never the store's) for `retention_days`. `identity` is the asker's;
+  # One answer the service gave or failed to give, kept in `ask.sqlite` in the instance directory,
+  # or in the schema `ask.records` names (`cortex.ask.PostgresRecords`), a table of cortex's own,
+  # never the store's, for `retention_days`. `identity` is the asker's;
   # `answer` the answer as `done` carried it, absent unless `outcome` is `answered`; `reason` the
   # `error` event's reason otherwise. `tool_calls` are the `tool` events of the answer, in order.
   # The token counts and `steps` are those of the `done` event (0 without one); `latency_ms` the

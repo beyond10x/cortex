@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "785a52f01fac9f330a345df82303219f49a355f40ae72a498b663dbb8a26c5e6",
-    "contract_digest": "slice-sha256/2:186536e3db207172c3c2eeb837dd06c4fd80159ed21c44e305270bd859b22598",
+    "source_digest": "7d8468225c0615bc54d37ab20d8a5ed011c6af620b27b8f62299e46196457ec1",
+    "contract_digest": "slice-sha256/2:f6dc17e34c1e00e7e3ee94d2dfbb13f7833d582ae35f7a395c66cb5dd78af8ee",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -62,6 +62,9 @@
         },
         "slow_after_ms": {
           "type": "integer"
+        },
+        "records": {
+          "$ref": "#/$defs/cortex.ask.PostgresRecords"
         }
       },
       "required": [
@@ -84,6 +87,32 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "cortex.ask.PostgresRecords": {
+      "title": "PostgresRecords",
+      "x-ess-name": "cortex.ask.PostgresRecords",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "ca_file": {
+          "type": "string"
+        },
+        "connection": {
+          "$ref": "#/$defs/cortex.instance.ConnectionRef"
+        }
+      },
+      "required": [
+        "url",
+        "schema",
+        "connection"
+      ],
       "additionalProperties": false
     },
     "cortex.instance.ChangeDetection": {

@@ -34,9 +34,54 @@ use crate::redact::Batch;
 /// The event contract `cortex.ask.AskStatus.format` names.
 pub const EVENTS_FORMAT: &str = "cortex.ask-events/1";
 
+/// Why the records of `spec` have no place, naming the field, never a value: a `postgres` store
+/// without `ask.records`, a `sqlite` store with one, or `ask.records` whose schema is no lowercase
+/// identifier, is reserved or is the store's own (the `schema` of its `ekr.postgres/1` file,
+/// `public` when it names none), or whose URL is no PostgreSQL URL or carries a password.
+fn records_refusal(spec: &m::InstanceSpec, ask: &ma::AskSpec) -> Option<String> {
+    use records::postgres::{schema_refusal, url_refusal};
+    let store = match &spec.store {
+        Some(m::StoreSpec::Postgres(p)) => p,
+        _ => {
+            return ask.records.as_ref().map(|_| {
+                "ask.records: names a PostgreSQL schema, and the instance's store is not \
+                 `postgres`; the records of a `sqlite` store live in ask.sqlite in the instance \
+                 directory"
+                    .to_string()
+            })
+        }
+    };
+    let Some(r) = &ask.records else {
+        return Some(
+            "ask.records: an instance on a `postgres` store keeps its answer records in a \
+             PostgreSQL schema of their own, and the spec names none"
+                .into(),
+        );
+    };
+    if let Some(refused) = schema_refusal(&r.schema).or_else(|| url_refusal(&r.url)) {
+        return Some(refused);
+    }
+    let config: Option<Value> = std::fs::read(crate::ekr::expand(&store.config))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+    let Some(config) = config else {
+        return Some(
+            "ask.records.schema: cannot be held apart from the store's schema: the \
+             ekr.postgres/1 file store.value.config names cannot be read as JSON"
+                .into(),
+        );
+    };
+    let ekr_schema = config["schema"].as_str().unwrap_or("public");
+    (ekr_schema == r.schema).then(|| {
+        "ask.records.schema: is the store's own schema (the schema of the ekr.postgres/1 file \
+         store.value.config names); the answer records live in a schema of their own"
+            .into()
+    })
+}
+
 /// Why a spec cannot be served, naming the field: no `ask` section, no model gateway, a limit of
 /// 0 or less (a retention or slow threshold included), an identity header that is no header name,
-/// an empty listen address, or a `postgres` store, whose records backend is not built yet.
+/// an empty listen address, or records with no place ([`records_refusal`]).
 pub fn check(spec: &m::InstanceSpec) -> Result<&ma::AskSpec, String> {
     let ask = spec
         .ask
@@ -71,8 +116,8 @@ pub fn check(spec: &m::InstanceSpec) -> Result<&ma::AskSpec, String> {
             return Err(format!("{field}: {value} is not above 0"));
         }
     }
-    if let Some(m::StoreSpec::Postgres(_)) = &spec.store {
-        return Err(records::POSTGRES_NOT_YET.into());
+    if let Some(refused) = records_refusal(spec, ask) {
+        return Err(refused);
     }
     let header = &ask.identity_header;
     if header.is_empty()
