@@ -1477,6 +1477,11 @@ mod tests {
                 source_types: vec!["Product".into()],
                 target_types: vec!["Maker".into()],
             }),
+            m::SchemaChange::WidenEdgeType(m::EdgeTypeWidening {
+                name: "MADE_BY".into(),
+                add_source_types: vec!["Service".into()],
+                add_target_types: vec![],
+            }),
             m::SchemaChange::AddProperty(m::PropertyChange {
                 owner: "Product".into(),
                 property: prop(),

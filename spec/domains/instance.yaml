@@ -754,8 +754,8 @@ types:
       - {name: name, type: String}
       - {name: into, type: List<String>}
 
-  # The closed list of ontology changes a schema proposal names. EKR applies the first four and
-  # `widen_edge_type` as schema transactions (`DefineNodeType`, `DefineEdgeType`, `ModifyProperty`,
+  # The closed list of ontology changes a schema proposal names. EKR applies the first five
+  # as schema transactions (`DefineNodeType`, `DefineEdgeType`, `ModifyProperty`,
   # `WidenEdgeType`); it removes, merges and splits nothing, so the other five are recorded for
   # review only.
   - name: cortex.instance.SchemaChange
