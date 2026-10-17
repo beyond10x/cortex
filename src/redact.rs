@@ -14,9 +14,10 @@
 //! one lower-case letter) seen at most `rare_limit` times (default 1) in the batch's document texts,
 //! unless it is a stop word or a placeholder's label. A word, hyphenated or not, is replaced whole
 //! or not at all: no part of a word the batch holds more often is a rare name, in the replacement
-//! and in [`Batch::left`] alike. A word glued to a lower-case letter before it is part of an
-//! identifier and skipped whole; one glued to an underscore or an uncased letter is read again
-//! from its next letter. The part of a word before a span another step hides is read alone, as
+//! and in [`Batch::left`] alike. A word glued to a lower-case letter before it, directly or
+//! through underscores, is part of an identifier and skipped whole; otherwise an underscore and an
+//! uncased letter (CJK text) bound a word, as a space does. The part of a word before a span
+//! another step hides is read alone, as
 //! the check reads it beside the placeholder, and the check does not read a text's last word as
 //! a rare name when it begins a word the batch holds more often (a cut at `max_chars`). Only what
 //! the model would see counts: words
@@ -245,10 +246,15 @@ fn date() -> &'static Regex {
 }
 
 /// A word that starts with a capital letter; `O'Neil` and `Jean-Luc` are one word, `Jane's` is
-/// `Jane`.
+/// `Jane`. A letter of a script without case (`\p{Lo}`, CJK text) ends it: `Rowan` of
+/// `会议上Rowan发言了`.
 fn capitalised_word() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
-    R.get_or_init(|| regex(r"\p{Lu}[\p{L}\p{M}]*(?:(?:['’]\p{Lu}|-\p{L})[\p{L}\p{M}]*)*"))
+    R.get_or_init(|| {
+        regex(
+            r"\p{Lu}[\p{L}\p{M}--\p{Lo}]*(?:(?:['’]\p{Lu}|-[\p{L}--\p{Lo}])[\p{L}\p{M}--\p{Lo}]*)*",
+        )
+    })
 }
 
 /// A digest written as one, `sha256:<hex>` or `sha384-<base64>`: not a credential.
@@ -585,12 +591,25 @@ fn link(text: &str, r: Range<usize>) -> Option<Range<usize>> {
     ok.then_some(r.start..r.start + end)
 }
 
-/// A capitalised word standing alone, with a lower-case letter in it: `API` is not one.
+/// Whether `c` joins the word beside it: a digit or a letter of a script with case. An underscore
+/// and a letter of a script without case (CJK text) bound a word, as a space does.
+fn joins(c: Option<char>) -> bool {
+    c.is_some_and(|c| {
+        c.is_alphanumeric() && (!c.is_alphabetic() || c.is_lowercase() || c.is_uppercase())
+    })
+}
+
+/// The character before `at`, past any underscores: `e` for `Identifier` in
+/// `snake_case_Identifier`, a space for `Rowan` in ` _Rowan_`.
+fn joined_before(text: &str, at: usize) -> Option<char> {
+    text[..at].trim_end_matches('_').chars().next_back()
+}
+
+/// A capitalised word standing alone, with a lower-case letter in it: `API` is not one. A word
+/// glued to a lower-case letter, directly or through underscores, is part of an identifier.
 fn capitalised(text: &str, r: Range<usize>) -> Option<Range<usize>> {
-    let b = before(text, r.start);
-    let ok = !alphanumeric(b)
-        && b != Some('_')
-        && !alphanumeric(after(text, r.end))
+    let ok = !joins(joined_before(text, r.start))
+        && !joins(after(text, r.end))
         && text[r.clone()].chars().any(char::is_lowercase);
     ok.then_some(r)
 }
@@ -933,9 +952,7 @@ impl Redactor {
                 let head =
                     text[whole.start..t.start.max(whole.start)].trim_end_matches(['-', '\'', '’']);
                 let head = whole.start..whole.start + head.len();
-                let b = before(text, head.start);
-                if !alphanumeric(b)
-                    && b != Some('_')
+                if !joins(joined_before(text, head.start))
                     && text[head.clone()].chars().any(char::is_lowercase)
                     && self.rare(&text[head.clone()], words)
                 {
@@ -951,11 +968,12 @@ impl Redactor {
                 (Some(c), None) => Some(c),
             };
             let Some(range) = range.filter(|r| !r.is_empty()) else {
-                // A rare-name step skips a word glued to a lower-case letter before it whole
-                // (`useFoo-Bar` is an identifier); one glued to an underscore or a letter of a
-                // script without case (`_Jean-Luc_`, CJK text) is read again from its next
-                // letter, so its tail is still a name.
-                pos = if step.rare && before(text, whole.start).is_some_and(char::is_lowercase) {
+                // A rare-name step skips a word glued to a lower-case letter before it whole,
+                // directly or through underscores (`useFoo-Bar`, `snake_case_Identifier` are
+                // identifiers).
+                pos = if step.rare
+                    && joined_before(text, whole.start).is_some_and(char::is_lowercase)
+                {
                     whole.end.max(retry)
                 } else {
                     retry
