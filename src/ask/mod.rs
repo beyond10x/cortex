@@ -5,13 +5,20 @@
 //! The loop ([`answer`]) is synchronous: it runs on a blocking thread of the server
 //! ([`serve`]) and hands each event to the stream as it happens. Nothing here is on the path of
 //! `cortex run`.
+//!
+//! Under the instance's `redaction` policy one answer is one redaction batch: the question and
+//! each tool result are redacted before the model is given them ([`shown`]), a result still
+//! holding a `refuse_if_left` class is replaced by a withheld tool error, and the answer is
+//! restored as it is streamed. [`proxy`] does the same for the eval `mcp` runner's `claude`.
 
 pub mod cite;
 pub mod limit;
 pub mod mcp;
 pub mod model;
+pub mod proxy;
 pub mod serve;
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -21,6 +28,7 @@ use serde_json::{json, Value};
 
 use crate::home::Home;
 use crate::instance::Layout;
+use crate::redact::Batch;
 
 /// The event contract `cortex.ask.AskStatus.format` names.
 pub const EVENTS_FORMAT: &str = "cortex.ask-events/1";
@@ -133,12 +141,15 @@ pub struct Settings {
     pub reader: ReaderCommand,
     /// The system prompt: how to use the tools and cite, then the spec's `guidance`.
     pub system: String,
+    /// The instance's `redaction` policy, which [`Settings::of`] checked compiles.
+    pub redaction: Option<m::RedactionPolicy>,
 }
 
 impl Settings {
     /// The settings of a spec [`check`] accepted.
     pub fn of(home: &Home, spec: &m::InstanceSpec) -> Result<Self, String> {
         let ask = check(spec)?.clone();
+        crate::redact::compile(spec.redaction.as_ref())?;
         let gateway = spec.model.gateway.as_ref().expect("checked");
         let mut system = format!(
             "You answer questions over the knowledge brain `{name}`: {description}\n\
@@ -161,6 +172,7 @@ impl Settings {
             reader: ReaderCommand::of(home, spec)?,
             system,
             ask,
+            redaction: spec.redaction.clone(),
         })
     }
 }
@@ -208,6 +220,50 @@ pub fn cut(text: &str, max: usize) -> (&str, bool) {
         end -= 1;
     }
     (&text[..end], true)
+}
+
+/// The tool error the model is given for a result in which the redaction policy still detects
+/// a class its `refuse_if_left` names (`left`): it names the classes, never what was found.
+pub fn withheld(left: &BTreeSet<&str>) -> String {
+    format!(
+        "The tool result was withheld by policy: the instance's redaction policy still detects {} \
+         in it.",
+        left.iter().copied().collect::<Vec<_>>().join(", ")
+    )
+}
+
+/// A tool result's text as the model is shown it, whether it was cut and whether it was
+/// withheld. Without a policy (`batch` is `None`) it is `text` cut to `max` bytes. With one it is
+/// redacted with the answer's batch, then cut; a cut text in which a `refuse_if_left` class is
+/// still detected is replaced by the [`withheld`] tool error.
+pub fn shown(batch: Option<&mut Batch<'_>>, text: &str, max: usize) -> (String, bool, bool) {
+    let Some(batch) = batch else {
+        let (shown, truncated) = cut(text, max);
+        return (shown.to_string(), truncated, false);
+    };
+    batch.reserve(text);
+    let redacted = batch.replace(text);
+    let (shown, truncated) = cut(&redacted, max);
+    let left = batch.left(shown);
+    if left.is_empty() {
+        (shown.to_string(), truncated, false)
+    } else {
+        (withheld(&left), false, true)
+    }
+}
+
+/// `text` with every placeholder of `batch` that has a value restored; `text` itself without a
+/// policy.
+fn restored(batch: Option<&Batch<'_>>, text: &str) -> String {
+    match batch {
+        None => text.to_string(),
+        Some(batch) => {
+            let mut restoring = batch.restoring();
+            let mut out = restoring.push(text);
+            out.push_str(&restoring.finish().0);
+            out
+        }
+    }
 }
 
 /// The last event of an answer: `done` for an answer, `error` for any other outcome.
@@ -289,6 +345,19 @@ pub fn answer(
             message: message.into(),
         })
     };
+    // One question is one redaction batch: one placeholder mapping, in memory, for this answer.
+    let redactor = match crate::redact::compile(settings.redaction.as_ref()) {
+        Ok(r) => r,
+        Err(reason) => return model_failed(reason),
+    };
+    let mut batch = redactor.as_ref().map(|r| r.batch());
+    let question = match batch.as_mut() {
+        Some(batch) => {
+            batch.reserve(question);
+            batch.replace(question)
+        }
+        None => question.to_string(),
+    };
     if !emit(status(0, "starting the reader")) {
         return gone();
     }
@@ -341,8 +410,27 @@ pub fn answer(
         if reply.tool_calls.is_empty() {
             let text = reply.content.unwrap_or_default();
             let cited = cite::cite(&text, settings.ask.link_templates.as_ref());
-            for piece in cited.answer.split_inclusive('\n') {
-                if !emit(ma::AskEvent::Delta(ma::AskDelta { text: piece.into() })) {
+            // Each delta is restored as it is sent, holding back a tail that may be a split
+            // placeholder; the answer is what the deltas carried.
+            let mut restoring = batch.as_ref().map(|b| b.restoring());
+            let mut pieces: Vec<String> = cited
+                .answer
+                .split_inclusive('\n')
+                .map(|piece| match restoring.as_mut() {
+                    Some(r) => r.push(piece),
+                    None => piece.to_string(),
+                })
+                .collect();
+            let mut unrestored = 0;
+            if let Some(r) = restoring {
+                let (rest, n) = r.finish();
+                pieces.push(rest);
+                unrestored = n;
+            }
+            let mut answer = String::new();
+            for piece in pieces.into_iter().filter(|p| !p.is_empty()) {
+                answer.push_str(&piece);
+                if !emit(ma::AskEvent::Delta(ma::AskDelta { text: piece })) {
                     return gone();
                 }
             }
@@ -350,7 +438,7 @@ pub fn answer(
                 answered: ma::Answered {
                     identity: identity.into(),
                     done: ma::AskDone {
-                        answer: cited.answer,
+                        answer,
                         nodes: cited.nodes,
                         evidence: cited.evidence,
                         input_tokens: usage.input,
@@ -358,13 +446,15 @@ pub fn answer(
                         cached_tokens: usage.cached,
                         context_tokens: context,
                         steps: step,
+                        unrestored: unrestored as i64,
                     },
                 },
             };
         }
         // Text before a tool call is the model thinking aloud, not the answer.
         if let Some(text) = reply.content.as_deref().filter(|t| !t.trim().is_empty()) {
-            if !emit(ma::AskEvent::Delta(ma::AskDelta { text: text.into() }))
+            let text = restored(batch.as_ref(), text);
+            if !emit(ma::AskEvent::Delta(ma::AskDelta { text }))
                 || !emit(ma::AskEvent::Discard(ma::AskDiscard { step }))
             {
                 return gone();
@@ -383,7 +473,7 @@ pub fn answer(
                 },
                 Err(e) => (format!("the arguments are not JSON: {e}"), true),
             };
-            let (shown, truncated) = cut(&text, max_bytes);
+            let (shown, truncated, withheld) = shown(batch.as_mut(), &text, max_bytes);
             if !emit(ma::AskEvent::Tool(ma::AskTool {
                 step,
                 name: call.name.clone(),
@@ -391,6 +481,7 @@ pub fn answer(
                 result_bytes: shown.len() as i64,
                 truncated,
                 failed,
+                withheld,
             })) {
                 return gone();
             }

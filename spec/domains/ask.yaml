@@ -75,7 +75,12 @@ types:
   # One tool call the model asked for, after its result was read. `arguments` is the call's
   # arguments as the model gave them (JSON text); `result_bytes` the bytes of the rewritten result
   # the model is shown; `truncated` whether it was cut to `max_result_bytes`; `failed` whether the
-  # reader answered an error, which the model is shown as the result.
+  # reader answered an error, which the model is shown as the result. With the instance's
+  # `redaction` policy (`cortex.instance.RedactionPolicy`) the result is redacted before the model
+  # is shown it, one placeholder mapping for the whole answer; `withheld` says a class the
+  # policy's `refuse_if_left` names was still detected in it, so the model was shown a tool error
+  # saying the result was withheld by policy instead, and the answer went on. Without a policy
+  # `withheld` is false.
   - name: cortex.ask.AskTool
     kind: struct
     fields:
@@ -85,6 +90,7 @@ types:
       - {name: result_bytes, type: Integer}
       - {name: truncated, type: Boolean}
       - {name: failed, type: Boolean}
+      - {name: withheld, type: Boolean}
 
   # A piece of the model's text, in order. Text of a step that then asks for a tool is withdrawn by
   # a `discard` event.
@@ -106,7 +112,11 @@ types:
   # gateway reported in its `usage`: `prompt_tokens`, `completion_tokens` and
   # `prompt_tokens_details.cached_tokens` (0 when not reported). `context_tokens` is the prompt
   # tokens of the last call, the size of the context the answer was made in; `steps` the model
-  # calls made.
+  # calls made. With a `redaction` policy the question and every tool result were redacted, and
+  # every placeholder in the answer that has a value is restored, in `answer` and in each `delta`;
+  # a `delta` that ends inside a possible placeholder holds that tail back for the next `delta` or
+  # `done`. `unrestored` counts the placeholders in the answer that have no value: they stay as
+  # written. Without a policy it is 0.
   - name: cortex.ask.AskDone
     kind: struct
     fields:
@@ -118,6 +128,7 @@ types:
       - {name: cached_tokens, type: Integer}
       - {name: context_tokens, type: Integer}
       - {name: steps, type: Integer}
+      - {name: unrestored, type: Integer}
 
   # The last event of an answer that has none. `reason` is one of `unidentified`, `rate-limit`,
   # `step-limit`, `time-limit`, `model-failed`, `reader-failed` and `bad-request`; `message` says

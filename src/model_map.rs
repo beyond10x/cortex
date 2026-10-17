@@ -221,6 +221,7 @@ pub fn ask_event(event: &ma::AskEvent) -> s::CortexAskAskEvent {
                 nodes: d.nodes.clone(),
                 output_tokens: n(d.output_tokens),
                 steps: n(d.steps),
+                unrestored: n(d.unrestored),
             }),
         }),
         ma::AskEvent::Error(e) => s::CortexAskAskEvent::V3(s::CortexAskAskEventVariant3 {
@@ -251,6 +252,7 @@ pub fn ask_event(event: &ma::AskEvent) -> s::CortexAskAskEvent {
                 result_bytes: n(t.result_bytes),
                 step: n(t.step),
                 truncated: t.truncated,
+                withheld: t.withheld,
             }),
         }),
     }

@@ -179,6 +179,7 @@ impl Context for Ports {
             cached_tokens: 0,
             context_tokens: 0,
             steps: 0,
+            unrestored: 0,
         }
     }
     fn external(&mut self, command: ExternalCommand<'_>, outcome: &'static str) -> bool {

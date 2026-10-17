@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use super::{CallError, ReaderCommand};
 
 /// The MCP protocol version cortex asks for.
-const PROTOCOL: &str = "2025-06-18";
+pub(crate) const PROTOCOL: &str = "2025-06-18";
 
 pub struct Reader {
     child: Child,

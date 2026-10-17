@@ -71,10 +71,10 @@ the event's name and its `data:` line the event as one JSON object, `{"event": <
 | event | fields | when |
 |---|---|---|
 | `status` | `format` (`cortex.ask-events/1`), `step`, `message` | first, then before each model call |
-| `tool` | `step`, `name`, `arguments`, `result_bytes`, `truncated`, `failed` | after each tool call the model asked for |
+| `tool` | `step`, `name`, `arguments`, `result_bytes`, `truncated`, `failed`, `withheld` | after each tool call the model asked for |
 | `delta` | `text` | a piece of the model's text, in order |
 | `discard` | `step` | withdraws the `delta`s since the last `discard`: text before a tool call, not the answer |
-| `done` | `answer`, `nodes`, `evidence`, `input_tokens`, `output_tokens`, `cached_tokens`, `context_tokens`, `steps` | the last event of an answer |
+| `done` | `answer`, `nodes`, `evidence`, `input_tokens`, `output_tokens`, `cached_tokens`, `context_tokens`, `steps`, `unrestored` | the last event of an answer |
 | `error` | `reason`, `message`, `retry_after` (with `rate-limit` only) | the last event of a request with no answer |
 
 `done.answer` is the answer with each citation marker, `[node:<id>]` or `[evidence:<id>]`, turned
@@ -98,13 +98,37 @@ over every model call (`prompt_tokens`, `completion_tokens`, `prompt_tokens_deta
 A tool result is rewritten into compact text (each text that is JSON written without whitespace)
 and cut at a character boundary to `max_result_bytes`; its `tool` event says whether it was cut.
 
+## Redaction
+
+With a [`redaction`](./spec-file.md#redaction) policy in the spec, the model reads the store only
+redacted, as extraction shows it documents. One question is one redaction batch: one placeholder
+mapping, held in memory for that answer and written nowhere.
+
+- The question and each tool result are redacted before the model is given them, with the
+  policy's classes, `known_names`, `rules` and `rare_limit`: the same value is the same
+  placeholder (`[Email-1]`, `[Name-1]`) in every result of the answer, and a name replaced as rare
+  stays replaced when a later result repeats it. A result is redacted before it is cut to
+  `max_result_bytes`. Credentials and rules with a `replacement` are replaced irreversibly.
+- A result in which a class the policy's `refuse_if_left` names is still detected is not given to
+  the model: it gets a tool error saying the result was withheld by policy, naming the classes,
+  and the `tool` event says `withheld: true`. The answer goes on.
+- The answer is restored before the client sees it: each placeholder that has a value is replaced
+  by it, in every `delta` and in `done.answer`. A `delta` that ends inside a possible placeholder
+  holds that tail back until the next `delta` or `done`, so no client sees half a placeholder. A
+  placeholder with no value (one the model changed or invented) stays as written and is counted in
+  `done.unrestored`.
+
+Without a policy, the question and the tool results reach the model unchanged, `withheld` is
+always false and `unrestored` 0. Detection is by pattern, with the limits that
+[Limits](./limits.md) states for extraction.
+
 ```text
 event: status
 data: {"event":"status","value":{"format":"cortex.ask-events/1","message":"starting the reader","step":0}}
 
 event: tool
-data: {"event":"tool","value":{"arguments":"{\"query\":\"widget\"}","failed":false,"name":"search","result_bytes":35,"step":1,"truncated":false}}
+data: {"event":"tool","value":{"arguments":"{\"query\":\"widget\"}","failed":false,"name":"search","result_bytes":35,"step":1,"truncated":false,"withheld":false}}
 
 event: done
-data: {"event":"done","value":{"answer":"…","cached_tokens":100,"context_tokens":200,"evidence":[],"input_tokens":300,"nodes":["n-42"],"output_tokens":30,"steps":2}}
+data: {"event":"done","value":{"answer":"…","cached_tokens":100,"context_tokens":200,"evidence":[],"input_tokens":300,"nodes":["n-42"],"output_tokens":30,"steps":2,"unrestored":0}}
 ```

@@ -244,6 +244,7 @@ fn ask_event(e: AskPublished) -> (String, Value) {
                     "cached_tokens": e.done.cached_tokens,
                     "context_tokens": e.done.context_tokens,
                     "steps": e.done.steps,
+                    "unrestored": e.done.unrestored,
                 },
             }),
         ),

@@ -112,10 +112,14 @@ came from and is not scored.
 | `ask` | a running `cortex ask serve`. This release has none, so the runner answers `runner-failed` |
 | `replay` | the answers the eval run `--from <stamp>` (a directory under `eval/`) recorded, by case id and question: a case whose id the run recorded under another question, or a run with no `summary.json` (a failed run), is `runner-failed`. It asks no model; two replays of one run write the same `results.jsonl`, byte for byte |
 
-:::caution[The `mcp` runner does not redact store contents]
-What `ekr mcp` returns reaches the model as the store holds it: the spec's `redaction` policy,
-which `quality` and `schema` apply to what the model is shown, does not apply to the `mcp`
-runner's tool results in this release.
+:::note[Redaction under the `mcp` runner]
+With a `redaction` policy in the spec, the `mcp` runner's model reads the store through a
+redacting MCP server in the `cortex` process instead of `ekr mcp` directly: MCP over HTTP on
+`127.0.0.1`, under a random path, for one case. Each case is one redaction batch: its question and
+every tool result are redacted as the [ask service](./ask-service.md#redaction) redacts them, a
+result in which a `refuse_if_left` class is still detected reaches the model as a tool error saying
+it was withheld by policy, and the answer is restored before it is scored and written. Without a
+policy the model reads `ekr mcp` as before.
 :::
 
 It writes two files under `eval/<UTC stamp>/` in the instance directory:

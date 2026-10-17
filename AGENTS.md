@@ -157,8 +157,10 @@ this repository and published by the organisation's reusable workflow.
   Measured on 2026-10-05: 423 input tokens with these flags against 10,837 with the user's
   setting sources, which carry the user's global instructions. Keep the flags.
   The one call given a tool is the eval `mcp` runner's (`Model::ask_with_mcp`): the same flags plus
-  `--mcp-config` naming `ekr mcp` as its only server and `--allowedTools mcp__ekr`; its tool
-  results are not redacted yet.
+  `--mcp-config` naming `ekr mcp` as its only server and `--allowedTools mcp__ekr`. Under a
+  `redaction` policy that server is `src/ask/proxy.rs` instead, a redacting MCP server over HTTP
+  on `127.0.0.1` in front of `ekr mcp`, so the model reads the store only redacted, as the ask
+  service's tool loop does.
 
 ## Upstream facts the code works around
 
