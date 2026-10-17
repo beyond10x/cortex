@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.AskSpec",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:0762211215e172439b41b10785ea1a6d852dc8ca231713efdb2e8c9bb45b73df",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AskLimits": {
+      "title": "AskLimits",
+      "x-ess-name": "cortex.ask.AskLimits",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "max_steps": {
+          "type": "integer"
+        },
+        "max_result_bytes": {
+          "type": "integer"
+        },
+        "max_seconds": {
+          "type": "integer"
+        },
+        "per_identity_per_minute": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_steps",
+        "max_result_bytes",
+        "max_seconds",
+        "per_identity_per_minute"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.AskSpec": {
+      "title": "AskSpec",
+      "x-ess-name": "cortex.ask.AskSpec",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "listen": {
+          "type": "string"
+        },
+        "identity_header": {
+          "type": "string"
+        },
+        "limits": {
+          "$ref": "#/$defs/cortex.ask.AskLimits"
+        },
+        "link_templates": {
+          "$ref": "#/$defs/cortex.ask.LinkTemplates"
+        },
+        "guidance": {
+          "type": "string"
+        },
+        "retention_days": {
+          "type": "integer"
+        },
+        "slow_after_ms": {
+          "type": "integer"
+        },
+        "records": {
+          "$ref": "#/$defs/cortex.ask.PostgresRecords"
+        }
+      },
+      "required": [
+        "listen",
+        "identity_header",
+        "limits"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.LinkTemplates": {
+      "title": "LinkTemplates",
+      "x-ess-name": "cortex.ask.LinkTemplates",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "cortex.ask.PostgresRecords": {
+      "title": "PostgresRecords",
+      "x-ess-name": "cortex.ask.PostgresRecords",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "ca_file": {
+          "type": "string"
+        },
+        "connection": {
+          "$ref": "#/$defs/cortex.instance.ConnectionRef"
+        }
+      },
+      "required": [
+        "url",
+        "schema",
+        "connection"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.ConnectionRef": {
+      "title": "ConnectionRef",
+      "x-ess-name": "cortex.instance.ConnectionRef",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "profile": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "adapter"
+      ],
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "(defined(connection) or defined(profile))"
+      ]
+    }
+  }
+}

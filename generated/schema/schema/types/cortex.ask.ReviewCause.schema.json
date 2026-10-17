@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.ReviewCause",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:e283c3c9ec6d491c2004343fd2f3083be3d94244654835bb0ddd061d91f4d2ce",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.ReviewCause": {
+      "title": "ReviewCause",
+      "x-ess-name": "cortex.ask.ReviewCause",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "voted-down",
+        "failed",
+        "slow"
+      ]
+    }
+  }
+}

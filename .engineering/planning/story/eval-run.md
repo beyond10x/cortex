@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:eval-run
 kind: story
-status: draft
+status: implemented
 title: An operator runs an eval set end to end and gets a deterministic score
 summary: cortex eval run over a question set with mcp, ask or replay runners, scored by expected facts and cited nodes
 relations:
@@ -10,7 +10,11 @@ relations:
 - serves: vision:self-updating-instances
 - depends_on: architecture-decision-record:answer-service-in-cortex
 - informed_by: story:quality-judge
-revision: 1
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-17T03:36:58Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-17T03:36:58Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-17T16:10:56Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

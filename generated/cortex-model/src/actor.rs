@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7
-// contract digest a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96
+// model digest dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda
+// contract digest 7d415de25a37eea36ac6425b96c4fa73b380215c1b617c8e06d0464a3499f204
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Every actor the specification declares, and the commands each may invoke — as data.
@@ -13,6 +13,12 @@
 /// An actor the specification declares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Actor {
+    /// `cortex.ask.Asker`.
+    Asker,
+    /// `cortex.ask.Reviewer`.
+    Reviewer,
+    /// `cortex.ask.Service`.
+    Service,
     /// `cortex.instance.Operator`.
     Operator,
     /// `cortex.instance.Scheduler`.
@@ -22,6 +28,9 @@ pub enum Actor {
 impl Actor {
     /// Every declared actor, ordered by qualified name.
     pub const ALL: &'static [Actor] = &[
+        Actor::Asker,
+        Actor::Reviewer,
+        Actor::Service,
         Actor::Operator,
         Actor::Scheduler,
     ];
@@ -29,6 +38,9 @@ impl Actor {
     /// The actor's qualified name, as the specification spells it.
     pub const fn name(self) -> &'static str {
         match self {
+            Actor::Asker => "cortex.ask.Asker",
+            Actor::Reviewer => "cortex.ask.Reviewer",
+            Actor::Service => "cortex.ask.Service",
             Actor::Operator => "cortex.instance.Operator",
             Actor::Scheduler => "cortex.instance.Scheduler",
         }
@@ -39,7 +51,20 @@ impl Actor {
 /// actor that only observes.
 pub fn may(actor: Actor) -> &'static [&'static str] {
     match actor {
+        Actor::Asker => &[
+            "cortex.ask.Ask",
+            "cortex.ask.CastVote",
+        ],
+        Actor::Reviewer => &[
+            "cortex.ask.CloseReview",
+        ],
+        Actor::Service => &[
+            "cortex.ask.OpenReview",
+            "cortex.ask.PurgeExpired",
+            "cortex.ask.RecordAnswer",
+        ],
         Actor::Operator => &[
+            "cortex.instance.AddEvalCase",
             "cortex.instance.AddSource",
             "cortex.instance.AdoptInstance",
             "cortex.instance.ApplySchemaProposals",
@@ -51,6 +76,7 @@ pub fn may(actor: Actor) -> &'static [&'static str] {
             "cortex.instance.RejectSchemaProposals",
             "cortex.instance.RemoveInstance",
             "cortex.instance.RestoreSnapshot",
+            "cortex.instance.RunEval",
             "cortex.instance.UpdateInstance",
         ],
         Actor::Scheduler => &[

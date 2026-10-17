@@ -1,0 +1,300 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.AskEvent",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:2e1b47a0ca30014397b0dd8aa9c788bada21c43a411db4d51fba623a99d71896",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AskDelta": {
+      "title": "AskDelta",
+      "x-ess-name": "cortex.ask.AskDelta",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.AskDiscard": {
+      "title": "AskDiscard",
+      "x-ess-name": "cortex.ask.AskDiscard",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.AskDone": {
+      "title": "AskDone",
+      "x-ess-name": "cortex.ask.AskDone",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "answer_id": {
+          "type": "string"
+        },
+        "answer": {
+          "type": "string"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "input_tokens": {
+          "type": "integer"
+        },
+        "output_tokens": {
+          "type": "integer"
+        },
+        "cached_tokens": {
+          "type": "integer"
+        },
+        "context_tokens": {
+          "type": "integer"
+        },
+        "steps": {
+          "type": "integer"
+        },
+        "unrestored": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "answer_id",
+        "answer",
+        "nodes",
+        "evidence",
+        "input_tokens",
+        "output_tokens",
+        "cached_tokens",
+        "context_tokens",
+        "steps",
+        "unrestored"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.AskError": {
+      "title": "AskError",
+      "x-ess-name": "cortex.ask.AskError",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "retry_after": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "reason",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.AskEvent": {
+      "title": "AskEvent",
+      "x-ess-name": "cortex.ask.AskEvent",
+      "x-ess-kind": "union",
+      "oneOf": [
+        {
+          "title": "delta",
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "delta"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.ask.AskDelta"
+            }
+          },
+          "required": [
+            "event",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "discard",
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "discard"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.ask.AskDiscard"
+            }
+          },
+          "required": [
+            "event",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "done",
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "done"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.ask.AskDone"
+            }
+          },
+          "required": [
+            "event",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "error",
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "error"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.ask.AskError"
+            }
+          },
+          "required": [
+            "event",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "status",
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "status"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.ask.AskStatus"
+            }
+          },
+          "required": [
+            "event",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "tool",
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "tool"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.ask.AskTool"
+            }
+          },
+          "required": [
+            "event",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "x-ess-union-tag": "event"
+    },
+    "cortex.ask.AskStatus": {
+      "title": "AskStatus",
+      "x-ess-name": "cortex.ask.AskStatus",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "step": {
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "step",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.AskTool": {
+      "title": "AskTool",
+      "x-ess-name": "cortex.ask.AskTool",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "arguments": {
+          "type": "string"
+        },
+        "result_bytes": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "failed": {
+          "type": "boolean"
+        },
+        "withheld": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "step",
+        "name",
+        "arguments",
+        "result_bytes",
+        "truncated",
+        "failed",
+        "withheld"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

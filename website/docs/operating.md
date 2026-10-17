@@ -18,6 +18,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `bin/cortex.version` | the version of that copy, recorded when it is placed |
 | `instances/<name>/instance.yaml` | the frozen spec file, beside copies of the seed files and instructions it names |
 | `instances/<name>/store.sqlite` | the instance's EKR store, unless its spec names `store.backend: postgres`; then the store is in PostgreSQL, opened through the spec's `ekr.postgres/1` file |
+| `instances/<name>/ask.sqlite` | with `cortex ask serve` on a `sqlite` store, its answer records, votes and review items (on a `postgres` store they live in the schema `ask.records` names instead) ([Ask service](./ask-service.md#answer-records-votes-and-review)); kept `ask.retention_days` (default 90) |
 | `instances/<name>/host.json` | the EKR host document the store is opened with |
 | `instances/<name>/meta.json` | the viewer's port and the directory the spec was created from |
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
@@ -40,6 +41,18 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
   `OnCalendar=<schedule>` and `Persistent=true`; the service runs
   `<home>/bin/cortex --home <home> run <instance>/<source> --record-failure`.
 - `cortex-<instance>-view.service`, which runs `ekr view` on the store at the instance's port.
+
+### Which process serves what
+
+| process | serves |
+|---|---|
+| `cortex` (every command, the timers' runs included) | no port: it runs, prints one JSON line and exits; metrics are a file |
+| `ekr view`, in the viewer unit | the store's viewer, at `serve.view_port` |
+| `ekr mcp`, from `cortex mcp-line` | the store to one agent, over its stdio |
+| `cortex ask serve --spec <file>` | `POST /ask`, the votes and the review queue at the spec's `ask.listen` ([Ask service](./ask-service.md)); it starts its own `ekr mcp` per answer |
+
+cortex installs no unit for the ask service; run it under a unit or supervisor of your own, behind
+the guard that verifies the asker and sets the spec's `ask.identity_header`.
 
 Unit names carry no home, and every home of one user shares the unit directory. So each unit
 records the home that wrote it as `X-CortexHome=<home>` in its `[Unit]` section (a unit an earlier
@@ -598,6 +611,13 @@ configuration, given on the command line for this one call and never copied into
 its password stays wherever the operator keeps it. Name `schema_connection` to start that `ekr`
 through Connectors too; `<file>` must then name `"password_file": "/proc/self/fd/3"` and carry no
 `password` key, or `cortex create` refuses it as `seed-refused` before any `ekr` runs.
+
+The answer records of `cortex ask serve` on a `postgres` store have a password of their own, the
+records role's, in the connection `ask.records.connection` names. Only the records process reads
+it: the service starts `cortex ask records` through `connectors connections launch --consumer
+cortex-records`, which hands it the document on descriptor 3. A deployment pins the `cortex`
+binary as the consumer `cortex-records` in the Connectors configuration, with no variable passed
+([Ask service](./ask-service.md#records-on-a-postgresql-store)).
 
 ## Serving a store
 

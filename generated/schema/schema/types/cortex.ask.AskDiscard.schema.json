@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.AskDiscard",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:079e97c895a2fbec99e9912578501bd9de910e5d933a4c930f980ba037012576",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AskDiscard": {
+      "title": "AskDiscard",
+      "x-ess-name": "cortex.ask.AskDiscard",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

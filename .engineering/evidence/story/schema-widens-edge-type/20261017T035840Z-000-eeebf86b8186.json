@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-17T03:58:40Z",
+  "actor": "human:timo",
+  "artifact": "story:schema-widens-edge-type",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "release 0.5.6: full gate on 84b36af, failed unit tests fixed in 7f6b3d2 and rerun green; CI green on 7f6b3d28, pull request 77"
+  }
+}

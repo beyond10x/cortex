@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AnswerRecord",
+  "x-ess-name": "cortex.ask.AnswerRecord",
+  "x-ess-kind": "entity",
+  "type": "object",
+  "properties": {
+    "answer_id": {
+      "$ref": "#/$defs/cortex.ask.AnswerId"
+    },
+    "instance_name": {
+      "$ref": "#/$defs/cortex.instance.InstanceName",
+      "x-ess-relation": {
+        "name": "answers",
+        "kind": "owns",
+        "source": "cortex.instance.Instance",
+        "target": "cortex.ask.AnswerRecord",
+        "cardinality": "many",
+        "via": "instance_name"
+      }
+    },
+    "identity": {
+      "type": "string"
+    },
+    "question": {
+      "type": "string"
+    },
+    "answer": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "outcome": {
+      "$ref": "#/$defs/cortex.ask.AnswerOutcome"
+    },
+    "tool_calls": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/cortex.ask.AskTool"
+      }
+    },
+    "latency_ms": {
+      "type": "integer"
+    },
+    "input_tokens": {
+      "type": "integer"
+    },
+    "output_tokens": {
+      "type": "integer"
+    },
+    "cached_tokens": {
+      "type": "integer"
+    },
+    "context_tokens": {
+      "type": "integer"
+    },
+    "steps": {
+      "type": "integer"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "state": {
+      "$ref": "#/$defs/cortex.ask.AnswerRecord.State"
+    }
+  },
+  "required": [
+    "answer_id",
+    "instance_name",
+    "identity",
+    "question",
+    "outcome",
+    "tool_calls",
+    "latency_ms",
+    "input_tokens",
+    "output_tokens",
+    "cached_tokens",
+    "context_tokens",
+    "steps",
+    "at",
+    "state"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:93cee108cfba687f0868db46eec28dddc514ce939b3a7d04c9657a1e6c4348cb",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AnswerId": {
+      "title": "AnswerId",
+      "x-ess-name": "cortex.ask.AnswerId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "cortex.ask.AnswerOutcome": {
+      "title": "AnswerOutcome",
+      "x-ess-name": "cortex.ask.AnswerOutcome",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "answered",
+        "failed",
+        "limited"
+      ]
+    },
+    "cortex.ask.AnswerRecord.State": {
+      "title": "State",
+      "x-ess-name": "cortex.ask.AnswerRecord.State",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Kept"
+      ]
+    },
+    "cortex.ask.AskTool": {
+      "title": "AskTool",
+      "x-ess-name": "cortex.ask.AskTool",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "arguments": {
+          "type": "string"
+        },
+        "result_bytes": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "failed": {
+          "type": "boolean"
+        },
+        "withheld": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "step",
+        "name",
+        "arguments",
+        "result_bytes",
+        "truncated",
+        "failed",
+        "withheld"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.InstanceName": {
+      "title": "InstanceName",
+      "x-ess-name": "cortex.instance.InstanceName",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

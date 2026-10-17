@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7
-// contract digest a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96
+// model digest dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda
+// contract digest 7d415de25a37eea36ac6425b96c4fa73b380215c1b617c8e06d0464a3499f204
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Semantic types synthesised from the `cortex` specification, v1.
@@ -18,6 +18,7 @@
 #![deny(missing_docs)]
 
 pub mod actor;
+pub mod ask;
 pub mod behaviour;
 pub mod instance;
 pub mod json;

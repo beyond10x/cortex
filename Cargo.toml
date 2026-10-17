@@ -1,6 +1,6 @@
 [package]
 name = "cortex-cli"
-version = "0.5.6"
+version = "0.6.0"
 edition = "2021"
 description = "Spin up EKR knowledge brains from a spec, fed on a schedule by Connectors data sources."
 license = "Apache-2.0"
@@ -31,6 +31,19 @@ sha2 = "0.10"
 unicode-normalization = "0.1"
 uuid = { version = "1", features = ["v7"] }
 walkdir = "2"
+
+# The answer service (`cortex ask serve`, `src/ask/`) only: an async runtime, an HTTP server, its
+# event stream, and an HTTP client for the model gateway. Nothing on the path of `cortex run` uses them.
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time"] }
+tokio-stream = { version = "0.1", default-features = false }
+# The answer records of an instance on a `postgres` store (`src/ask/records/postgres.rs`): a
+# synchronous PostgreSQL client over TLS, in the records process `cortex ask records` alone.
+postgres = "0.19"
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
+tokio-postgres-rustls = "0.14"
+webpki-roots = "1"
 
 [dev-dependencies]
 tempfile = "3"

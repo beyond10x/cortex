@@ -37,7 +37,9 @@ stand; [Status](./status.mdx) lists what is planned.
   the names it lists in `known_names`, rare capitalised words (`RareName`), and whatever its own
   regular-expression `rules` match, with placeholders such as `[Email-1]`, `[Url-1]` and
   `[Name-1]` in what the model is shown. That covers a document's text, title, description and
-  source line, and the known entity names. Before the answer is applied, each placeholder is put
+  source line, and the known entity names; the question and every tool result of the
+  [ask service](./ask-service.md#redaction) and of the eval `mcp` runner. Before the answer is
+  applied or returned, each placeholder is put
   back. The store and its evidence therefore hold the personal data and stay searchable for it;
   only the model does not see it. A placeholder the model changed or invented stays as written
   and is counted as `unrestored` in the run's log. Detection is by pattern: a person's name is

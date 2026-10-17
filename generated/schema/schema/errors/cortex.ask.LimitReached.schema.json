@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LimitReached payload",
+  "description": "The answer reached the spec's step or time limit before the model answered.",
+  "x-ess-name": "cortex.ask.LimitReached",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "limit": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "limit"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:d3cb3f6d3b013e691d526cf414e524fbed6ef745c9009b831d6d00d0af624437",
+    "regenerate": "ess generate"
+  }
+}

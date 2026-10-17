@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ask a question input",
+  "x-ess-name": "cortex.ask.Ask",
+  "x-ess-kind": "command-input",
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string"
+    },
+    "identity": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "question",
+    "identity"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:c6aba90a1e1e769654fd9a2239779ef194a79263e832625d9bf187720d2a0729",
+    "regenerate": "ess generate"
+  }
+}

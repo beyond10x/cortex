@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvalReviewNotFound payload",
+  "description": "The instance's answer records hold no review item with this id, or not the answer record it belongs to (a purge took them); no case was added.",
+  "x-ess-name": "cortex.instance.EvalReviewNotFound",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "review_id": {
+      "$ref": "#/$defs/cortex.ask.ReviewId"
+    }
+  },
+  "required": [
+    "review_id"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:1c8b8282fc7d0ae39d972873632ead0f4cc9fb05aa3935f5b4b7d4238dc314f5",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.ReviewId": {
+      "title": "ReviewId",
+      "x-ess-name": "cortex.ask.ReviewId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

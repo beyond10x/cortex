@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Open a review item input",
+  "x-ess-name": "cortex.ask.OpenReview",
+  "x-ess-kind": "command-input",
+  "type": "object",
+  "properties": {
+    "review_id": {
+      "$ref": "#/$defs/cortex.ask.ReviewId"
+    },
+    "answer_id": {
+      "$ref": "#/$defs/cortex.ask.AnswerId"
+    },
+    "cause": {
+      "$ref": "#/$defs/cortex.ask.ReviewCause"
+    }
+  },
+  "required": [
+    "review_id",
+    "answer_id",
+    "cause"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:e0dba880155a222a7357aa137fdaee9bb01a1dbbe71edba940e3c1a535af2993",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AnswerId": {
+      "title": "AnswerId",
+      "x-ess-name": "cortex.ask.AnswerId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "cortex.ask.ReviewCause": {
+      "title": "ReviewCause",
+      "x-ess-name": "cortex.ask.ReviewCause",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "voted-down",
+        "failed",
+        "slow"
+      ]
+    },
+    "cortex.ask.ReviewId": {
+      "title": "ReviewId",
+      "x-ess-name": "cortex.ask.ReviewId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

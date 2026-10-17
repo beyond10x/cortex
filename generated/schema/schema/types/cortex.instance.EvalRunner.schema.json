@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.EvalRunner",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:c77af711ff717ca78731bfebcdb8170fb20d23aa1f7eceed7da851555efc2939",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.EvalRunner": {
+      "title": "EvalRunner",
+      "x-ess-name": "cortex.instance.EvalRunner",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "mcp",
+        "ask",
+        "replay"
+      ]
+    }
+  }
+}

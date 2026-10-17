@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.EvalSet",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:b14fd2b1760110d87a70a57ef28579823a4da7aefd3f2e1b02f338a0c1168557",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.ReviewId": {
+      "title": "ReviewId",
+      "x-ess-name": "cortex.ask.ReviewId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "cortex.instance.EvalCase": {
+      "title": "EvalCase",
+      "x-ess-name": "cortex.instance.EvalCase",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "question": {
+          "type": "string"
+        },
+        "expect_facts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expect_nodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "type": "string"
+        },
+        "review_id": {
+          "$ref": "#/$defs/cortex.ask.ReviewId"
+        }
+      },
+      "required": [
+        "format",
+        "id",
+        "question",
+        "expect_facts",
+        "expect_nodes"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.EvalSet": {
+      "title": "EvalSet",
+      "x-ess-name": "cortex.instance.EvalSet",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.instance.EvalCase"
+          }
+        }
+      },
+      "required": [
+        "cases"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

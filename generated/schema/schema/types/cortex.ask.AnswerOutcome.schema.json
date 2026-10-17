@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.AnswerOutcome",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:30761bf64b60eb9a68b25260c61dfdb39e7f0d3cc04cdf80cd21493dcd203d2e",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AnswerOutcome": {
+      "title": "AnswerOutcome",
+      "x-ess-name": "cortex.ask.AnswerOutcome",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "answered",
+        "failed",
+        "limited"
+      ]
+    }
+  }
+}

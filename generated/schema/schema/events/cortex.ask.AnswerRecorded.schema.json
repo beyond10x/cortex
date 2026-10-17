@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AnswerRecorded payload",
+  "x-ess-name": "cortex.ask.AnswerRecorded",
+  "x-ess-kind": "event-payload",
+  "type": "object",
+  "properties": {
+    "answer_id": {
+      "$ref": "#/$defs/cortex.ask.AnswerId"
+    },
+    "outcome": {
+      "$ref": "#/$defs/cortex.ask.AnswerOutcome"
+    }
+  },
+  "required": [
+    "answer_id",
+    "outcome"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:24269eade2abdc2e692d4c498456c8ae8cb38e4e86df18fe47bddd92f36a1217",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AnswerId": {
+      "title": "AnswerId",
+      "x-ess-name": "cortex.ask.AnswerId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "cortex.ask.AnswerOutcome": {
+      "title": "AnswerOutcome",
+      "x-ess-name": "cortex.ask.AnswerOutcome",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "answered",
+        "failed",
+        "limited"
+      ]
+    }
+  }
+}

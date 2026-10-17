@@ -18,7 +18,7 @@ use cortex_cli::instance::{Layout, Meta};
 use cortex_cli::ports::{cost_decimal, Ports, Shared, SharedRef};
 use cortex_cli::schedule::{self, Systemd};
 use cortex_cli::snapshot::{self, Refusal, RestoreError};
-use cortex_cli::{ekr, home, instance, model_map, quality, run, schema, spec, structured};
+use cortex_cli::{ekr, eval, home, instance, model_map, quality, run, schema, spec, structured};
 
 /// Spin up EKR knowledge brains from a spec, fed on a schedule by Connectors data sources.
 #[derive(Parser)]
@@ -152,6 +152,11 @@ enum Command {
         #[arg(long)]
         sample: i64,
     },
+    /// Eval sets asked of an instance end to end and scored.
+    Eval {
+        #[command(subcommand)]
+        command: EvalCommand,
+    },
     /// One data source of an instance.
     Source {
         #[command(subcommand)]
@@ -191,6 +196,34 @@ enum Command {
         #[command(subcommand)]
         decide: Option<SchemaCommand>,
     },
+    /// The answer service of an instance (`cortex.ask`).
+    Ask {
+        #[command(subcommand)]
+        command: AskCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum AskCommand {
+    /// Answer questions over the store of the instance the spec names: `POST /ask` on the spec's
+    /// `ask.listen` streams `cortex.ask.AskEvent`s (`cortex.ask.Ask`). Prints
+    /// `{"listening": "<address>"}` once bound, and serves until stopped.
+    Serve {
+        #[arg(long)]
+        spec: PathBuf,
+    },
+    /// The records process of an instance on a `postgres` store, which the service starts
+    /// through `connectors connections launch --consumer cortex-records`: reads the role's
+    /// password from descriptor 3, migrates the schema, then runs the service's statements, one
+    /// JSON line each way on its standard input and output.
+    Records {
+        #[arg(long)]
+        url: String,
+        #[arg(long)]
+        schema: String,
+        #[arg(long)]
+        ca_file: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -222,6 +255,47 @@ enum SchemaCommand {
     /// (`cortex.instance.ApplySchemaProposals`): in an EKR stage on a `postgres` store, after a
     /// snapshot on a `sqlite` store, held to the spec's gate.
     Apply { name: String, stamp: String },
+}
+
+#[derive(Subcommand)]
+enum EvalCommand {
+    /// Ask each case of an eval set and score each answer with no model, by the fact strings it
+    /// must contain and the node ids it must cite; write `eval/<UTC stamp>/results.jsonl` and
+    /// `summary.json` (`cortex.instance.RunEval`).
+    Run {
+        name: String,
+        /// The set: a JSON object whose `cases` are `cortex.eval-case/1` cases.
+        #[arg(long)]
+        set: PathBuf,
+        /// `mcp`: the instance's model with the store's MCP reader; `ask`: a running
+        /// `cortex ask serve`; `replay`: the answers of the eval run `--from` names.
+        #[arg(long, value_parser = ["mcp", "ask", "replay"])]
+        runner: String,
+        /// For `replay`: the stamp of the eval run under `eval/` whose answers to score again.
+        #[arg(long)]
+        from: Option<String>,
+    },
+    /// The cases of an eval set made from the answer service's review items.
+    Case {
+        #[command(subcommand)]
+        command: CaseCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum CaseCommand {
+    /// Append the case of a closed review item to an eval set, creating the set file when it does
+    /// not exist: the question of its answer record and the facts and nodes the reviewer expected
+    /// when closing it (`cortex.instance.AddEvalCase`). An open item is refused.
+    Add {
+        name: String,
+        /// The set file: a JSON object whose `cases` are `cortex.eval-case/1` cases.
+        #[arg(long)]
+        set: PathBuf,
+        /// The review item's id, `<answer id>:<cause>`, as `GET /review` lists it.
+        #[arg(long)]
+        from_review: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -301,6 +375,28 @@ fn main() -> ExitCode {
             Err(e) => fail(e),
         },
         Command::McpLine { name } => mcp_line(&home, &name),
+        Command::Ask {
+            command: AskCommand::Serve { spec },
+        } => ask_serve(&home, &spec),
+        Command::Ask {
+            command:
+                AskCommand::Records {
+                    url,
+                    schema,
+                    ca_file,
+                },
+        } => match cortex_cli::ask::records::postgres::serve_process(
+            &url,
+            &schema,
+            ca_file.as_deref(),
+            std::path::Path::new(cortex_cli::instance::LAUNCH_PASSWORD_FILE),
+        ) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("cortex: {e}");
+                ExitCode::from(1)
+            }
+        },
         command => {
             // `restore` does not wait for the lock: while another command holds it, it answers
             // `busy` and writes nothing.
@@ -408,6 +504,26 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
         Command::Remove { name } => remove(app, ctx, &name),
         Command::Restore { name, snapshot } => restore(app, ctx, &name, &snapshot),
         Command::Quality { name, sample } => quality(app, ctx, &name, sample),
+        Command::Eval {
+            command:
+                EvalCommand::Run {
+                    name,
+                    set,
+                    runner,
+                    from,
+                },
+        } => eval_run(app, ctx, &name, &set, &runner, from.as_deref()),
+        Command::Eval {
+            command:
+                EvalCommand::Case {
+                    command:
+                        CaseCommand::Add {
+                            name,
+                            set,
+                            from_review,
+                        },
+                },
+        } => eval_case_add(app, ctx, &name, &set, &from_review),
         Command::Schema {
             decide: Some(decide),
             ..
@@ -524,7 +640,10 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             }
             Err(e) => fail(e),
         },
-        Command::Schema { name: None, .. } | Command::Setup { .. } | Command::McpLine { .. } => {
+        Command::Schema { name: None, .. }
+        | Command::Setup { .. }
+        | Command::McpLine { .. }
+        | Command::Ask { .. } => {
             unreachable!("handled before the lock")
         }
     }
@@ -1725,6 +1844,193 @@ fn quality(app: &mut App, ctx: &Ctx, name: &str, sample: i64) -> ExitCode {
     print("quality", &done)
 }
 
+fn eval_run(
+    app: &mut App,
+    ctx: &Ctx,
+    name: &str,
+    set: &Path,
+    runner: &str,
+    from: Option<&str>,
+) -> ExitCode {
+    const CMD: &str = "cortex.instance.RunEval";
+    let runner = eval::runner_of(runner).expect("clap admits only the three runners");
+    // An unknown name asks nothing; the generated behaviour answers `no-such-instance`.
+    let known = ctx.shared.borrow().registry.instances.contains_key(name);
+    let mut dir = None;
+    if known {
+        let layout = Layout::new(ctx.home.instance_dir(name));
+        // As `quality`: the set, the spec and a replayed run are read under the lock; the model
+        // calls and the files under `eval/<stamp>/` need none, so scheduled runs do not wait.
+        let prepared = eval::prepare(&layout, set, runner, from);
+        drop(ctx.lock.borrow_mut().take());
+        let result = prepared.and_then(|p| eval::run(&layout, &ctx.tools, p, ctx.home));
+        let mut shared = ctx.shared.borrow_mut();
+        // The order the generated behaviour takes the values in: the stamp, the seven counts,
+        // the two token counts, the cost.
+        match result {
+            Ok(e) => {
+                shared.strings.push_back(e.stamp.clone());
+                shared.integers.extend([
+                    e.cases,
+                    e.passed,
+                    e.facts_expected,
+                    e.facts_found,
+                    e.nodes_expected,
+                    e.nodes_found,
+                    e.model_calls,
+                ]);
+                shared
+                    .optional_integers
+                    .extend([e.input_tokens, e.output_tokens]);
+                shared.optional_decimals.push_back(cost_decimal(e.cost_usd));
+                dir = Some(e.dir);
+            }
+            Err(eval::Failure::Set(reason)) => {
+                shared.external.insert((CMD, "set-invalid"), true);
+                shared.strings.push_back(reason);
+            }
+            Err(eval::Failure::Runner(reason)) => {
+                shared.external.insert((CMD, "runner-failed"), true);
+                shared.strings.push_back(reason);
+            }
+        }
+    }
+    let done = match app.run_eval(m::RunEval {
+        name: m::InstanceName(name.to_string()),
+        set: set.display().to_string(),
+        runner,
+        from: from.map(str::to_string),
+    }) {
+        Err(e) => return fail(e),
+        Ok(m::RunEvalOutcome::Evaluated { eval_ran: e }) => {
+            let mut detail = json!({
+                "name": e.name.0,
+                "stamp": e.stamp,
+                "runner": eval::runner_name(e.runner),
+                "cases": e.cases,
+                "passed": e.passed,
+                "facts_expected": e.facts_expected,
+                "facts_found": e.facts_found,
+                "nodes_expected": e.nodes_expected,
+                "nodes_found": e.nodes_found,
+                "model_calls": e.model_calls,
+                "input_tokens": e.input_tokens,
+                "output_tokens": e.output_tokens,
+                "cost_usd": e.cost_usd.map(|c| c.0),
+            });
+            // The run's directory is not on the event.
+            if let Some(dir) = dir {
+                detail["dir"] = json!(dir);
+            }
+            Done {
+                outcome: "evaluated",
+                ok: true,
+                detail,
+            }
+        }
+        Ok(m::RunEvalOutcome::SetInvalid { error }) => Done {
+            outcome: "set-invalid",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
+        Ok(m::RunEvalOutcome::RunnerFailed { error }) => Done {
+            outcome: "runner-failed",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
+        Ok(m::RunEvalOutcome::NoSuchInstance { error }) => Done {
+            outcome: "no-such-instance",
+            ok: false,
+            detail: json!({"name": error.name.0}),
+        },
+    };
+    print("eval run", &done)
+}
+
+fn eval_case_add(app: &mut App, ctx: &Ctx, name: &str, set: &Path, review_id: &str) -> ExitCode {
+    const CMD: &str = "cortex.instance.AddEvalCase";
+    // An unknown name reads nothing; the generated behaviour answers `no-such-instance`.
+    let known = ctx.shared.borrow().registry.instances.contains_key(name);
+    if known {
+        let layout = Layout::new(ctx.home.instance_dir(name));
+        let result = eval::add_case(ctx.home, &layout, set, review_id);
+        let mut shared = ctx.shared.borrow_mut();
+        // The order the generated behaviour takes the values in: the case's id, then the count.
+        match result {
+            Ok(added) => {
+                shared.strings.push_back(added.id);
+                shared.integers.push_back(added.cases);
+            }
+            Err(eval::CaseRefused::SetInvalid(reason)) => {
+                shared.external.insert((CMD, "set-invalid"), true);
+                shared.strings.push_back(reason);
+            }
+            Err(eval::CaseRefused::NoSuchReview) => {
+                shared.external.insert((CMD, "no-such-review"), true);
+            }
+            Err(eval::CaseRefused::ReviewOpen) => {
+                shared.external.insert((CMD, "review-open"), true);
+            }
+            Err(eval::CaseRefused::NoExpectations) => {
+                shared.external.insert((CMD, "no-expectations"), true);
+            }
+            Err(eval::CaseRefused::CaseExists) => {
+                shared.external.insert((CMD, "case-exists"), true);
+            }
+            Err(eval::CaseRefused::Failed(reason)) => return fail(reason),
+        }
+    }
+    let done = match app.add_eval_case(m::AddEvalCase {
+        name: m::InstanceName(name.to_string()),
+        set: set.display().to_string(),
+        from_review: cortex_model::ask::ReviewId(review_id.to_string()),
+    }) {
+        Err(e) => return fail(e),
+        Ok(m::AddEvalCaseOutcome::Added { eval_case_added: e }) => Done {
+            outcome: "added",
+            ok: true,
+            detail: json!({
+                "name": e.name.0,
+                "set": e.set,
+                "review_id": e.review_id.0,
+                "id": e.id,
+                "cases": e.cases,
+            }),
+        },
+        Ok(m::AddEvalCaseOutcome::SetInvalid { error }) => Done {
+            outcome: "set-invalid",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
+        Ok(m::AddEvalCaseOutcome::NoSuchReview { error }) => Done {
+            outcome: "no-such-review",
+            ok: false,
+            detail: json!({"review_id": error.review_id.0}),
+        },
+        Ok(m::AddEvalCaseOutcome::ReviewOpen { error }) => Done {
+            outcome: "review-open",
+            ok: false,
+            detail: json!({"review_id": error.review_id.0}),
+        },
+        Ok(m::AddEvalCaseOutcome::NoExpectations { error }) => Done {
+            outcome: "no-expectations",
+            ok: false,
+            detail: json!({"review_id": error.review_id.0}),
+        },
+        Ok(m::AddEvalCaseOutcome::CaseExists { error }) => Done {
+            outcome: "case-exists",
+            ok: false,
+            detail: json!({"review_id": error.review_id.0}),
+        },
+        Ok(m::AddEvalCaseOutcome::NoSuchInstance { error }) => Done {
+            outcome: "no-such-instance",
+            ok: false,
+            detail: json!({"name": error.name.0}),
+        },
+    };
+    print("eval case add", &done)
+}
+
 fn propose_schema(
     app: &mut App,
     ctx: &Ctx,
@@ -2443,6 +2749,31 @@ fn enable(app: &mut App, ctx: &Ctx, source_id: &str) -> ExitCode {
     print("source enable", &done)
 }
 
+/// `cortex ask serve`: a spec the service cannot serve is refused (exit 2, naming the field)
+/// before anything binds; a service that stops exits 1.
+fn ask_serve(home: &Home, spec: &std::path::Path) -> ExitCode {
+    let (settings, loaded) = match cortex_cli::spec::load_given(spec)
+        .and_then(|loaded| cortex_cli::ask::Settings::of(home, &loaded.model).map(|s| (s, loaded)))
+    {
+        Ok(s) => s,
+        Err(e) => return fail(format!("{}: {e}", spec.display())),
+    };
+    let keeper = match cortex_cli::ask::records::Keeper::open(home, &loaded.model) {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("cortex: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    match cortex_cli::ask::serve::serve(settings, keeper) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("cortex: {e}");
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn mcp_line(home: &Home, name: &str) -> ExitCode {
     let layout = Layout::new(home.instance_dir(name));
     let spec = match layout.load_spec() {
@@ -2537,6 +2868,9 @@ mod tests {
             ],
         ),
     ];
+    /// Commands whose command line is one word below their wire name, which the specification's
+    /// one level of command groups cannot name: `eval case add`.
+    const NESTED: &[(&str, &str)] = &[("cortex.instance.AddEvalCase", "add")];
     /// Flags that steer the implementation and are no command input.
     const STEERING: &[&str] = &[
         "spec",
@@ -2587,9 +2921,15 @@ mod tests {
     fn check(command: &clap::Command, qualified: &str, model: &Value) {
         let decl = find(model, qualified);
         let wire = decl["naming"]["wire"].as_str().expect("a wire name");
-        let sub = command
+        let mut sub = command
             .find_subcommand(wire)
             .unwrap_or_else(|| panic!("no `{wire}` subcommand for {qualified}"));
+        // A command one word below its wire (`UNMAPPED:` in `spec/`): the inputs are that word's.
+        if let Some((_, word)) = NESTED.iter().find(|(n, _)| *n == qualified) {
+            sub = sub
+                .find_subcommand(word)
+                .unwrap_or_else(|| panic!("no `{wire} {word}` subcommand for {qualified}"));
+        }
         let Some(inputs) = decl["input"].as_array() else {
             return;
         };

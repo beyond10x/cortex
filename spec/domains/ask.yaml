@@ -1,0 +1,773 @@
+domain: cortex.ask
+
+summary: >-
+  The answer service of an instance: `cortex ask serve` answers a question over the instance's
+  store as a stream of events. It reads the store only through the EKR MCP reader (`ekr mcp`) and
+  writes nothing to it; its model is the instance's model gateway, spoken to as an
+  OpenAI-compatible endpoint. Every answer is streamed and kept as an answer record, with the votes
+  of its readers; an answer voted down, failed or slow is queued for review. The records are
+  cortex's own, never in the store: in `ask.sqlite` in the instance directory on a `sqlite` store,
+  in a PostgreSQL schema of their own on a `postgres` one; they are purged after the spec's
+  `retention_days`.
+
+naming:
+  wire: ask
+  display: Answers
+
+types:
+  # The limits of one answer. `max_steps` is the most model calls one answer makes: a step is one
+  # model call, with the tool calls it asks for; a model that still asks for a tool at step
+  # `max_steps` ends the answer with an `error` event whose `reason` is `step-limit`.
+  # `max_result_bytes` is the most bytes of one tool result the model is shown: a longer result,
+  # rewritten into compact text, is cut at a character boundary to at most that many bytes, and its
+  # `tool` event says so (`truncated`). `max_seconds` is the most wall-clock seconds one answer
+  # takes, every model and tool call included; past it the answer ends with `error`, `reason`
+  # `time-limit`. `per_identity_per_minute` is the most questions one identity asks in a minute (a
+  # sliding window of 60 seconds); the next answers 429 with an `error` event whose `reason` is
+  # `rate-limit` and whose `retry_after` is the whole seconds until the oldest question of the
+  # window leaves it, at least 1. Each is an Integer above 0.
+  # UNMAPPED: the refusal of a limit of 0 or less (the service does not start, exit 2, naming the
+  # field) is a check on an Integer the specification has no construct for; `ask::check` holds it
+  # and `tests/ask_service.rs` tests it.
+  - name: cortex.ask.AskLimits
+    kind: struct
+    fields:
+      - {name: max_steps, type: Integer}
+      - {name: max_result_bytes, type: Integer}
+      - {name: max_seconds, type: Integer}
+      - {name: per_identity_per_minute, type: Integer}
+
+  # How a citation in an answer becomes a link. The model cites a node as `[node:<id>]` and an
+  # evidence as `[evidence:<id>]`; the service replaces each marker in the answer by a Markdown link
+  # `[<id>](<url>)`, the URL being the template with `{id}` replaced by the percent-encoded id.
+  # Without a template for its kind a marker is left as written. Either way the id is cited
+  # (`cortex.ask.AskDone`).
+  - name: cortex.ask.LinkTemplates
+    kind: struct
+    fields:
+      - {name: node, type: Optional<String>}
+      - {name: evidence, type: Optional<String>}
+
+  # The optional `ask` section of an instance spec (`cortex.instance.InstanceSpec`): how
+  # `cortex ask serve` answers. `listen` is the address it binds, `host:port`.
+  # `identity_header` names the request header that carries the identity of the asker, verified
+  # by the guard in front of the service; cortex verifies no token. A request without that header,
+  # or with an empty one, answers 401 and asks no model. `guidance`, when given, is added to the
+  # service's system prompt. The model route is the instance's `model.gateway`
+  # (`cortex.instance.ModelGateway`) and its model `model.model`; the service does not start
+  # without a gateway. No field carries a credential: the gateway's token is read from the variable
+  # `model.gateway.token_env` names.
+  # `retention_days` is how many days an answer record (`cortex.ask.AnswerRecord`) is kept, with its
+  # votes and review items: the service purges older ones when it starts and every 24 hours after
+  # (`cortex.ask.PurgeExpired`); absent means 90. `slow_after_ms` is the latency in milliseconds
+  # past which an answer is slow and opens a review item (`cortex.ask.ReviewCause` `slow`); absent
+  # means no answer is slow. Each is an Integer above 0. A `retention_days` too large to count in
+  # milliseconds before now keeps every record: the purge's `before` stops at the earliest instant
+  # a Timestamp writes (0001-01-01T00:00:00Z) and never wraps into the future.
+  # UNMAPPED: the refusal of a `retention_days` or `slow_after_ms` of 0 or less (the service does
+  # not start, exit 2, naming the field) is a check on an Integer the specification has no
+  # construct for; `ask::check` holds it and `tests/answer_records.rs` tests it.
+  # For an instance whose store is `sqlite`, the records live in `ask.sqlite` in the instance
+  # directory and `records` is absent. For an instance whose store is `postgres`, they live in a
+  # schema of their own, never EKR's, named by `records` (`cortex.ask.PostgresRecords`), which such
+  # an instance must give.
+  # UNMAPPED: `records` is required on a `postgres` store and refused on a `sqlite` one (the service
+  # does not start, exit 2, naming `ask.records`), and its `schema` is refused when it is the
+  # schema of the store's `ekr.postgres/1` file (naming `ask.records.schema`): each reads the
+  # instance's `store` beside its `ask` section, a rule across two fields of
+  # `cortex.instance.InstanceSpec` the specification has no construct for; `ask::check` holds them
+  # and `tests/answer_records.rs` tests them.
+  - name: cortex.ask.AskSpec
+    kind: struct
+    fields:
+      - {name: listen, type: String}
+      - {name: identity_header, type: String}
+      - {name: limits, type: cortex.ask.AskLimits}
+      - {name: link_templates, type: Optional<cortex.ask.LinkTemplates>}
+      - {name: guidance, type: Optional<String>}
+      - {name: retention_days, type: Optional<Integer>}
+      - {name: slow_after_ms, type: Optional<Integer>}
+      - {name: records, type: Optional<cortex.ask.PostgresRecords>}
+
+  # Where the answer records of an instance on a `postgres` store live: the tables `answers`,
+  # `votes`, `reviews` and `schema_version` in the PostgreSQL schema `schema`, which is never the
+  # store's (EKR's) schema. `url` is a PostgreSQL connection URL with no password
+  # (`postgres://<role>@<host>:<port>/<database>`); TLS is required (`sslmode=prefer` is raised to
+  # `require`) unless it says `sslmode=disable`, and the server's certificate is verified against `ca_file` when given, else
+  # against the public web roots. `connection` is the Connectors connection that holds the role's
+  # `{"password": …}` document: the service starts its records process,
+  # `cortex ask records --url <url> --schema <schema> [--ca-file <file>]`, through
+  # `connectors connections launch --consumer cortex-records`, which hands that process the
+  # document on descriptor 3. Only that process reads it, to connect; the service itself, its log
+  # and its files never see it. The records process creates the schema when it is missing and
+  # migrates its tables to the schema version of this cortex when it starts; a schema at a newer
+  # version is refused. No field carries a credential.
+  # UNMAPPED: `schema` must be a lowercase PostgreSQL identifier (`[a-z_][a-z0-9_]*`, at most 63
+  # bytes, not starting with `pg_`), `url` must carry no password and be a `postgres://` or
+  # `postgresql://` URL, and `connection` names an id or a profile, not both: checks on Strings the
+  # specification has no construct for; `ask::check` and `spec::check` hold them and
+  # `tests/answer_records.rs` tests them.
+  - name: cortex.ask.PostgresRecords
+    kind: struct
+    fields:
+      - {name: url, type: String}
+      - {name: schema, type: String}
+      - {name: ca_file, type: Optional<String>}
+      - {name: connection, type: cortex.instance.ConnectionRef}
+
+  # The identity of one answer the service gave or failed to give: a UUIDv7, so ids sort by time.
+  - name: cortex.ask.AnswerId
+    kind: newtype
+    of: String
+
+  # The identity of one vote: the answer's id and the voter's identity, `<answer_id>:<identity>`.
+  # An answer id holds no `:`, so the first one separates the two; one identity has one vote on
+  # one answer, which it may change.
+  - name: cortex.ask.VoteId
+    kind: newtype
+    of: String
+
+  # The identity of one review item: the answer's id and the cause, `<answer_id>:<cause>`. One
+  # answer has at most one review item for each cause, open or closed: a cause that already opened
+  # one opens no second.
+  - name: cortex.ask.ReviewId
+    kind: newtype
+    of: String
+
+  # What became of a question: `answered` when the stream ended with `done`; `limited` when it
+  # ended at the step or time limit (`cortex.ask.LimitReached`); `failed` when the model or the
+  # reader failed (`cortex.ask.ModelFailed`, `cortex.ask.ReaderFailed`). A refusal before the
+  # answer starts (401, 429, 400) is no answer and leaves no record.
+  - name: cortex.ask.AnswerOutcome
+    kind: enum
+    variants: [answered, failed, limited]
+
+  # A reader's verdict on an answer.
+  - name: cortex.ask.VoteValue
+    kind: enum
+    variants: [up, down]
+
+  # Why an answer is in the review queue: a `down` vote (`voted-down`), an outcome other than
+  # `answered` (`failed`), or a latency past `slow_after_ms` (`slow`).
+  - name: cortex.ask.ReviewCause
+    kind: enum
+    variants: [voted-down, failed, slow]
+
+  # The first event of every answer, and one per step after it. `format` is the event contract,
+  # `cortex.ask-events/1`; `step` the model call about to be made, 0 before the first; `message`
+  # a short text for a person.
+  - name: cortex.ask.AskStatus
+    kind: struct
+    fields:
+      - {name: format, type: String}
+      - {name: step, type: Integer}
+      - {name: message, type: String}
+
+  # One tool call the model asked for, after its result was read. `arguments` is the call's
+  # arguments as the model gave them (JSON text); `result_bytes` the bytes of the rewritten result
+  # the model is shown; `truncated` whether it was cut to `max_result_bytes`; `failed` whether the
+  # reader answered an error, which the model is shown as the result. With the instance's
+  # `redaction` policy (`cortex.instance.RedactionPolicy`) the result is redacted before the model
+  # is shown it, one placeholder mapping for the whole answer; `withheld` says a class the
+  # policy's `refuse_if_left` names was still detected in it, so the model was shown a tool error
+  # saying the result was withheld by policy instead, and the answer went on. Without a policy
+  # `withheld` is false.
+  - name: cortex.ask.AskTool
+    kind: struct
+    fields:
+      - {name: step, type: Integer}
+      - {name: name, type: String}
+      - {name: arguments, type: String}
+      - {name: result_bytes, type: Integer}
+      - {name: truncated, type: Boolean}
+      - {name: failed, type: Boolean}
+      - {name: withheld, type: Boolean}
+
+  # A piece of the model's text, in order. Text of a step that then asks for a tool is withdrawn by
+  # a `discard` event.
+  - name: cortex.ask.AskDelta
+    kind: struct
+    fields:
+      - {name: text, type: String}
+
+  # Withdraws every `delta` since the last `discard`: that text was the model's thinking before a
+  # tool call, not the answer.
+  - name: cortex.ask.AskDiscard
+    kind: struct
+    fields:
+      - {name: step, type: Integer}
+
+  # The last event of an answer. `answer` is the answer with its citation markers turned into links
+  # (`cortex.ask.LinkTemplates`); `nodes` and `evidence` the ids it cites, each once, in the order
+  # they first appear. The token counts add up, over every model call of the answer, what the
+  # gateway reported in its `usage`: `prompt_tokens`, `completion_tokens` and
+  # `prompt_tokens_details.cached_tokens` (0 when not reported). `context_tokens` is the prompt
+  # tokens of the last call, the size of the context the answer was made in; `steps` the model
+  # calls made. `answer_id` is the id the answer is recorded under (`cortex.ask.AnswerRecord`), for
+  # a vote on it (`cortex.ask.Vote`). With a `redaction` policy the question and every tool result
+  # were redacted, and every placeholder in the answer that has a value is restored, in `answer`
+  # and in each `delta`; a `delta` that ends inside a possible placeholder holds that tail back for
+  # the next `delta` or `done`. `unrestored` counts the placeholders in the answer that have no
+  # value: they stay as written. Without a policy it is 0.
+  - name: cortex.ask.AskDone
+    kind: struct
+    fields:
+      - {name: answer_id, type: String}
+      - {name: answer, type: String}
+      - {name: nodes, type: List<String>}
+      - {name: evidence, type: List<String>}
+      - {name: input_tokens, type: Integer}
+      - {name: output_tokens, type: Integer}
+      - {name: cached_tokens, type: Integer}
+      - {name: context_tokens, type: Integer}
+      - {name: steps, type: Integer}
+      - {name: unrestored, type: Integer}
+
+  # The last event of an answer that has none. `reason` is one of `unidentified`, `rate-limit`,
+  # `step-limit`, `time-limit`, `model-failed`, `reader-failed` and `bad-request`; `message` says
+  # more, for a person; `retry_after` is given with `rate-limit` only, in whole seconds.
+  - name: cortex.ask.AskError
+    kind: struct
+    fields:
+      - {name: reason, type: String}
+      - {name: message, type: String}
+      - {name: retry_after, type: Optional<Integer>}
+
+  # One event of the stream `POST /ask` answers, `text/event-stream`: the SSE `event:` line is the
+  # variant's name and its `data:` line the event as one JSON object, `{"event": <name>, "value":
+  # <the variant's fields>}`. An answer is `status`, then any `status`, `tool`, `delta` and
+  # `discard` events, then exactly one `done` or `error`, which ends the stream. A refusal before
+  # the answer starts (401, 429) is a stream of that one `error` event.
+  - name: cortex.ask.AskEvent
+    kind: union
+    tag: event
+    variants:
+      status: cortex.ask.AskStatus
+      tool: cortex.ask.AskTool
+      delta: cortex.ask.AskDelta
+      discard: cortex.ask.AskDiscard
+      done: cortex.ask.AskDone
+      error: cortex.ask.AskError
+
+entities:
+  # One answer the service gave or failed to give, kept in `ask.sqlite` in the instance directory,
+  # or in the schema `ask.records` names (`cortex.ask.PostgresRecords`), a table of cortex's own,
+  # never the store's, for `retention_days`. `identity` is the asker's;
+  # `answer` the answer as `done` carried it, absent unless `outcome` is `answered`; `reason` the
+  # `error` event's reason otherwise. `tool_calls` are the `tool` events of the answer, in order.
+  # The token counts and `steps` are those of the `done` event (0 without one); `latency_ms` the
+  # milliseconds from the question to the last event; `at` when the question was asked.
+  # `question` and `answer` are kept with every credential shape masked (`[masked:<shape>]`,
+  # `crate::mask`), whatever the instance's `redaction` policy, as everywhere cortex writes text;
+  # the mask is irreversible. A vote's `comment` and a review item's `close_reason` and
+  # `expect_facts` are kept so too.
+  - name: cortex.ask.AnswerRecord
+    identity:
+      name: answer_id
+      type: cortex.ask.AnswerId
+    fields:
+      - {name: instance_name, type: cortex.instance.InstanceName}
+      - {name: identity, type: String}
+      - {name: question, type: String}
+      - {name: answer, type: Optional<String>}
+      - {name: reason, type: Optional<String>}
+      - {name: outcome, type: cortex.ask.AnswerOutcome}
+      - {name: tool_calls, type: List<cortex.ask.AskTool>}
+      - {name: latency_ms, type: Integer}
+      - {name: input_tokens, type: Integer}
+      - {name: output_tokens, type: Integer}
+      - {name: cached_tokens, type: Integer}
+      - {name: context_tokens, type: Integer}
+      - {name: steps, type: Integer}
+      - {name: at, type: Timestamp}
+    relations:
+      # A vote and a review item have no meaning without their answer: a purge takes them with it.
+      - name: votes
+        kind: owns
+        target: cortex.ask.Vote
+        cardinality: many
+        via: answer_id
+      - name: reviews
+        kind: owns
+        target: cortex.ask.ReviewItem
+        cardinality: many
+        via: answer_id
+    invariants:
+      - latency_ms >= 0
+      - input_tokens >= 0
+      - output_tokens >= 0
+      - cached_tokens >= 0
+      - context_tokens >= 0
+      - steps >= 0
+    lifecycle:
+      initial: Kept
+      states: [Kept]
+      terminal: [Kept]
+      transitions: []
+
+  # One identity's vote on one answer (`cortex.ask.VoteId`): the latest it cast, with its optional
+  # comment, and when it was cast.
+  - name: cortex.ask.Vote
+    identity:
+      name: vote_id
+      type: cortex.ask.VoteId
+    fields:
+      - {name: answer_id, type: cortex.ask.AnswerId}
+      - {name: identity, type: String}
+      - {name: value, type: cortex.ask.VoteValue}
+      - {name: comment, type: Optional<String>}
+      - {name: at, type: Timestamp}
+    lifecycle:
+      initial: Cast
+      states: [Cast]
+      terminal: [Cast]
+      transitions: []
+
+  # An answer in the review queue for one cause (`cortex.ask.ReviewId`), open until a reviewer
+  # closes it with a reason. A `voted-down` item stays open when the vote is changed to `up`.
+  # `expect_facts` and `expect_nodes` are what the reviewer says a right answer contains and
+  # cites, written at close and absent while the item is open; `cortex eval case add
+  # --from-review` makes them an eval case's expectations (`cortex.instance.AddEvalCase`).
+  - name: cortex.ask.ReviewItem
+    identity:
+      name: review_id
+      type: cortex.ask.ReviewId
+    fields:
+      - {name: answer_id, type: cortex.ask.AnswerId}
+      - {name: cause, type: cortex.ask.ReviewCause}
+      - {name: opened_at, type: Timestamp}
+      - {name: close_reason, type: Optional<String>}
+      - {name: closed_at, type: Optional<Timestamp>}
+      - {name: expect_facts, type: Optional<List<String>>}
+      - {name: expect_nodes, type: Optional<List<String>>}
+    lifecycle:
+      initial: Open
+      states: [Open, Closed]
+      terminal: [Closed]
+      transitions:
+        - name: close
+          from: [Open]
+          to: Closed
+
+actors:
+  # The asker, as the guard in front of the service identifies it in the spec's
+  # `identity_header`. A reader of an answer votes on it as an asker (`cortex.ask.CastVote`).
+  - name: cortex.ask.Asker
+    may:
+      - cortex.ask.Ask
+      - cortex.ask.CastVote
+    naming:
+      display: Asker
+
+  # Whoever works down the review queue, identified as an asker is. Which identities may review is
+  # the guard's to decide, in front of the service.
+  - name: cortex.ask.Reviewer
+    may:
+      - cortex.ask.CloseReview
+    naming:
+      display: Reviewer
+
+  # The service itself: it records each answer, opens the review items an answer or a vote calls
+  # for, and purges what is past retention.
+  - name: cortex.ask.Service
+    may:
+      - cortex.ask.RecordAnswer
+      - cortex.ask.OpenReview
+      - cortex.ask.PurgeExpired
+    naming:
+      display: Answer service
+
+errors:
+  - name: cortex.ask.Unidentified
+    summary: The request carries no identity in the header the spec names; it answers 401.
+    fields:
+      - {name: header, type: String}
+
+  - name: cortex.ask.RateLimited
+    summary: >-
+      The identity asked `per_identity_per_minute` questions in the last minute; it answers 429.
+      Ask again after `retry_after` seconds.
+    fields:
+      - {name: identity, type: String}
+      - {name: retry_after, type: Integer}
+
+  - name: cortex.ask.LimitReached
+    summary: The answer reached the spec's step or time limit before the model answered.
+    fields:
+      - {name: limit, type: String}
+
+  - name: cortex.ask.ModelFailed
+    summary: The model gateway could not be reached or answered an error or no message.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.ask.ReaderFailed
+    summary: The EKR MCP reader could not be started or stopped answering.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.ask.AnswerNotFound
+    summary: No answer record carries this id, or it was purged; it answers 404.
+    fields:
+      - {name: answer_id, type: cortex.ask.AnswerId}
+
+  - name: cortex.ask.ReviewNotFound
+    summary: No review item carries this id, or it was purged; it answers 404.
+    fields:
+      - {name: review_id, type: cortex.ask.ReviewId}
+
+  - name: cortex.ask.ReviewNotOpen
+    summary: The review item was already closed; it answers 409 and keeps its first reason.
+    fields:
+      - {name: review_id, type: cortex.ask.ReviewId}
+
+  - name: cortex.ask.ReviewExists
+    summary: >-
+      The answer already has a review item for this cause, open or closed; the service opens no
+      second one and answers nothing for it.
+    fields:
+      - {name: review_id, type: cortex.ask.ReviewId}
+
+commands:
+  - name: cortex.ask.Ask
+    naming:
+      wire: ask
+      display: Ask a question
+    # `POST /ask` with the JSON body `{"question": …}`; `identity` is the value of the spec's
+    # `identity_header`. The answer is the event stream of `cortex.ask.AskEvent`; an outcome's
+    # error is its `error` event, and `answered` is its `done` event.
+    input:
+      - {name: question, type: String}
+      - {name: identity, type: String}
+    outcomes:
+      - name: unidentified
+        external: The request carries no identity in the header the spec names
+        error: cortex.ask.Unidentified
+        payload:
+          cortex.ask.Unidentified:
+            header: {generated: true}
+        summary: It answers 401; no model was asked.
+
+      - name: rate-limited
+        external: The identity asked its per-minute limit of questions in the last minute
+        error: cortex.ask.RateLimited
+        payload:
+          cortex.ask.RateLimited:
+            identity: input.identity
+            retry_after: {generated: true}
+        summary: It answers 429 with an `error` event carrying `retry_after`; no model was asked.
+
+      - name: limit-reached
+        external: The model still asks for a tool at the step limit, or the time limit passes
+        error: cortex.ask.LimitReached
+        payload:
+          cortex.ask.LimitReached:
+            limit: {generated: true}
+        summary: The stream ends with an `error` event naming the limit, and no `done`.
+
+      - name: model-failed
+        external: The model gateway cannot be reached or answers an error
+        error: cortex.ask.ModelFailed
+        payload:
+          cortex.ask.ModelFailed:
+            reason: {generated: true}
+        summary: The stream ends with an `error` event, and no `done`.
+
+      - name: reader-failed
+        external: The EKR MCP reader cannot be started or stops answering
+        error: cortex.ask.ReaderFailed
+        payload:
+          cortex.ask.ReaderFailed:
+            reason: {generated: true}
+        summary: The stream ends with an `error` event, and no `done`.
+
+      - name: answered
+        emits:
+          - cortex.ask.Answered
+        payload:
+          cortex.ask.Answered:
+            identity: input.identity
+            done: {generated: true}
+        summary: The stream ends with a `done` event carrying the answer and what it cites.
+
+  - name: cortex.ask.RecordAnswer
+    naming:
+      wire: record
+      display: Record an answer
+    # The service records every question it began to answer, once its stream ended: the outcome
+    # of `cortex.ask.Ask` and what its events carried. After the record, it opens a review item
+    # (`cortex.ask.OpenReview`) with cause `failed` for an outcome other than `answered`, and with
+    # cause `slow` for a `latency_ms` past the spec's `slow_after_ms`. A record that cannot be
+    # written is logged on standard error and changes nothing the asker was streamed.
+    input:
+      - {name: answer_id, type: cortex.ask.AnswerId}
+      - {name: instance_name, type: cortex.instance.InstanceName}
+      - {name: identity, type: String}
+      - {name: question, type: String}
+      - {name: answer, type: Optional<String>}
+      - {name: reason, type: Optional<String>}
+      - {name: outcome, type: cortex.ask.AnswerOutcome}
+      - {name: tool_calls, type: List<cortex.ask.AskTool>}
+      - {name: latency_ms, type: Integer}
+      - {name: input_tokens, type: Integer}
+      - {name: output_tokens, type: Integer}
+      - {name: cached_tokens, type: Integer}
+      - {name: context_tokens, type: Integer}
+      - {name: steps, type: Integer}
+      - {name: at, type: Timestamp}
+    outcomes:
+      - name: recorded
+        creates: cortex.ask.AnswerRecord
+        instance: answer_id
+        sets:
+          instance_name: input.instance_name
+          identity: input.identity
+          question: input.question
+          answer: input.answer
+          reason: input.reason
+          outcome: input.outcome
+          tool_calls: input.tool_calls
+          latency_ms: input.latency_ms
+          input_tokens: input.input_tokens
+          output_tokens: input.output_tokens
+          cached_tokens: input.cached_tokens
+          context_tokens: input.context_tokens
+          steps: input.steps
+          at: input.at
+        emits:
+          - cortex.ask.AnswerRecorded
+        payload:
+          cortex.ask.AnswerRecorded:
+            answer_id: input.answer_id
+            outcome: input.outcome
+        summary: The answer is kept until it is past `retention_days`.
+
+  - name: cortex.ask.CastVote
+    naming:
+      wire: vote
+      display: Vote on an answer
+    # `POST /ask/{answer_id}/vote` with the JSON body `{"value": "up" | "down", "comment": …}`;
+    # `identity` is the value of the spec's `identity_header` and `vote_id` is
+    # `<answer_id>:<identity>` (`cortex.ask.VoteId`). It answers 200 with the vote. A `down` vote
+    # then opens a review item with cause `voted-down` (`cortex.ask.OpenReview`), once per answer.
+    # The vote is written only while its answer is kept: a vote whose answer a purge took after the
+    # check answers `no-such-answer`, and neither it nor a review item outlives the answer. A purge
+    # also takes any vote or review item whose answer is gone.
+    input:
+      - {name: vote_id, type: cortex.ask.VoteId}
+      - {name: answer_id, type: cortex.ask.AnswerId}
+      - {name: identity, type: String}
+      - {name: value, type: cortex.ask.VoteValue}
+      - {name: comment, type: Optional<String>}
+    outcomes:
+      - name: unidentified
+        external: The request carries no identity in the header the spec names
+        error: cortex.ask.Unidentified
+        payload:
+          cortex.ask.Unidentified:
+            header: {generated: true}
+        summary: It answers 401; nothing was cast.
+
+      - name: no-such-answer
+        external: No answer record carries `answer_id`
+        error: cortex.ask.AnswerNotFound
+        payload:
+          cortex.ask.AnswerNotFound:
+            answer_id: input.answer_id
+        summary: It answers 404; nothing was cast.
+
+      - name: changed
+        updates: cortex.ask.Vote
+        instance: vote_id
+        sets:
+          value: input.value
+          comment: input.comment
+          at: {generated: true}
+        emits:
+          - cortex.ask.Voted
+        payload:
+          cortex.ask.Voted:
+            vote_id: input.vote_id
+            answer_id: input.answer_id
+            value: input.value
+        summary: The identity's vote on the answer is replaced; it still has one.
+
+      - name: cast
+        unknown_instance: true
+        creates: cortex.ask.Vote
+        instance: vote_id
+        sets:
+          answer_id: input.answer_id
+          identity: input.identity
+          value: input.value
+          comment: input.comment
+          at: {generated: true}
+        emits:
+          - cortex.ask.Voted
+        payload:
+          cortex.ask.Voted:
+            vote_id: input.vote_id
+            answer_id: input.answer_id
+            value: input.value
+        summary: The identity's first vote on the answer is kept.
+
+  - name: cortex.ask.OpenReview
+    naming:
+      wire: open-review
+      display: Open a review item
+    # The service opens an item for an answer and a cause; `review_id` is `<answer_id>:<cause>`
+    # (`cortex.ask.ReviewId`), so a cause opens one item per answer.
+    input:
+      - {name: review_id, type: cortex.ask.ReviewId}
+      - {name: answer_id, type: cortex.ask.AnswerId}
+      - {name: cause, type: cortex.ask.ReviewCause}
+    outcomes:
+      - name: opened
+        creates: cortex.ask.ReviewItem
+        instance: review_id
+        sets:
+          answer_id: input.answer_id
+          cause: input.cause
+          opened_at: {generated: true}
+        emits:
+          - cortex.ask.ReviewOpened
+        payload:
+          cortex.ask.ReviewOpened:
+            review_id: input.review_id
+            answer_id: input.answer_id
+            cause: input.cause
+        summary: The answer is in the review queue for this cause.
+
+      - name: exists
+        existing_instance: true
+        error: cortex.ask.ReviewExists
+        payload:
+          cortex.ask.ReviewExists:
+            review_id: input.review_id
+        summary: The answer already has an item for this cause; nothing changed.
+
+  - name: cortex.ask.CloseReview
+    naming:
+      wire: close-review
+      display: Close a review item
+    # `POST /review/{review_id}/close` with the JSON body `{"reason": …, "expect_facts": […],
+    # "expect_nodes": […]}`, a reason that is not empty and two optional lists of strings that are
+    # not blank (absent is empty; anything else answers 400); it answers 200 with the item.
+    # `GET /review` lists the open items (`cortex.ask.OpenReviews`). Both answer 401 without an
+    # identity, as `POST /ask` does. A close writes only an item that is still open: of two closes
+    # of one item at once, one is `closed` and the other `wrong-state`, and the item keeps the
+    # first one's reason and expectations. The expected facts are kept with their credential
+    # shapes masked, as the reason is.
+    input:
+      - {name: review_id, type: cortex.ask.ReviewId}
+      - {name: reason, type: String}
+      - {name: expect_facts, type: List<String>}
+      - {name: expect_nodes, type: List<String>}
+    outcomes:
+      - name: closed
+        moves: cortex.ask.ReviewItem.close
+        instance: review_id
+        sets:
+          close_reason: input.reason
+          closed_at: {generated: true}
+          expect_facts: input.expect_facts
+          expect_nodes: input.expect_nodes
+        emits:
+          - cortex.ask.ReviewClosed
+        payload:
+          cortex.ask.ReviewClosed:
+            review_id: input.review_id
+            reason: input.reason
+        summary: The item leaves the review queue with its reason.
+
+      - name: wrong-state
+        wrong_state: true
+        error: cortex.ask.ReviewNotOpen
+        payload:
+          cortex.ask.ReviewNotOpen:
+            review_id: input.review_id
+        summary: It answers 409; the item keeps the reason it was closed with.
+
+      - name: no-such-review
+        unknown_instance: true
+        error: cortex.ask.ReviewNotFound
+        payload:
+          cortex.ask.ReviewNotFound:
+            review_id: input.review_id
+        summary: It answers 404; nothing changed.
+
+  - name: cortex.ask.PurgeExpired
+    naming:
+      wire: purge
+      display: Purge expired answers
+    # The service purges when it starts and every 24 hours after: every answer record whose `at`
+    # is before `before` (now less `retention_days`) is deleted with its votes and review items, in
+    # one transaction. `records`, `votes` and `reviews` count what was deleted.
+    # UNMAPPED: the delete of every record older than `before`, with what it owns, is a delete over
+    # a set of rows the specification has no construct for; `ask::records` holds it and
+    # `tests/answer_records.rs` tests it.
+    input:
+      - {name: before, type: Timestamp}
+    outcomes:
+      - name: purged
+        emits:
+          - cortex.ask.Purged
+        payload:
+          cortex.ask.Purged:
+            before: input.before
+            records: {generated: true}
+            votes: {generated: true}
+            reviews: {generated: true}
+        summary: Nothing older than `before` is left.
+
+events:
+  - name: cortex.ask.Answered
+    fields:
+      - {name: identity, type: String}
+      - {name: done, type: cortex.ask.AskDone}
+
+  - name: cortex.ask.AnswerRecorded
+    fields:
+      - {name: answer_id, type: cortex.ask.AnswerId}
+      - {name: outcome, type: cortex.ask.AnswerOutcome}
+
+  - name: cortex.ask.Voted
+    fields:
+      - {name: vote_id, type: cortex.ask.VoteId}
+      - {name: answer_id, type: cortex.ask.AnswerId}
+      - {name: value, type: cortex.ask.VoteValue}
+
+  - name: cortex.ask.ReviewOpened
+    fields:
+      - {name: review_id, type: cortex.ask.ReviewId}
+      - {name: answer_id, type: cortex.ask.AnswerId}
+      - {name: cause, type: cortex.ask.ReviewCause}
+
+  - name: cortex.ask.ReviewClosed
+    fields:
+      - {name: review_id, type: cortex.ask.ReviewId}
+      - {name: reason, type: String}
+
+  - name: cortex.ask.Purged
+    fields:
+      - {name: before, type: Timestamp}
+      - {name: records, type: Integer}
+      - {name: votes, type: Integer}
+      - {name: reviews, type: Integer}
+
+views:
+  # The review queue, `GET /review`: every open item, oldest first, as `{"reviews": [<row>, …]}`.
+  - name: cortex.ask.OpenReviews
+    source: cortex.ask.ReviewItem
+    consistency: read_your_writes
+    filter: state == Open
+    order_by:
+      - opened_at asc
+    fields:
+      - {name: review_id, type: cortex.ask.ReviewId}
+      - {name: answer_id, type: cortex.ask.AnswerId}
+      - {name: cause, type: cortex.ask.ReviewCause}
+      - {name: opened_at, type: Timestamp}
+    naming:
+      wire: review
+      display: Open reviews

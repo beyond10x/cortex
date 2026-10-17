@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AnswerNotFound payload",
+  "description": "No answer record carries this id, or it was purged; it answers 404.",
+  "x-ess-name": "cortex.ask.AnswerNotFound",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "answer_id": {
+      "$ref": "#/$defs/cortex.ask.AnswerId"
+    }
+  },
+  "required": [
+    "answer_id"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:111f259a070aa42f9dff2919dd26471f8fc9c65c61f96d1141fc88ebebc94975",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AnswerId": {
+      "title": "AnswerId",
+      "x-ess-name": "cortex.ask.AnswerId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

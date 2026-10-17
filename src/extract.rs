@@ -457,6 +457,48 @@ pub fn prompt_split(
     (p, fixed)
 }
 
+/// A file of mode 0600 in a new directory of mode 0700, both removed when it is dropped.
+struct PrivateFile {
+    dir: PathBuf,
+    file: PathBuf,
+}
+
+impl PrivateFile {
+    fn write(content: &str) -> Result<PrivateFile, String> {
+        use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+        let dir = std::env::temp_dir().join(format!(
+            "cortex-mcp-{}",
+            crate::ask::proxy::token().map_err(|e| format!("the MCP configuration: {e}"))?
+        ));
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&dir)
+            .map_err(|e| format!("the MCP configuration directory: {e}"))?;
+        let private = PrivateFile {
+            file: dir.join("mcp.json"),
+            dir,
+        };
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&private.file)
+            .and_then(|mut f| f.write_all(content.as_bytes()))
+            .map_err(|e| format!("the MCP configuration file: {e}"))?;
+        Ok(private)
+    }
+
+    fn path(&self) -> &Path {
+        &self.file
+    }
+}
+
+impl Drop for PrivateFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
 impl Model {
     /// One extraction call for one batch, through the spec's backend, run in `dir`: [`ask_with`]
     /// and the extraction prompt [`SYSTEM_PROMPT`]. An error answer that cost zero is asked once
@@ -522,9 +564,58 @@ impl Model {
         prompt: &str,
         budget_usd: Option<f64>,
     ) -> Result<Answer, Refused> {
+        self.ask_claude_with(system_prompt, dir, schema, prompt, budget_usd, None)
+    }
+
+    /// [`ask_with`] for the one call that is given a tool: `mcp_config` is the JSON of the MCP
+    /// servers `claude` starts (`--mcp-config`, still with `--strict-mcp-config`, so no other
+    /// server is read) and `allowed` the tools it may call (`--allowedTools`); every built-in
+    /// tool stays off (`--tools ""`) and every other isolation flag stays. The eval `mcp` runner
+    /// is its only caller. Codex is refused as in [`ask_with`].
+    ///
+    /// [`ask_with`]: Model::ask_with
+    #[allow(clippy::too_many_arguments)]
+    pub fn ask_with_mcp(
+        &self,
+        system_prompt: &str,
+        dir: &Path,
+        schema: &Value,
+        prompt: &str,
+        budget_usd: Option<f64>,
+        mcp_config: &str,
+        allowed: &str,
+    ) -> Result<Answer, Refused> {
+        match self.backend {
+            ModelBackend::Claude => self.ask_claude_with(
+                system_prompt,
+                dir,
+                schema,
+                prompt,
+                budget_usd,
+                Some((mcp_config, allowed)),
+            ),
+            ModelBackend::Codex => Err(Refused::free(CODEX_PENDING.into())),
+        }
+    }
+
+    fn ask_claude_with(
+        &self,
+        system_prompt: &str,
+        dir: &Path,
+        schema: &Value,
+        prompt: &str,
+        budget_usd: Option<f64>,
+        mcp: Option<(&str, &str)>,
+    ) -> Result<Answer, Refused> {
         let gateway = gateway_environment(self.gateway.as_ref()).map_err(Refused::free)?;
         std::fs::create_dir_all(dir)
             .map_err(|e| Refused::free(format!("{}: {e}", dir.display())))?;
+        // The MCP configuration may carry a bearer header: it goes in a file only its owner reads,
+        // never on the command line, and is removed when the call ends.
+        let config_file = match mcp {
+            Some((config, _)) => Some(PrivateFile::write(config).map_err(Refused::free)?),
+            None => None,
+        };
         let mut command = Command::new("timeout");
         for (key, value) in gateway {
             match value {
@@ -542,6 +633,15 @@ impl Model {
                 "--disable-slash-commands",
                 "--no-session-persistence",
             ])
+            .args(match (mcp, &config_file) {
+                (Some((_, allowed)), Some(file)) => vec![
+                    "--mcp-config".to_string(),
+                    file.path().display().to_string(),
+                    "--allowedTools".to_string(),
+                    allowed.to_string(),
+                ],
+                _ => vec![],
+            })
             .args(["--model", &self.model])
             .args(["--system-prompt", system_prompt])
             .args(["--json-schema", &schema.to_string()])

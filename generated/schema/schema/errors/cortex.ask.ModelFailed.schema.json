@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ModelFailed payload",
+  "description": "The model gateway could not be reached or answered an error or no message.",
+  "x-ess-name": "cortex.ask.ModelFailed",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:8f5f0f1ddab35b47f8d135258a1f6cdad6e33fc5a12b367707280948d230264c",
+    "regenerate": "ess generate"
+  }
+}

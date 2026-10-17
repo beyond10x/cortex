@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.AskTool",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:2d4fc9f21bfe518677726d40a98ee337730d5ab8dc24772e505d48deb018c28d",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AskTool": {
+      "title": "AskTool",
+      "x-ess-name": "cortex.ask.AskTool",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "arguments": {
+          "type": "string"
+        },
+        "result_bytes": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "failed": {
+          "type": "boolean"
+        },
+        "withheld": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "step",
+        "name",
+        "arguments",
+        "result_bytes",
+        "truncated",
+        "failed",
+        "withheld"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

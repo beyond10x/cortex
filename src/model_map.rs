@@ -2,6 +2,7 @@
 //! the generated model types (`generated/cortex-model`). Both sides are generated from `spec/`;
 //! this module is the one place that connects them, and the compiler checks every field.
 
+use cortex_model::ask as ma;
 use cortex_model::instance as m;
 use cortex_model::json as mj;
 use cortex_model::primitives::Decimal;
@@ -163,7 +164,116 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
                 },
             }),
         },
+        ask: match &spec.ask {
+            EssPresence::Absent => None,
+            EssPresence::Present(a) => Some(ask_spec(a)?),
+        },
     })
+}
+
+fn ask_spec(a: &s::CortexAskAskSpec) -> Result<ma::AskSpec, MapError> {
+    Ok(ma::AskSpec {
+        listen: a.listen.clone(),
+        identity_header: a.identity_header.clone(),
+        limits: ma::AskLimits {
+            max_steps: int(&a.limits.max_steps, "ask.limits.max_steps")?,
+            max_result_bytes: int(&a.limits.max_result_bytes, "ask.limits.max_result_bytes")?,
+            max_seconds: int(&a.limits.max_seconds, "ask.limits.max_seconds")?,
+            per_identity_per_minute: int(
+                &a.limits.per_identity_per_minute,
+                "ask.limits.per_identity_per_minute",
+            )?,
+        },
+        link_templates: match &a.link_templates {
+            EssPresence::Absent => None,
+            EssPresence::Present(l) => Some(ma::LinkTemplates {
+                node: opt(&l.node),
+                evidence: opt(&l.evidence),
+            }),
+        },
+        guidance: opt(&a.guidance),
+        retention_days: match &a.retention_days {
+            EssPresence::Absent => None,
+            EssPresence::Present(d) => Some(int(d, "ask.retention_days")?),
+        },
+        slow_after_ms: match &a.slow_after_ms {
+            EssPresence::Absent => None,
+            EssPresence::Present(t) => Some(int(t, "ask.slow_after_ms")?),
+        },
+        records: match &a.records {
+            EssPresence::Absent => None,
+            EssPresence::Present(r) => Some(ma::PostgresRecords {
+                url: r.url.clone(),
+                schema: r.schema.clone(),
+                ca_file: opt(&r.ca_file),
+                connection: connection_ref(&r.connection),
+            }),
+        },
+    })
+}
+
+/// An answer's event as the stream carries it: the generated wire form of `cortex.ask.AskEvent`,
+/// `{"event": <name>, "value": <fields>}`.
+pub fn ask_event(event: &ma::AskEvent) -> s::CortexAskAskEvent {
+    let n = serde_json::Number::from;
+    match event {
+        ma::AskEvent::Delta(d) => s::CortexAskAskEvent::V0(s::CortexAskAskEventVariant0 {
+            event: s::CortexAskAskEventVariant0Event::V0,
+            value: Box::new(s::CortexAskAskDelta {
+                text: d.text.clone(),
+            }),
+        }),
+        ma::AskEvent::Discard(d) => s::CortexAskAskEvent::V1(s::CortexAskAskEventVariant1 {
+            event: s::CortexAskAskEventVariant1Event::V0,
+            value: Box::new(s::CortexAskAskDiscard { step: n(d.step) }),
+        }),
+        ma::AskEvent::Done(d) => s::CortexAskAskEvent::V2(s::CortexAskAskEventVariant2 {
+            event: s::CortexAskAskEventVariant2Event::V0,
+            value: Box::new(s::CortexAskAskDone {
+                answer: d.answer.clone(),
+                answer_id: d.answer_id.clone(),
+                cached_tokens: n(d.cached_tokens),
+                context_tokens: n(d.context_tokens),
+                evidence: d.evidence.clone(),
+                input_tokens: n(d.input_tokens),
+                nodes: d.nodes.clone(),
+                output_tokens: n(d.output_tokens),
+                steps: n(d.steps),
+                unrestored: n(d.unrestored),
+            }),
+        }),
+        ma::AskEvent::Error(e) => s::CortexAskAskEvent::V3(s::CortexAskAskEventVariant3 {
+            event: s::CortexAskAskEventVariant3Event::V0,
+            value: Box::new(s::CortexAskAskError {
+                message: e.message.clone(),
+                reason: e.reason.clone(),
+                retry_after: match e.retry_after {
+                    None => EssPresence::Absent,
+                    Some(r) => EssPresence::Present(n(r)),
+                },
+            }),
+        }),
+        ma::AskEvent::Status(st) => s::CortexAskAskEvent::V4(s::CortexAskAskEventVariant4 {
+            event: s::CortexAskAskEventVariant4Event::V0,
+            value: Box::new(s::CortexAskAskStatus {
+                format: st.format.clone(),
+                message: st.message.clone(),
+                step: n(st.step),
+            }),
+        }),
+        ma::AskEvent::Tool(t) => s::CortexAskAskEvent::V5(s::CortexAskAskEventVariant5 {
+            event: s::CortexAskAskEventVariant5Event::V0,
+            value: Box::new(s::CortexAskAskTool {
+                arguments: t.arguments.clone(),
+                failed: t.failed,
+                name: t.name.clone(),
+                result_bytes: n(t.result_bytes),
+                step: n(t.step),
+                truncated: t.truncated,
+                withheld: t.withheld,
+            }),
+        }),
+    }
 }
 
 fn connection_ref(c: &s::CortexInstanceConnectionRef) -> m::ConnectionRef {

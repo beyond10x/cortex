@@ -40,11 +40,117 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7",
-    "contract_digest": "slice-sha256/2:e813a9dabdc6b5a345dadc687c0299337a9c01992a68d2873351ad371148274d",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:24c880a0e3baa07e579c9e3b93d95288d4fdae608c03844e8d48b60600ae8113",
     "regenerate": "ess generate"
   },
   "$defs": {
+    "cortex.ask.AskLimits": {
+      "title": "AskLimits",
+      "x-ess-name": "cortex.ask.AskLimits",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "max_steps": {
+          "type": "integer"
+        },
+        "max_result_bytes": {
+          "type": "integer"
+        },
+        "max_seconds": {
+          "type": "integer"
+        },
+        "per_identity_per_minute": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_steps",
+        "max_result_bytes",
+        "max_seconds",
+        "per_identity_per_minute"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.AskSpec": {
+      "title": "AskSpec",
+      "x-ess-name": "cortex.ask.AskSpec",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "listen": {
+          "type": "string"
+        },
+        "identity_header": {
+          "type": "string"
+        },
+        "limits": {
+          "$ref": "#/$defs/cortex.ask.AskLimits"
+        },
+        "link_templates": {
+          "$ref": "#/$defs/cortex.ask.LinkTemplates"
+        },
+        "guidance": {
+          "type": "string"
+        },
+        "retention_days": {
+          "type": "integer"
+        },
+        "slow_after_ms": {
+          "type": "integer"
+        },
+        "records": {
+          "$ref": "#/$defs/cortex.ask.PostgresRecords"
+        }
+      },
+      "required": [
+        "listen",
+        "identity_header",
+        "limits"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.LinkTemplates": {
+      "title": "LinkTemplates",
+      "x-ess-name": "cortex.ask.LinkTemplates",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "cortex.ask.PostgresRecords": {
+      "title": "PostgresRecords",
+      "x-ess-name": "cortex.ask.PostgresRecords",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "ca_file": {
+          "type": "string"
+        },
+        "connection": {
+          "$ref": "#/$defs/cortex.instance.ConnectionRef"
+        }
+      },
+      "required": [
+        "url",
+        "schema",
+        "connection"
+      ],
+      "additionalProperties": false
+    },
     "cortex.instance.ChangeDetection": {
       "title": "ChangeDetection",
       "x-ess-name": "cortex.instance.ChangeDetection",
@@ -463,6 +569,9 @@
         },
         "monitoring": {
           "$ref": "#/$defs/cortex.instance.MonitoringSpec"
+        },
+        "ask": {
+          "$ref": "#/$defs/cortex.ask.AskSpec"
         }
       },
       "required": [

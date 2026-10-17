@@ -1,5 +1,398 @@
 {
   "$defs": {
+    "cortex.ask.AskDelta": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "AskDelta",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.ask.AskDelta"
+    },
+    "cortex.ask.AskDiscard": {
+      "additionalProperties": false,
+      "properties": {
+        "step": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step"
+      ],
+      "title": "AskDiscard",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.ask.AskDiscard"
+    },
+    "cortex.ask.AskDone": {
+      "additionalProperties": false,
+      "properties": {
+        "answer": {
+          "type": "string"
+        },
+        "answer_id": {
+          "type": "string"
+        },
+        "cached_tokens": {
+          "type": "integer"
+        },
+        "context_tokens": {
+          "type": "integer"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "input_tokens": {
+          "type": "integer"
+        },
+        "nodes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "output_tokens": {
+          "type": "integer"
+        },
+        "steps": {
+          "type": "integer"
+        },
+        "unrestored": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "answer_id",
+        "answer",
+        "nodes",
+        "evidence",
+        "input_tokens",
+        "output_tokens",
+        "cached_tokens",
+        "context_tokens",
+        "steps",
+        "unrestored"
+      ],
+      "title": "AskDone",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.ask.AskDone"
+    },
+    "cortex.ask.AskError": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "retry_after": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "reason",
+        "message"
+      ],
+      "title": "AskError",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.ask.AskError"
+    },
+    "cortex.ask.AskEvent": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "event": {
+              "const": "delta",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.ask.AskDelta"
+            }
+          },
+          "required": [
+            "event",
+            "value"
+          ],
+          "title": "delta",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "event": {
+              "const": "discard",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.ask.AskDiscard"
+            }
+          },
+          "required": [
+            "event",
+            "value"
+          ],
+          "title": "discard",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "event": {
+              "const": "done",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.ask.AskDone"
+            }
+          },
+          "required": [
+            "event",
+            "value"
+          ],
+          "title": "done",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "event": {
+              "const": "error",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.ask.AskError"
+            }
+          },
+          "required": [
+            "event",
+            "value"
+          ],
+          "title": "error",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "event": {
+              "const": "status",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.ask.AskStatus"
+            }
+          },
+          "required": [
+            "event",
+            "value"
+          ],
+          "title": "status",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "event": {
+              "const": "tool",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.ask.AskTool"
+            }
+          },
+          "required": [
+            "event",
+            "value"
+          ],
+          "title": "tool",
+          "type": "object"
+        }
+      ],
+      "title": "AskEvent",
+      "x-ess-kind": "union",
+      "x-ess-name": "cortex.ask.AskEvent",
+      "x-ess-union-tag": "event"
+    },
+    "cortex.ask.AskLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_result_bytes": {
+          "type": "integer"
+        },
+        "max_seconds": {
+          "type": "integer"
+        },
+        "max_steps": {
+          "type": "integer"
+        },
+        "per_identity_per_minute": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_steps",
+        "max_result_bytes",
+        "max_seconds",
+        "per_identity_per_minute"
+      ],
+      "title": "AskLimits",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.ask.AskLimits"
+    },
+    "cortex.ask.AskSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "guidance": {
+          "type": "string"
+        },
+        "identity_header": {
+          "type": "string"
+        },
+        "limits": {
+          "$ref": "#/$defs/cortex.ask.AskLimits"
+        },
+        "link_templates": {
+          "$ref": "#/$defs/cortex.ask.LinkTemplates"
+        },
+        "listen": {
+          "type": "string"
+        },
+        "records": {
+          "$ref": "#/$defs/cortex.ask.PostgresRecords"
+        },
+        "retention_days": {
+          "type": "integer"
+        },
+        "slow_after_ms": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "listen",
+        "identity_header",
+        "limits"
+      ],
+      "title": "AskSpec",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.ask.AskSpec"
+    },
+    "cortex.ask.AskStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "step": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "format",
+        "step",
+        "message"
+      ],
+      "title": "AskStatus",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.ask.AskStatus"
+    },
+    "cortex.ask.AskTool": {
+      "additionalProperties": false,
+      "properties": {
+        "arguments": {
+          "type": "string"
+        },
+        "failed": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "result_bytes": {
+          "type": "integer"
+        },
+        "step": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "withheld": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "step",
+        "name",
+        "arguments",
+        "result_bytes",
+        "truncated",
+        "failed",
+        "withheld"
+      ],
+      "title": "AskTool",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.ask.AskTool"
+    },
+    "cortex.ask.LinkTemplates": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        }
+      },
+      "title": "LinkTemplates",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.ask.LinkTemplates"
+    },
+    "cortex.ask.PostgresRecords": {
+      "additionalProperties": false,
+      "properties": {
+        "ca_file": {
+          "type": "string"
+        },
+        "connection": {
+          "$ref": "#/$defs/cortex.instance.ConnectionRef"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "schema",
+        "connection"
+      ],
+      "title": "PostgresRecords",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.ask.PostgresRecords"
+    },
     "cortex.instance.ChangeDetection": {
       "enum": [
         "ContentHash"
@@ -374,6 +767,9 @@
     "cortex.instance.InstanceSpec": {
       "additionalProperties": false,
       "properties": {
+        "ask": {
+          "$ref": "#/$defs/cortex.ask.AskSpec"
+        },
         "description": {
           "type": "string"
         },
@@ -1434,8 +1830,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:a5999d3c6ea02b7df89a76365524a4c5accc06daeb9d43168b3d2266423b21a5",
-    "source_digest": "590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7",
+    "contract_digest": "slice-sha256/2:7a4a9d280f6dd245837da09ff77a16b7f1848b57183c83183296e7dacfe3c4f8",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
     "specification_version": "v1",
     "system": "cortex"
   }

@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7
-// contract digest a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96
+// model digest dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda
+// contract digest 7d415de25a37eea36ac6425b96c4fa73b380215c1b617c8e06d0464a3499f204
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -18,6 +18,10 @@
 /// An event this component declares it publishes, on its way to the system's transport.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PublishedEvent {
+    /// `cortex.instance.EvalCaseAdded`.
+    EvalCaseAdded(crate::instance::EvalCaseAdded),
+    /// `cortex.instance.EvalRan`.
+    EvalRan(crate::instance::EvalRan),
     /// `cortex.instance.InstanceAdopted`.
     InstanceAdopted(crate::instance::InstanceAdopted),
     /// `cortex.instance.InstanceCreated`.
@@ -78,8 +82,29 @@ impl<B> Cortex<B> {
 
 impl<B> Cortex<B>
 where
-    B: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    B: crate::instance::obligations::AddEvalCaseBehavior + crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunEvalBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
 {
+    /// Accepts `cortex.instance.AddEvalCase`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn add_eval_case(&mut self, input: crate::instance::AddEvalCase) -> Result<crate::instance::AddEvalCaseOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.add_eval_case(input)?;
+        match &outcome {
+            crate::instance::AddEvalCaseOutcome::SetInvalid { .. } => {}
+            crate::instance::AddEvalCaseOutcome::NoSuchReview { .. } => {}
+            crate::instance::AddEvalCaseOutcome::ReviewOpen { .. } => {}
+            crate::instance::AddEvalCaseOutcome::NoExpectations { .. } => {}
+            crate::instance::AddEvalCaseOutcome::CaseExists { .. } => {}
+            crate::instance::AddEvalCaseOutcome::Added { eval_case_added, .. } => {
+                self.outbox.push(PublishedEvent::EvalCaseAdded(eval_case_added.clone()));
+            }
+            crate::instance::AddEvalCaseOutcome::NoSuchInstance { .. } => {}
+        }
+        Ok(outcome)
+    }
+
     /// Accepts `cortex.instance.AddSource`: runs the behaviour obligation, then publishes the declared events
     /// the outcome carries.
     ///
@@ -304,6 +329,24 @@ where
                 self.outbox.push(PublishedEvent::SnapshotRestored(snapshot_restored.clone()));
             }
             crate::instance::RestoreSnapshotOutcome::NoSuchInstance { .. } => {}
+        }
+        Ok(outcome)
+    }
+
+    /// Accepts `cortex.instance.RunEval`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn run_eval(&mut self, input: crate::instance::RunEval) -> Result<crate::instance::RunEvalOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.run_eval(input)?;
+        match &outcome {
+            crate::instance::RunEvalOutcome::SetInvalid { .. } => {}
+            crate::instance::RunEvalOutcome::RunnerFailed { .. } => {}
+            crate::instance::RunEvalOutcome::Evaluated { eval_ran, .. } => {
+                self.outbox.push(PublishedEvent::EvalRan(eval_ran.clone()));
+            }
+            crate::instance::RunEvalOutcome::NoSuchInstance { .. } => {}
         }
         Ok(outcome)
     }

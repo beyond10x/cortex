@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvalRun",
+  "x-ess-name": "cortex.instance.EvalRun",
+  "x-ess-kind": "entity",
+  "type": "object",
+  "properties": {
+    "stamp": {
+      "type": "string"
+    },
+    "instance_name": {
+      "$ref": "#/$defs/cortex.instance.InstanceName",
+      "x-ess-relation": {
+        "name": "eval_runs",
+        "kind": "owns",
+        "source": "cortex.instance.Instance",
+        "target": "cortex.instance.EvalRun",
+        "cardinality": "many",
+        "via": "instance_name"
+      }
+    },
+    "runner": {
+      "$ref": "#/$defs/cortex.instance.EvalRunner"
+    },
+    "cases": {
+      "type": "integer"
+    },
+    "passed": {
+      "type": "integer"
+    },
+    "cost_usd": {
+      "type": "string",
+      "format": "decimal",
+      "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
+    "state": {
+      "$ref": "#/$defs/cortex.instance.EvalRun.State"
+    }
+  },
+  "required": [
+    "stamp",
+    "instance_name",
+    "runner",
+    "cases",
+    "passed",
+    "state"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:93cee108cfba687f0868db46eec28dddc514ce939b3a7d04c9657a1e6c4348cb",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.EvalRun.State": {
+      "title": "State",
+      "x-ess-name": "cortex.instance.EvalRun.State",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Recorded"
+      ]
+    },
+    "cortex.instance.EvalRunner": {
+      "title": "EvalRunner",
+      "x-ess-name": "cortex.instance.EvalRunner",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "mcp",
+        "ask",
+        "replay"
+      ]
+    },
+    "cortex.instance.InstanceName": {
+      "title": "InstanceName",
+      "x-ess-name": "cortex.instance.InstanceName",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

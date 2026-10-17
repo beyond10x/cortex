@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.AskLimits",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:63fd0ba50ea7398c5b6e486938f857bc59a652f54f39acdacd575e3eb09caf2b",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AskLimits": {
+      "title": "AskLimits",
+      "x-ess-name": "cortex.ask.AskLimits",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "max_steps": {
+          "type": "integer"
+        },
+        "max_result_bytes": {
+          "type": "integer"
+        },
+        "max_seconds": {
+          "type": "integer"
+        },
+        "per_identity_per_minute": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_steps",
+        "max_result_bytes",
+        "max_seconds",
+        "per_identity_per_minute"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

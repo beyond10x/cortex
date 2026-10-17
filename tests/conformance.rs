@@ -7,18 +7,23 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
+use cortex_cli::ask::records::{self, RecordStore, Records};
 use cortex_cli::connectors::Connectors;
 use cortex_cli::home::{self, Home, Registry};
-use cortex_cli::ports::{Ports, Shared, SharedRef};
+use cortex_cli::ports::{AskPorts, Ports, Shared, SharedRef};
 use cortex_cli::run::{Counts, Failure, Report, Tools};
 use cortex_cli::status;
+use cortex_model::ask as ma;
 use cortex_model::behaviour::Generated;
 use cortex_model::instance as m;
 use cortex_model::ports::cortex::{Cortex, PublishedEvent};
+use cortex_model::ports::cortex_ask::{CortexAsk, PublishedEvent as AskPublished};
 use serde_json::{json, Value};
 
 type App = Cortex<Generated<Ports>>;
+type AskApp = CortexAsk<Generated<AskPorts>>;
 
 struct Last {
     outcome: String,
@@ -30,6 +35,9 @@ struct Last {
 
 struct Scenario {
     app: App,
+    ask_app: AskApp,
+    /// The answer records the ask app keeps, in memory.
+    records: Arc<Records>,
     shared: SharedRef,
     captured: BTreeMap<String, Value>,
     observed: Vec<(String, Value)>,
@@ -71,6 +79,7 @@ fn placeholder_spec() -> m::InstanceSpec {
         snapshots: None,
         gate: None,
         monitoring: None,
+        ask: None,
     }
 }
 
@@ -85,6 +94,17 @@ fn same(a: &Value, b: &Value) -> bool {
     match (a.as_f64(), b.as_f64()) {
         (Some(x), Some(y)) => x == y,
         _ => text(a) == text(b),
+    }
+}
+
+/// Two row values ordered, or `None` for a missing value or two kinds nothing orders. Texts order
+/// by their bytes: every timestamp a view of this harness publishes is written in one UTC form.
+fn rank(a: &Value, b: &Value) -> Option<std::cmp::Ordering> {
+    match (a, b) {
+        (Value::Number(_), Value::Number(_)) => a.as_f64()?.partial_cmp(&b.as_f64()?),
+        (Value::String(x), Value::String(y)) => Some(x.as_bytes().cmp(y.as_bytes())),
+        (Value::Bool(x), Value::Bool(y)) => Some(x.cmp(y)),
+        _ => None,
     }
 }
 
@@ -130,6 +150,38 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "rate": e.rate.map(|r| r.0),
                 "lower": e.lower.0,
                 "upper": e.upper.0,
+                "cost_usd": e.cost_usd.map(|c| c.0),
+            }),
+        ),
+        PublishedEvent::EvalCaseAdded(e) => (
+            "EvalCaseAdded",
+            json!({
+                "name": e.name.0,
+                "set": e.set,
+                "review_id": e.review_id.0,
+                "id": e.id,
+                "cases": e.cases,
+            }),
+        ),
+        PublishedEvent::EvalRan(e) => (
+            "EvalRan",
+            json!({
+                "name": e.name.0,
+                "stamp": e.stamp,
+                "runner": match e.runner {
+                    m::EvalRunner::Mcp => "mcp",
+                    m::EvalRunner::Ask => "ask",
+                    m::EvalRunner::Replay => "replay",
+                },
+                "cases": e.cases,
+                "passed": e.passed,
+                "facts_expected": e.facts_expected,
+                "facts_found": e.facts_found,
+                "nodes_expected": e.nodes_expected,
+                "nodes_found": e.nodes_found,
+                "model_calls": e.model_calls,
+                "input_tokens": e.input_tokens,
+                "output_tokens": e.output_tokens,
                 "cost_usd": e.cost_usd.map(|c| c.0),
             }),
         ),
@@ -201,6 +253,91 @@ fn event(e: PublishedEvent) -> (String, Value) {
     (format!("cortex.instance.{name}"), payload)
 }
 
+/// An event of the answer service, by its qualified name, with its payload as JSON.
+fn ask_event(e: AskPublished) -> (String, Value) {
+    match e {
+        AskPublished::AnswerRecorded(e) => (
+            "cortex.ask.AnswerRecorded".into(),
+            json!({
+                "answer_id": e.answer_id.0,
+                "outcome": records::outcome_name(e.outcome),
+            }),
+        ),
+        AskPublished::Purged(e) => (
+            "cortex.ask.Purged".into(),
+            json!({
+                "before": e.before.0,
+                "records": e.records,
+                "votes": e.votes,
+                "reviews": e.reviews,
+            }),
+        ),
+        AskPublished::ReviewClosed(e) => (
+            "cortex.ask.ReviewClosed".into(),
+            json!({"review_id": e.review_id.0, "reason": e.reason}),
+        ),
+        AskPublished::ReviewOpened(e) => (
+            "cortex.ask.ReviewOpened".into(),
+            json!({
+                "review_id": e.review_id.0,
+                "answer_id": e.answer_id.0,
+                "cause": records::cause_name(e.cause),
+            }),
+        ),
+        AskPublished::Voted(e) => (
+            "cortex.ask.Voted".into(),
+            json!({
+                "vote_id": e.vote_id.0,
+                "answer_id": e.answer_id.0,
+                "value": records::value_name(e.value),
+            }),
+        ),
+        AskPublished::Answered(e) => (
+            "cortex.ask.Answered".into(),
+            json!({
+                "identity": e.identity,
+                "done": {
+                    "answer_id": e.done.answer_id,
+                    "answer": e.done.answer,
+                    "nodes": e.done.nodes,
+                    "evidence": e.done.evidence,
+                    "input_tokens": e.done.input_tokens,
+                    "output_tokens": e.done.output_tokens,
+                    "cached_tokens": e.done.cached_tokens,
+                    "context_tokens": e.done.context_tokens,
+                    "steps": e.done.steps,
+                    "unrestored": e.done.unrestored,
+                },
+            }),
+        ),
+    }
+}
+
+/// A payload with every field that holds a struct replaced by its fields, named `<field>.<sub>`,
+/// as the suite names them in a shape.
+fn flatten(payload: &Value) -> Value {
+    fn walk(prefix: &str, v: &Value, out: &mut serde_json::Map<String, Value>) {
+        match v {
+            Value::Object(o) if !prefix.is_empty() => {
+                for (k, sub) in o {
+                    walk(&format!("{prefix}.{k}"), sub, out);
+                }
+            }
+            _ => {
+                out.insert(prefix.to_string(), v.clone());
+            }
+        }
+    }
+    let Some(fields) = payload.as_object() else {
+        return payload.clone();
+    };
+    let mut out = serde_json::Map::new();
+    for (k, v) in fields {
+        walk(k, v, &mut out);
+    }
+    Value::Object(out)
+}
+
 fn manifest_dir() -> std::path::PathBuf {
     std::env::var("CARGO_MANIFEST_DIR")
         .expect("cargo sets CARGO_MANIFEST_DIR")
@@ -230,6 +367,7 @@ fn decimal_pattern(event: &str, field: &str) -> regex::Regex {
 /// unless the suite marks it `optional`, a present value is of the stated `kind` (never null),
 /// and the payload carries no field the shape does not state.
 fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Value>) {
+    let payload = flatten(payload);
     let fields = payload
         .as_object()
         .unwrap_or_else(|| panic!("{event}: {payload} is not an object"));
@@ -248,7 +386,7 @@ fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Val
             .unwrap_or_else(|| panic!("{event}.{field}: unsupported shape {descriptor}"));
         if let Some(key) = descriptor
             .keys()
-            .find(|k| !matches!(k.as_str(), "holds" | "kind" | "optional"))
+            .find(|k| !matches!(k.as_str(), "holds" | "kind" | "optional" | "variants"))
         {
             panic!("{event}.{field}: unsupported shape key {key}");
         }
@@ -263,6 +401,24 @@ fn check_shape(event: &str, payload: &Value, shape: &serde_json::Map<String, Val
             match fields.get(field) {
                 None => assert!(optional, "{event} lacks {field}"),
                 Some(value) => assert!(value.is_array(), "{event}.{field}: {value} is no list"),
+            }
+            continue;
+        }
+        // An enum is present unless optional, and one of the variants the suite states.
+        if holds == Some("enum") {
+            let variants: Vec<&str> = descriptor
+                .get("variants")
+                .and_then(Value::as_array)
+                .unwrap_or_else(|| panic!("{event}.{field}: an enum states no variants"))
+                .iter()
+                .map(|v| v.as_str().expect("a variant is a string"))
+                .collect();
+            match fields.get(field) {
+                None => assert!(optional, "{event} lacks {field}"),
+                Some(value) => assert!(
+                    value.as_str().is_some_and(|v| variants.contains(&v)),
+                    "{event}.{field}: {value} is none of {variants:?}"
+                ),
             }
             continue;
         }
@@ -324,8 +480,17 @@ impl Scenario {
             runner: Some(runner),
             counter: Some(counter),
         }));
+        // The answer service is a component of its own over the same shared state, its records
+        // in a store in memory.
+        let records = Arc::new(Records::in_memory().expect("a store in memory"));
+        let ask_app = CortexAsk::new(Generated::new(AskPorts::new(
+            records.clone(),
+            shared.clone(),
+        )));
         Self {
             app,
+            ask_app,
+            records,
             shared,
             captured: BTreeMap::new(),
             observed: Vec::new(),
@@ -343,10 +508,11 @@ impl Scenario {
                 .get(spec["instance"].as_str().unwrap())
                 .cloned()
                 .unwrap_or_else(|| panic!("nothing captured as {}", spec["instance"])),
+            // The first publication of the event, as the ESS reference runner resolves it: a
+            // scenario's own subject publishes before any later step's sibling row does.
             Some("observed") => self
                 .observed
                 .iter()
-                .rev()
                 .find(|(name, _)| name == spec["event"].as_str().unwrap())
                 .map(|(_, payload)| payload[spec["field"].as_str().unwrap()].clone())
                 .unwrap_or_else(|| panic!("no {} observed", spec["event"])),
@@ -370,6 +536,21 @@ impl Scenario {
                 .get(k)
                 .and_then(Value::as_array)
                 .map(|a| a.iter().filter_map(Value::as_i64).collect())
+                .unwrap_or_default()
+        };
+        // A suite writes an integer as a JSON number, `1.0` included.
+        let int = |k: &str| -> i64 {
+            let v = input.get(k).unwrap_or(&Value::Null);
+            v.as_i64()
+                .or_else(|| v.as_f64().filter(|f| f.fract() == 0.0).map(|f| f as i64))
+                .unwrap_or_else(|| panic!("{k}: {v} is not an integer"))
+        };
+        let optional = |k: &str| input.get(k).and_then(Value::as_str).map(str::to_string);
+        let strings = |k: &str| -> Vec<String> {
+            input
+                .get(k)
+                .and_then(Value::as_array)
+                .map(|a| a.iter().map(text).collect())
                 .unwrap_or_default()
         };
         let app = &mut self.app;
@@ -657,6 +838,76 @@ impl Scenario {
                     Some(("InstanceNotFound", json!({"name": error.name.0}))),
                 ),
             },
+            "cortex.instance.RunEval" => match app
+                .run_eval(m::RunEval {
+                    name: m::InstanceName(s("name")),
+                    set: s("set"),
+                    runner: match s("runner").as_str() {
+                        "ask" => m::EvalRunner::Ask,
+                        "replay" => m::EvalRunner::Replay,
+                        _ => m::EvalRunner::Mcp,
+                    },
+                    from: input
+                        .get("from")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                })
+                .unwrap()
+            {
+                m::RunEvalOutcome::Evaluated { .. } => ("evaluated", None),
+                m::RunEvalOutcome::SetInvalid { error } => (
+                    "set-invalid",
+                    Some(("EvalSetInvalid", json!({"reason": error.reason}))),
+                ),
+                m::RunEvalOutcome::RunnerFailed { error } => (
+                    "runner-failed",
+                    Some(("EvalRunnerFailed", json!({"reason": error.reason}))),
+                ),
+                m::RunEvalOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+            },
+            "cortex.instance.AddEvalCase" => match app
+                .add_eval_case(m::AddEvalCase {
+                    name: m::InstanceName(s("name")),
+                    set: s("set"),
+                    from_review: ma::ReviewId(s("from_review")),
+                })
+                .unwrap()
+            {
+                m::AddEvalCaseOutcome::Added { .. } => ("added", None),
+                m::AddEvalCaseOutcome::SetInvalid { error } => (
+                    "set-invalid",
+                    Some(("EvalSetInvalid", json!({"reason": error.reason}))),
+                ),
+                m::AddEvalCaseOutcome::NoSuchReview { error } => (
+                    "no-such-review",
+                    Some((
+                        "EvalReviewNotFound",
+                        json!({"review_id": error.review_id.0}),
+                    )),
+                ),
+                m::AddEvalCaseOutcome::ReviewOpen { error } => (
+                    "review-open",
+                    Some(("EvalReviewOpen", json!({"review_id": error.review_id.0}))),
+                ),
+                m::AddEvalCaseOutcome::NoExpectations { error } => (
+                    "no-expectations",
+                    Some((
+                        "EvalNoExpectations",
+                        json!({"review_id": error.review_id.0}),
+                    )),
+                ),
+                m::AddEvalCaseOutcome::CaseExists { error } => (
+                    "case-exists",
+                    Some(("EvalCaseExists", json!({"review_id": error.review_id.0}))),
+                ),
+                m::AddEvalCaseOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+            },
             "cortex.instance.ProposeSchemaChanges" => match app
                 .propose_schema_changes(m::ProposeSchemaChanges {
                     name: m::InstanceName(s("name")),
@@ -780,16 +1031,196 @@ impl Scenario {
                     Some(("InstanceNotFound", json!({"name": error.name.0}))),
                 ),
             },
+            "cortex.ask.Ask" => match self
+                .ask_app
+                .ask(ma::Ask {
+                    question: s("question"),
+                    identity: s("identity"),
+                })
+                .unwrap()
+            {
+                ma::AskOutcome::Answered { .. } => ("answered", None),
+                ma::AskOutcome::Unidentified { error } => (
+                    "unidentified",
+                    Some(("cortex.ask.Unidentified", json!({"header": error.header}))),
+                ),
+                ma::AskOutcome::RateLimited { error } => (
+                    "rate-limited",
+                    Some((
+                        "cortex.ask.RateLimited",
+                        json!({"identity": error.identity, "retry_after": error.retry_after}),
+                    )),
+                ),
+                ma::AskOutcome::LimitReached { error } => (
+                    "limit-reached",
+                    Some(("cortex.ask.LimitReached", json!({"limit": error.limit}))),
+                ),
+                ma::AskOutcome::ModelFailed { error } => (
+                    "model-failed",
+                    Some(("cortex.ask.ModelFailed", json!({"reason": error.reason}))),
+                ),
+                ma::AskOutcome::ReaderFailed { error } => (
+                    "reader-failed",
+                    Some(("cortex.ask.ReaderFailed", json!({"reason": error.reason}))),
+                ),
+            },
+            "cortex.ask.RecordAnswer" => {
+                let tool_calls = input
+                    .get("tool_calls")
+                    .and_then(Value::as_array)
+                    .map(|calls| {
+                        calls
+                            .iter()
+                            .map(|t| {
+                                let n = |k: &str| t[k].as_f64().expect("a number") as i64;
+                                ma::AskTool {
+                                    step: n("step"),
+                                    name: text(&t["name"]),
+                                    arguments: text(&t["arguments"]),
+                                    result_bytes: n("result_bytes"),
+                                    truncated: t["truncated"].as_bool().expect("a bool"),
+                                    failed: t["failed"].as_bool().expect("a bool"),
+                                    withheld: t["withheld"].as_bool().unwrap_or(false),
+                                }
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let outcome = s("outcome");
+                match self
+                    .ask_app
+                    .record_answer(ma::RecordAnswer {
+                        answer_id: ma::AnswerId(s("answer_id")),
+                        instance_name: m::InstanceName(s("instance_name")),
+                        identity: s("identity"),
+                        question: s("question"),
+                        answer: optional("answer"),
+                        reason: optional("reason"),
+                        outcome: [
+                            ma::AnswerOutcome::Answered,
+                            ma::AnswerOutcome::Failed,
+                            ma::AnswerOutcome::Limited,
+                        ]
+                        .into_iter()
+                        .find(|o| records::outcome_name(*o) == outcome)
+                        .unwrap_or_else(|| panic!("unknown answer outcome {outcome}")),
+                        tool_calls,
+                        latency_ms: int("latency_ms"),
+                        input_tokens: int("input_tokens"),
+                        output_tokens: int("output_tokens"),
+                        cached_tokens: int("cached_tokens"),
+                        context_tokens: int("context_tokens"),
+                        steps: int("steps"),
+                        at: cortex_model::primitives::Timestamp(s("at")),
+                    })
+                    .unwrap()
+                {
+                    ma::RecordAnswerOutcome::Recorded { .. } => ("recorded", None),
+                }
+            }
+            "cortex.ask.CastVote" => {
+                let value = s("value");
+                match self
+                    .ask_app
+                    .cast_vote(ma::CastVote {
+                        vote_id: ma::VoteId(s("vote_id")),
+                        answer_id: ma::AnswerId(s("answer_id")),
+                        identity: s("identity"),
+                        value: records::value_of(&value)
+                            .unwrap_or_else(|| panic!("unknown vote value {value}")),
+                        comment: optional("comment"),
+                    })
+                    .unwrap()
+                {
+                    ma::CastVoteOutcome::Cast { .. } => ("cast", None),
+                    ma::CastVoteOutcome::Changed { .. } => ("changed", None),
+                    ma::CastVoteOutcome::Unidentified { error } => (
+                        "unidentified",
+                        Some(("cortex.ask.Unidentified", json!({"header": error.header}))),
+                    ),
+                    ma::CastVoteOutcome::NoSuchAnswer { error } => (
+                        "no-such-answer",
+                        Some((
+                            "cortex.ask.AnswerNotFound",
+                            json!({"answer_id": error.answer_id.0}),
+                        )),
+                    ),
+                }
+            }
+            "cortex.ask.OpenReview" => {
+                let cause = s("cause");
+                match self
+                    .ask_app
+                    .open_review(ma::OpenReview {
+                        review_id: ma::ReviewId(s("review_id")),
+                        answer_id: ma::AnswerId(s("answer_id")),
+                        cause: records::cause_of(&cause)
+                            .unwrap_or_else(|| panic!("unknown review cause {cause}")),
+                    })
+                    .unwrap()
+                {
+                    ma::OpenReviewOutcome::Opened { .. } => ("opened", None),
+                    ma::OpenReviewOutcome::Exists { error } => (
+                        "exists",
+                        Some((
+                            "cortex.ask.ReviewExists",
+                            json!({"review_id": error.review_id.0}),
+                        )),
+                    ),
+                }
+            }
+            "cortex.ask.CloseReview" => match self
+                .ask_app
+                .close_review(ma::CloseReview {
+                    review_id: ma::ReviewId(s("review_id")),
+                    reason: s("reason"),
+                    expect_facts: strings("expect_facts"),
+                    expect_nodes: strings("expect_nodes"),
+                })
+                .unwrap()
+            {
+                ma::CloseReviewOutcome::Closed { .. } => ("closed", None),
+                ma::CloseReviewOutcome::WrongState { error } => (
+                    "wrong-state",
+                    Some((
+                        "cortex.ask.ReviewNotOpen",
+                        json!({"review_id": error.review_id.0}),
+                    )),
+                ),
+                ma::CloseReviewOutcome::NoSuchReview { error } => (
+                    "no-such-review",
+                    Some((
+                        "cortex.ask.ReviewNotFound",
+                        json!({"review_id": error.review_id.0}),
+                    )),
+                ),
+            },
+            "cortex.ask.PurgeExpired" => match self
+                .ask_app
+                .purge_expired(ma::PurgeExpired {
+                    before: cortex_model::primitives::Timestamp(s("before")),
+                })
+                .unwrap()
+            {
+                ma::PurgeExpiredOutcome::Purged { .. } => ("purged", None),
+            },
             other => panic!("unknown command {other}"),
         };
         let mut events: Vec<_> = self.app.drain_outbox().into_iter().map(event).collect();
+        events.extend(self.ask_app.drain_outbox().into_iter().map(ask_event));
         events.extend(unpublished);
         self.observed.extend(events.iter().cloned());
         // A forced branch holds for the one command that follows it.
         self.shared.borrow_mut().external.clear();
         self.last = Some(Last {
             outcome: outcome.to_string(),
-            error: error.as_ref().map(|(e, _)| format!("cortex.instance.{e}")),
+            error: error.as_ref().map(|(e, _)| {
+                if e.contains('.') {
+                    e.to_string()
+                } else {
+                    format!("cortex.instance.{e}")
+                }
+            }),
             error_fields: error.map(|(_, f)| f).unwrap_or(Value::Null),
             events,
         });
@@ -830,6 +1261,20 @@ impl Scenario {
                         "last_outcome": s.data.last_outcome.map(status::outcome_name),
                         "last_run_at": s.data.last_run_at.as_ref().map(|t| t.0.clone()),
                         "last_reason": s.data.last_reason,
+                    })
+                })
+                .collect(),
+            "cortex.ask.OpenReviews" => self
+                .records
+                .open_reviews()
+                .expect("the records read")
+                .into_iter()
+                .map(|r| {
+                    json!({
+                        "review_id": r.review_id.0,
+                        "answer_id": r.answer_id.0,
+                        "cause": records::cause_name(r.cause),
+                        "opened_at": r.opened_at.0,
                     })
                 })
                 .collect(),
@@ -982,6 +1427,50 @@ impl Scenario {
                             assert!(ok, "{view}: {p} fails for {r}");
                         }
                     }
+                    "counts" => {
+                        let at_least = expectation["at_least"].as_u64().expect("at_least") as usize;
+                        assert!(
+                            rows.len() >= at_least,
+                            "{view} holds {} rows, not at least {at_least}",
+                            rows.len()
+                        );
+                    }
+                    "ranked" => {
+                        // As the ESS reference runner ranks: each neighbouring pair in order on
+                        // its first key that differs; a tie on every key is in order.
+                        let keys: Vec<(&str, bool)> = expectation["order_by"]
+                            .as_array()
+                            .expect("order_by")
+                            .iter()
+                            .map(|k| {
+                                let k = k.as_str().unwrap();
+                                match k.rsplit_once(' ') {
+                                    Some((field, "desc")) => (field, false),
+                                    Some((field, "asc")) => (field, true),
+                                    _ => (k, true),
+                                }
+                            })
+                            .collect();
+                        for pair in rows.windows(2) {
+                            for (field, ascending) in &keys {
+                                let order =
+                                    rank(&pair[0][field], &pair[1][field]).unwrap_or_else(|| {
+                                        panic!("{view}: `{field}` has no order in {pair:?}")
+                                    });
+                                if order == std::cmp::Ordering::Equal {
+                                    continue;
+                                }
+                                assert_eq!(
+                                    order == std::cmp::Ordering::Less,
+                                    *ascending,
+                                    "{view}: {} then {} is not ordered by {keys:?}",
+                                    pair[0],
+                                    pair[1]
+                                );
+                                break;
+                            }
+                        }
+                    }
                     other => panic!("unsupported expectation {other}"),
                 }
             }
@@ -998,7 +1487,7 @@ impl Scenario {
                 let id_field = before
                     .as_object()
                     .and_then(|o| {
-                        ["name", "source_id"]
+                        ["name", "source_id", "review_id"]
                             .into_iter()
                             .find(|k| o.contains_key(*k))
                     })
@@ -1046,7 +1535,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        83,
+        111,
         "the suite's scenario count moved; update this floor"
     );
     assert!(
@@ -1151,4 +1640,62 @@ fn the_shape_check_holds_each_field_to_the_shape_the_suite_states() {
             "{rule} on an absent field was not refused"
         );
     }
+}
+
+/// The `ranked` expectation refuses rows out of order, a row without the key and keys of mixed
+/// kinds, and reads a later key only on a tie. What it cannot see: zero or one row, and rows tied
+/// on every key, which the `OpenReviews` rows of one scenario are (`opened_at` is stamped to the
+/// second).
+#[test]
+fn the_ranked_expectation_refuses_rows_out_of_order_a_missing_key_and_mixed_kinds() {
+    let view = "cortex.ask.OpenReviews";
+    let holds = |rows: Vec<Value>, order_by: Value| {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut s = Scenario::new();
+            s.views.insert(view.to_string(), rows);
+            s.step(&json!({
+                "step": "expect_view",
+                "view": view,
+                "expectation": {"expect": "ranked", "order_by": order_by},
+            }));
+        }))
+        .is_ok()
+    };
+    let asc = json!(["opened_at asc"]);
+    let row = |id: &str, at: &str| json!({"review_id": id, "opened_at": at});
+    let (early, late) = ("2026-10-17T09:00:00Z", "2026-10-17T09:00:01Z");
+
+    assert!(holds(vec![row("a", early), row("b", late)], asc.clone()));
+    assert!(
+        !holds(vec![row("b", late), row("a", early)], asc.clone()),
+        "rows out of order held"
+    );
+    assert!(holds(
+        vec![row("b", late), row("a", early)],
+        json!(["opened_at desc"])
+    ));
+    assert!(
+        !holds(
+            vec![row("a", early), json!({"review_id": "b"})],
+            asc.clone()
+        ),
+        "a row without the key held"
+    );
+    assert!(
+        !holds(
+            vec![json!({"review_id": "a", "opened_at": 1}), row("b", late)],
+            asc.clone()
+        ),
+        "keys of mixed kinds held"
+    );
+    assert!(
+        !holds(
+            vec![row("b", early), row("a", early)],
+            json!(["opened_at asc", "review_id asc"])
+        ),
+        "a tie on the first key was not decided by the second"
+    );
+    // The limits: a tie on every key is in order, and one row has no pair to rank.
+    assert!(holds(vec![row("b", early), row("a", early)], asc.clone()));
+    assert!(holds(vec![row("b", late)], asc));
 }

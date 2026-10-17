@@ -116,6 +116,41 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 - `version` — `String`
 - `bin` — `Optional<String>`, which may be absent
 
+### `EvalCase`
+
+`cortex.instance.EvalCase` is a record of seven fields:
+
+- `format` — `String`
+- `id` — `String`
+- `question` — `String`
+- `expect_facts` — `List<String>`
+- `expect_nodes` — `List<String>`
+- `source` — `Optional<String>`, which may be absent
+- `review_id` — `Optional<cortex.ask.ReviewId>`, which may be absent
+
+### `EvalResult`
+
+`cortex.instance.EvalResult` is a record of eight fields:
+
+- `format` — `String`
+- `id` — `String`
+- `question` — `String`
+- `answer` — `String`
+- `cited_nodes` — `List<String>`
+- `passed` — `Boolean`
+- `missing_facts` — `List<String>`
+- `missing_nodes` — `List<String>`
+
+### `EvalRunner`
+
+`cortex.instance.EvalRunner` is one of `mcp`, `ask` and `replay`.
+
+### `EvalSet`
+
+`cortex.instance.EvalSet` is a record of one field:
+
+- `cases` — `List<cortex.instance.EvalCase>`
+
 ### `FetchPolicy`
 
 `cortex.instance.FetchPolicy` is a record of four fields:
@@ -165,7 +200,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 
 ### `InstanceSpec`
 
-`cortex.instance.InstanceSpec` is a record of 13 fields:
+`cortex.instance.InstanceSpec` is a record of 14 fields:
 
 - `format` — `String`
 - `name` — `cortex.instance.InstanceName`
@@ -180,6 +215,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 - `snapshots` — `Optional<cortex.instance.SnapshotPolicy>`, which may be absent
 - `gate` — `Optional<cortex.instance.RunGate>`, which may be absent
 - `monitoring` — `Optional<cortex.instance.MonitoringSpec>`, which may be absent
+- `ask` — `Optional<cortex.ask.AskSpec>`, which may be absent
 
 ### `ModelBackend`
 
@@ -613,11 +649,45 @@ Every value satisfies `paging.stop_older_than_since != true` and `(defined(conne
 
 Every value satisfies `(defined(connection) or defined(profile))`.
 
-Five of the types above are reached by nothing else in this system: `cortex.instance.DailySpend`, `cortex.instance.HookResult`, `cortex.instance.QualityVerdict`, `cortex.instance.SchemaProposal` and `cortex.instance.SchemaProposals`. No entity, view, command, event, error or crossing names them, so it is either vocabulary something outside this specification uses or a leftover — and only a person can tell which.
+Seven of the types above are reached by nothing else in this system: `cortex.instance.DailySpend`, `cortex.instance.EvalResult`, `cortex.instance.EvalSet`, `cortex.instance.HookResult`, `cortex.instance.QualityVerdict`, `cortex.instance.SchemaProposal` and `cortex.instance.SchemaProposals`. No entity, view, command, event, error or crossing names them, so it is either vocabulary something outside this specification uses or a leftover — and only a person can tell which.
 
 ## Entities
 
 An entity is what this context is about: something with an identity that outlives any one request, a shape, and a lifecycle. The lifecycle is exhaustive — a move that is not drawn below is a move this specification does not permit, and that is the only way it says so. Every move is labelled with the command that takes it, because a move nothing can trigger is refused rather than drawn.
+
+### `EvalRun`
+
+`cortex.instance.EvalRun`.
+
+An instance is identified by `stamp`, a `String`. The name is part of the model and not a convention: a view projects the identity under that name, so a projection inventing its own would disagree with the view.
+
+It holds:
+
+- `instance_name` — `cortex.instance.InstanceName`
+- `runner` — `cortex.instance.EvalRunner`
+- `cases` — `Integer`
+- `passed` — `Integer`
+- `cost_usd` — `Optional<Decimal>`, which may be absent
+
+Its `instance_name` is what [`Instance`](#instance) owns it by, as `eval_runs`.
+
+Every instance satisfies `cases >= 0` and `passed >= 0` — a predicate over this entity's own fields, checked against them rather than stored as a sentence, so an invariant reading something the entity does not have is refused instead of documented.
+
+Its state is a `cortex.instance.EvalRun.State`, one of `Recorded`. That enum is synthesised from the lifecycle rather than declared beside it, so the states a view's filter compares and the states drawn below cannot disagree.
+
+An instance is created in `Recorded`. `Recorded` is terminal, so an instance may rest there forever. That is declared rather than inferred from having no way out: an entity that cannot leave a state is either finished or stuck, and only its author knows which.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Recorded
+    Recorded --> [*]
+```
+
+It declares no moves, so nothing changes its state once it exists.
+
+It has one state, so there is no move to permit or to forbid.
+
+No view projects it, so nothing outside this context is promised a way to observe one.
 
 ### `Instance`
 
@@ -632,7 +702,7 @@ It holds:
 - `ekr_version` — `String`
 - `seed_digest` — `String`
 
-It owns any number of [`Source`](#source), as `sources`, carried by `Source.instance_name`.
+It owns any number of [`Source`](#source), as `sources`, carried by `Source.instance_name`. It owns any number of [`cortex.ask.AnswerRecord`](cortex-ask.md#answerrecord), as `answers`, carried by `cortex.ask.AnswerRecord.instance_name`. It owns any number of [`EvalRun`](#evalrun), as `eval_runs`, carried by `EvalRun.instance_name`.
 
 No invariant is declared, so nothing here constrains an instance at rest.
 
@@ -793,6 +863,32 @@ It declares no order, so the rows come back in whatever order the implementation
 A generated scenario asserts it once, immediately after the command: a view promising this and not keeping the promise has to fail the suite rather than be retried until it passes.
 
 ## Commands
+
+### `AddEvalCase`
+
+`cortex.instance.AddEvalCase`, shown to a person as "Add an eval case from a review" and called `case` on the wire.
+
+It takes:
+
+- `name` — `cortex.instance.InstanceName`
+- `set` — `String`
+- `from_review` — `cortex.ask.ReviewId`
+
+It has seven outcomes.
+
+**`set-invalid`** — The set file is unchanged. Decided outside the input: The set file exists and cannot be read or is not a cortex.eval-case/1 set. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.EvalSetInvalid`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`no-such-review`** — The set file is unchanged. Decided outside the input: The instance's answer records hold no review item from_review names, or not its answer. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.EvalReviewNotFound`, carrying `review_id`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`review-open`** — The item has no expectations until a reviewer closes it; the set file is unchanged. Decided outside the input: The review item from_review names is still open. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.EvalReviewOpen`, carrying `review_id`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`no-expectations`** — A case with nothing expected passes every answer; the set file is unchanged and not created. Decided outside the input: The review item from_review names is closed with no expected fact and no expected node. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.EvalNoExpectations`, carrying `review_id`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`case-exists`** — The set file is unchanged. Decided outside the input: The set already holds a case with the review id as its id or its review_id. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.EvalCaseExists`, carrying `review_id`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`added`** — The set file ends with the new case; `id` is the case's id and `cases` counts the set's cases with it. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.EvalCaseAdded`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+
+**`no-such-instance`** — Nothing was read or written. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
 ### `AddSource`
 
@@ -1047,6 +1143,27 @@ It has five outcomes.
 
 **`no-such-instance`** — Nothing was restored. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
+### `RunEval`
+
+`cortex.instance.RunEval`, shown to a person as "Run an eval set" and called `run` on the wire.
+
+It takes:
+
+- `name` — `cortex.instance.InstanceName`
+- `set` — `String`
+- `runner` — `cortex.instance.EvalRunner`
+- `from` — `Optional<String>`, which may be absent
+
+It has four outcomes.
+
+**`set-invalid`** — No model was asked and nothing was written. Decided outside the input: The set cannot be read or is not a cortex.eval-case/1 set, or from is missing for replay or given for another runner. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.EvalSetInvalid`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`runner-failed`** — No summary was written; the results of the cases answered before stay. Decided outside the input: The runner cannot answer a case, its model call fails or finds the budget or the daily ceiling spent, no ask service answers, or the replayed run recorded no answer for a case. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.EvalRunnerFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`evaluated`** — Every case was answered and scored. `cases` counts them and `passed` those that passed; `facts_expected` and `facts_found` count the expected fact strings and those the answers contain, `nodes_expected` and `nodes_found` the expected node ids and those the answers cite. `model_calls` counts the model calls, 0 for `replay`; `input_tokens` and `output_tokens` are their tokens, absent as soon as one answer carried no count; `cost_usd` is what they cost in USD, absent as soon as one answer carried no cost. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.EvalRan`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+
+**`no-such-instance`** — Nothing was asked or written. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
+
 ### `RunSource`
 
 `cortex.instance.RunSource`, shown to a person as "Run a source once" and called `run` on the wire.
@@ -1103,6 +1220,46 @@ It has four outcomes.
 **`no-such-instance`** — Nothing changed. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
 ## Events
+
+### `EvalCaseAdded`
+
+`cortex.instance.EvalCaseAdded`.
+
+It carries:
+
+- `name` — `cortex.instance.InstanceName`
+- `set` — `String`
+- `review_id` — `cortex.ask.ReviewId`
+- `id` — `String`
+- `cases` — `Integer`
+
+Emitted by `cortex.instance.AddEvalCase` on its `added` outcome.
+
+Nothing in this system reacts to it.
+
+### `EvalRan`
+
+`cortex.instance.EvalRan`.
+
+It carries:
+
+- `name` — `cortex.instance.InstanceName`
+- `stamp` — `String`
+- `runner` — `cortex.instance.EvalRunner`
+- `cases` — `Integer`
+- `passed` — `Integer`
+- `facts_expected` — `Integer`
+- `facts_found` — `Integer`
+- `nodes_expected` — `Integer`
+- `nodes_found` — `Integer`
+- `model_calls` — `Integer`
+- `input_tokens` — `Optional<Integer>`, which may be absent
+- `output_tokens` — `Optional<Integer>`, which may be absent
+- `cost_usd` — `Optional<Decimal>`, which may be absent
+
+Emitted by `cortex.instance.RunEval` on its `evaluated` outcome.
+
+Nothing in this system reacts to it.
 
 ### `InstanceAdopted`
 
@@ -1410,6 +1567,68 @@ It carries:
 
 Reported by `cortex.instance.RunSource` on its `connection-unavailable` outcome.
 
+### `EvalCaseExists`
+
+The set already holds the case of this review item, or a case with its id; one review item yields one case in a set.
+
+It carries:
+
+- `review_id` — `cortex.ask.ReviewId`
+
+Reported by `cortex.instance.AddEvalCase` on its `case-exists` outcome.
+
+### `EvalNoExpectations`
+
+The review item is closed but its reviewer wrote no expected fact and no expected node (an item closed before the answer records held expectations has none): a case with nothing expected passes every answer, so no case was added.
+
+It carries:
+
+- `review_id` — `cortex.ask.ReviewId`
+
+Reported by `cortex.instance.AddEvalCase` on its `no-expectations` outcome.
+
+### `EvalReviewNotFound`
+
+The instance's answer records hold no review item with this id, or not the answer record it belongs to (a purge took them); no case was added.
+
+It carries:
+
+- `review_id` — `cortex.ask.ReviewId`
+
+Reported by `cortex.instance.AddEvalCase` on its `no-such-review` outcome.
+
+### `EvalReviewOpen`
+
+The review item is still open: its expected facts and nodes are written when a reviewer closes it, so it yields no case yet.
+
+It carries:
+
+- `review_id` — `cortex.ask.ReviewId`
+
+Reported by `cortex.instance.AddEvalCase` on its `review-open` outcome.
+
+### `EvalRunnerFailed`
+
+The runner could not answer a case: the model call failed, timed out, answered no valid answer or found the budget or the instance's daily ceiling spent; no `cortex ask serve` answered; or the run `replay` names holds no recorded answer for a case. `results.jsonl` keeps the results of the cases answered before; no `summary.json` was written.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.RunEval` on its `runner-failed` outcome.
+
+### `EvalSetInvalid`
+
+The eval set cannot be read, or is not a `cortex.eval-case/1` set: a case of another `format`, a case without an id or a question, two cases with one id, or no case; or `--from` is missing for `replay`, or given for another runner. No model was asked and nothing was written.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.AddEvalCase` on its `set-invalid` outcome.
+
+Reported by `cortex.instance.RunEval` on its `set-invalid` outcome.
+
 ### `ExtractionFailed`
 
 The model call failed or returned no valid extraction document; nothing was applied.
@@ -1460,6 +1679,8 @@ It carries:
 
 - `name` — `cortex.instance.InstanceName`
 
+Reported by `cortex.instance.AddEvalCase` on its `no-such-instance` outcome.
+
 Reported by `cortex.instance.ApplySchemaProposals` on its `no-such-instance` outcome.
 
 Reported by `cortex.instance.ApproveSchemaProposals` on its `no-such-instance` outcome.
@@ -1473,6 +1694,8 @@ Reported by `cortex.instance.RejectSchemaProposals` on its `no-such-instance` ou
 Reported by `cortex.instance.RemoveInstance` on its `no-such-instance` outcome.
 
 Reported by `cortex.instance.RestoreSnapshot` on its `no-such-instance` outcome.
+
+Reported by `cortex.instance.RunEval` on its `no-such-instance` outcome.
 
 Reported by `cortex.instance.UpdateInstance` on its `no-such-instance` outcome.
 
@@ -1701,7 +1924,7 @@ An actor is who may ask this context for something. Every grant below points at 
 
 `cortex.instance.Operator`, shown to a person as "Operator".
 
-It may invoke [`AddSource`](#addsource), [`AdoptInstance`](#adoptinstance), [`ApplySchemaProposals`](#applyschemaproposals), [`ApproveSchemaProposals`](#approveschemaproposals), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`MeasureQuality`](#measurequality), [`ProposeSchemaChanges`](#proposeschemachanges), [`RejectSchemaProposals`](#rejectschemaproposals), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot) and [`UpdateInstance`](#updateinstance).
+It may invoke [`AddEvalCase`](#addevalcase), [`AddSource`](#addsource), [`AdoptInstance`](#adoptinstance), [`ApplySchemaProposals`](#applyschemaproposals), [`ApproveSchemaProposals`](#approveschemaproposals), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`MeasureQuality`](#measurequality), [`ProposeSchemaChanges`](#proposeschemachanges), [`RejectSchemaProposals`](#rejectschemaproposals), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot), [`RunEval`](#runeval) and [`UpdateInstance`](#updateinstance).
 
 ### `Scheduler`
 
@@ -1712,4 +1935,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7` · contract digest `slice-sha256/2:a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda` · contract digest `slice-sha256/2:65119c41fb707475d9790ee12866a656f96befebd4326bf4ad791ee82cf708d5`. Do not edit this file; change the specification and regenerate it with `task generate`.

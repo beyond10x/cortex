@@ -4,4 +4,5 @@ specification:
   - system.yaml
   - components.yaml
   - domains/instance.yaml
+  - domains/ask.yaml
 scenarios: []

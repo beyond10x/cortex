@@ -18,6 +18,8 @@ components:
         - cortex.instance.EnableSource
         - cortex.instance.RestoreSnapshot
         - cortex.instance.MeasureQuality
+        - cortex.instance.RunEval
+        - cortex.instance.AddEvalCase
         - cortex.instance.ProposeSchemaChanges
         - cortex.instance.ApproveSchemaProposals
         - cortex.instance.RejectSchemaProposals
@@ -35,6 +37,8 @@ components:
         - cortex.instance.SourceEnabled
         - cortex.instance.SnapshotRestored
         - cortex.instance.QualityMeasured
+        - cortex.instance.EvalRan
+        - cortex.instance.EvalCaseAdded
         - cortex.instance.SchemaChangesProposed
         - cortex.instance.SchemaProposalsDecided
         - cortex.instance.SchemaProposalsApplied
@@ -63,6 +67,40 @@ components:
             - cortex.instance.ApproveSchemaProposals
             - cortex.instance.RejectSchemaProposals
             - cortex.instance.ApplySchemaProposals
+        - name: eval
+          summary: Eval sets asked of an instance end to end and scored
+          commands:
+            - cortex.instance.RunEval
+            - cortex.instance.AddEvalCase
       views:
         - cortex.instance.Instances
         - cortex.instance.Sources
+
+  - component: cortex-ask
+    summary: >-
+      The answer service, `cortex ask serve --spec <instance spec>`: a long-running process that
+      answers `POST /ask` as a stream of events over the instance's store, read through the EKR MCP
+      reader. The batch component `cortex` serves no port; this one serves the spec's `ask.listen`.
+      It keeps every answer with its votes and a review queue in `ask.sqlite` in the instance
+      directory, or, for an instance on a `postgres` store, in a PostgreSQL schema of their own
+      through a records process launched by Connectors (`cortex ask records`), and purges them
+      after the spec's `retention_days`.
+    owns:
+      domains:
+        - cortex.ask
+    accepts:
+      commands:
+        - cortex.ask.Ask
+        - cortex.ask.RecordAnswer
+        - cortex.ask.CastVote
+        - cortex.ask.OpenReview
+        - cortex.ask.CloseReview
+        - cortex.ask.PurgeExpired
+    publishes:
+      events:
+        - cortex.ask.Answered
+        - cortex.ask.AnswerRecorded
+        - cortex.ask.Voted
+        - cortex.ask.ReviewOpened
+        - cortex.ask.ReviewClosed
+        - cortex.ask.Purged

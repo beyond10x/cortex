@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvalSetInvalid payload",
+  "description": "The eval set cannot be read, or is not a `cortex.eval-case/1` set: a case of another `format`, a case without an id or a question, two cases with one id, or no case; or `--from` is missing for `replay`, or given for another runner. No model was asked and nothing was written.",
+  "x-ess-name": "cortex.instance.EvalSetInvalid",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:d708c433ed80ac1753e1073b666765158563ed5a10d1bdeed4abca9be318f55a",
+    "regenerate": "ess generate"
+  }
+}

@@ -44,12 +44,15 @@ naming `story:codex-model-backend`, and `codex` is never started; `cortex qualit
 | `cortex remove <name>` | stop and delete the instance's timers and viewer that its home wrote (`units.kept` names any of the same name another home wrote); its directory and store stay | `removed`, `wrong-state`, `no-such-instance` |
 | `cortex restore <name> <snapshot>` | put a `sqlite` store and the instance's `state/` back to a snapshot a run took before it applied anything (see [Operating](./operating.md#undoing-a-run)). It snapshots what it replaces as `<ms>-before-restore` and reports the name as `before_restore`, and `state_restored`; a running viewer is stopped and started again. It does not wait for the home's lock | `restored`, `busy`, `no-such-snapshot`, `backend-unsupported`, `no-such-instance` |
 | `cortex quality <name> --sample <n>` | measure how often the instance's facts are supported by the evidence they cite (see [Measuring fact quality](#measuring-fact-quality)). It reads the store and writes nothing to it, so a removed instance is measured too. It holds the home's lock only while it draws the sample, so the timers' runs do not wait behind the model calls | `measured`, `sample-failed`, `judge-failed`, `no-such-instance` |
+| `cortex eval run <name> --set <file> --runner mcp\|ask\|replay [--from <stamp>]` | ask each case of an eval set and score each answer with no model, by the fact strings it must contain and the node ids it must cite (see [Running an eval set](#running-an-eval-set)). It reads the store and writes nothing to it. It holds the home's lock only while it reads the set, the spec and a replayed run | `evaluated`, `set-invalid`, `runner-failed`, `no-such-instance` |
+| `cortex eval case add <name> --set <file> --from-review <review id>` | append the case of a closed review item of the answer service to an eval set, creating the file when it does not exist (see [Adding a case from a review](#adding-a-case-from-a-review)). An open item is refused and the set file is left as it was | `added`, `set-invalid`, `no-such-review`, `review-open`, `no-expectations`, `case-exists`, `no-such-instance` |
 | `cortex schema <name> [--sample <n>] [--dry-run \| --review]` | have the instance's model propose changes to the store's ontology from a sample of its facts (default 40) and apply each one EKR applies as a schema transaction of its own (see [Proposing schema changes](#proposing-schema-changes)). `--dry-run` records the proposals and applies none; `--review` records each one `pending` for a decision (see [Reviewing schema changes](#reviewing-schema-changes)). It holds the home's lock while it draws the sample and while it applies, not during the model calls | `applied`, `proposed` (a dry run), `reviewed`, `sample-failed`, `propose-failed`, `no-such-instance` |
 | `cortex schema approve <name> <stamp> [--only <n>]… [--by <who>]` | approve the pending proposals of a review run: those `--only` names by their line (from 1), or every pending one | `approved`, `not-pending`, `no-such-run`, `no-such-instance` |
 | `cortex schema reject <name> <stamp> [--only <n>]… --reason <text> [--by <who>]` | reject them, with the reason | `rejected`, `not-pending`, `no-such-run`, `no-such-instance` |
 | `cortex schema apply <name> <stamp>` | apply the run's approved proposals, with no model call, in an EKR stage (`postgres`) or after a snapshot (`sqlite`), held to the spec's `gate` | `applied`, `not-approved`, `gate-failed`, `apply-failed`, `store-outcome-unknown`, `no-such-run`, `no-such-instance` |
 | `cortex list` | instances: name, state, description, model, EKR version, seed digest, viewer address, and the version of `<home>/bin/cortex` their timers run (`binary_version`, null when none is recorded) | |
 | `cortex mcp-line <name>` | print the `claude mcp add` line that serves the instance's store through `ekr mcp` | |
+| `cortex ask serve --spec <file>` | answer questions over the store of the instance the spec names: `POST /ask` on the spec's `ask.listen` streams the events of `cortex.ask-events/1`, from a tool loop over `ekr mcp` against `model.gateway`, until stopped (see [Ask service](./ask-service.md)). A spec it cannot serve exits 2, naming the field | `answered` (`done`), `unidentified`, `rate-limited`, `limit-reached`, `model-failed`, `reader-failed` (`error`) |
 
 `cortex update` refuses a spec whose `name` is not `<name>`. `create`, `adopt` and `update` name each unit they took over from a home that no longer holds the instance in `units.taken_over` (see [Operating](./operating.md#systemd-units)). Every command refuses a home whose path holds a line break.
 
@@ -80,6 +83,87 @@ again), `judged`, `passed`, `unclear`, `rate` (null when the store holds no fact
 nothing. `judge-failed` (a model call failed or found the budget or the daily ceiling spent, or `refuse_if_left`
 refused what the judge would be shown) writes no `fact-quality.json`; `verdicts.jsonl` keeps the
 verdicts of the batches judged before, and a failed model call's reason states the cost so far.
+
+### Running an eval set
+
+`cortex eval run <name> --set <file> --runner <runner>` asks each question of an eval set, in the
+set's order, and scores each answer deterministically. The set is a JSON object whose `cases` are
+`cortex.eval-case/1` objects, at least one, with distinct ids:
+
+```json
+{"cases": [
+  {"format": "cortex.eval-case/1", "id": "widget",
+   "question": "Who develops the Widget engine?",
+   "expect_facts": ["Widget engine"], "expect_nodes": ["node-widget"]}
+]}
+```
+
+A case is held to the published `cortex.instance.EvalCase` schema: `expect_facts` and
+`expect_nodes` are both required lists of strings, no other key is admitted, `source` and
+`review_id` are strings, and no expected fact or node is empty or white space only. A case the schema refuses makes the
+set `set-invalid`.
+
+An answer passes when it contains every `expect_facts` string (letter case and runs of white
+space ignored) and cites every `expect_nodes` id exactly. An optional `source` says where a case
+came from and is not scored.
+
+| runner | answers with |
+|---|---|
+| `mcp` | the instance's model (the `claude` backend), with the store's MCP reader, `ekr mcp` as `cortex mcp-line` starts it, as its only tools (`--allowedTools mcp__ekr`, every built-in tool off). It answers `answer` and `cited_nodes`, and spends at most the spec's `model.budget_usd` and what its `model.daily_ceiling_usd` leaves of the UTC day, held to its token limits, as `cortex quality` is |
+| `ask` | a running `cortex ask serve`. This release has none, so the runner answers `runner-failed` |
+| `replay` | the answers the eval run `--from <stamp>` (a directory under `eval/`) recorded, by case id and question: a case whose id the run recorded under another question, or a run with no `summary.json` (a failed run), is `runner-failed`. It asks no model; two replays of one run write the same `results.jsonl`, byte for byte |
+
+:::note[Redaction under the `mcp` runner]
+With a `redaction` policy in the spec, the `mcp` runner's model reads the store through a
+redacting MCP server in the `cortex` process instead of `ekr mcp` directly: MCP over HTTP on
+`127.0.0.1`, under a random path and behind a random bearer header, for one case. The `--mcp-config`
+that names it is a file only its owner reads, removed after the case: no secret is on the command
+line. The server stops when the case ends, whatever connections are open. Each case is one redaction batch: its question and
+every tool result are redacted as the [ask service](./ask-service.md#redaction) redacts them, a
+result in which a `refuse_if_left` class is still detected reaches the model as a tool error saying
+it was withheld by policy, a question that still holds such a class is recorded as a failed case
+with the refusal as its answer and no model is asked, and the answer is restored before it is scored and written. Without a
+policy the model reads `ekr mcp` as before.
+:::
+
+It writes two files under `eval/<UTC stamp>/` in the instance directory:
+
+| file | holds |
+|---|---|
+| `results.jsonl` | one `cortex.eval-result/1` object per case, in the set's order: `id`, `question`, `answer`, `cited_nodes`, `passed`, `missing_facts` (the expected fact strings the answer does not contain) and `missing_nodes` (the expected node ids it does not cite). A line holds no time or cost |
+| `summary.json` | written last, by a temporary file renamed into place, so it exists only when every result is on disk. `cortex.eval-run/1`: `stamp`, `instance_name`, `runner`, `cases`, `passed`, `facts_expected`, `facts_found`, `nodes_expected`, `nodes_found`, `model_calls`, `input_tokens`, `output_tokens`, `cost_usd`, and `from` for a replay |
+
+An `evaluated` line's detail carries the counts of `summary.json`, `name` and `dir`;
+`input_tokens`, `output_tokens` and `cost_usd` are null as soon as one answer carried no count or
+cost, and 0 for `replay`. `set-invalid` (the set cannot be read or is not a `cortex.eval-case/1`
+set, or `--from` is missing for `replay` or given for another runner) asks no model and writes
+nothing. `runner-failed` (a model call failed or found the budget or the daily ceiling spent, no
+ask service answered, the replayed run recorded no answer, or another question, for a case, or it wrote no `summary.json`) writes no
+`summary.json`; `results.jsonl` keeps the results of the cases answered before, and the reason
+states the cost so far.
+
+### Adding a case from a review
+
+`cortex eval case add <name> --set <file> --from-review <review id>` turns a closed review item of
+the instance's answer service ([Answer records, votes and review](./ask-service.md#answer-records-votes-and-review))
+into one case appended to the set file. The case's `id` and `review_id` are the review id
+(`<answer id>:<cause>`), its `question` is the question of the item's answer record, and its
+`expect_facts` and `expect_nodes` are those the reviewer sent when closing the item (empty when
+they sent none). A set file that does not exist yet is created holding the one case; an existing
+one is rewritten whole, through a temporary file renamed into place; a set path that is a symbolic
+link is written at its target. It opens the answer records read-only: it creates no `ask.sqlite` (an
+instance that served no question answers `no-such-review`) and migrates none, and writes nothing to
+them or to the store.
+
+| outcome | when | the set file |
+|---|---|---|
+| `added` | the item is closed; the detail carries `id` and `cases`, the set's cases with the new one | ends with the new case |
+| `set-invalid` | the file exists and cannot be read or is not a `cortex.eval-case/1` set | unchanged |
+| `no-such-review` | no review item carries the id, or its answer record is gone | unchanged |
+| `review-open` | the item is still open: its expectations are written when it is closed | unchanged |
+| `no-expectations` | the item is closed with no expected fact and no expected node (one closed before expectations were recorded has none): such a case passes every answer | unchanged, a missing file not created |
+| `case-exists` | the set already holds a case with the review id as its `id` or `review_id` | unchanged |
+| `no-such-instance` | no instance has the name | unchanged |
 
 ### Proposing schema changes
 

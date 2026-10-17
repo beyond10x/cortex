@@ -143,7 +143,9 @@ this repository and published by the organisation's reusable workflow.
   every batch is checked as the model would be shown it before the first model call, and a class
   still detected then fails the run with nothing sent or stored; each batch is checked again just
   before it is sent (the known entity names grow), and a class found then stops the run before
-  that batch, with the batches before it applied.
+  that batch, with the batches before it applied. A question that still holds a `refuse_if_left`
+  class after redaction is refused (the ask service: `bad-request`, 400; an eval case: recorded as
+  failed), and a withheld tool result leaves none of its values in the mapping.
 - **A rule with a `replacement` is irreversible, like a credential.** A `rules` entry with a
   non-empty `replacement` replaces its matches by that text in a document's text, title and
   description before the document is stored (`Redactor::scrub`), and in its URL before the model
@@ -156,6 +158,11 @@ this repository and published by the organisation's reusable workflow.
   `--strict-mcp-config`, `--disable-slash-commands` and `--tools ""`, in an empty directory.
   Measured on 2026-10-05: 423 input tokens with these flags against 10,837 with the user's
   setting sources, which carry the user's global instructions. Keep the flags.
+  The one call given a tool is the eval `mcp` runner's (`Model::ask_with_mcp`): the same flags plus
+  `--mcp-config` naming `ekr mcp` as its only server and `--allowedTools mcp__ekr`. Under a
+  `redaction` policy that server is `src/ask/proxy.rs` instead, a redacting MCP server over HTTP
+  on `127.0.0.1` in front of `ekr mcp`, so the model reads the store only redacted, as the ask
+  service's tool loop does.
 
 ## Upstream facts the code works around
 
@@ -173,7 +180,7 @@ this repository and published by the organisation's reusable workflow.
 - `task check` is the gate (see [Commands](#commands)); `STATUS.md` records its last result.
 - Format with `cargo fmt -p cortex-cli -p cortex-docs`. `cargo fmt --all` also rewrites the
   generated crates, which are path dependencies, and `task drift` then fails.
-- `tests/conformance.rs` runs every scenario of `spec/suite.json` (83) in process; `tests/e2e.rs`
+- `tests/conformance.rs` runs every scenario of `spec/suite.json` (104) in process; `tests/e2e.rs`
   drives the binary end to end; the clap ⇔ spec test in `src/main.rs` holds the command line to
   the commands, inputs and views `spec/` puts on it.
 - Build into this tree's own `target/` (leave `CARGO_TARGET_DIR` unset), and end each tree with

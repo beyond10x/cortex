@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7
-// contract digest a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96
+// model digest dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda
+// contract digest 7d415de25a37eea36ac6425b96c4fa73b380215c1b617c8e06d0464a3499f204
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! The `cortex` system, v1: its components assembled, its bindings wired, and its one transport.
@@ -19,6 +19,22 @@
 /// escalates into.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SystemEvent {
+    /// `cortex.ask.AnswerRecorded`.
+    AnswerRecorded(crate::ask::AnswerRecorded),
+    /// `cortex.ask.Answered`.
+    Answered(crate::ask::Answered),
+    /// `cortex.ask.Purged`.
+    Purged(crate::ask::Purged),
+    /// `cortex.ask.ReviewClosed`.
+    ReviewClosed(crate::ask::ReviewClosed),
+    /// `cortex.ask.ReviewOpened`.
+    ReviewOpened(crate::ask::ReviewOpened),
+    /// `cortex.ask.Voted`.
+    Voted(crate::ask::Voted),
+    /// `cortex.instance.EvalCaseAdded`.
+    EvalCaseAdded(crate::instance::EvalCaseAdded),
+    /// `cortex.instance.EvalRan`.
+    EvalRan(crate::instance::EvalRan),
     /// `cortex.instance.InstanceAdopted`.
     InstanceAdopted(crate::instance::InstanceAdopted),
     /// `cortex.instance.InstanceCreated`.
@@ -53,6 +69,14 @@ impl SystemEvent {
     /// The qualified name the specification declares this event under.
     pub fn name(&self) -> &'static str {
         match self {
+            Self::AnswerRecorded(_) => "cortex.ask.AnswerRecorded",
+            Self::Answered(_) => "cortex.ask.Answered",
+            Self::Purged(_) => "cortex.ask.Purged",
+            Self::ReviewClosed(_) => "cortex.ask.ReviewClosed",
+            Self::ReviewOpened(_) => "cortex.ask.ReviewOpened",
+            Self::Voted(_) => "cortex.ask.Voted",
+            Self::EvalCaseAdded(_) => "cortex.instance.EvalCaseAdded",
+            Self::EvalRan(_) => "cortex.instance.EvalRan",
             Self::InstanceAdopted(_) => "cortex.instance.InstanceAdopted",
             Self::InstanceCreated(_) => "cortex.instance.InstanceCreated",
             Self::InstanceRemoved(_) => "cortex.instance.InstanceRemoved",
@@ -74,6 +98,8 @@ impl SystemEvent {
 impl From<crate::ports::cortex::PublishedEvent> for SystemEvent {
     fn from(event: crate::ports::cortex::PublishedEvent) -> Self {
         match event {
+            crate::ports::cortex::PublishedEvent::EvalCaseAdded(event) => Self::EvalCaseAdded(event),
+            crate::ports::cortex::PublishedEvent::EvalRan(event) => Self::EvalRan(event),
             crate::ports::cortex::PublishedEvent::InstanceAdopted(event) => Self::InstanceAdopted(event),
             crate::ports::cortex::PublishedEvent::InstanceCreated(event) => Self::InstanceCreated(event),
             crate::ports::cortex::PublishedEvent::InstanceRemoved(event) => Self::InstanceRemoved(event),
@@ -92,23 +118,39 @@ impl From<crate::ports::cortex::PublishedEvent> for SystemEvent {
     }
 }
 
+impl From<crate::ports::cortex_ask::PublishedEvent> for SystemEvent {
+    fn from(event: crate::ports::cortex_ask::PublishedEvent) -> Self {
+        match event {
+            crate::ports::cortex_ask::PublishedEvent::AnswerRecorded(event) => Self::AnswerRecorded(event),
+            crate::ports::cortex_ask::PublishedEvent::Answered(event) => Self::Answered(event),
+            crate::ports::cortex_ask::PublishedEvent::Purged(event) => Self::Purged(event),
+            crate::ports::cortex_ask::PublishedEvent::ReviewClosed(event) => Self::ReviewClosed(event),
+            crate::ports::cortex_ask::PublishedEvent::ReviewOpened(event) => Self::ReviewOpened(event),
+            crate::ports::cortex_ask::PublishedEvent::Voted(event) => Self::Voted(event),
+        }
+    }
+}
+
 /// The `cortex` system: every component behind its port, and the transport between them.
 ///
 /// The component fields are public because commands enter the system through a component's own
 /// port; the log and its delivery cursor are not, because publishing happens by pumping, not by
 /// writing history directly.
-pub struct System<CortexBehaviors> {
+pub struct System<CortexBehaviors, CortexAskBehaviors> {
     /// The `cortex` component.
     pub cortex: crate::ports::cortex::Cortex<CortexBehaviors>,
+    /// The `cortex-ask` component.
+    pub cortex_ask: crate::ports::cortex_ask::CortexAsk<CortexAskBehaviors>,
     published: Vec<SystemEvent>,
     cursor: usize,
 }
 
-impl<CortexBehaviors> System<CortexBehaviors> {
+impl<CortexBehaviors, CortexAskBehaviors> System<CortexBehaviors, CortexAskBehaviors> {
     /// Assembles the system from its components.
-    pub fn new(cortex: crate::ports::cortex::Cortex<CortexBehaviors>) -> Self {
+    pub fn new(cortex: crate::ports::cortex::Cortex<CortexBehaviors>, cortex_ask: crate::ports::cortex_ask::CortexAsk<CortexAskBehaviors>) -> Self {
         Self {
             cortex,
+            cortex_ask,
             published: Vec::new(),
             cursor: 0,
         }
@@ -133,9 +175,10 @@ impl<CortexBehaviors> System<CortexBehaviors> {
     }
 }
 
-impl<CortexBehaviors> System<CortexBehaviors>
+impl<CortexBehaviors, CortexAskBehaviors> System<CortexBehaviors, CortexAskBehaviors>
 where
-    CortexBehaviors: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    CortexBehaviors: crate::instance::obligations::AddEvalCaseBehavior + crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunEvalBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    CortexAskBehaviors: crate::ask::obligations::AskBehavior + crate::ask::obligations::CastVoteBehavior + crate::ask::obligations::CloseReviewBehavior + crate::ask::obligations::OpenReviewBehavior + crate::ask::obligations::PurgeExpiredBehavior + crate::ask::obligations::RecordAnswerBehavior + crate::ask::obligations::OpenReviewsQuery,
 {
     /// Delivers until quiescent: collects every component's outbox onto the log. No binding
     /// reacts to anything this specification publishes, so collecting is the whole delivery.
@@ -152,6 +195,9 @@ where
     /// Moves every component's outbox onto the log, in component order.
     fn collect(&mut self) {
         for event in self.cortex.drain_outbox() {
+            self.published.push(SystemEvent::from(event));
+        }
+        for event in self.cortex_ask.drain_outbox() {
             self.published.push(SystemEvent::from(event));
         }
     }

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.AnswerRecord.State",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dc81cc1eaab435b76878abd34f575fe077043654a6f942a04143482598539cda",
+    "contract_digest": "slice-sha256/2:fd3b9189b8243196355ee8ea27776f6d2eadd4c40b16887b73b716a8667adb60",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AnswerRecord.State": {
+      "title": "State",
+      "x-ess-name": "cortex.ask.AnswerRecord.State",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "Kept"
+      ]
+    }
+  }
+}
