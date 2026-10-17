@@ -38,13 +38,16 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 ### Fixed
 
-- A rare name in underscore italics (`_Rowan_`) or written straight after CJK text
-  (`会议上Rowan发言了`) is replaced by `RareName` and found by `refuse_if_left: [RareName]`
+- A rare name in underscore italics (`_Rowan_`), in a file name after an underscore
+  (`CV_Rowan.pdf`, `2024_Quill.pdf`, the `Quill` of `Rowan_Quill`) or written straight after CJK
+  text (`会议上Rowan发言了`) is replaced by `RareName` and found by `refuse_if_left: [RareName]`
   (issue #74). Before, the underscore or the CJK letter before it made it part of a longer word,
   so it reached the model and the check did not see it. An underscore and a letter of a script
-  without case now bound a word, as a space does; a word glued to a lower-case letter, directly
-  or through underscores (`useFoo`, `snake_case_Identifier`), is still part of an identifier and
-  kept. A word now also ends at a CJK letter after it, so `Rowan` is counted alone. The rare head
+  without case now bound a word, as a space does. A word glued directly to a lower-case letter
+  (`useFoo`) is still part of an identifier, and so is a word after underscores when the run of
+  letters and digits before them begins with a lower-case letter (`snake_case_Identifier`). A
+  word now also ends at a CJK letter after it, so `Rowan` is counted alone; a Latin letter
+  without case (`ǀ`, `ʔ`) stays part of a word (`Nǀaqriaq`). The rare head
   of a word whose tail is a known name (`Schmidt` of `Schmidt-Müller`) has been replaced since
   0.5.4; a test now holds it.
 
