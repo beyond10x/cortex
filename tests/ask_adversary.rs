@@ -418,7 +418,6 @@ fn parse_stream(text: &str) -> Vec<(String, Value)> {
 /// maximum the service must either refuse the spec (exit 2, naming the field) or answer with
 /// exactly one terminal event.
 #[test]
-#[ignore = "adversary: max_seconds near i64::MAX overflows the deadline (Instant + Duration panics); the answer streams no event at all"]
 fn max_seconds_at_the_integer_maximum_still_ends_an_answer_with_one_terminal_event() {
     let gateway = Gateway::start(vec![text_reply("Yes [node:n-1].")], Duration::ZERO);
     let limits = "{max_steps: 4, max_result_bytes: 4096, max_seconds: 9223372036854775807, \
@@ -449,7 +448,6 @@ fn max_seconds_at_the_integer_maximum_still_ends_an_answer_with_one_terminal_eve
 /// arguments exceed the pipe's buffer: `max_seconds` is "every model and tool call included", so
 /// the answer must end with `time-limit` (or `reader-failed`) shortly after it, not hang.
 #[test]
-#[ignore = "adversary: Reader::send writes the request to the child's stdin without a deadline; a reader that stops reading holds the answer past max_seconds, with no terminal event"]
 fn a_reader_that_stops_reading_cannot_hold_an_answer_past_max_seconds() {
     let arguments = json!({"query": "a".repeat(256 * 1024)}).to_string();
     let gateway = Gateway::start(
@@ -616,11 +614,9 @@ fn the_reader_inherits_neither_the_gateway_token_nor_the_api_key() {
     assert!(!env.contains(TOKEN_ENV));
 }
 
-/// The reader reads a store; it needs no model credential of the operator's. Only
-/// `ANTHROPIC_API_KEY` and the gateway's variable are removed, so every other credential in the
-/// service's environment reaches it.
+/// The reader reads a store; it needs no model credential of the operator's: no ANTHROPIC_* or
+/// CLAUDE_* variable of the service's environment, nor the gateway's, reaches it.
 #[test]
-#[ignore = "adversary: the reader inherits ANTHROPIC_AUTH_TOKEN and CLAUDE_CODE_OAUTH_TOKEN from the service; only two names are removed"]
 fn the_reader_inherits_no_other_model_credential() {
     let gateway = Gateway::start(vec![text_reply("Yes.")], Duration::ZERO);
     let service = serve(
@@ -808,7 +804,6 @@ fn concurrent_questions_of_one_identity_admit_exactly_the_limit() {
 /// A body that is not JSON is no question: it answers 400 and does not spend a question of the
 /// identity's minute.
 #[test]
-#[ignore = "adversary: the limiter admits (and counts) a request before its body is read, so a 400 bad-request spends a question of the minute"]
 fn a_malformed_body_does_not_spend_a_question_of_the_minute() {
     let gateway = Gateway::start(vec![text_reply("Yes [node:n-1].")], Duration::ZERO);
     let service = serve(
@@ -836,7 +831,6 @@ fn a_malformed_body_does_not_spend_a_question_of_the_minute() {
 /// Every refusal is in the event contract: a body above the server's body limit answers a
 /// `text/event-stream` holding one `error` event, like every other refusal before an answer.
 #[test]
-#[ignore = "adversary: a body above axum's default 2 MiB limit answers 413 text/plain, outside the event contract"]
 fn a_body_above_the_body_limit_is_refused_inside_the_event_contract() {
     let gateway = Gateway::start(vec![text_reply("Yes [node:n-1].")], Duration::ZERO);
     let service = serve(&gateway, Setup::default());

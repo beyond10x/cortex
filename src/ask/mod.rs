@@ -90,6 +90,7 @@ impl ReaderCommand {
             ("EKR_BACKEND".into(), store.backend.name().to_string()),
             ("EKR_STORE".into(), store.store.display().to_string()),
         ];
+        // `mcp::Reader::start` also removes every ANTHROPIC_* and CLAUDE_* variable.
         let mut remove = vec!["ANTHROPIC_API_KEY".to_string()];
         if let Some(g) = &spec.model.gateway {
             remove.push(g.token_env.clone());
@@ -276,7 +277,9 @@ pub fn answer(
     emit: &mut dyn FnMut(ma::AskEvent) -> bool,
 ) -> ma::AskOutcome {
     let limits = &settings.ask.limits;
-    let deadline = Instant::now() + Duration::from_secs(limits.max_seconds as u64);
+    // A limit past ten years is no limit in practice; the clamp keeps the sum from overflowing.
+    let seconds = (limits.max_seconds as u64).min(10 * 365 * 24 * 3600);
+    let deadline = Instant::now() + Duration::from_secs(seconds);
     let max_bytes = limits.max_result_bytes as usize;
     let gone = || model_failed("the request was closed before the answer".into());
     let status = |step: i64, message: &str| {
