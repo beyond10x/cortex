@@ -173,17 +173,55 @@ enum Command {
     /// With one, have the instance's model propose ontology changes from a sample of the store's
     /// facts and their evidence, in batches of 20, and apply each change EKR applies as a schema
     /// transaction of its own; every proposal is written to `schema/<UTC stamp>/proposals.jsonl`
-    /// (`cortex.instance.ProposeSchemaChanges`).
-    #[command(verbatim_doc_comment)]
+    /// (`cortex.instance.ProposeSchemaChanges`). With `--review`, apply none: record each
+    /// `pending` for `schema approve` and `schema reject`, and `schema apply` applies the
+    /// approved ones.
+    #[command(verbatim_doc_comment, args_conflicts_with_subcommands = true)]
     Schema {
         name: Option<String>,
         /// How many facts to draw, 1 to 1000.
         #[arg(long, default_value_t = 40, requires = "name")]
         sample: i64,
         /// Record the proposals without applying any.
-        #[arg(long, requires = "name")]
+        #[arg(long, requires = "name", conflicts_with = "review")]
         dry_run: bool,
+        /// Record every proposal `pending`, for a decision, and apply none.
+        #[arg(long, requires = "name")]
+        review: bool,
+        #[command(subcommand)]
+        decide: Option<SchemaCommand>,
     },
+}
+
+#[derive(Subcommand)]
+enum SchemaCommand {
+    /// Approve proposals of a review run (`cortex.instance.ApproveSchemaProposals`): every pending
+    /// one, or those `--only` names by their 1-based line in its `proposals.jsonl`.
+    Approve {
+        name: String,
+        /// The run's stamp, as `schema --review` printed it.
+        stamp: String,
+        #[arg(long)]
+        only: Vec<i64>,
+        /// Who decided, written as each line's `decided_by`.
+        #[arg(long)]
+        by: Option<String>,
+    },
+    /// Reject proposals of a review run with a reason (`cortex.instance.RejectSchemaProposals`).
+    Reject {
+        name: String,
+        stamp: String,
+        #[arg(long)]
+        only: Vec<i64>,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        by: Option<String>,
+    },
+    /// Apply the approved proposals of a review run, with no model call
+    /// (`cortex.instance.ApplySchemaProposals`): in an EKR stage on a `postgres` store, after a
+    /// snapshot on a `sqlite` store, held to the spec's gate.
+    Apply { name: String, stamp: String },
 }
 
 #[derive(Subcommand)]
@@ -247,7 +285,11 @@ fn main() -> ExitCode {
         return fail(reason);
     }
     match cli.command {
-        Command::Schema { name: None, .. } => {
+        Command::Schema {
+            name: None,
+            decide: None,
+            ..
+        } => {
             println!("{SPEC_SCHEMA}");
             ExitCode::SUCCESS
         }
@@ -367,10 +409,31 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
         Command::Restore { name, snapshot } => restore(app, ctx, &name, &snapshot),
         Command::Quality { name, sample } => quality(app, ctx, &name, sample),
         Command::Schema {
+            decide: Some(decide),
+            ..
+        } => match decide {
+            SchemaCommand::Approve {
+                name,
+                stamp,
+                only,
+                by,
+            } => decide_schema(app, ctx, &name, &stamp, only, None, by),
+            SchemaCommand::Reject {
+                name,
+                stamp,
+                only,
+                reason,
+                by,
+            } => decide_schema(app, ctx, &name, &stamp, only, Some(reason), by),
+            SchemaCommand::Apply { name, stamp } => apply_schema_run(app, ctx, &name, &stamp),
+        },
+        Command::Schema {
             name: Some(name),
             sample,
             dry_run,
-        } => propose_schema(app, ctx, &name, sample, dry_run),
+            review,
+            decide: None,
+        } => propose_schema(app, ctx, &name, sample, dry_run, review),
         Command::Run {
             source_id,
             record_failure,
@@ -1662,7 +1725,14 @@ fn quality(app: &mut App, ctx: &Ctx, name: &str, sample: i64) -> ExitCode {
     print("quality", &done)
 }
 
-fn propose_schema(app: &mut App, ctx: &Ctx, name: &str, sample: i64, dry_run: bool) -> ExitCode {
+fn propose_schema(
+    app: &mut App,
+    ctx: &Ctx,
+    name: &str,
+    sample: i64,
+    dry_run: bool,
+    review: bool,
+) -> ExitCode {
     const CMD: &str = "cortex.instance.ProposeSchemaChanges";
     // An unknown name proposes nothing; the generated behaviour answers `no-such-instance`.
     let known = ctx.shared.borrow().registry.instances.contains_key(name);
@@ -1677,7 +1747,9 @@ fn propose_schema(app: &mut App, ctx: &Ctx, name: &str, sample: i64, dry_run: bo
         let asked = drawn.and_then(|d| schema::ask(&layout, &ctx.tools, d, ctx.home));
         let result = match asked {
             Err(e) => Err(e),
-            Ok(asked) if dry_run => schema::record(asked, None),
+            Ok(asked) if dry_run => schema::record(asked, schema::Mode::DryRun),
+            // A review run applies nothing, so it needs neither the lock nor the store.
+            Ok(asked) if review => schema::record(asked, schema::Mode::Review),
             Ok(asked) => {
                 // Held only while applying; the registry loaded before the model calls is not
                 // written back (`main`), as another command may have written it since.
@@ -1688,7 +1760,7 @@ fn propose_schema(app: &mut App, ctx: &Ctx, name: &str, sample: i64, dry_run: bo
                 match schema::target_of(&layout) {
                     Ok((store, operator)) => schema::record(
                         asked,
-                        Some(schema::Target {
+                        schema::Mode::Apply(schema::Target {
                             store: &store,
                             operator: &operator,
                         }),
@@ -1708,6 +1780,7 @@ fn propose_schema(app: &mut App, ctx: &Ctx, name: &str, sample: i64, dry_run: bo
                     p.refused,
                     p.recorded_only,
                     p.invalid,
+                    p.pending,
                     p.dropped,
                 ]);
                 shared.optional_decimals.push_back(cost_decimal(p.cost_usd));
@@ -1733,6 +1806,7 @@ fn propose_schema(app: &mut App, ctx: &Ctx, name: &str, sample: i64, dry_run: bo
             "refused": e.refused,
             "recorded_only": e.recorded_only,
             "invalid": e.invalid,
+            "pending": e.pending,
             "dropped": e.dropped,
             "cost_usd": e.cost_usd.as_ref().map(|c| &c.0),
         });
@@ -1746,12 +1820,20 @@ fn propose_schema(app: &mut App, ctx: &Ctx, name: &str, sample: i64, dry_run: bo
         name: m::InstanceName(name.to_string()),
         sample,
         dry_run,
+        review,
     }) {
         Err(e) => return fail(e),
         Ok(m::ProposeSchemaChangesOutcome::Proposed {
             schema_changes_proposed: e,
         }) => Done {
             outcome: "proposed",
+            ok: true,
+            detail: detail(&e),
+        },
+        Ok(m::ProposeSchemaChangesOutcome::Reviewed {
+            schema_changes_proposed: e,
+        }) => Done {
+            outcome: "reviewed",
             ok: true,
             detail: detail(&e),
         },
@@ -1779,6 +1861,210 @@ fn propose_schema(app: &mut App, ctx: &Ctx, name: &str, sample: i64, dry_run: bo
         },
     };
     print("schema", &done)
+}
+
+/// `schema approve` (`reason` none) and `schema reject`: decides the run's proposals under the
+/// home's lock, then lets the generated behaviour answer from what was decided.
+fn decide_schema(
+    app: &mut App,
+    ctx: &Ctx,
+    name: &str,
+    stamp: &str,
+    only: Vec<i64>,
+    reason: Option<String>,
+    by: Option<String>,
+) -> ExitCode {
+    let cmd: &'static str = match reason {
+        None => "cortex.instance.ApproveSchemaProposals",
+        Some(_) => "cortex.instance.RejectSchemaProposals",
+    };
+    let known = ctx.shared.borrow().registry.instances.contains_key(name);
+    if known {
+        let layout = Layout::new(ctx.home.instance_dir(name));
+        let (decision, word) = match &reason {
+            None => (schema::Decision::Approve, "approved"),
+            Some(r) => (schema::Decision::Reject(r.clone()), "rejected"),
+        };
+        let decided = schema::decide(&layout, stamp, &only, decision, by.as_deref());
+        let mut shared = ctx.shared.borrow_mut();
+        match decided {
+            Ok(d) => {
+                shared.strings.push_back(word.into());
+                shared.integers.extend([d.decided, d.pending]);
+            }
+            Err(schema::Refusal::NoSuchRun(why)) => {
+                shared.external.insert((cmd, "no-such-run"), true);
+                shared.strings.push_back(why);
+            }
+            Err(other) => {
+                shared.external.insert((cmd, "not-pending"), true);
+                shared.strings.push_back(refusal_reason(other));
+            }
+        }
+    }
+    let decided = |e: m::SchemaProposalsDecided| {
+        json!({"name": e.name.0, "stamp": e.stamp, "decision": e.decision,
+               "decided": e.decided, "pending": e.pending})
+    };
+    let name = m::InstanceName(name.to_string());
+    let stamp = stamp.to_string();
+    let done = match reason {
+        None => match app.approve_schema_proposals(m::ApproveSchemaProposals {
+            name,
+            stamp,
+            only,
+            by,
+        }) {
+            Err(e) => return fail(e),
+            Ok(m::ApproveSchemaProposalsOutcome::Approved {
+                schema_proposals_decided: e,
+            }) => Done {
+                outcome: "approved",
+                ok: true,
+                detail: decided(e),
+            },
+            Ok(m::ApproveSchemaProposalsOutcome::NoSuchRun { error }) => no_such_run(error),
+            Ok(m::ApproveSchemaProposalsOutcome::NotPending { error }) => Done {
+                outcome: "not-pending",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            Ok(m::ApproveSchemaProposalsOutcome::NoSuchInstance { error }) => {
+                no_such_instance(error)
+            }
+        },
+        Some(reason) => match app.reject_schema_proposals(m::RejectSchemaProposals {
+            name,
+            stamp,
+            only,
+            reason,
+            by,
+        }) {
+            Err(e) => return fail(e),
+            Ok(m::RejectSchemaProposalsOutcome::Rejected {
+                schema_proposals_decided: e,
+            }) => Done {
+                outcome: "rejected",
+                ok: true,
+                detail: decided(e),
+            },
+            Ok(m::RejectSchemaProposalsOutcome::NoSuchRun { error }) => no_such_run(error),
+            Ok(m::RejectSchemaProposalsOutcome::NotPending { error }) => Done {
+                outcome: "not-pending",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            Ok(m::RejectSchemaProposalsOutcome::NoSuchInstance { error }) => {
+                no_such_instance(error)
+            }
+        },
+    };
+    print("schema", &done)
+}
+
+/// `schema apply`: applies the run's approved proposals under the home's lock, then lets the
+/// generated behaviour answer from what was applied.
+fn apply_schema_run(app: &mut App, ctx: &Ctx, name: &str, stamp: &str) -> ExitCode {
+    const CMD: &str = "cortex.instance.ApplySchemaProposals";
+    let known = ctx.shared.borrow().registry.instances.contains_key(name);
+    let mut snapshot = None;
+    if known {
+        let layout = Layout::new(ctx.home.instance_dir(name));
+        let applied = schema::apply_run(&layout, stamp);
+        let mut shared = ctx.shared.borrow_mut();
+        match applied {
+            Ok(a) => {
+                shared.integers.extend([
+                    a.applied,
+                    a.refused,
+                    a.recorded_only,
+                    a.invalid,
+                    a.revision,
+                ]);
+                snapshot = a.snapshot;
+            }
+            Err(refusal) => {
+                let outcome = match &refusal {
+                    schema::Refusal::NoSuchRun(_) => "no-such-run",
+                    schema::Refusal::NotPending(_) | schema::Refusal::ApplyFailed(_) => {
+                        "apply-failed"
+                    }
+                    schema::Refusal::NotApproved(_) => "not-approved",
+                    schema::Refusal::GateFailed(_) => "gate-failed",
+                    schema::Refusal::StoreOutcomeUnknown(_) => "store-outcome-unknown",
+                };
+                shared.external.insert((CMD, outcome), true);
+                shared.strings.push_back(refusal_reason(refusal));
+            }
+        }
+    }
+    let reason = |reason: String| json!({"reason": reason});
+    let done = match app.apply_schema_proposals(m::ApplySchemaProposals {
+        name: m::InstanceName(name.to_string()),
+        stamp: stamp.to_string(),
+    }) {
+        Err(e) => return fail(e),
+        Ok(m::ApplySchemaProposalsOutcome::Applied {
+            schema_proposals_applied: e,
+        }) => Done {
+            outcome: "applied",
+            ok: true,
+            // The snapshot is not on the event.
+            detail: json!({"name": e.name.0, "stamp": e.stamp, "applied": e.applied,
+                "refused": e.refused, "recorded_only": e.recorded_only, "invalid": e.invalid,
+                "revision": e.revision, "snapshot": snapshot}),
+        },
+        Ok(m::ApplySchemaProposalsOutcome::NoSuchRun { error }) => no_such_run(error),
+        Ok(m::ApplySchemaProposalsOutcome::NotApproved { error }) => Done {
+            outcome: "not-approved",
+            ok: false,
+            detail: reason(error.reason),
+        },
+        Ok(m::ApplySchemaProposalsOutcome::GateFailed { error }) => Done {
+            outcome: "gate-failed",
+            ok: false,
+            detail: reason(error.reason),
+        },
+        Ok(m::ApplySchemaProposalsOutcome::ApplyFailed { error }) => Done {
+            outcome: "apply-failed",
+            ok: false,
+            detail: reason(error.reason),
+        },
+        Ok(m::ApplySchemaProposalsOutcome::StoreOutcomeUnknown { error }) => Done {
+            outcome: "store-outcome-unknown",
+            ok: false,
+            detail: reason(error.reason),
+        },
+        Ok(m::ApplySchemaProposalsOutcome::NoSuchInstance { error }) => no_such_instance(error),
+    };
+    print("schema", &done)
+}
+
+fn refusal_reason(refusal: schema::Refusal) -> String {
+    match refusal {
+        schema::Refusal::NoSuchRun(r)
+        | schema::Refusal::NotPending(r)
+        | schema::Refusal::NotApproved(r)
+        | schema::Refusal::GateFailed(r)
+        | schema::Refusal::ApplyFailed(r)
+        | schema::Refusal::StoreOutcomeUnknown(r) => r,
+    }
+}
+
+fn no_such_run(error: m::SchemaRunNotFound) -> Done {
+    Done {
+        outcome: "no-such-run",
+        ok: false,
+        detail: json!({"stamp": error.stamp, "reason": error.reason}),
+    }
+}
+
+fn no_such_instance(error: m::InstanceNotFound) -> Done {
+    Done {
+        outcome: "no-such-instance",
+        ok: false,
+        detail: json!({"name": error.name.0}),
+    }
 }
 
 fn split(source_id: &str) -> (&str, &str) {

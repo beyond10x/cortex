@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-17T02:21:55Z",
+  "actor": "human:timo",
+  "artifact": "story:redaction-name-beside-marks",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "full gate on 73535b78: 71 test binaries, 815 passed, 0 failed; released in v0.5.5 (PR #76, merge db39216a)"
+  }
+}

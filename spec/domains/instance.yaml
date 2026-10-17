@@ -715,6 +715,15 @@ types:
       - {name: source_types, type: List<String>}
       - {name: target_types, type: List<String>}
 
+  # The node types to add to an existing edge type's ends. cortex writes EKR's widening with each
+  # end whole: what the end holds now plus these; an end never loses a type.
+  - name: cortex.instance.EdgeTypeWidening
+    kind: struct
+    fields:
+      - {name: name, type: String}
+      - {name: add_source_types, type: List<String>}
+      - {name: add_target_types, type: List<String>}
+
   # `owner` names a node type or an edge type.
   - name: cortex.instance.PropertyChange
     kind: struct
@@ -745,15 +754,17 @@ types:
       - {name: name, type: String}
       - {name: into, type: List<String>}
 
-  # The closed list of ontology changes a schema proposal names. EKR applies the first four as
-  # schema transactions (`DefineNodeType`, `DefineEdgeType`, `ModifyProperty`); it removes, merges
-  # and splits nothing, so the other five are recorded for review only.
+  # The closed list of ontology changes a schema proposal names. EKR applies the first five
+  # as schema transactions (`DefineNodeType`, `DefineEdgeType`, `ModifyProperty`,
+  # `WidenEdgeType`); it removes, merges and splits nothing, so the other five are recorded for
+  # review only.
   - name: cortex.instance.SchemaChange
     kind: union
     tag: kind
     variants:
       add_node_type: cortex.instance.NewNodeType
       add_edge_type: cortex.instance.NewEdgeType
+      widen_edge_type: cortex.instance.EdgeTypeWidening
       add_property: cortex.instance.PropertyChange
       redeclare_property: cortex.instance.PropertyChange
       remove_node_type: cortex.instance.TypeRemoval
@@ -785,10 +796,12 @@ types:
   # inherits from or a type inheriting from it already declares, in any case; a property it
   # redeclares is inherited, not declared by the type it names; or a name it gives holds a
   # placeholder of the redaction policy (only `reason` is restored). `dry-run` for a change EKR
-  # would be asked to apply.
+  # would be asked to apply. A review run (`--review`) records every proposal `pending`; `approve`
+  # makes it `approved` and `reject` `rejected`; `apply` decides an approved one as `applied`,
+  # `refused`, `recorded-only` or `invalid`, planned against the ontology at the head then.
   - name: cortex.instance.SchemaProposalStatus
     kind: enum
-    variants: [applied, refused, recorded-only, invalid, dry-run]
+    variants: [pending, approved, rejected, applied, refused, recorded-only, invalid, dry-run]
 
   # One line of `schema/<stamp>/proposals.jsonl`, `format` `cortex.schema-proposal/1`. `facts` are
   # EKR assertion ids; `evidence` the EKR evidence ids the proposal cites and its facts cite, each
@@ -796,6 +809,15 @@ types:
   # assertions, `evidence-set-mismatch`), so this line is where an applied change's evidence is.
   # `codes` are EKR's issue codes when it refused the change; `note` says why it was refused,
   # invalid or recorded only. `revision` and `schema_version` are what an applied change committed.
+  # `decision_reason` is the reason `reject` was given; `decided_by` who `approve` or `reject`
+  # named (`--by`). A proposal is named by its run's stamp and its 1-based line in the file.
+  # UNMAPPED: the proposal's lifecycle, `pending` to `approved` or `rejected`, and `approved` to
+  # `applied`, `refused`, `recorded-only` or `invalid`, a decided proposal never decided again.
+  # As an entity it cannot be stated: every transition needs a command outcome that causes it
+  # (ESS-ENTITY-005), and a review run records as many proposals as the model answered, while an
+  # outcome creates one instance, and `apply` takes each approved proposal to whichever of four
+  # states EKR's answer for it chooses, while a set move (`instances:`) takes every row it selects
+  # through one transition. `src/schema.rs` holds it, and `tests/schema_review.rs` tests it.
   - name: cortex.instance.SchemaProposal
     kind: struct
     fields:
@@ -809,6 +831,8 @@ types:
       - {name: note, type: Optional<String>}
       - {name: revision, type: Optional<Integer>}
       - {name: schema_version, type: Optional<String>}
+      - {name: decision_reason, type: Optional<String>}
+      - {name: decided_by, type: Optional<String>}
 
 entities:
   - name: cortex.instance.Instance
@@ -906,6 +930,9 @@ actors:
       - cortex.instance.RestoreSnapshot
       - cortex.instance.MeasureQuality
       - cortex.instance.ProposeSchemaChanges
+      - cortex.instance.ApproveSchemaProposals
+      - cortex.instance.RejectSchemaProposals
+      - cortex.instance.ApplySchemaProposals
     naming:
       display: Operator
 
@@ -1087,6 +1114,45 @@ errors:
       A model call for schema proposals failed, timed out, answered no valid proposals or found the
       budget or the instance's daily ceiling spent, the redaction policy refused what the model
       would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.SchemaRunNotFound
+    summary: >-
+      The instance has no schema run by this stamp: no `schema/<stamp>/proposals.jsonl`, or one
+      that cannot be read.
+    fields:
+      - {name: stamp, type: String}
+      - {name: reason, type: String}
+
+  - name: cortex.instance.SchemaProposalsNotPending
+    summary: >-
+      `approve` or `reject` named a proposal the run does not have or that is already decided, or
+      the run has no pending proposal left. A decided proposal is not decided again; nothing
+      changed.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.SchemaProposalsNotApproved
+    summary: >-
+      `apply` found no approved proposal in the run: none was approved, or every approved one is
+      applied or decided. Nothing was applied.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.SchemaGateFailed
+    summary: >-
+      The applied schema changes failed the spec's `gate`. Nothing was published: the stage was
+      abandoned, or on `sqlite` the snapshot taken before was restored; every approved proposal is
+      still `approved`.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.SchemaApplyFailed
+    summary: >-
+      EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer
+      a transaction. Nothing was published: the stage was abandoned, or on `sqlite` the snapshot
+      taken before was restored; every approved proposal is still `approved`.
     fields:
       - {name: reason, type: String}
 
@@ -1915,11 +1981,17 @@ commands:
     # under the instance directory. Spends at most the spec's `model.budget_usd` and what is left
     # of its `model.daily_ceiling_usd` for the UTC day; in tokens, it stops before a further call
     # once its answers' tokens reach `model.budget_tokens` or the day's reach
-    # `model.daily_ceiling_tokens`; behind a model gateway, in tokens only.
+    # `model.daily_ceiling_tokens`; behind a model gateway, in tokens only. With `review`, nothing
+    # is applied and the lock is not taken again: every proposal not dropped is recorded `pending`
+    # (one whose name holds a placeholder of the redaction policy `invalid`, as in any run) for
+    # `cortex.instance.ApproveSchemaProposals` and `cortex.instance.RejectSchemaProposals`, and
+    # `cortex.instance.ApplySchemaProposals` applies the approved ones. `dry_run` and `review`
+    # exclude each other.
     input:
       - {name: name, type: cortex.instance.InstanceName}
       - {name: sample, type: Integer}
       - {name: dry_run, type: Boolean}
+      - {name: review, type: Boolean}
     outcomes:
       - name: sample-failed
         external: EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read
@@ -1953,6 +2025,7 @@ commands:
             refused: {generated: true}
             recorded_only: {generated: true}
             invalid: {generated: true}
+            pending: {generated: true}
             dropped: {generated: true}
             cost_usd: {generated: true}
         summary: >-
@@ -1960,6 +2033,32 @@ commands:
           `refused` are 0, and a change EKR would be asked to apply is `dry-run`. `cost_usd` is
           what the model calls cost in USD, absent as soon as one answer carried no cost and never
           0 for it.
+
+      - name: reviewed
+        when: review
+        updates: cortex.instance.Instance
+        instance: name
+        emits:
+          - cortex.instance.SchemaChangesProposed
+        payload:
+          cortex.instance.SchemaChangesProposed:
+            name: input.name
+            stamp: {generated: true}
+            revision: {generated: true}
+            proposed: {generated: true}
+            applied: {generated: true}
+            refused: {generated: true}
+            recorded_only: {generated: true}
+            invalid: {generated: true}
+            pending: {generated: true}
+            dropped: {generated: true}
+            cost_usd: {generated: true}
+        summary: >-
+          A review run: every proposal not dropped is recorded `pending` and none is applied,
+          except one whose name holds a placeholder of the redaction policy, `invalid`; `pending`
+          counts them and `applied`, `refused` and `recorded_only` are 0.
+          `stamp` names the run for `approve`, `reject` and `apply`. `cost_usd` is what the model
+          calls cost in USD, absent as soon as one answer carried no cost and never 0 for it.
 
       - name: applied
         updates: cortex.instance.Instance
@@ -1976,6 +2075,7 @@ commands:
             refused: {generated: true}
             recorded_only: {generated: true}
             invalid: {generated: true}
+            pending: {generated: true}
             dropped: {generated: true}
             cost_usd: {generated: true}
         summary: >-
@@ -1992,6 +2092,206 @@ commands:
           cortex.instance.InstanceNotFound:
             name: input.name
         summary: Nothing was proposed.
+
+  - name: cortex.instance.ApproveSchemaProposals
+    naming:
+      wire: approve
+      display: Approve schema proposals
+    # Under the home's lock, rewrites the decision of each named proposal of the review run
+    # `stamp` (`only`, 1-based lines of its `proposals.jsonl`; every pending one when empty) from
+    # `pending` to `approved`, with `by` as `decided_by`. Asks no model and touches no store.
+    input:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: stamp, type: String}
+      - {name: only, type: List<Integer>}
+      - {name: by, type: Optional<String>}
+    outcomes:
+      - name: no-such-run
+        external: The instance has no readable `schema/<stamp>/proposals.jsonl`
+        error: cortex.instance.SchemaRunNotFound
+        payload:
+          cortex.instance.SchemaRunNotFound:
+            stamp: input.stamp
+            reason: {generated: true}
+        summary: Nothing was decided.
+
+      - name: not-pending
+        external: A proposal `only` names is not in the run or is not `pending`, or the run has no pending proposal
+        error: cortex.instance.SchemaProposalsNotPending
+        payload:
+          cortex.instance.SchemaProposalsNotPending:
+            reason: {generated: true}
+        summary: Nothing was decided.
+
+      - name: approved
+        updates: cortex.instance.Instance
+        instance: name
+        emits:
+          - cortex.instance.SchemaProposalsDecided
+        payload:
+          cortex.instance.SchemaProposalsDecided:
+            name: input.name
+            stamp: input.stamp
+            decision: {generated: true}
+            decided: {generated: true}
+            pending: {generated: true}
+        summary: >-
+          Each named proposal is `approved`; `decided` counts them, `pending` what the run still
+          holds undecided. `decision` is `approved`.
+
+      - name: no-such-instance
+        unknown_instance: true
+        error: cortex.instance.InstanceNotFound
+        payload:
+          cortex.instance.InstanceNotFound:
+            name: input.name
+        summary: Nothing was decided.
+
+  - name: cortex.instance.RejectSchemaProposals
+    naming:
+      wire: reject
+      display: Reject schema proposals
+    # As `cortex.instance.ApproveSchemaProposals`, to `rejected`, with `reason` as each line's
+    # `decision_reason`. A rejected proposal is never applied.
+    input:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: stamp, type: String}
+      - {name: only, type: List<Integer>}
+      - {name: reason, type: String}
+      - {name: by, type: Optional<String>}
+    outcomes:
+      - name: no-such-run
+        external: The instance has no readable `schema/<stamp>/proposals.jsonl`
+        error: cortex.instance.SchemaRunNotFound
+        payload:
+          cortex.instance.SchemaRunNotFound:
+            stamp: input.stamp
+            reason: {generated: true}
+        summary: Nothing was decided.
+
+      - name: not-pending
+        external: A proposal `only` names is not in the run or is not `pending`, the run has no pending proposal, or the reason is blank
+        error: cortex.instance.SchemaProposalsNotPending
+        payload:
+          cortex.instance.SchemaProposalsNotPending:
+            reason: {generated: true}
+        summary: Nothing was decided.
+
+      - name: rejected
+        updates: cortex.instance.Instance
+        instance: name
+        emits:
+          - cortex.instance.SchemaProposalsDecided
+        payload:
+          cortex.instance.SchemaProposalsDecided:
+            name: input.name
+            stamp: input.stamp
+            decision: {generated: true}
+            decided: {generated: true}
+            pending: {generated: true}
+        summary: >-
+          Each named proposal is `rejected` with the reason; `decided` counts them, `pending` what
+          the run still holds undecided. `decision` is `rejected`.
+
+      - name: no-such-instance
+        unknown_instance: true
+        error: cortex.instance.InstanceNotFound
+        payload:
+          cortex.instance.InstanceNotFound:
+            name: input.name
+        summary: Nothing was decided.
+
+  - name: cortex.instance.ApplySchemaProposals
+    naming:
+      wire: apply
+      display: Apply approved schema proposals
+    # Under the home's lock, reads the review run's `proposals.jsonl` and plans each `approved`
+    # proposal against the ontology at the head, as a run without `--review` does: one whose type
+    # or property is there already, or that names one that is not, is `invalid`; a remove, merge or
+    # split is `recorded-only`. Each other one is asked of EKR as one schema transaction of its own,
+    # the change as recorded, and is `applied` or `refused`. No model is asked. On a `postgres`
+    # store the transactions run in an EKR stage (`ekr stage begin`), published at the head it
+    # began from only when every transaction was answered and the spec's `gate` passed, and
+    # abandoned otherwise. On a `sqlite` store a snapshot `<ms>-schema-<stamp>` is taken first and
+    # kept once a transaction commits, for `cortex restore`; a gate that fails restores it. A
+    # gate's checks on the run report's measures (`documents_new`, `cost_usd`, …) are a source
+    # run's and are not read; checks on `ekr quality`'s numbers are.
+    # UNMAPPED: whether a schema apply needs gate measures of its own is open.
+    input:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: stamp, type: String}
+    outcomes:
+      - name: no-such-run
+        external: The instance has no readable `schema/<stamp>/proposals.jsonl`
+        error: cortex.instance.SchemaRunNotFound
+        payload:
+          cortex.instance.SchemaRunNotFound:
+            stamp: input.stamp
+            reason: {generated: true}
+        summary: Nothing was applied.
+
+      - name: not-approved
+        external: The run holds no `approved` proposal
+        error: cortex.instance.SchemaProposalsNotApproved
+        payload:
+          cortex.instance.SchemaProposalsNotApproved:
+            reason: {generated: true}
+        summary: Nothing was applied.
+
+      - name: gate-failed
+        external: The store after the changes fails a check of the spec's gate
+        error: cortex.instance.SchemaGateFailed
+        payload:
+          cortex.instance.SchemaGateFailed:
+            reason: {generated: true}
+        summary: >-
+          Nothing was published; every approved proposal is still `approved`, and the store's
+          head is where it was (`postgres`) or back at the snapshot (`sqlite`).
+
+      - name: apply-failed
+        external: EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction
+        error: cortex.instance.SchemaApplyFailed
+        payload:
+          cortex.instance.SchemaApplyFailed:
+            reason: {generated: true}
+        summary: Nothing was published; every approved proposal is still `approved`.
+
+      - name: store-outcome-unknown
+        external: EKR cannot say whether the stage's begin or publish took effect
+        error: cortex.instance.StoreOutcomeUnknown
+        payload:
+          cortex.instance.StoreOutcomeUnknown:
+            reason: {generated: true}
+        summary: >-
+          Every approved proposal is still `approved`. The stage is kept in `stage.json`, and the
+          next run of a source settles it.
+
+      - name: applied
+        updates: cortex.instance.Instance
+        instance: name
+        emits:
+          - cortex.instance.SchemaProposalsApplied
+        payload:
+          cortex.instance.SchemaProposalsApplied:
+            name: input.name
+            stamp: input.stamp
+            applied: {generated: true}
+            refused: {generated: true}
+            recorded_only: {generated: true}
+            invalid: {generated: true}
+            revision: {generated: true}
+        summary: >-
+          Every approved proposal is decided: `applied` with the revision and schema version it
+          committed, or `refused`, `recorded-only` or `invalid` with why. `revision` is the store's
+          head after the apply. Proposals still `pending` stay so.
+
+      - name: no-such-instance
+        unknown_instance: true
+        error: cortex.instance.InstanceNotFound
+        payload:
+          cortex.instance.InstanceNotFound:
+            name: input.name
+        summary: Nothing was applied.
 
 events:
   - name: cortex.instance.InstanceCreated
@@ -2111,9 +2411,9 @@ events:
       - {name: upper, type: Decimal}
       - {name: cost_usd, type: Optional<Decimal>}
 
-  # `proposed` counts the lines of `proposals.jsonl`; `applied`, `refused`, `recorded_only` and
-  # `invalid` count them by status, and the rest are `dry-run`. `dropped` counts the proposals
-  # dropped for their citations, which are not written.
+  # `proposed` counts the lines of `proposals.jsonl`; `applied`, `refused`, `recorded_only`,
+  # `invalid` and `pending` count them by status, and the rest are `dry-run`. `dropped` counts the
+  # proposals dropped for their citations, which are not written.
   - name: cortex.instance.SchemaChangesProposed
     fields:
       - {name: name, type: cortex.instance.InstanceName}
@@ -2124,8 +2424,31 @@ events:
       - {name: refused, type: Integer}
       - {name: recorded_only, type: Integer}
       - {name: invalid, type: Integer}
+      - {name: pending, type: Integer}
       - {name: dropped, type: Integer}
       - {name: cost_usd, type: Optional<Decimal>}
+
+  # `decision` is `approved` or `rejected`; `decided` counts the proposals decided, `pending` the
+  # run's proposals still undecided after.
+  - name: cortex.instance.SchemaProposalsDecided
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: stamp, type: String}
+      - {name: decision, type: String}
+      - {name: decided, type: Integer}
+      - {name: pending, type: Integer}
+
+  # The approved proposals of the run, counted by what `apply` decided; `revision` is the store's
+  # head after.
+  - name: cortex.instance.SchemaProposalsApplied
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: stamp, type: String}
+      - {name: applied, type: Integer}
+      - {name: refused, type: Integer}
+      - {name: recorded_only, type: Integer}
+      - {name: invalid, type: Integer}
+      - {name: revision, type: Integer}
 
 views:
   - name: cortex.instance.Instances

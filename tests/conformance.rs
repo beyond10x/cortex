@@ -144,8 +144,31 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "refused": e.refused,
                 "recorded_only": e.recorded_only,
                 "invalid": e.invalid,
+                "pending": e.pending,
                 "dropped": e.dropped,
                 "cost_usd": e.cost_usd.map(|c| c.0),
+            }),
+        ),
+        PublishedEvent::SchemaProposalsDecided(e) => (
+            "SchemaProposalsDecided",
+            json!({
+                "name": e.name.0,
+                "stamp": e.stamp,
+                "decision": e.decision,
+                "decided": e.decided,
+                "pending": e.pending,
+            }),
+        ),
+        PublishedEvent::SchemaProposalsApplied(e) => (
+            "SchemaProposalsApplied",
+            json!({
+                "name": e.name.0,
+                "stamp": e.stamp,
+                "applied": e.applied,
+                "refused": e.refused,
+                "recorded_only": e.recorded_only,
+                "invalid": e.invalid,
+                "revision": e.revision,
             }),
         ),
         PublishedEvent::SourceRan(e) => (
@@ -342,6 +365,13 @@ impl Scenario {
             })
             .unwrap_or_default();
         let s = |k: &str| text(input.get(k).unwrap_or(&Value::Null));
+        let integers = |k: &str| -> Vec<i64> {
+            input
+                .get(k)
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(Value::as_i64).collect())
+                .unwrap_or_default()
+        };
         let app = &mut self.app;
         // Events an outcome carries that the generated port does not publish (below).
         let mut unpublished: Vec<(String, Value)> = Vec::new();
@@ -635,10 +665,15 @@ impl Scenario {
                         .get("dry_run")
                         .and_then(Value::as_bool)
                         .unwrap_or(false),
+                    review: input
+                        .get("review")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
                 })
                 .unwrap()
             {
                 m::ProposeSchemaChangesOutcome::Proposed { .. } => ("proposed", None),
+                m::ProposeSchemaChangesOutcome::Reviewed { .. } => ("reviewed", None),
                 m::ProposeSchemaChangesOutcome::Applied { .. } => ("applied", None),
                 m::ProposeSchemaChangesOutcome::SampleFailed { error } => (
                     "sample-failed",
@@ -649,6 +684,98 @@ impl Scenario {
                     Some(("ProposeFailed", json!({"reason": error.reason}))),
                 ),
                 m::ProposeSchemaChangesOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+            },
+            "cortex.instance.ApproveSchemaProposals" => match app
+                .approve_schema_proposals(m::ApproveSchemaProposals {
+                    name: m::InstanceName(s("name")),
+                    stamp: s("stamp"),
+                    only: integers("only"),
+                    by: input.get("by").and_then(Value::as_str).map(str::to_string),
+                })
+                .unwrap()
+            {
+                m::ApproveSchemaProposalsOutcome::Approved { .. } => ("approved", None),
+                m::ApproveSchemaProposalsOutcome::NoSuchRun { error } => (
+                    "no-such-run",
+                    Some((
+                        "SchemaRunNotFound",
+                        json!({"stamp": error.stamp, "reason": error.reason}),
+                    )),
+                ),
+                m::ApproveSchemaProposalsOutcome::NotPending { error } => (
+                    "not-pending",
+                    Some(("SchemaProposalsNotPending", json!({"reason": error.reason}))),
+                ),
+                m::ApproveSchemaProposalsOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+            },
+            "cortex.instance.RejectSchemaProposals" => match app
+                .reject_schema_proposals(m::RejectSchemaProposals {
+                    name: m::InstanceName(s("name")),
+                    stamp: s("stamp"),
+                    only: integers("only"),
+                    reason: s("reason"),
+                    by: input.get("by").and_then(Value::as_str).map(str::to_string),
+                })
+                .unwrap()
+            {
+                m::RejectSchemaProposalsOutcome::Rejected { .. } => ("rejected", None),
+                m::RejectSchemaProposalsOutcome::NoSuchRun { error } => (
+                    "no-such-run",
+                    Some((
+                        "SchemaRunNotFound",
+                        json!({"stamp": error.stamp, "reason": error.reason}),
+                    )),
+                ),
+                m::RejectSchemaProposalsOutcome::NotPending { error } => (
+                    "not-pending",
+                    Some(("SchemaProposalsNotPending", json!({"reason": error.reason}))),
+                ),
+                m::RejectSchemaProposalsOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+            },
+            "cortex.instance.ApplySchemaProposals" => match app
+                .apply_schema_proposals(m::ApplySchemaProposals {
+                    name: m::InstanceName(s("name")),
+                    stamp: s("stamp"),
+                })
+                .unwrap()
+            {
+                m::ApplySchemaProposalsOutcome::Applied { .. } => ("applied", None),
+                m::ApplySchemaProposalsOutcome::NoSuchRun { error } => (
+                    "no-such-run",
+                    Some((
+                        "SchemaRunNotFound",
+                        json!({"stamp": error.stamp, "reason": error.reason}),
+                    )),
+                ),
+                m::ApplySchemaProposalsOutcome::NotApproved { error } => (
+                    "not-approved",
+                    Some((
+                        "SchemaProposalsNotApproved",
+                        json!({"reason": error.reason}),
+                    )),
+                ),
+                m::ApplySchemaProposalsOutcome::GateFailed { error } => (
+                    "gate-failed",
+                    Some(("SchemaGateFailed", json!({"reason": error.reason}))),
+                ),
+                m::ApplySchemaProposalsOutcome::ApplyFailed { error } => (
+                    "apply-failed",
+                    Some(("SchemaApplyFailed", json!({"reason": error.reason}))),
+                ),
+                m::ApplySchemaProposalsOutcome::StoreOutcomeUnknown { error } => (
+                    "store-outcome-unknown",
+                    Some(("StoreOutcomeUnknown", json!({"reason": error.reason}))),
+                ),
+                m::ApplySchemaProposalsOutcome::NoSuchInstance { error } => (
                     "no-such-instance",
                     Some(("InstanceNotFound", json!({"name": error.name.0}))),
                 ),
@@ -919,7 +1046,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        67,
+        83,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

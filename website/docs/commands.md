@@ -44,7 +44,10 @@ naming `story:codex-model-backend`, and `codex` is never started; `cortex qualit
 | `cortex remove <name>` | stop and delete the instance's timers and viewer that its home wrote (`units.kept` names any of the same name another home wrote); its directory and store stay | `removed`, `wrong-state`, `no-such-instance` |
 | `cortex restore <name> <snapshot>` | put a `sqlite` store and the instance's `state/` back to a snapshot a run took before it applied anything (see [Operating](./operating.md#undoing-a-run)). It snapshots what it replaces as `<ms>-before-restore` and reports the name as `before_restore`, and `state_restored`; a running viewer is stopped and started again. It does not wait for the home's lock | `restored`, `busy`, `no-such-snapshot`, `backend-unsupported`, `no-such-instance` |
 | `cortex quality <name> --sample <n>` | measure how often the instance's facts are supported by the evidence they cite (see [Measuring fact quality](#measuring-fact-quality)). It reads the store and writes nothing to it, so a removed instance is measured too. It holds the home's lock only while it draws the sample, so the timers' runs do not wait behind the model calls | `measured`, `sample-failed`, `judge-failed`, `no-such-instance` |
-| `cortex schema <name> [--sample <n>] [--dry-run]` | have the instance's model propose changes to the store's ontology from a sample of its facts (default 40) and apply each one EKR applies as a schema transaction of its own (see [Proposing schema changes](#proposing-schema-changes)). `--dry-run` records the proposals and applies none. It holds the home's lock while it draws the sample and while it applies, not during the model calls | `applied`, `proposed` (a dry run), `sample-failed`, `propose-failed`, `no-such-instance` |
+| `cortex schema <name> [--sample <n>] [--dry-run \| --review]` | have the instance's model propose changes to the store's ontology from a sample of its facts (default 40) and apply each one EKR applies as a schema transaction of its own (see [Proposing schema changes](#proposing-schema-changes)). `--dry-run` records the proposals and applies none; `--review` records each one `pending` for a decision (see [Reviewing schema changes](#reviewing-schema-changes)). It holds the home's lock while it draws the sample and while it applies, not during the model calls | `applied`, `proposed` (a dry run), `reviewed`, `sample-failed`, `propose-failed`, `no-such-instance` |
+| `cortex schema approve <name> <stamp> [--only <n>]… [--by <who>]` | approve the pending proposals of a review run: those `--only` names by their line (from 1), or every pending one | `approved`, `not-pending`, `no-such-run`, `no-such-instance` |
+| `cortex schema reject <name> <stamp> [--only <n>]… --reason <text> [--by <who>]` | reject them, with the reason | `rejected`, `not-pending`, `no-such-run`, `no-such-instance` |
+| `cortex schema apply <name> <stamp>` | apply the run's approved proposals, with no model call, in an EKR stage (`postgres`) or after a snapshot (`sqlite`), held to the spec's `gate` | `applied`, `not-approved`, `gate-failed`, `apply-failed`, `store-outcome-unknown`, `no-such-run`, `no-such-instance` |
 | `cortex list` | instances: name, state, description, model, EKR version, seed digest, viewer address, and the version of `<home>/bin/cortex` their timers run (`binary_version`, null when none is recorded) | |
 | `cortex mcp-line <name>` | print the `claude mcp add` line that serves the instance's store through `ekr mcp` | |
 
@@ -95,6 +98,7 @@ The changes the model may propose are a closed list:
 | change | what cortex does |
 |---|---|
 | `add_node_type`, `add_edge_type`, `add_property` | asks EKR to apply it (`DefineNodeType`, `DefineEdgeType`, `ModifyProperty`). Every property cortex declares is optional, so no node the store holds becomes invalid |
+| `widen_edge_type` | names an edge type the ontology declares and the node types to add to its sources (`add_source_types`), its targets (`add_target_types`) or both; asks EKR to apply it (`WidenEdgeType`) with each end written whole, what it holds now and the additions, so an end never loses a type. It is `invalid` when the edge type or a named node type is not in the ontology, or when it adds no type new to either end. Once applied, an edge between the newly admitted types is no longer rejected |
 | `redeclare_property` | asks EKR to apply a new value kind or cardinality to a property the type declares itself (`ModifyProperty`); whether it is required and its constraints stay as declared. EKR refuses one the values the store holds do not fit |
 | `remove_node_type`, `remove_edge_type`, `remove_property`, `merge_types`, `split_type` | records it for review: EKR removes, merges and splits nothing |
 
@@ -113,6 +117,9 @@ directory, one `cortex.schema-proposal/1` object per proposal not dropped: `chan
 | `recorded-only` | a remove, merge or split, recorded and not applied |
 | `invalid` | cortex could not write it against the ontology, and `note` says why: a type or property it names is not there; a type it adds already is, in any case; a property it adds is one the type, a type it inherits from or a type inheriting from it already declares, in any case; a property it redeclares is inherited; or a name it gives holds a placeholder of the `redaction` policy |
 | `dry-run` | `--dry-run`: a change EKR would have been asked to apply |
+| `pending` | `--review`: recorded for a decision, nothing applied |
+| `approved` | `cortex schema approve` approved it; `cortex schema apply` applies it |
+| `rejected` | `cortex schema reject` rejected it; `decision_reason` holds the reason. It is never applied |
 
 Of the model's answer, only each proposal's `reason` has the `redaction` policy's placeholders
 put back. A masked value never becomes a type or property name, which every later round would
@@ -128,6 +135,47 @@ reports it) and `dir`. `sample-failed` asks no model and writes nothing. `propos
 call failed or found the budget or the daily ceiling spent, `refuse_if_left` refused what the model would be shown, or
 EKR could not read the ontology) applies nothing and writes no `proposals.jsonl`; its reason states
 the cost so far.
+
+### Reviewing schema changes
+
+`cortex schema <name> --review` asks the model as above and applies nothing: it does not take the
+lock again, and every proposal not dropped is recorded `pending`, except one whose name holds a
+placeholder of the `redaction` policy, which is `invalid` as in any round. Its `reviewed` detail
+names the run's `stamp` and counts the proposals `pending`. A person then decides each one:
+
+```console
+cortex schema approve acme 20261017T101500Z --only 1 --by ops
+cortex schema reject acme 20261017T101500Z --only 2 --reason "a maker is an organisation"
+cortex schema apply acme 20261017T101500Z
+```
+
+`approve` and `reject` rewrite the decision of each proposal `--only` names, by its line in
+`proposals.jsonl` counted from 1 (every pending one without `--only`), with `--by` as its
+`decided_by` and, for `reject`, the reason as its `decision_reason`. Every proposal named must be
+`pending`: a decided proposal is not decided again, and `not-pending` decides nothing. Their detail
+counts the proposals `decided` and those still `pending`. Neither asks a model or touches the
+store.
+
+`apply` plans each `approved` proposal against the ontology at the head, as a round without
+`--review` does, so one whose type was added meanwhile is `invalid` and nothing is applied for it.
+Each other one is asked of EKR as a schema transaction of its own: the change as recorded, byte for
+byte, with no model call. Proposals still `pending` stay so. The apply is held as a gated source
+run is:
+
+- On a `postgres` store the transactions run in an EKR stage (`ekr stage begin`). The stage is
+  published at the head it began from only when EKR answered every transaction and the spec's
+  `gate` passed, and abandoned otherwise: `gate-failed` and `apply-failed` leave the store's head
+  where it was and every approved proposal `approved`. A publish whose outcome EKR cannot tell is
+  `store-outcome-unknown`; the stage stays in `stage.json` and the next run of a source settles it.
+- On a `sqlite` store the store is copied first and kept as the snapshot `<ms>-schema-<stamp>` once
+  a transaction commits, which the detail names (`snapshot`) and [`cortex restore`](#instances) puts
+  back. A gate that fails restores it.
+
+The gate's checks on a number of `ekr quality` are read after the changes; checks on the run
+report's measures (`documents_new`, `facts_refused`, `cost_usd`, …) belong to a source run and are
+not read. `applied` counts the approved proposals by what was decided (`applied`, `refused`,
+`recorded_only`, `invalid`) and gives the store's head after as `revision`; a proposal applied says
+its `revision` and `schema_version` on its line. A run with no approved proposal is `not-approved`.
 
 ## Sources
 

@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58
-// contract digest b1983b6adc7d8842e9db4813bfcf4a4607ea84f282db7184e5764a85fa9b152c
+// model digest 590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7
+// contract digest a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! The `cortex` system, v1: its components assembled, its bindings wired, and its one transport.
@@ -33,6 +33,10 @@ pub enum SystemEvent {
     RunFailed(crate::instance::RunFailed),
     /// `cortex.instance.SchemaChangesProposed`.
     SchemaChangesProposed(crate::instance::SchemaChangesProposed),
+    /// `cortex.instance.SchemaProposalsApplied`.
+    SchemaProposalsApplied(crate::instance::SchemaProposalsApplied),
+    /// `cortex.instance.SchemaProposalsDecided`.
+    SchemaProposalsDecided(crate::instance::SchemaProposalsDecided),
     /// `cortex.instance.SnapshotRestored`.
     SnapshotRestored(crate::instance::SnapshotRestored),
     /// `cortex.instance.SourceAdded`.
@@ -56,6 +60,8 @@ impl SystemEvent {
             Self::QualityMeasured(_) => "cortex.instance.QualityMeasured",
             Self::RunFailed(_) => "cortex.instance.RunFailed",
             Self::SchemaChangesProposed(_) => "cortex.instance.SchemaChangesProposed",
+            Self::SchemaProposalsApplied(_) => "cortex.instance.SchemaProposalsApplied",
+            Self::SchemaProposalsDecided(_) => "cortex.instance.SchemaProposalsDecided",
             Self::SnapshotRestored(_) => "cortex.instance.SnapshotRestored",
             Self::SourceAdded(_) => "cortex.instance.SourceAdded",
             Self::SourceDisabled(_) => "cortex.instance.SourceDisabled",
@@ -75,6 +81,8 @@ impl From<crate::ports::cortex::PublishedEvent> for SystemEvent {
             crate::ports::cortex::PublishedEvent::QualityMeasured(event) => Self::QualityMeasured(event),
             crate::ports::cortex::PublishedEvent::RunFailed(event) => Self::RunFailed(event),
             crate::ports::cortex::PublishedEvent::SchemaChangesProposed(event) => Self::SchemaChangesProposed(event),
+            crate::ports::cortex::PublishedEvent::SchemaProposalsApplied(event) => Self::SchemaProposalsApplied(event),
+            crate::ports::cortex::PublishedEvent::SchemaProposalsDecided(event) => Self::SchemaProposalsDecided(event),
             crate::ports::cortex::PublishedEvent::SnapshotRestored(event) => Self::SnapshotRestored(event),
             crate::ports::cortex::PublishedEvent::SourceAdded(event) => Self::SourceAdded(event),
             crate::ports::cortex::PublishedEvent::SourceDisabled(event) => Self::SourceDisabled(event),
@@ -127,7 +135,7 @@ impl<CortexBehaviors> System<CortexBehaviors> {
 
 impl<CortexBehaviors> System<CortexBehaviors>
 where
-    CortexBehaviors: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    CortexBehaviors: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
 {
     /// Delivers until quiescent: collects every component's outbox onto the log. No binding
     /// reacts to anything this specification publishes, so collecting is the whole delivery.

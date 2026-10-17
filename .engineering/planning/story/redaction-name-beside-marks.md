@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:redaction-name-beside-marks
 kind: story
-status: active
+status: implemented
 title: A rare name beside an underscore, CJK text or a known name is replaced
 refs:
 - provider: github
@@ -10,10 +10,11 @@ refs:
 relations:
 - decomposes: epic:organisation-scale-instance
 - serves: vision:self-updating-instances
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-16T22:06:51Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-10-16T22:06:51Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-10-17T02:21:55Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

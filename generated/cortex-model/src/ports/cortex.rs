@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58
-// contract digest b1983b6adc7d8842e9db4813bfcf4a4607ea84f282db7184e5764a85fa9b152c
+// model digest 590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7
+// contract digest a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -32,6 +32,10 @@ pub enum PublishedEvent {
     RunFailed(crate::instance::RunFailed),
     /// `cortex.instance.SchemaChangesProposed`.
     SchemaChangesProposed(crate::instance::SchemaChangesProposed),
+    /// `cortex.instance.SchemaProposalsApplied`.
+    SchemaProposalsApplied(crate::instance::SchemaProposalsApplied),
+    /// `cortex.instance.SchemaProposalsDecided`.
+    SchemaProposalsDecided(crate::instance::SchemaProposalsDecided),
     /// `cortex.instance.SnapshotRestored`.
     SnapshotRestored(crate::instance::SnapshotRestored),
     /// `cortex.instance.SourceAdded`.
@@ -74,7 +78,7 @@ impl<B> Cortex<B> {
 
 impl<B> Cortex<B>
 where
-    B: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    B: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
 {
     /// Accepts `cortex.instance.AddSource`: runs the behaviour obligation, then publishes the declared events
     /// the outcome carries.
@@ -107,6 +111,45 @@ where
             crate::instance::AdoptInstanceOutcome::Adopted { instance_adopted, .. } => {
                 self.outbox.push(PublishedEvent::InstanceAdopted(instance_adopted.clone()));
             }
+        }
+        Ok(outcome)
+    }
+
+    /// Accepts `cortex.instance.ApplySchemaProposals`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn apply_schema_proposals(&mut self, input: crate::instance::ApplySchemaProposals) -> Result<crate::instance::ApplySchemaProposalsOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.apply_schema_proposals(input)?;
+        match &outcome {
+            crate::instance::ApplySchemaProposalsOutcome::NoSuchRun { .. } => {}
+            crate::instance::ApplySchemaProposalsOutcome::NotApproved { .. } => {}
+            crate::instance::ApplySchemaProposalsOutcome::GateFailed { .. } => {}
+            crate::instance::ApplySchemaProposalsOutcome::ApplyFailed { .. } => {}
+            crate::instance::ApplySchemaProposalsOutcome::StoreOutcomeUnknown { .. } => {}
+            crate::instance::ApplySchemaProposalsOutcome::Applied { schema_proposals_applied, .. } => {
+                self.outbox.push(PublishedEvent::SchemaProposalsApplied(schema_proposals_applied.clone()));
+            }
+            crate::instance::ApplySchemaProposalsOutcome::NoSuchInstance { .. } => {}
+        }
+        Ok(outcome)
+    }
+
+    /// Accepts `cortex.instance.ApproveSchemaProposals`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn approve_schema_proposals(&mut self, input: crate::instance::ApproveSchemaProposals) -> Result<crate::instance::ApproveSchemaProposalsOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.approve_schema_proposals(input)?;
+        match &outcome {
+            crate::instance::ApproveSchemaProposalsOutcome::NoSuchRun { .. } => {}
+            crate::instance::ApproveSchemaProposalsOutcome::NotPending { .. } => {}
+            crate::instance::ApproveSchemaProposalsOutcome::Approved { schema_proposals_decided, .. } => {
+                self.outbox.push(PublishedEvent::SchemaProposalsDecided(schema_proposals_decided.clone()));
+            }
+            crate::instance::ApproveSchemaProposalsOutcome::NoSuchInstance { .. } => {}
         }
         Ok(outcome)
     }
@@ -180,6 +223,9 @@ where
             crate::instance::ProposeSchemaChangesOutcome::Proposed { schema_changes_proposed, .. } => {
                 self.outbox.push(PublishedEvent::SchemaChangesProposed(schema_changes_proposed.clone()));
             }
+            crate::instance::ProposeSchemaChangesOutcome::Reviewed { schema_changes_proposed, .. } => {
+                self.outbox.push(PublishedEvent::SchemaChangesProposed(schema_changes_proposed.clone()));
+            }
             crate::instance::ProposeSchemaChangesOutcome::Applied { schema_changes_proposed, .. } => {
                 self.outbox.push(PublishedEvent::SchemaChangesProposed(schema_changes_proposed.clone()));
             }
@@ -204,6 +250,24 @@ where
             }
             crate::instance::RecordFailureOutcome::AlreadyDisabled { .. } => {}
             crate::instance::RecordFailureOutcome::NoSuchSource { .. } => {}
+        }
+        Ok(outcome)
+    }
+
+    /// Accepts `cortex.instance.RejectSchemaProposals`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn reject_schema_proposals(&mut self, input: crate::instance::RejectSchemaProposals) -> Result<crate::instance::RejectSchemaProposalsOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.reject_schema_proposals(input)?;
+        match &outcome {
+            crate::instance::RejectSchemaProposalsOutcome::NoSuchRun { .. } => {}
+            crate::instance::RejectSchemaProposalsOutcome::NotPending { .. } => {}
+            crate::instance::RejectSchemaProposalsOutcome::Rejected { schema_proposals_decided, .. } => {
+                self.outbox.push(PublishedEvent::SchemaProposalsDecided(schema_proposals_decided.clone()));
+            }
+            crate::instance::RejectSchemaProposalsOutcome::NoSuchInstance { .. } => {}
         }
         Ok(outcome)
     }

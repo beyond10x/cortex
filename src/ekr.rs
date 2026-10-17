@@ -442,6 +442,14 @@ impl Store {
         }
     }
 
+    /// The revision `ekr head` answers: the store's, or its stage's when it is in one.
+    pub fn head(&self) -> Result<i64, String> {
+        let head = json(&run(self.command(&[OsStr::new("head")])?, "head")?, "head")?;
+        head["revision"]
+            .as_i64()
+            .ok_or_else(|| format!("ekr head answered no revision: {head}"))
+    }
+
     /// Whether the store's lineage holds a seed: `ekr head` answers a head, or says "the lineage
     /// has no seed" (EKR 0.0.30, measured on PostgreSQL). Any other answer is an error.
     pub fn seeded(&self) -> Result<bool, String> {
@@ -670,6 +678,14 @@ pub enum Operation {
         owner: String,
         property: PropertyDecl,
     },
+    /// `!WidenEdgeType`, a schema change: the ends of the edge type `edge_type`, each written whole
+    /// (every node type id it holds now and the ones added), since EKR refuses an end that loses
+    /// a type.
+    WidenEdgeType {
+        edge_type: String,
+        source_types: Vec<String>,
+        target_types: Vec<String>,
+    },
 }
 
 impl Operation {
@@ -739,6 +755,18 @@ impl Operation {
                 m.insert(s("owner"), s(owner));
                 m.insert(s("property"), property.yaml());
                 ("ModifyProperty", Yaml::Mapping(m))
+            }
+            Operation::WidenEdgeType {
+                edge_type,
+                source_types,
+                target_types,
+            } => {
+                let ids = |v: &[String]| Yaml::Sequence(v.iter().map(|t| s(t)).collect());
+                let mut m = Mapping::new();
+                m.insert(s("edge_type"), s(edge_type));
+                m.insert(s("source_types"), ids(source_types));
+                m.insert(s("target_types"), ids(target_types));
+                ("WidenEdgeType", Yaml::Mapping(m))
             }
         };
         Yaml::Tagged(Box::new(TaggedValue {
@@ -892,6 +920,11 @@ mod tests {
                     owner: "n-0".into(),
                     property: prop("p-2"),
                 },
+                Operation::WidenEdgeType {
+                    edge_type: "e-1".into(),
+                    source_types: vec!["n-0".into(), "n-2".into()],
+                    target_types: vec!["n-1".into()],
+                },
             ],
             Some("v-1"),
         );
@@ -917,6 +950,8 @@ mod tests {
             "required: false",
             "required: true",
             "constraints: []",
+            "- !WidenEdgeType",
+            "edge_type: e-1",
         ] {
             assert!(text.contains(part), "{part} in {text}");
         }

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Approve schema proposals input",
+  "x-ess-name": "cortex.instance.ApproveSchemaProposals",
+  "x-ess-kind": "command-input",
+  "type": "object",
+  "properties": {
+    "name": {
+      "$ref": "#/$defs/cortex.instance.InstanceName"
+    },
+    "stamp": {
+      "type": "string"
+    },
+    "only": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      }
+    },
+    "by": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "stamp",
+    "only"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7",
+    "contract_digest": "slice-sha256/2:eef230ed260acc0d518e10801dfa6e4ec89e37d8d7c57a792eec0a9f13b78591",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.InstanceName": {
+      "title": "InstanceName",
+      "x-ess-name": "cortex.instance.InstanceName",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

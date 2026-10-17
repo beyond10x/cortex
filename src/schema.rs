@@ -21,11 +21,12 @@ use serde_json::{json, Value};
 
 use crate::ekr::{Operation, PropertyDecl, Store};
 use crate::extract::{cost_text, Model};
+use crate::gate;
 use crate::home::Home;
 use crate::instance::Layout;
 use crate::quality::{self, Batch};
 use crate::redact::{self, Redactor};
-use crate::run::{add_cost, Tools};
+use crate::run::{self, add_cost, Tools};
 use crate::spend;
 
 /// The `format` of each line of `proposals.jsonl`.
@@ -38,6 +39,9 @@ evidence it cites.
 Propose a change only where the facts and their evidence show that the ontology lacks something \
 they need, or holds something that does not fit them:
 - `add_node_type`, `add_edge_type`, `add_property`: a type or property the ontology lacks.
+- `widen_edge_type`: node types an edge type the ontology declares should also connect, added to \
+its source end (`add_source_types`), its target end (`add_target_types`) or both. An end never \
+loses a type.
 - `redeclare_property`: a property the ontology declares whose value kind or cardinality does not \
 fit the values the evidence gives it.
 - `remove_node_type`, `remove_edge_type`, `remove_property`, `merge_types`, `split_type`: \
@@ -116,6 +120,7 @@ pub struct Proposed {
     pub refused: i64,
     pub recorded_only: i64,
     pub invalid: i64,
+    pub pending: i64,
     pub dropped: i64,
     /// The sum while every answer is costed, `None` as soon as one is not; `0` when no model was
     /// asked.
@@ -177,8 +182,28 @@ pub fn status_name(s: m::SchemaProposalStatus) -> &'static str {
         m::SchemaProposalStatus::Refused => "refused",
         m::SchemaProposalStatus::RecordedOnly => "recorded-only",
         m::SchemaProposalStatus::Invalid => "invalid",
+        m::SchemaProposalStatus::Pending => "pending",
+        m::SchemaProposalStatus::Approved => "approved",
+        m::SchemaProposalStatus::Rejected => "rejected",
         m::SchemaProposalStatus::DryRun => "dry-run",
     }
+}
+
+/// The status `name` writes, as [`status_name`] writes it.
+fn status_of(name: &str) -> Option<m::SchemaProposalStatus> {
+    use m::SchemaProposalStatus as S;
+    [
+        S::Pending,
+        S::Approved,
+        S::Rejected,
+        S::Applied,
+        S::Refused,
+        S::RecordedOnly,
+        S::Invalid,
+        S::DryRun,
+    ]
+    .into_iter()
+    .find(|s| status_name(*s) == name)
 }
 
 fn text(v: &Value) -> Option<String> {
@@ -227,6 +252,11 @@ pub fn change_of(v: &Value) -> Option<m::SchemaChange> {
             source_types: texts(&value["source_types"])?,
             target_types: texts(&value["target_types"])?,
         }),
+        "widen_edge_type" => m::SchemaChange::WidenEdgeType(m::EdgeTypeWidening {
+            name: text(&value["name"])?,
+            add_source_types: texts(&value["add_source_types"])?,
+            add_target_types: texts(&value["add_target_types"])?,
+        }),
         "add_property" => m::SchemaChange::AddProperty(property_change_of(value)?),
         "redeclare_property" => m::SchemaChange::RedeclareProperty(property_change_of(value)?),
         "remove_node_type" => m::SchemaChange::RemoveNodeType(removal(value)?),
@@ -269,6 +299,11 @@ pub fn change_json(c: &m::SchemaChange) -> Value {
             json!({"name": t.name, "source_types": t.source_types,
                    "target_types": t.target_types}),
         ),
+        m::SchemaChange::WidenEdgeType(t) => (
+            "widen_edge_type",
+            json!({"name": t.name, "add_source_types": t.add_source_types,
+                   "add_target_types": t.add_target_types}),
+        ),
         m::SchemaChange::AddProperty(p) => ("add_property", property_change_json(p)),
         m::SchemaChange::RedeclareProperty(p) => ("redeclare_property", property_change_json(p)),
         m::SchemaChange::RemoveNodeType(t) => ("remove_node_type", json!({"name": t.name})),
@@ -306,7 +341,39 @@ pub fn proposal_json(p: &m::SchemaProposal) -> Value {
     if let Some(version) = &p.schema_version {
         line["schema_version"] = json!(version);
     }
+    if let Some(reason) = &p.decision_reason {
+        line["decision_reason"] = json!(reason);
+    }
+    if let Some(by) = &p.decided_by {
+        line["decided_by"] = json!(by);
+    }
     line
+}
+
+/// A line of `proposals.jsonl` read back, as [`proposal_json`] writes it; `None` for anything
+/// else.
+pub fn proposal_of(v: &Value) -> Option<m::SchemaProposal> {
+    let optional = |key: &str| match &v[key] {
+        Value::Null => Some(None),
+        other => other.as_str().map(|s| Some(s.to_string())),
+    };
+    Some(m::SchemaProposal {
+        format: text(&v["format"])?,
+        change: change_of(&v["change"])?,
+        reason: text(&v["reason"])?,
+        facts: texts(&v["facts"])?,
+        evidence: texts(&v["evidence"])?,
+        status: status_of(v["status"].as_str()?)?,
+        codes: texts(&v["codes"])?,
+        note: optional("note")?,
+        revision: match &v["revision"] {
+            Value::Null => None,
+            other => Some(other.as_i64()?),
+        },
+        schema_version: optional("schema_version")?,
+        decision_reason: optional("decision_reason")?,
+        decided_by: optional("decided_by")?,
+    })
 }
 
 /// The proposal `entry` of a batch's answer, when it parses and everything it cites is in
@@ -560,6 +627,9 @@ pub fn ask(layout: &Layout, tools: &Tools, drawn: Drawn, home: &Home) -> Result<
 struct TypeEntry {
     id: String,
     parents: Vec<String>,
+    /// An edge type's ends, node type ids; empty for a node type.
+    sources: Vec<String>,
+    targets: Vec<String>,
     /// `property name → declaration` (`id`, `value_type`, `cardinality`, `required`,
     /// `constraints`).
     props: BTreeMap<String, Value>,
@@ -593,16 +663,20 @@ impl Names {
                         .flatten()
                         .filter_map(|p| Some((text(&p["name"])?, p.clone())))
                         .collect();
-                    // A parent is written as its id, or as `{id, name}`.
-                    let parents = t["parents"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .filter_map(|p| text(p).or_else(|| text(&p["id"])))
-                        .collect();
+                    // A parent or an end is written as its id, or as `{id, name}`.
+                    let ids = |key: &str| {
+                        t[key]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|p| text(p).or_else(|| text(&p["id"])))
+                            .collect()
+                    };
                     let entry = TypeEntry {
                         id: text(&t["id"])?,
-                        parents,
+                        parents: ids("parents"),
+                        sources: ids("source_types"),
+                        targets: ids("target_types"),
                         props,
                     };
                     Some((text(&t["name"])?, entry))
@@ -703,17 +777,34 @@ impl Names {
                     .collect();
                 let entry = TypeEntry {
                     id: id.clone(),
-                    parents: Vec::new(),
                     props,
+                    ..TypeEntry::default()
                 };
                 self.nodes.insert(name.clone(), entry);
             }
-            Operation::DefineEdgeType { id, name, .. } => {
+            Operation::DefineEdgeType {
+                id,
+                name,
+                source_types,
+                target_types,
+            } => {
                 let entry = TypeEntry {
                     id: id.clone(),
+                    sources: source_types.clone(),
+                    targets: target_types.clone(),
                     ..TypeEntry::default()
                 };
                 self.edges.insert(name.clone(), entry);
+            }
+            Operation::WidenEdgeType {
+                edge_type,
+                source_types,
+                target_types,
+            } => {
+                if let Some(t) = self.edges.values_mut().find(|t| &t.id == edge_type) {
+                    t.sources = source_types.clone();
+                    t.targets = target_types.clone();
+                }
             }
             Operation::ModifyProperty { owner, property } => {
                 if let Some(t) = self
@@ -732,6 +823,8 @@ impl Names {
 
 /// How a proposal is decided before EKR is asked.
 enum Plan {
+    /// Recorded for a decision, not planned yet (`--review`).
+    Pending,
     /// A kind EKR does not apply.
     RecordOnly(String),
     /// cortex cannot write it against the ontology, and says why.
@@ -891,6 +984,46 @@ fn plan(
                 },
             }))
         }
+        m::SchemaChange::WidenEdgeType(t) => {
+            let Some(edge) = names.edges.get(&t.name) else {
+                return invalid(format!("the ontology declares no edge type {}", t.name));
+            };
+            // Each end is written whole: what it holds now, then each named type it lacks.
+            let mut grows = false;
+            let mut ends: Vec<Vec<String>> = Vec::new();
+            for (held, added) in [
+                (&edge.sources, &t.add_source_types),
+                (&edge.targets, &t.add_target_types),
+            ] {
+                let mut ids = held.clone();
+                for name in added {
+                    let Some(node) = names.nodes.get(name) else {
+                        return invalid(format!(
+                            "{} names {name}, which is not a node type of the ontology",
+                            t.name
+                        ));
+                    };
+                    if !ids.contains(&node.id) {
+                        ids.push(node.id.clone());
+                        grows = true;
+                    }
+                }
+                ends.push(ids);
+            }
+            if !grows {
+                return invalid(format!(
+                    "the widening of {} adds no node type new to either end",
+                    t.name
+                ));
+            }
+            let target_types = ends.pop().unwrap_or_default();
+            let source_types = ends.pop().unwrap_or_default();
+            Ok(Plan::Write(Operation::WidenEdgeType {
+                edge_type: edge.id.clone(),
+                source_types,
+                target_types,
+            }))
+        }
         m::SchemaChange::RemoveNodeType(_)
         | m::SchemaChange::RemoveEdgeType(_)
         | m::SchemaChange::RemoveProperty(_)
@@ -914,14 +1047,24 @@ pub fn target_of(layout: &Layout) -> Result<(Store, String), String> {
     Ok((layout.store_handle(&spec), operator))
 }
 
-/// Decides every proposal of `asked`, in order, and writes `proposals.jsonl`. With `target`, each
-/// change cortex can write is asked of EKR as one schema transaction of its own, against the
-/// ontology at the head; the caller holds the home's lock. Without it (a dry run), nothing is
-/// applied and such a change is `dry-run`.
-pub fn record(asked: Asked, target: Option<Target<'_>>) -> Result<Proposed, Failure> {
-    let ontology = match &target {
-        Some(t) => t.store.ontology().map_err(Failure::Propose)?,
-        None => asked.ontology.clone(),
+/// What [`record`] does with the proposals it writes.
+pub enum Mode<'a> {
+    /// `--dry-run`: nothing is applied, and a change EKR would be asked to apply is `dry-run`.
+    DryRun,
+    /// `--review`: nothing is applied, and every proposal is `pending`, except one whose name
+    /// holds a placeholder of the redaction policy, which no apply can write and is `invalid`.
+    Review,
+    /// Each change cortex can write is asked of EKR at once; the caller holds the home's lock.
+    Apply(Target<'a>),
+}
+
+/// Decides every proposal of `asked`, in order, as `mode` says, and writes `proposals.jsonl`.
+/// Applying, each change cortex can write is asked of EKR as one schema transaction of its own,
+/// against the ontology at the head.
+pub fn record(asked: Asked, mode: Mode<'_>) -> Result<Proposed, Failure> {
+    let ontology = match &mode {
+        Mode::Apply(t) => t.store.ontology().map_err(Failure::Propose)?,
+        Mode::DryRun | Mode::Review => asked.ontology.clone(),
     };
     let mut names = Names::of(&ontology);
     let path = asked.dir.join("proposals.jsonl");
@@ -940,17 +1083,21 @@ pub fn record(asked: Asked, target: Option<Target<'_>>) -> Result<Proposed, Fail
             note: None,
             revision: None,
             schema_version: None,
+            decision_reason: None,
+            decided_by: None,
         };
-        let planned = match &target {
+        let planned = match &mode {
             _ if c.masked => Ok(Plan::Invalid(MASKED.into())),
-            Some(t) => plan(&c.change, &names, &mut |kind| t.store.mint(kind)),
+            Mode::Review => Ok(Plan::Pending),
+            Mode::Apply(t) => plan(&c.change, &names, &mut |kind| t.store.mint(kind)),
             // A dry run asks EKR for nothing; its ids only keep the names apart.
-            None => plan(&c.change, &names, &mut |_| {
+            Mode::DryRun => plan(&c.change, &names, &mut |_| {
                 placeholder += 1;
                 Ok(format!("dry-run-{placeholder}"))
             }),
         };
         match planned {
+            Ok(Plan::Pending) => record.status = m::SchemaProposalStatus::Pending,
             Ok(Plan::RecordOnly(note)) => {
                 record.status = m::SchemaProposalStatus::RecordedOnly;
                 record.note = Some(note);
@@ -959,9 +1106,14 @@ pub fn record(asked: Asked, target: Option<Target<'_>>) -> Result<Proposed, Fail
                 record.status = m::SchemaProposalStatus::Invalid;
                 record.note = Some(note);
             }
-            Ok(Plan::Write(op)) => match &target {
-                None => names.add(&op),
-                Some(t) => apply(t, &asked.dir, n, &op, &mut record, &mut names),
+            Ok(Plan::Write(op)) => match &mode {
+                Mode::Apply(t) => {
+                    if let Err(e) = apply(t, &asked.dir, n, &op, &mut record, &mut names) {
+                        record.status = m::SchemaProposalStatus::Refused;
+                        record.note = Some(e);
+                    }
+                }
+                Mode::DryRun | Mode::Review => names.add(&op),
             },
             Err(e) => {
                 record.status = m::SchemaProposalStatus::Refused;
@@ -987,13 +1139,16 @@ pub fn record(asked: Asked, target: Option<Target<'_>>) -> Result<Proposed, Fail
         refused: count(m::SchemaProposalStatus::Refused),
         recorded_only: count(m::SchemaProposalStatus::RecordedOnly),
         invalid: count(m::SchemaProposalStatus::Invalid),
+        pending: count(m::SchemaProposalStatus::Pending),
         dropped: asked.dropped,
         cost_usd: asked.cost_usd,
     })
 }
 
 /// Asks EKR to apply `op` as one schema transaction, written to `schema-<n>.yaml` in `dir`, and
-/// records what it answered.
+/// records what it answered: `applied` or, when validation rejected it, `refused` with its codes.
+/// An error is EKR failing to answer at all (an id not minted, a verb that failed): nothing is
+/// recorded for it.
 fn apply(
     t: &Target<'_>,
     dir: &Path,
@@ -1001,21 +1156,20 @@ fn apply(
     op: &Operation,
     record: &mut m::SchemaProposal,
     names: &mut Names,
-) {
+) -> Result<(), String> {
     let path = dir.join(format!("schema-{n:04}.yaml"));
-    let submitted = t.store.mint("schema-version").and_then(|version| {
-        t.store
-            .submit(&path, t.operator, std::slice::from_ref(op), Some(&version))
-            .map(|r| (version, r))
-    });
-    match submitted {
-        Ok((version, Ok(revision))) => {
+    let version = t.store.mint("schema-version")?;
+    match t
+        .store
+        .submit(&path, t.operator, std::slice::from_ref(op), Some(&version))?
+    {
+        Ok(revision) => {
             record.status = m::SchemaProposalStatus::Applied;
             record.revision = Some(revision);
             record.schema_version = Some(version);
             names.add(op);
         }
-        Ok((_, Err(rejected))) => {
+        Err(rejected) => {
             record.status = m::SchemaProposalStatus::Refused;
             for issue in &rejected.issues {
                 if !record.codes.contains(&issue.code) {
@@ -1029,10 +1183,277 @@ fn apply(
                 .collect();
             record.note = Some(messages.join("; "));
         }
-        Err(e) => {
-            record.status = m::SchemaProposalStatus::Refused;
-            record.note = Some(e);
+    }
+    Ok(())
+}
+
+/// `schema/<stamp>` of the instance, when `stamp` is a name cortex could have given a run: no
+/// path separator, no `.` or `..`, nothing outside `[0-9A-Za-z_-]`.
+fn run_dir(layout: &Layout, stamp: &str) -> Result<PathBuf, String> {
+    let named = !stamp.is_empty()
+        && stamp
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !named {
+        return Err(format!("{stamp:?} is not the stamp of a schema run"));
+    }
+    Ok(layout.dir.join("schema").join(stamp))
+}
+
+/// Every line of the run's `proposals.jsonl`, in order.
+fn read_run(dir: &Path) -> Result<Vec<m::SchemaProposal>, String> {
+    let path = dir.join("proposals.jsonl");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    text.lines()
+        .enumerate()
+        .map(|(n, line)| {
+            serde_json::from_str::<Value>(line)
+                .ok()
+                .and_then(|v| proposal_of(&v))
+                .ok_or_else(|| format!("{}: line {} is not a proposal", path.display(), n + 1))
+        })
+        .collect()
+}
+
+/// Rewrites the run's `proposals.jsonl` whole: written beside it, then renamed over it, so a
+/// reader sees the file before or after, never part of it.
+fn write_run(dir: &Path, proposals: &[m::SchemaProposal]) -> Result<(), String> {
+    let path = dir.join("proposals.jsonl");
+    let next = dir.join(".proposals.jsonl.next");
+    let mut text = String::new();
+    for p in proposals {
+        text.push_str(&proposal_json(p).to_string());
+        text.push('\n');
+    }
+    std::fs::write(&next, text)
+        .and_then(|()| std::fs::rename(&next, &path))
+        .map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// What `approve` or `reject` decides.
+pub enum Decision {
+    Approve,
+    /// With its reason, each line's `decision_reason`.
+    Reject(String),
+}
+
+/// Why a decision or an apply changed nothing: the declared outcome it takes.
+#[derive(Debug)]
+pub enum Refusal {
+    /// `no-such-run`.
+    NoSuchRun(String),
+    /// `not-pending`.
+    NotPending(String),
+    /// `not-approved`.
+    NotApproved(String),
+    /// `gate-failed`.
+    GateFailed(String),
+    /// `apply-failed`.
+    ApplyFailed(String),
+    /// `store-outcome-unknown`.
+    StoreOutcomeUnknown(String),
+}
+
+/// What a decision left: how many proposals it decided, and how many of the run are still
+/// `pending`.
+#[derive(Debug)]
+pub struct Decided {
+    pub decided: i64,
+    pub pending: i64,
+}
+
+fn pending(proposals: &[m::SchemaProposal]) -> i64 {
+    proposals
+        .iter()
+        .filter(|p| p.status == m::SchemaProposalStatus::Pending)
+        .count() as i64
+}
+
+/// Decides the proposals `only` names (1-based lines of the run's `proposals.jsonl`; every
+/// `pending` one when empty) as `decision`, with `by` as `decided_by`. Every one named must be
+/// `pending`; otherwise nothing is decided. The caller holds the home's lock.
+pub fn decide(
+    layout: &Layout,
+    stamp: &str,
+    only: &[i64],
+    decision: Decision,
+    by: Option<&str>,
+) -> Result<Decided, Refusal> {
+    let dir = run_dir(layout, stamp).map_err(Refusal::NoSuchRun)?;
+    let mut proposals = read_run(&dir).map_err(Refusal::NoSuchRun)?;
+    if let Decision::Reject(reason) = &decision {
+        if reason.trim().is_empty() {
+            return Err(Refusal::NotPending("a rejection needs a reason".into()));
         }
+    }
+    let mut named: Vec<usize> = Vec::new();
+    if only.is_empty() {
+        named.extend(
+            (0..proposals.len())
+                .filter(|&i| proposals[i].status == m::SchemaProposalStatus::Pending),
+        );
+        if named.is_empty() {
+            return Err(Refusal::NotPending(format!(
+                "run {stamp} has no pending proposal"
+            )));
+        }
+    }
+    for &n in only {
+        let held = usize::try_from(n)
+            .ok()
+            .and_then(|n| n.checked_sub(1))
+            .filter(|&i| i < proposals.len());
+        let Some(i) = held else {
+            return Err(Refusal::NotPending(format!(
+                "run {stamp} has no proposal {n}: it has {}",
+                proposals.len()
+            )));
+        };
+        let status = proposals[i].status;
+        if status != m::SchemaProposalStatus::Pending {
+            return Err(Refusal::NotPending(format!(
+                "proposal {n} of run {stamp} is {}, not pending: a decided proposal is not \
+                 decided again",
+                status_name(status)
+            )));
+        }
+        if !named.contains(&i) {
+            named.push(i);
+        }
+    }
+    for &i in &named {
+        let p = &mut proposals[i];
+        match &decision {
+            Decision::Approve => p.status = m::SchemaProposalStatus::Approved,
+            Decision::Reject(reason) => {
+                p.status = m::SchemaProposalStatus::Rejected;
+                p.decision_reason = Some(reason.clone());
+            }
+        }
+        p.decided_by = by.map(str::to_string);
+    }
+    write_run(&dir, &proposals).map_err(Refusal::NoSuchRun)?;
+    Ok(Decided {
+        decided: named.len() as i64,
+        pending: pending(&proposals),
+    })
+}
+
+/// What an apply decided for the run's approved proposals.
+#[derive(Debug)]
+pub struct AppliedRun {
+    pub applied: i64,
+    pub refused: i64,
+    pub recorded_only: i64,
+    pub invalid: i64,
+    /// The store's head after the apply.
+    pub revision: i64,
+    /// The snapshot kept before it, on `sqlite` once a transaction committed.
+    pub snapshot: Option<String>,
+}
+
+/// Applies the run's `approved` proposals, in order, each planned against the ontology at the
+/// head and, when cortex can write it, asked of EKR as one schema transaction of its own: the
+/// change as recorded, no model asked. Everything runs held as a gated run is ([`run::Held`]): in
+/// an EKR stage on `postgres`, published only when EKR answered every transaction and the spec's
+/// gate passed; after a snapshot on `sqlite`, restored when either fails. Only then are the
+/// decisions written; a refusal leaves the run as it was. The caller holds the home's lock.
+pub fn apply_run(layout: &Layout, stamp: &str) -> Result<AppliedRun, Refusal> {
+    let dir = run_dir(layout, stamp).map_err(Refusal::NoSuchRun)?;
+    let mut proposals = read_run(&dir).map_err(Refusal::NoSuchRun)?;
+    let approved: Vec<usize> = (0..proposals.len())
+        .filter(|&i| proposals[i].status == m::SchemaProposalStatus::Approved)
+        .collect();
+    if approved.is_empty() {
+        return Err(Refusal::NotApproved(format!(
+            "run {stamp} holds no approved proposal"
+        )));
+    }
+    let failed = Refusal::ApplyFailed;
+    let spec = layout.load_spec().map_err(failed)?;
+    let (mut store, operator) = target_of(layout).map_err(failed)?;
+    let mut held = run::Held::begin(layout, &spec, &mut store, &format!("schema-{stamp}"))
+        .map_err(refusal_of)?;
+    let decided = (|| {
+        let ontology = store.ontology()?;
+        let mut names = Names::of(&ontology);
+        let target = Target {
+            store: &store,
+            operator: &operator,
+        };
+        for &i in &approved {
+            let p = &mut proposals[i];
+            match plan(&p.change, &names, &mut |kind| store.mint(kind))? {
+                Plan::Pending => {}
+                Plan::RecordOnly(note) => {
+                    p.status = m::SchemaProposalStatus::RecordedOnly;
+                    p.note = Some(note);
+                }
+                Plan::Invalid(note) => {
+                    p.status = m::SchemaProposalStatus::Invalid;
+                    p.note = Some(note);
+                }
+                Plan::Write(op) => {
+                    apply(&target, &dir, i, &op, p, &mut names)?;
+                    if p.status == m::SchemaProposalStatus::Applied {
+                        held.committed();
+                    }
+                }
+            }
+        }
+        Ok::<(), String>(())
+    })();
+    if let Err(e) = decided {
+        let undone = held.undo_after_error();
+        return Err(Refusal::ApplyFailed(format!(
+            "{e}; {undone}; every approved proposal is still approved"
+        )));
+    }
+    if let Some(gate) = spec.gate.as_ref() {
+        let failed = gate::evaluate_store(gate, || gate::quality(&store));
+        if !failed.is_empty() {
+            let undone = held.undo();
+            return Err(Refusal::GateFailed(format!(
+                "{}; {undone}; every approved proposal is still approved",
+                gate::reason(&failed)
+            )));
+        }
+    }
+    let snapshot = held.snapshot().map(str::to_string);
+    held.publish().map_err(|f| match refusal_of(f) {
+        Refusal::ApplyFailed(e) => {
+            Refusal::ApplyFailed(format!("{e}; every approved proposal is still approved"))
+        }
+        other => other,
+    })?;
+    store.stage = None;
+    let revision = store.head().map_err(Refusal::ApplyFailed)?;
+    write_run(&dir, &proposals).map_err(Refusal::ApplyFailed)?;
+    let count = |s: m::SchemaProposalStatus| {
+        approved
+            .iter()
+            .filter(|&&i| proposals[i].status == s)
+            .count() as i64
+    };
+    Ok(AppliedRun {
+        applied: count(m::SchemaProposalStatus::Applied),
+        refused: count(m::SchemaProposalStatus::Refused),
+        recorded_only: count(m::SchemaProposalStatus::RecordedOnly),
+        invalid: count(m::SchemaProposalStatus::Invalid),
+        revision,
+        snapshot,
+    })
+}
+
+/// The refusal a run failure of [`run::Held`] is.
+fn refusal_of(f: run::Failure) -> Refusal {
+    match f {
+        run::Failure::StoreOutcomeUnknown(e) => Refusal::StoreOutcomeUnknown(e),
+        run::Failure::Fetch(e)
+        | run::Failure::Extract(e)
+        | run::Failure::Apply(e)
+        | run::Failure::ConnectionUnavailable(e)
+        | run::Failure::BatchTooLarge(e) => Refusal::ApplyFailed(e),
     }
 }
 
@@ -1077,6 +1498,11 @@ mod tests {
             m::SchemaChange::SplitType(m::TypeSplit {
                 name: "C".into(),
                 into: vec!["A".into(), "B".into()],
+            }),
+            m::SchemaChange::WidenEdgeType(m::EdgeTypeWidening {
+                name: "MADE_BY".into(),
+                add_source_types: vec!["Service".into()],
+                add_target_types: vec![],
             }),
         ]
     }
@@ -1130,11 +1556,52 @@ mod tests {
             note: Some(RECORD_ONLY.into()),
             revision: None,
             schema_version: None,
+            decision_reason: None,
+            decided_by: None,
         };
         let line = proposal_json(&p);
         assert_eq!(line["status"], "recorded-only");
         assert_eq!(line["change"]["kind"], "merge_types");
         assert!(line.get("revision").is_none() && line.get("schema_version").is_none());
+        assert!(line.get("decision_reason").is_none() && line.get("decided_by").is_none());
+        assert_eq!(proposal_of(&line), Some(p));
+    }
+
+    /// Every line `proposal_json` writes reads back as the same proposal, whatever its change,
+    /// status and decision, so `approve`, `reject` and `apply` rewrite a run without changing what
+    /// they did not decide.
+    #[test]
+    fn every_proposal_line_reads_back_as_written() {
+        use m::SchemaProposalStatus as S;
+        let statuses = [
+            S::Pending,
+            S::Approved,
+            S::Rejected,
+            S::Applied,
+            S::Refused,
+            S::RecordedOnly,
+            S::Invalid,
+            S::DryRun,
+        ];
+        for (change, status) in every_change().into_iter().zip(statuses.iter().cycle()) {
+            let p = m::SchemaProposal {
+                format: FORMAT.into(),
+                change,
+                reason: "r".into(),
+                facts: vec!["f".into()],
+                evidence: vec![],
+                status: *status,
+                codes: vec!["c".into()],
+                note: Some("n".into()),
+                revision: Some(4),
+                schema_version: Some("v".into()),
+                decision_reason: Some("why".into()),
+                decided_by: Some("ops".into()),
+            };
+            let line = proposal_json(&p);
+            assert_eq!(status_name(*status), line["status"]);
+            assert_eq!(proposal_of(&line), Some(p), "{line}");
+        }
     }
 
     fn batch() -> Batch {
@@ -1257,7 +1724,10 @@ mod tests {
             plan(&changes[3], &names, &mut mint),
             Ok(Plan::Write(_))
         ));
-        for change in &changes[4..] {
+        let recorded = changes[4..]
+            .iter()
+            .filter(|c| !matches!(c, m::SchemaChange::WidenEdgeType(_)));
+        for change in recorded {
             assert!(matches!(
                 plan(change, &names, &mut mint),
                 Ok(Plan::RecordOnly(_))

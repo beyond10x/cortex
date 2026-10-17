@@ -875,6 +875,149 @@ fn a_postgres_run_that_fails_its_gate_is_undone() {
     );
 }
 
+/// The proposing model's stand-in for `cortex schema`: one new node type `Maker`, citing the first
+/// fact of its prompt and the first evidence label.
+fn maker_proposer(w: &World) {
+    common::executable(
+        &w.bin.join("claude"),
+        r#"fact=$(cat | grep -oE '^=== Fact [0-9a-f-]{36}' | head -1 | cut -d' ' -f3)
+echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"total_cost_usd\":0.02,\"structured_output\":{\"proposals\":[{\"change\":{\"kind\":\"add_node_type\",\"value\":{\"name\":\"Maker\",\"properties\":[]}},\"reason\":\"r\",\"facts\":[\"$fact\"],\"evidence\":[\"E1\"]}]}}"
+"#,
+    );
+}
+
+/// `story:schema-proposals-on-approval`: `cortex schema apply` on a `postgres` store runs the
+/// approved changes in an EKR stage. With a gate that fails it publishes nothing and abandons the
+/// stage: the store's head and ontology are unchanged and the approved proposal stays `approved`.
+/// Without the gate the same proposal is applied in a stage that is published.
+#[test]
+fn a_postgres_schema_apply_that_fails_its_gate_publishes_nothing() {
+    if !container_runtime("the PostgreSQL schema apply case") {
+        return;
+    }
+    let w = World::new();
+    let pg = Postgres::start(&w.root);
+    let state = w.root.join("connectors-state");
+    let (app, owner) = pg.launched(&state);
+    let staged_ekr = stage_logging_ekr(&w);
+    launching_connectors(&w, &state, &staged_ekr);
+    let spec = spec_with_ekr(&w, "pg", &launched_store(&app), &staged_ekr);
+    let ungated = std::fs::read_to_string(&spec).unwrap();
+    let (code, out, err) = cortex(
+        &w,
+        &[
+            "create",
+            "--spec",
+            spec.to_str().unwrap(),
+            "--postgres-schema-config",
+            owner.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(0), "{out}{err}");
+    let (code, out, err) = cortex(&w, &["run", "pg/docs"]);
+    assert_eq!(code, Some(0), "{out}{err}");
+    let dir = w.home.join("instances/pg");
+    let names = |dir: &Path| -> Vec<String> {
+        postgres_ekr(dir, &pg.app, &["ontology"])["node_types"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|t| t["name"].as_str().map(str::to_string))
+            .collect()
+    };
+
+    maker_proposer(&w);
+    let (code, out, err) = cortex(&w, &["schema", "pg", "--sample", "5", "--review"]);
+    let reviewed = last_json(&out);
+    assert_eq!(
+        (code, reviewed["outcome"].as_str()),
+        (Some(0), Some("reviewed")),
+        "{out}{err}"
+    );
+    let stamp = reviewed["detail"]["stamp"].as_str().unwrap().to_string();
+    let (code, out, err) = cortex(&w, &["schema", "approve", "pg", &stamp]);
+    assert_eq!(code, Some(0), "{out}{err}");
+    let proposals = dir.join("schema").join(&stamp).join("proposals.jsonl");
+    let status = || -> Value {
+        let text = std::fs::read_to_string(&proposals).unwrap();
+        serde_json::from_str::<Value>(text.lines().next().unwrap()).unwrap()["status"].clone()
+    };
+    let head = postgres_head(&dir, &pg.app)["revision"].as_i64().unwrap();
+    let stages_before = postgres_ekr(&dir, &pg.app, &["stage", "list"])
+        .as_array()
+        .map_or(0, Vec::len);
+
+    // The store holds active assertions, so `assertions.active max 0` fails.
+    std::fs::write(
+        &spec,
+        format!("{ungated}gate:\n  checks:\n    - {{measure: assertions.active, max: \"0\"}}\n"),
+    )
+    .unwrap();
+    let (code, out, err) = cortex(&w, &["update", "pg", "--spec", spec.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{out}{err}");
+    let (code, out, err) = cortex(&w, &["schema", "apply", "pg", &stamp]);
+    let refused = last_json(&out);
+    assert_eq!(
+        (code, refused["outcome"].as_str()),
+        (Some(1), Some("gate-failed")),
+        "{out}{err}"
+    );
+    let reason = refused["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(reason.contains("assertions.active"), "{reason}");
+    assert_eq!(
+        postgres_head(&dir, &pg.app)["revision"].as_i64(),
+        Some(head),
+        "the failed apply moved the head: {reason}"
+    );
+    assert!(!names(&dir).contains(&"Maker".to_string()));
+    assert_eq!(status(), "approved");
+    let listed = postgres_ekr(&dir, &pg.app, &["stage", "list"]);
+    let listed = listed.as_array().unwrap();
+    assert_eq!(listed.len(), stages_before + 1, "{listed:?}");
+    let abandoned = listed.iter().find(|s| s["state"] == "Abandoned");
+    assert!(abandoned.is_some(), "no abandoned stage: {listed:?}");
+    assert!(
+        !dir.join("stage.json").exists(),
+        "the apply left its stage record"
+    );
+    // The schema transactions were asked in the stage.
+    let id = abandoned.unwrap()["stage_id"].as_str().unwrap();
+    let log = std::fs::read_to_string(w.root.join("ekr-stage.log")).unwrap();
+    for verb in ["propose", "commit", "quality"] {
+        assert!(
+            log.lines().any(|l| l.starts_with(&format!("{id}|{verb}"))),
+            "{verb} in the stage, in {log}"
+        );
+    }
+
+    // Without the gate the same approved proposal is applied, and its stage published.
+    std::fs::write(&spec, &ungated).unwrap();
+    let (code, out, err) = cortex(&w, &["update", "pg", "--spec", spec.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{out}{err}");
+    let (code, out, err) = cortex(&w, &["schema", "apply", "pg", &stamp]);
+    let applied = last_json(&out);
+    assert_eq!(
+        (code, applied["outcome"].as_str()),
+        (Some(0), Some("applied")),
+        "{out}{err}"
+    );
+    assert_eq!(
+        postgres_head(&dir, &pg.app)["revision"].as_i64(),
+        Some(head + 1)
+    );
+    assert!(names(&dir).contains(&"Maker".to_string()));
+    assert_eq!(status(), "applied");
+    let listed = postgres_ekr(&dir, &pg.app, &["stage", "list"]);
+    assert!(
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["state"] == "Published" && s["base"] == head),
+        "{listed}"
+    );
+}
+
 /// A store that names a connection is refused unless its `ekr.postgres/1` file takes the password
 /// from descriptor 3 and Connectors lists the connection; a schema connection needs a connection.
 /// No refusal prints a value of the configuration.

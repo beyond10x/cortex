@@ -36,6 +36,24 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+## 0.5.6 — 2026-10-17
+
+### Added
+
+- `cortex schema <name> --review` has the model propose ontology changes and records each one
+  `pending` in `schema/<stamp>/proposals.jsonl`, applying none. `cortex schema approve <name>
+  <stamp> [--only <n>…]` and `cortex schema reject <name> <stamp> [--only <n>…] --reason <text>`
+  decide each proposal once. `cortex schema apply <name> <stamp>` applies exactly the approved
+  proposals, each planned again against the ontology at the head (a type added meanwhile is
+  recorded `invalid`), without a model call: on a `postgres` store inside an EKR stage published
+  only when the spec's `gate` passes and abandoned otherwise, on a `sqlite` store after a snapshot
+  `cortex restore` puts back. An apply that fails leaves its proposals `approved` and the store as
+  it was. `cortex schema <name>` without `--review` behaves as before.
+- A schema proposal can widen an existing edge type: `widen_edge_type` names the edge type and the
+  node types to add to its sources and targets. cortex writes EKR's `WidenEdgeType` with each end
+  whole, and records a widening of an unknown edge or node type, or one that adds nothing,
+  `invalid`. After it is applied, a fact joining the newly admitted types is no longer refused.
+
 ## 0.5.5 — 2026-10-17
 
 ### Fixed
