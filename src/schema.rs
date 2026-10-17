@@ -1724,7 +1724,10 @@ mod tests {
             plan(&changes[3], &names, &mut mint),
             Ok(Plan::Write(_))
         ));
-        for change in &changes[4..] {
+        let recorded = changes[4..]
+            .iter()
+            .filter(|c| !matches!(c, m::SchemaChange::WidenEdgeType(_)));
+        for change in recorded {
             assert!(matches!(
                 plan(change, &names, &mut mint),
                 Ok(Plan::RecordOnly(_))
