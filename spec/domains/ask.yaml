@@ -92,8 +92,8 @@ types:
   # Where the answer records of an instance on a `postgres` store live: the tables `answers`,
   # `votes`, `reviews` and `schema_version` in the PostgreSQL schema `schema`, which is never the
   # store's (EKR's) schema. `url` is a PostgreSQL connection URL with no password
-  # (`postgres://<role>@<host>:<port>/<database>`); TLS is required unless it says
-  # `sslmode=disable`, and the server's certificate is verified against `ca_file` when given, else
+  # (`postgres://<role>@<host>:<port>/<database>`); TLS is required (`sslmode=prefer` is raised to
+  # `require`) unless it says `sslmode=disable`, and the server's certificate is verified against `ca_file` when given, else
   # against the public web roots. `connection` is the Connectors connection that holds the role's
   # `{"password": …}` document: the service starts its records process,
   # `cortex ask records --url <url> --schema <schema> [--ca-file <file>]`, through
