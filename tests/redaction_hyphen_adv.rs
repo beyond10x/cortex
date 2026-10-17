@@ -50,7 +50,6 @@ fn shown(r: &Redactor, texts: &[&str]) -> Vec<(String, BTreeSet<&'static str>)> 
 /// rare first half must be too. It is never counted (the word overlaps the known name), so it is
 /// rare, and it is shown.
 #[test]
-#[ignore = "adversary finding: the rare head of a word whose tail is a known name is shown (Schmidt-[Name-2])"]
 fn the_rare_half_of_a_name_hyphenated_to_a_known_name_is_not_shown() {
     let r = redactor(&["Müller"], None, false);
     let out = shown(&r, &["Frau Schmidt-Müller rief zurück."]);
@@ -78,7 +77,6 @@ fn a_hyphenated_name_in_underscore_italics_is_not_shown() {
 /// The same for a single-word name in italics: it is never a rare name, in the replacement or in
 /// the gate.
 #[test]
-#[ignore = "adversary finding: a name glued to an underscore is never a rare name and is shown"]
 fn a_name_in_underscore_italics_is_not_shown() {
     let r = redactor(&[], None, true);
     let out = shown(&r, &["Thanks to _Rowan_ for the review."]);
@@ -105,7 +103,6 @@ fn a_hyphenated_latin_name_glued_to_cjk_text_is_not_shown() {
 
 /// The single-word form of the case above.
 #[test]
-#[ignore = "adversary finding: a name glued to CJK letters is never a rare name and is shown"]
 fn a_latin_name_glued_to_cjk_text_is_not_shown() {
     let r = redactor(&[], None, true);
     let out = shown(&r, &["会议上Rowan发言了。"]);
@@ -114,6 +111,49 @@ fn a_latin_name_glued_to_cjk_text_is_not_shown() {
         !text.contains("Rowan"),
         "a name in CJK text reaches the model, and the gate finds {left:?}: {text}"
     );
+}
+
+/// The three names above, with `RareName` only refused, not replaced: the gate finds each one left.
+#[test]
+fn the_gate_finds_a_name_beside_an_underscore_cjk_text_or_a_known_name() {
+    let refuse_only = |known: &[&str]| {
+        let policy = m::RedactionPolicy {
+            classes: Vec::new(),
+            rules: Vec::new(),
+            known_names: (!known.is_empty()).then(|| known.iter().map(|n| n.to_string()).collect()),
+            rare_limit: None,
+            refuse_if_left: Some(vec![RARE]),
+        };
+        compile(Some(&policy))
+            .expect("a valid policy")
+            .expect("a policy that refuses")
+    };
+    let cases: [(&[&str], &str); 3] = [
+        (&["Müller"], "Frau Schmidt-Müller rief zurück."),
+        (&[], "Thanks to _Rowan_ for the review."),
+        (&[], "会议上Rowan发言了。"),
+    ];
+    for (known, text) in cases {
+        let r = refuse_only(known);
+        let (shown, left) = shown(&r, &[text]).remove(0);
+        assert_eq!(left, BTreeSet::from(["RareName"]), "{shown}");
+    }
+}
+
+/// A capitalised word glued to a lower-case letter, directly or through underscores, is part of
+/// an identifier: it is neither replaced nor left for the gate.
+#[test]
+fn a_word_glued_to_a_lower_case_letter_through_underscores_is_not_a_name() {
+    let r = redactor(&[], None, true);
+    for (text, left) in shown(
+        &r,
+        &["see snake_case_Identifier and fooBar and x__Quill here"],
+    ) {
+        for word in ["Identifier", "Bar", "Quill"] {
+            assert!(text.contains(word), "{word} was replaced: {text}");
+        }
+        assert_eq!(left, BTreeSet::new(), "{text}");
+    }
 }
 
 // ---------------------------------------------------------------------------------------------

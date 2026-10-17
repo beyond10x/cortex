@@ -59,9 +59,12 @@ stand; [Status](./status.mdx) lists what is planned.
   a capitalised word such as `Thanks` or `Subject`, is hidden from the model too, and restored; a
   person named often in the batch and not listed in `known_names` is not hidden. A word with
   hyphens, such as `Jean-Luc` or `Co-Authored-By`, is one word: it is hidden whole or kept
-  whole, and no part of a word seen more than `rare_limit` times is taken. A name glued to a
-  lower-case letter (`useFoo-Bar`) is read as part of an identifier and not taken; one glued to an
-  underscore or to CJK text has its tail taken (`_Jean-Luc_`), but not its head.
+  whole, and no part of a word seen more than `rare_limit` times is taken. A name glued directly
+  to a lower-case letter (`useFoo-Bar`), or after underscores to a run of letters and digits that
+  begins with a lower-case letter (`snake_case_Identifier`, `lebenslauf_Rowan`), is read as part
+  of an identifier and not taken. Otherwise an underscore and CJK text bound a word as a space
+  does, so `_Rowan_`, `CV_Rowan.pdf`, the `Quill` of `Rowan_Quill` and the `Rowan` of
+  `会议上Rowan发言了` are taken.
 - **Known names are matched in any case.** A name in `known_names` is matched as a whole word,
   in any upper or lower case, and in either Unicode form (composed `ë` or `e` with a combining
   mark).
