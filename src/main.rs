@@ -263,6 +263,27 @@ enum EvalCommand {
         #[arg(long)]
         from: Option<String>,
     },
+    /// The cases of an eval set made from the answer service's review items.
+    Case {
+        #[command(subcommand)]
+        command: CaseCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum CaseCommand {
+    /// Append the case of a closed review item to an eval set, creating the set file when it does
+    /// not exist: the question of its answer record and the facts and nodes the reviewer expected
+    /// when closing it (`cortex.instance.AddEvalCase`). An open item is refused.
+    Add {
+        name: String,
+        /// The set file: a JSON object whose `cases` are `cortex.eval-case/1` cases.
+        #[arg(long)]
+        set: PathBuf,
+        /// The review item's id, `<answer id>:<cause>`, as `GET /review` lists it.
+        #[arg(long)]
+        from_review: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -461,6 +482,17 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
                     from,
                 },
         } => eval_run(app, ctx, &name, &set, &runner, from.as_deref()),
+        Command::Eval {
+            command:
+                EvalCommand::Case {
+                    command:
+                        CaseCommand::Add {
+                            name,
+                            set,
+                            from_review,
+                        },
+                },
+        } => eval_case_add(app, ctx, &name, &set, &from_review),
         Command::Schema {
             decide: Some(decide),
             ..
@@ -1884,6 +1916,82 @@ fn eval_run(
     print("eval run", &done)
 }
 
+fn eval_case_add(app: &mut App, ctx: &Ctx, name: &str, set: &Path, review_id: &str) -> ExitCode {
+    const CMD: &str = "cortex.instance.AddEvalCase";
+    // An unknown name reads nothing; the generated behaviour answers `no-such-instance`.
+    let known = ctx.shared.borrow().registry.instances.contains_key(name);
+    if known {
+        let layout = Layout::new(ctx.home.instance_dir(name));
+        let result = eval::add_case(ctx.home, &layout, set, review_id);
+        let mut shared = ctx.shared.borrow_mut();
+        // The order the generated behaviour takes the values in: the case's id, then the count.
+        match result {
+            Ok(added) => {
+                shared.strings.push_back(added.id);
+                shared.integers.push_back(added.cases);
+            }
+            Err(eval::CaseRefused::SetInvalid(reason)) => {
+                shared.external.insert((CMD, "set-invalid"), true);
+                shared.strings.push_back(reason);
+            }
+            Err(eval::CaseRefused::NoSuchReview) => {
+                shared.external.insert((CMD, "no-such-review"), true);
+            }
+            Err(eval::CaseRefused::ReviewOpen) => {
+                shared.external.insert((CMD, "review-open"), true);
+            }
+            Err(eval::CaseRefused::CaseExists) => {
+                shared.external.insert((CMD, "case-exists"), true);
+            }
+            Err(eval::CaseRefused::Failed(reason)) => return fail(reason),
+        }
+    }
+    let done = match app.add_eval_case(m::AddEvalCase {
+        name: m::InstanceName(name.to_string()),
+        set: set.display().to_string(),
+        from_review: cortex_model::ask::ReviewId(review_id.to_string()),
+    }) {
+        Err(e) => return fail(e),
+        Ok(m::AddEvalCaseOutcome::Added { eval_case_added: e }) => Done {
+            outcome: "added",
+            ok: true,
+            detail: json!({
+                "name": e.name.0,
+                "set": e.set,
+                "review_id": e.review_id.0,
+                "id": e.id,
+                "cases": e.cases,
+            }),
+        },
+        Ok(m::AddEvalCaseOutcome::SetInvalid { error }) => Done {
+            outcome: "set-invalid",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
+        Ok(m::AddEvalCaseOutcome::NoSuchReview { error }) => Done {
+            outcome: "no-such-review",
+            ok: false,
+            detail: json!({"review_id": error.review_id.0}),
+        },
+        Ok(m::AddEvalCaseOutcome::ReviewOpen { error }) => Done {
+            outcome: "review-open",
+            ok: false,
+            detail: json!({"review_id": error.review_id.0}),
+        },
+        Ok(m::AddEvalCaseOutcome::CaseExists { error }) => Done {
+            outcome: "case-exists",
+            ok: false,
+            detail: json!({"review_id": error.review_id.0}),
+        },
+        Ok(m::AddEvalCaseOutcome::NoSuchInstance { error }) => Done {
+            outcome: "no-such-instance",
+            ok: false,
+            detail: json!({"name": error.name.0}),
+        },
+    };
+    print("eval case add", &done)
+}
+
 fn propose_schema(
     app: &mut App,
     ctx: &Ctx,
@@ -2721,6 +2829,9 @@ mod tests {
             ],
         ),
     ];
+    /// Commands whose command line is one word below their wire name, which the specification's
+    /// one level of command groups cannot name: `eval case add`.
+    const NESTED: &[(&str, &str)] = &[("cortex.instance.AddEvalCase", "add")];
     /// Flags that steer the implementation and are no command input.
     const STEERING: &[&str] = &[
         "spec",
@@ -2771,9 +2882,15 @@ mod tests {
     fn check(command: &clap::Command, qualified: &str, model: &Value) {
         let decl = find(model, qualified);
         let wire = decl["naming"]["wire"].as_str().expect("a wire name");
-        let sub = command
+        let mut sub = command
             .find_subcommand(wire)
             .unwrap_or_else(|| panic!("no `{wire}` subcommand for {qualified}"));
+        // A command one word below its wire (`UNMAPPED:` in `spec/`): the inputs are that word's.
+        if let Some((_, word)) = NESTED.iter().find(|(n, _)| *n == qualified) {
+            sub = sub
+                .find_subcommand(word)
+                .unwrap_or_else(|| panic!("no `{wire} {word}` subcommand for {qualified}"));
+        }
         let Some(inputs) = decl["input"].as_array() else {
             return;
         };

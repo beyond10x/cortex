@@ -103,6 +103,14 @@
         {
           "name": "closed_at",
           "type": "Optional<timestamp>"
+        },
+        {
+          "name": "expect_facts",
+          "type": "Optional<List<string>>"
+        },
+        {
+          "name": "expect_nodes",
+          "type": "Optional<List<string>>"
         }
       ],
       "id": "cortex.ask.ReviewItem",

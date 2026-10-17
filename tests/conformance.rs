@@ -153,6 +153,16 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "cost_usd": e.cost_usd.map(|c| c.0),
             }),
         ),
+        PublishedEvent::EvalCaseAdded(e) => (
+            "EvalCaseAdded",
+            json!({
+                "name": e.name.0,
+                "set": e.set,
+                "review_id": e.review_id.0,
+                "id": e.id,
+                "cases": e.cases,
+            }),
+        ),
         PublishedEvent::EvalRan(e) => (
             "EvalRan",
             json!({
@@ -536,6 +546,13 @@ impl Scenario {
                 .unwrap_or_else(|| panic!("{k}: {v} is not an integer"))
         };
         let optional = |k: &str| input.get(k).and_then(Value::as_str).map(str::to_string);
+        let strings = |k: &str| -> Vec<String> {
+            input
+                .get(k)
+                .and_then(Value::as_array)
+                .map(|a| a.iter().map(text).collect())
+                .unwrap_or_default()
+        };
         let app = &mut self.app;
         // Events an outcome carries that the generated port does not publish (below).
         let mut unpublished: Vec<(String, Value)> = Vec::new();
@@ -851,6 +868,39 @@ impl Scenario {
                     Some(("InstanceNotFound", json!({"name": error.name.0}))),
                 ),
             },
+            "cortex.instance.AddEvalCase" => match app
+                .add_eval_case(m::AddEvalCase {
+                    name: m::InstanceName(s("name")),
+                    set: s("set"),
+                    from_review: ma::ReviewId(s("from_review")),
+                })
+                .unwrap()
+            {
+                m::AddEvalCaseOutcome::Added { .. } => ("added", None),
+                m::AddEvalCaseOutcome::SetInvalid { error } => (
+                    "set-invalid",
+                    Some(("EvalSetInvalid", json!({"reason": error.reason}))),
+                ),
+                m::AddEvalCaseOutcome::NoSuchReview { error } => (
+                    "no-such-review",
+                    Some((
+                        "EvalReviewNotFound",
+                        json!({"review_id": error.review_id.0}),
+                    )),
+                ),
+                m::AddEvalCaseOutcome::ReviewOpen { error } => (
+                    "review-open",
+                    Some(("EvalReviewOpen", json!({"review_id": error.review_id.0}))),
+                ),
+                m::AddEvalCaseOutcome::CaseExists { error } => (
+                    "case-exists",
+                    Some(("EvalCaseExists", json!({"review_id": error.review_id.0}))),
+                ),
+                m::AddEvalCaseOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+            },
             "cortex.instance.ProposeSchemaChanges" => match app
                 .propose_schema_changes(m::ProposeSchemaChanges {
                     name: m::InstanceName(s("name")),
@@ -1117,6 +1167,8 @@ impl Scenario {
                 .close_review(ma::CloseReview {
                     review_id: ma::ReviewId(s("review_id")),
                     reason: s("reason"),
+                    expect_facts: strings("expect_facts"),
+                    expect_nodes: strings("expect_nodes"),
                 })
                 .unwrap()
             {
@@ -1476,7 +1528,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        104,
+        110,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

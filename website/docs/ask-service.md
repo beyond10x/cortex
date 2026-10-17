@@ -159,7 +159,7 @@ latency, the token counts of its `done` event and the time. A request refused be
 `instances/<name>/ask.sqlite` in the instance directory, never in the EKR store, and the file
 carries its schema version, migrated when the service starts. A file written by a newer cortex is
 refused. The question, the answer, the `tool` events' arguments, a vote's comment and a close's
-reason are kept with every credential shape masked (`[masked:<shape>]`), whatever the instance's
+reason and expected facts are kept with every credential shape masked (`[masked:<shape>]`), whatever the instance's
 `redaction` policy; the mask is irreversible.
 
 The record routes need the identity header too (401 without it) and answer JSON; a refusal is
@@ -169,7 +169,7 @@ The record routes need the identity header too (401 without it) and answer JSON;
 |---|---|---|
 | `POST /ask/{answer_id}/vote` | `{"value": "up" \| "down", "comment"?: <text>}` | the vote as kept: `vote_id`, `answer_id`, `identity`, `value`, `comment`, `at`. 400 `bad-request` for another value, 404 `no-such-answer` for an id no record carries |
 | `GET /review` | none | `{"reviews": [...]}`: every open review item, oldest first, with `review_id`, `answer_id`, `cause` and `opened_at` |
-| `POST /review/{review_id}/close` | `{"reason": <text>}` | the item as closed. 400 without a reason, 404 `no-such-review` for an unknown id, 409 `review-not-open` for an item closed already |
+| `POST /review/{review_id}/close` | `{"reason": <text>, "expect_facts": [<text>, …], "expect_nodes": [<node id>, …]}` | the item as closed, with `expect_facts` and `expect_nodes`: what a right answer contains and cites, which `cortex eval case add --from-review` makes an eval case (both optional, empty when absent). 400 without a reason or with an expectation list that is not a list of strings that are not blank, 404 `no-such-review` for an unknown id, 409 `review-not-open` for an item closed already |
 
 An identity has one vote per answer: voting again changes it. An answer opens one review item per
 cause, and an item, once opened, stays as it was whatever happens after:

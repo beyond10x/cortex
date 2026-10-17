@@ -319,7 +319,25 @@ async fn review(State(service): State<Arc<Service>>, headers: HeaderMap) -> Resp
     }
 }
 
-/// `POST /review/{review_id}/close` with `{"reason": "…"}`: the item as kept after it.
+/// An optional list of strings that are not blank in a close's body: absent is empty, anything
+/// else is the refusal's message.
+fn expectations(body: &Value, key: &str) -> Result<Vec<String>, String> {
+    let refused = || format!("`{key}` is not a list of strings that are not blank");
+    match body.get(key) {
+        None | Some(Value::Null) => Ok(vec![]),
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|i| match i.as_str() {
+                Some(s) if !s.trim().is_empty() => Ok(s.to_string()),
+                _ => Err(refused()),
+            })
+            .collect(),
+        Some(_) => Err(refused()),
+    }
+}
+
+/// `POST /review/{review_id}/close` with `{"reason": "…", "expect_facts": […], "expect_nodes":
+/// […]}`: the item as kept after it.
 async fn close(
     State(service): State<Arc<Service>>,
     Path(review_id): Path<String>,
@@ -329,8 +347,13 @@ async fn close(
     if identity_of(&service, &headers).is_none() {
         return unidentified(&service);
     }
-    let reason = serde_json::from_slice::<Value>(&body)
-        .ok()
+    let body = serde_json::from_slice::<Value>(&body).ok();
+    let expected = body.as_ref().map(|b| {
+        expectations(b, "expect_facts")
+            .and_then(|facts| expectations(b, "expect_nodes").map(|nodes| (facts, nodes)))
+    });
+    let reason = body
+        .as_ref()
         .and_then(|b| {
             b.get("reason")
                 .and_then(Value::as_str)
@@ -345,8 +368,13 @@ async fn close(
             "the body names no `reason`",
         );
     };
+    let (facts, nodes) = match expected {
+        Some(Ok(lists)) => lists,
+        Some(Err(message)) => return json_error(StatusCode::BAD_REQUEST, "bad-request", message),
+        None => (vec![], vec![]),
+    };
     let keeper = service.keeper.clone();
-    let closed = match blocking(move || keeper.close(&review_id, &reason)).await {
+    let closed = match blocking(move || keeper.close(&review_id, &reason, facts, nodes)).await {
         Ok(Ok(closed)) => closed,
         Ok(Err(reason)) => return store_failed(reason),
         Err(response) => return *response,
@@ -362,6 +390,8 @@ async fn close(
                 "opened_at": item.data.opened_at.0,
                 "close_reason": item.data.close_reason,
                 "closed_at": item.data.closed_at.map(|t| t.0),
+                "expect_facts": item.data.expect_facts.unwrap_or_default(),
+                "expect_nodes": item.data.expect_nodes.unwrap_or_default(),
             }),
         ),
         (ma::CloseReviewOutcome::Closed { review_closed }, None) => store_failed(format!(

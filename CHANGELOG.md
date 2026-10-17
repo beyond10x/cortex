@@ -36,6 +36,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Added
+
+- `cortex eval case add <name> --set <file> --from-review <review id>` appends the case of a closed
+  review item to an eval set: the question of its answer record and the facts and nodes the
+  reviewer expected, with `review_id` naming the item. An open item, an unknown one and one the set
+  already holds are refused, and the set file is left as it was. `POST /review/{id}/close` takes
+  the expectations as `expect_facts` and `expect_nodes` beside `reason`.
+
 ## 0.5.6 — 2026-10-17
 
 ### Added

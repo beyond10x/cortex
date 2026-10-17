@@ -20,6 +20,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use cortex_model::ask::{ReviewId, ReviewItemState};
 use cortex_model::instance as m;
 use serde_json::{json, Value};
 
@@ -96,13 +97,14 @@ pub fn runner_of(name: &str) -> Option<m::EvalRunner> {
 
 /// The keys `cortex.instance.EvalCase` admits; the generated model has no reader of its own, so
 /// the published schema's rules are applied here.
-const CASE_KEYS: [&str; 6] = [
+const CASE_KEYS: [&str; 7] = [
     "format",
     "id",
     "question",
     "expect_facts",
     "expect_nodes",
     "source",
+    "review_id",
 ];
 
 /// A required list of non-blank strings.
@@ -143,6 +145,11 @@ fn case_of(v: &Value, n: usize) -> Result<m::EvalCase, String> {
         Some(Value::String(s)) => Some(s.clone()),
         Some(_) => return Err(format!("{at}: `source` is not a string")),
     };
+    let review_id = match v.get("review_id") {
+        None => None,
+        Some(Value::String(s)) if !s.trim().is_empty() => Some(ReviewId(s.clone())),
+        Some(_) => return Err(format!("{at}: `review_id` is not a review id")),
+    };
     let text = |key: &str| {
         v.get(key)
             .and_then(Value::as_str)
@@ -157,6 +164,7 @@ fn case_of(v: &Value, n: usize) -> Result<m::EvalCase, String> {
         expect_facts: strings(v, "expect_facts", &at)?,
         expect_nodes: strings(v, "expect_nodes", &at)?,
         source,
+        review_id,
     })
 }
 
@@ -673,6 +681,105 @@ pub fn run(
     Ok(evaluation)
 }
 
+/// Why `eval case add` added no case: the declared outcome it takes, or a failure no outcome
+/// declares (the spec or the records cannot be read, the set cannot be written).
+#[derive(Debug)]
+pub enum CaseRefused {
+    SetInvalid(String),
+    NoSuchReview,
+    ReviewOpen,
+    CaseExists,
+    Failed(String),
+}
+
+/// The case `eval case add` appended: its id, and how many cases the set holds with it.
+#[derive(Debug)]
+pub struct CaseAdded {
+    pub id: String,
+    pub cases: i64,
+}
+
+/// `AddEvalCase`: appends the case of the closed review item `review_id` of the instance's answer
+/// records to the set file `set`, creating the file when it does not exist. The case's id and
+/// `review_id` are the review id, its question that of the item's answer record, its expectations
+/// those the reviewer wrote at close (none written is none expected). The records are only read;
+/// on any refusal the set file is left as it was. The file is replaced whole, through a temporary
+/// file beside it, so a reader never sees half of it.
+pub fn add_case(
+    home: &Home,
+    layout: &Layout,
+    set: &Path,
+    review_id: &str,
+) -> Result<CaseAdded, CaseRefused> {
+    let (mut doc, taken) = match std::fs::read_to_string(set) {
+        Ok(text) => {
+            let parsed = parse_set(&text).map_err(CaseRefused::SetInvalid)?;
+            let taken = parsed.cases.iter().any(|c| {
+                c.id == review_id || c.review_id.as_ref().is_some_and(|r| r.0 == review_id)
+            });
+            let doc = serde_json::from_str::<Value>(&text)
+                .map_err(|e| CaseRefused::SetInvalid(e.to_string()))?;
+            (doc, taken)
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (json!({"cases": []}), false),
+        Err(e) => {
+            return Err(CaseRefused::SetInvalid(format!(
+                "cannot read the set {}: {e}",
+                set.display()
+            )))
+        }
+    };
+    let spec = layout.load_spec().map_err(CaseRefused::Failed)?;
+    let records = crate::ask::records::Keeper::open(home, &spec).map_err(CaseRefused::Failed)?;
+    let item = records
+        .store
+        .review(&ReviewId(review_id.into()))
+        .map_err(CaseRefused::Failed)?
+        .ok_or(CaseRefused::NoSuchReview)?;
+    if item.state != ReviewItemState::Closed {
+        return Err(CaseRefused::ReviewOpen);
+    }
+    let answer = records
+        .store
+        .answer(&item.data.answer_id)
+        .map_err(CaseRefused::Failed)?
+        .ok_or(CaseRefused::NoSuchReview)?;
+    if taken {
+        return Err(CaseRefused::CaseExists);
+    }
+    let cases = doc["cases"]
+        .as_array_mut()
+        .ok_or_else(|| CaseRefused::SetInvalid("the set holds no list of `cases`".into()))?;
+    cases.push(json!({
+        "format": CASE_FORMAT,
+        "id": review_id,
+        "question": answer.data.question,
+        "expect_facts": item.data.expect_facts.unwrap_or_default(),
+        "expect_nodes": item.data.expect_nodes.unwrap_or_default(),
+        "review_id": review_id,
+    }));
+    let count = cases.len() as i64;
+    let mut text = serde_json::to_string_pretty(&doc).expect("a JSON value serializes");
+    text.push('\n');
+    let name = set
+        .file_name()
+        .ok_or_else(|| CaseRefused::SetInvalid(format!("{} names no file", set.display())))?;
+    let mut temp_name = std::ffi::OsString::from(".");
+    temp_name.push(name);
+    temp_name.push(".cortex-tmp");
+    let temp = set.with_file_name(temp_name);
+    std::fs::write(&temp, text)
+        .and_then(|()| std::fs::rename(&temp, set))
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp);
+            CaseRefused::Failed(format!("cannot write the set {}: {e}", set.display()))
+        })?;
+    Ok(CaseAdded {
+        id: review_id.into(),
+        cases: count,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -685,6 +792,7 @@ mod tests {
             expect_facts: facts.iter().map(|s| s.to_string()).collect(),
             expect_nodes: nodes.iter().map(|s| s.to_string()).collect(),
             source: None,
+            review_id: None,
         }
     }
 

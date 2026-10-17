@@ -19,6 +19,7 @@ components:
         - cortex.instance.RestoreSnapshot
         - cortex.instance.MeasureQuality
         - cortex.instance.RunEval
+        - cortex.instance.AddEvalCase
         - cortex.instance.ProposeSchemaChanges
         - cortex.instance.ApproveSchemaProposals
         - cortex.instance.RejectSchemaProposals
@@ -37,6 +38,7 @@ components:
         - cortex.instance.SnapshotRestored
         - cortex.instance.QualityMeasured
         - cortex.instance.EvalRan
+        - cortex.instance.EvalCaseAdded
         - cortex.instance.SchemaChangesProposed
         - cortex.instance.SchemaProposalsDecided
         - cortex.instance.SchemaProposalsApplied
@@ -69,6 +71,7 @@ components:
           summary: Eval sets asked of an instance end to end and scored
           commands:
             - cortex.instance.RunEval
+            - cortex.instance.AddEvalCase
       views:
         - cortex.instance.Instances
         - cortex.instance.Sources
