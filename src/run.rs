@@ -47,6 +47,9 @@ pub enum Failure {
     /// The run was sent SIGTERM and stopped at its next safe point ([`crate::terminate`]): not a
     /// fault of the source, so it is not counted. A gated run is undone ([`settle`]).
     Terminated(String),
+    /// The model could not be reached ([`extract::unavailable`]): not a fault of the source, so it
+    /// is not counted. The batches before it stay applied.
+    ModelUnavailable(extract::Unavailable, String),
 }
 
 #[derive(Debug)]
@@ -917,6 +920,8 @@ fn process_in(
     let mut n = 0;
     // Why the run ended `batch-too-large`, when a part still did not fit.
     let mut too_large: Option<String> = None;
+    // Why the run ended `model-unavailable`, when the model could not be reached.
+    let mut unreachable: Option<(extract::Unavailable, String)> = None;
     while let Some((batch, depth)) = queue.pop_front() {
         stop_point(&format!("before batch {n}"))?;
         let dir = run_dir.join(format!("batch-{n}"));
@@ -1045,6 +1050,22 @@ fn process_in(
                 ));
                 break;
             }
+            // The model, not the batch, failed: the batches before it stay applied, and this one
+            // and the rest are extracted by a later run.
+            Err(refused) if refused.unavailable.is_some() => {
+                let cause = refused.unavailable.expect("matched");
+                unreachable = Some((
+                    cause,
+                    format!(
+                        "the model could not be reached ({}) for batch {}: {}; a later run \
+                         extracts it and the batches after it",
+                        cause.name(),
+                        n - 1,
+                        refused.message
+                    ),
+                ));
+                break;
+            }
             Err(refused) if report.documents_applied == 0 => {
                 return Err(Failure::Extract(refused.message))
             }
@@ -1127,6 +1148,12 @@ fn process_in(
         }
         report.stopped = Some(why.clone());
     }
+    if let Some((cause, why)) = &unreachable {
+        if report.documents_applied == 0 {
+            return Err(Failure::ModelUnavailable(*cause, why.clone()));
+        }
+        report.stopped = Some(why.clone());
+    }
     unread(&mut report, &fetched.unread, redactor.as_ref());
     if undoable {
         held_to_gate(
@@ -1135,7 +1162,9 @@ fn process_in(
             &store,
             label,
             &report,
-            too_large.as_deref(),
+            too_large
+                .as_deref()
+                .or(unreachable.as_ref().map(|(_, why)| why.as_str())),
             before,
             started,
         )?;
@@ -1145,9 +1174,10 @@ fn process_in(
         &mut seen, &seen_path, &report, wanted, held_since, window, failures,
     )?;
     log(layout, label, &report, started);
-    match too_large {
-        Some(why) => Err(Failure::BatchTooLarge(why)),
-        None => Ok(report),
+    match (too_large, unreachable) {
+        (Some(why), _) => Err(Failure::BatchTooLarge(why)),
+        (None, Some((cause, why))) => Err(Failure::ModelUnavailable(cause, why)),
+        (None, None) => Ok(report),
     }
 }
 
@@ -1355,6 +1385,7 @@ impl Failure {
             }
             Failure::BatchTooLarge(m) => Failure::BatchTooLarge(format!("{m}; {more}")),
             Failure::Terminated(m) => Failure::Terminated(format!("{m}; {more}")),
+            Failure::ModelUnavailable(c, m) => Failure::ModelUnavailable(c, format!("{m}; {more}")),
         }
     }
 
@@ -1367,7 +1398,8 @@ impl Failure {
             | Failure::StoreOutcomeUnknown(m)
             | Failure::ConnectionUnavailable(m)
             | Failure::BatchTooLarge(m)
-            | Failure::Terminated(m) => m,
+            | Failure::Terminated(m)
+            | Failure::ModelUnavailable(_, m) => m,
         }
     }
 }

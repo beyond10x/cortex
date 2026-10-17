@@ -30,7 +30,7 @@ pub const HOOK_TIMEOUT_S: u64 = 10;
 pub const METRICS: &str = "metrics.prom";
 
 /// Every outcome a source's run records, in the order the spec declares them.
-pub const OUTCOMES: [m::RunOutcome; 9] = [
+pub const OUTCOMES: [m::RunOutcome; 10] = [
     m::RunOutcome::Ran,
     m::RunOutcome::FetchFailed,
     m::RunOutcome::ExtractionFailed,
@@ -39,6 +39,7 @@ pub const OUTCOMES: [m::RunOutcome; 9] = [
     m::RunOutcome::ConnectionUnavailable,
     m::RunOutcome::BatchTooLarge,
     m::RunOutcome::Terminated,
+    m::RunOutcome::ModelUnavailable,
     m::RunOutcome::Disabled,
 ];
 
@@ -52,6 +53,7 @@ pub fn outcome_name(outcome: m::RunOutcome) -> &'static str {
         m::RunOutcome::ConnectionUnavailable => "connection-unavailable",
         m::RunOutcome::BatchTooLarge => "batch-too-large",
         m::RunOutcome::Terminated => "terminated",
+        m::RunOutcome::ModelUnavailable => "model-unavailable",
         m::RunOutcome::Disabled => "disabled",
     }
 }
@@ -202,7 +204,8 @@ pub fn hook_outcome(outcome: m::RunOutcome, disabled: bool) -> Option<m::RunOutc
         | m::RunOutcome::StoreOutcomeUnknown
         | m::RunOutcome::ConnectionUnavailable
         | m::RunOutcome::BatchTooLarge
-        | m::RunOutcome::Terminated => Some(if disabled {
+        | m::RunOutcome::Terminated
+        | m::RunOutcome::ModelUnavailable => Some(if disabled {
             m::RunOutcome::Disabled
         } else {
             outcome
@@ -652,11 +655,15 @@ mod tests {
         )
         .unwrap();
         let text = metrics_text(&layout, &["t/news".into()]);
-        assert!(!text.contains("cortex_source_last_run_documents{"), "{text}");
+        assert!(
+            !text.contains("cortex_source_last_run_documents{"),
+            "{text}"
+        );
         assert!(text.contains("cortex_source_documents_total{source=\"t/news\",kind=\"read\"} 6\n"));
         assert!(text.contains("cortex_source_last_run_duration_seconds{source=\"t/news\"} 2.000\n"));
-        assert!(text
-            .contains("cortex_source_runs_total{source=\"t/news\",outcome=\"terminated\"} 1\n"));
+        assert!(
+            text.contains("cortex_source_runs_total{source=\"t/news\",outcome=\"terminated\"} 1\n")
+        );
         assert_eq!(
             hook_outcome(m::RunOutcome::Terminated, false),
             Some(m::RunOutcome::Terminated)

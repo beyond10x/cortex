@@ -2404,6 +2404,21 @@ const EXIT_BATCH_TOO_LARGE: u8 = 6;
 /// handled the signal (143).
 const EXIT_TERMINATED: u8 = 8;
 
+/// The exit status of a `run` whose model could not be reached (its connection refused, the
+/// gateway answering 502, 503 or 504, the model not loaded, `claude` not startable): distinct
+/// from every failure's, so a wrapper tells a model outage, which is not counted against the
+/// source, from a broken source.
+const EXIT_MODEL_UNAVAILABLE: u8 = 7;
+
+/// The spec's name of a `cortex.instance.ModelUnavailableCause`.
+fn unavailable_cause(cause: m::ModelUnavailableCause) -> &'static str {
+    match cause {
+        m::ModelUnavailableCause::Refused => "refused",
+        m::ModelUnavailableCause::NotLoaded => "not-loaded",
+        m::ModelUnavailableCause::GatewayDown => "gateway-down",
+    }
+}
+
 /// The exit status of each `run` outcome, which an external scheduler reads instead of the line.
 fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
     match outcome {
@@ -2413,6 +2428,7 @@ fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
         m::RunSourceOutcome::ConnectionUnavailable { .. } => EXIT_CONNECTION_UNAVAILABLE,
         m::RunSourceOutcome::BatchTooLarge { .. } => EXIT_BATCH_TOO_LARGE,
         m::RunSourceOutcome::Terminated { .. } => EXIT_TERMINATED,
+        m::RunSourceOutcome::ModelUnavailable { .. } => EXIT_MODEL_UNAVAILABLE,
         m::RunSourceOutcome::FetchOnlyFailed { .. }
         | m::RunSourceOutcome::FetchFailed { .. }
         | m::RunSourceOutcome::ExtractionFailed { .. }
@@ -2639,6 +2655,19 @@ fn run_source(
                 outcome: "terminated",
                 ok: false,
                 detail: json!({"reason": error.reason}),
+            },
+            None,
+        ),
+        // Not a failure of the source either: its model could not be reached. No
+        // `RecordFailure`; status, metric and hook report it.
+        m::RunSourceOutcome::ModelUnavailable { error } => (
+            Done {
+                outcome: "model-unavailable",
+                ok: false,
+                detail: json!({
+                    "cause": unavailable_cause(error.cause),
+                    "reason": error.reason,
+                }),
             },
             None,
         ),

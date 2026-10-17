@@ -115,6 +115,8 @@ pub struct Refused {
     pub unfit: Option<Unfit>,
     /// The call was ended because the run was sent SIGTERM ([`crate::terminate`]).
     pub terminated: bool,
+    /// The model could not be reached ([`unavailable`]): not a fault of the batch or the source.
+    pub unavailable: Option<Unavailable>,
     /// The model calls made: `0` when no model was asked.
     pub calls: i64,
     /// The tokens those calls reported.
@@ -211,6 +213,7 @@ impl Refused {
             error_answer: false,
             unfit: None,
             terminated: false,
+            unavailable: None,
             calls: 0,
             usage: Usage::ZERO,
         }
@@ -224,6 +227,7 @@ impl Refused {
             error_answer: false,
             unfit: None,
             terminated: false,
+            unavailable: None,
             calls: 1,
             usage: Usage::UNKNOWN,
         }
@@ -289,6 +293,60 @@ pub fn unfit(text: &str) -> Option<Unfit> {
     } else {
         None
     }
+}
+
+/// Why a model could not be reached (`cortex.instance.ModelUnavailableCause`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unavailable {
+    /// The model process could not be started, or its connection was refused.
+    Refused,
+    /// The server behind the gateway has not loaded the model, or is still loading it.
+    NotLoaded,
+    /// The gateway or the API answered HTTP 502, 503 or 504.
+    GatewayDown,
+}
+
+impl Unavailable {
+    /// As the spec names it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Unavailable::Refused => "refused",
+            Unavailable::NotLoaded => "not-loaded",
+            Unavailable::GatewayDown => "gateway-down",
+        }
+    }
+}
+
+/// Whether a model call's error text says the model could not be reached, in any case:
+/// [`Unavailable::NotLoaded`] for `model not loaded`, `no models loaded`, `model is loading` or
+/// `currently loading`; [`Unavailable::GatewayDown`] for an `API Error` with status 502, 503 or
+/// 504, `Bad Gateway`, `Service Unavailable` or `Gateway Timeout`; [`Unavailable::Refused`] for
+/// `connection refused`, `ECONNREFUSED`, `Connection error` (how `claude -p` words a connection
+/// that failed) or `Unable to connect`. A timeout and every other error are not.
+pub fn unavailable(text: &str) -> Option<Unavailable> {
+    let text = text.to_lowercase();
+    let any = |words: &[&str]| words.iter().any(|w| text.contains(w));
+    if any(&[
+        "model not loaded",
+        "no models loaded",
+        "model is loading",
+        "currently loading",
+    ]) {
+        return Some(Unavailable::NotLoaded);
+    }
+    let status = regex::Regex::new(r"api error:?\s*(502|503|504)\b").expect("a valid pattern");
+    if status.is_match(&text) || any(&["bad gateway", "service unavailable", "gateway timeout"]) {
+        return Some(Unavailable::GatewayDown);
+    }
+    if any(&[
+        "connection refused",
+        "econnrefused",
+        "connection error",
+        "unable to connect",
+    ]) {
+        return Some(Unavailable::Refused);
+    }
+    None
 }
 
 /// How long an extraction waits before asking again after an error answer that cost zero.
@@ -543,8 +601,18 @@ fn wait_or_terminate(child: &mut std::process::Child, prompt: &str) -> Waited {
             bytes
         })
     };
-    let stdout = read(child.stdout.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
-    let stderr = read(child.stderr.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
+    let stdout = read(
+        child
+            .stdout
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    );
+    let stderr = read(
+        child
+            .stderr
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    );
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
@@ -761,7 +829,10 @@ impl Model {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| Refused::free(format!("cannot run claude: {e}")))?;
+            .map_err(|e| Refused {
+                unavailable: Some(Unavailable::Refused),
+                ..Refused::free(format!("cannot run claude: {e}"))
+            })?;
         // The prompt is written, and the answer read, on threads of their own, so a run sent
         // SIGTERM ends the call however far it got ([`crate::terminate`]).
         let out = match wait_or_terminate(&mut child, prompt) {
@@ -770,11 +841,20 @@ impl Model {
             Waited::Terminated => return Err(Refused::terminated()),
         };
         let answer: Value = serde_json::from_slice(&out.stdout).map_err(|_| {
-            Refused::uncosted(format!(
-                "claude exited {} without a JSON answer: {}",
-                out.status,
-                String::from_utf8_lossy(&out.stderr).trim()
-            ))
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            // `timeout` exits 126 when it cannot run `claude`, 127 when it finds none.
+            let unavailable = match out.status.code() {
+                Some(126 | 127) => Some(Unavailable::Refused),
+                _ => unavailable(&stderr),
+            };
+            Refused {
+                unavailable,
+                ..Refused::uncosted(format!(
+                    "claude exited {} without a JSON answer: {}",
+                    out.status,
+                    error_text(&stderr)
+                ))
+            }
         })?;
         let cost_usd = answer["total_cost_usd"].as_f64();
         let usage = Usage::read(&answer);
@@ -782,6 +862,10 @@ impl Model {
             // Claude's own text says why (a sign-in, a usage limit); kept masked and bounded in
             // the reason and in `error.txt`, where nothing else of the failed call is written.
             let unfit = unfit(answer["result"].as_str().unwrap_or_default());
+            let unavailable = unfit
+                .is_none()
+                .then(|| unavailable(answer["result"].as_str().unwrap_or_default()))
+                .flatten();
             let said = error_text(answer["result"].as_str().unwrap_or_default());
             let _ = std::fs::write(dir.join("error.txt"), &said);
             let mut message = format!(
@@ -799,6 +883,7 @@ impl Model {
                 error_answer: true,
                 unfit,
                 terminated: false,
+                unavailable,
                 calls: 1,
                 usage,
             });
@@ -819,6 +904,7 @@ impl Model {
                 error_answer: false,
                 unfit: None,
                 terminated: false,
+                unavailable: None,
                 calls: 1,
                 usage,
             }),
@@ -1030,6 +1116,41 @@ pub fn entity_names(model: &Value) -> Vec<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `story:model-unavailable-outcome`: a model that cannot be reached is told by its error
+    /// text; a timeout, a refusal of the request and an invalid answer are not.
+    #[test]
+    fn an_error_text_names_why_the_model_could_not_be_reached() {
+        for (text, cause) in [
+            ("API Error: Connection error.", Some(Unavailable::Refused)),
+            (
+                "connect ECONNREFUSED 127.0.0.1:4000",
+                Some(Unavailable::Refused),
+            ),
+            ("API Error: 502 Bad Gateway", Some(Unavailable::GatewayDown)),
+            (
+                "API Error: 503 {error:upstream}",
+                Some(Unavailable::GatewayDown),
+            ),
+            ("api error: 504 timeout", Some(Unavailable::GatewayDown)),
+            (
+                "API Error: 503 {error:Model is currently loading}",
+                Some(Unavailable::NotLoaded),
+            ),
+            (
+                "No models loaded. Load a model first",
+                Some(Unavailable::NotLoaded),
+            ),
+            ("API Error: 500 internal", None),
+            ("API Error: 400 invalid request", None),
+            ("API Error: 401 authentication_error", None),
+            ("Request timed out.", None),
+            ("claude returned no structured output", None),
+            ("the document mentions port 5020 and 5030", None),
+        ] {
+            assert_eq!(unavailable(text), cause, "{text}");
+        }
+    }
 
     #[test]
     fn a_rejected_fact_names_the_evidence_it_cites_and_another_part_names_none() {

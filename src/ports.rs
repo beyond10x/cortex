@@ -368,6 +368,15 @@ fn source_ran(source_id: m::SourceId, report: &Report) -> m::SourceRan {
     }
 }
 
+/// The spec's name for why a model could not be reached.
+fn unavailable_cause(cause: crate::extract::Unavailable) -> m::ModelUnavailableCause {
+    match cause {
+        crate::extract::Unavailable::Refused => m::ModelUnavailableCause::Refused,
+        crate::extract::Unavailable::NotLoaded => m::ModelUnavailableCause::NotLoaded,
+        crate::extract::Unavailable::GatewayDown => m::ModelUnavailableCause::GatewayDown,
+    }
+}
+
 fn store(ports: &mut Ports, data: m::SourceData, state: m::SourceState) {
     let source = m::Source::new(data);
     let snapshot = match state {
@@ -487,6 +496,14 @@ impl Ports {
             Err(Failure::Terminated(reason)) => m::RunSourceOutcome::Terminated {
                 error: m::RunTerminated { reason },
             },
+            Err(Failure::ModelUnavailable(cause, reason)) => {
+                m::RunSourceOutcome::ModelUnavailable {
+                    error: m::ModelUnavailable {
+                        cause: unavailable_cause(cause),
+                        reason,
+                    },
+                }
+            }
             Ok(report) => {
                 let ran = source_ran(source_id, &report);
                 self.shared.borrow_mut().last_run = Some(report);
@@ -562,7 +579,8 @@ impl Ports {
                 | Failure::StoreOutcomeUnknown(reason)
                 | Failure::ConnectionUnavailable(reason)
                 | Failure::BatchTooLarge(reason)
-                | Failure::Terminated(reason),
+                | Failure::Terminated(reason)
+                | Failure::ModelUnavailable(_, reason),
             ) => failed(reason),
             Ok(c) => m::RunSourceOutcome::Fetched {
                 source_fetched: m::SourceFetched {
@@ -618,6 +636,9 @@ impl RunSourceBehavior for Ports {
             ("connection-unavailable", Failure::ConnectionUnavailable),
             ("batch-too-large", Failure::BatchTooLarge),
             ("terminated", Failure::Terminated),
+            ("model-unavailable", |reason| {
+                Failure::ModelUnavailable(crate::extract::Unavailable::Refused, reason)
+            }),
         ]
         .into_iter()
         .find(|(outcome, _)| self.decided(RUN, outcome));
@@ -684,6 +705,16 @@ impl RunSourceBehavior for Ports {
                 self.note(found, m::RunOutcome::Terminated, Some(reason.clone()));
                 return Ok(m::RunSourceOutcome::Terminated {
                     error: m::RunTerminated { reason },
+                });
+            }
+            // Recorded on the source like a failure; the scheduler counts none for it (main.rs).
+            Err(Failure::ModelUnavailable(cause, reason)) => {
+                self.note(found, m::RunOutcome::ModelUnavailable, Some(reason.clone()));
+                return Ok(m::RunSourceOutcome::ModelUnavailable {
+                    error: m::ModelUnavailable {
+                        cause: unavailable_cause(cause),
+                        reason,
+                    },
                 });
             }
             Ok(report) => report,
