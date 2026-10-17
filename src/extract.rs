@@ -329,14 +329,18 @@ pub struct Known {
     pub node_types: Vec<String>,
     /// `RELATION: Source -> Target`.
     pub edge_types: Vec<String>,
-    /// Up to 50 names per node type, from earlier runs.
-    pub entities: BTreeMap<String, Vec<String>>,
+    /// The known entities shown to the model (`crate::known`): the store's nodes the batch names,
+    /// then up to 50 names per node type from earlier runs.
+    pub entities: Vec<cortex_model::instance::KnownEntity>,
 }
 
 impl Known {
     /// The names of `ontology` (`ekr ontology`), each node type's properties with their value
     /// kind (`value_type.value_kind`) and nothing else of their declaration.
-    pub fn from_ontology(ontology: &Value, entities: BTreeMap<String, Vec<String>>) -> Self {
+    pub fn from_ontology(
+        ontology: &Value,
+        entities: Vec<cortex_model::instance::KnownEntity>,
+    ) -> Self {
         let names = |v: &Value| -> Vec<String> {
             v.as_array()
                 .into_iter()
@@ -432,8 +436,9 @@ pub fn prompt_split(
     p.push('\n');
     if !known.entities.is_empty() {
         p.push_str("Known entities:\n");
-        for (ty, names) in &known.entities {
-            p.push_str(&format!("- {ty}: {}\n", names.join("; ")));
+        for line in crate::known::lines(&known.entities) {
+            p.push_str(&line);
+            p.push('\n');
         }
     }
     p.push_str("\nExtract the knowledge in these documents.\n");
@@ -986,7 +991,7 @@ mod tests {
             ]},
             {"id": "t3", "name": "Organization", "parents": [], "properties": []},
         ], "edge_types": []});
-        let known = Known::from_ontology(&ontology, BTreeMap::new());
+        let known = Known::from_ontology(&ontology, Vec::new());
         let text = prompt("d", None, &known, &[]);
         assert!(text.contains("release_date: String"), "{text}");
         assert!(
@@ -1054,7 +1059,7 @@ mod tests {
 
     #[test]
     fn the_fixed_part_of_a_prompt_ends_where_its_documents_begin() {
-        let known = Known::from_ontology(&json!({}), BTreeMap::new());
+        let known = Known::from_ontology(&json!({}), Vec::new());
         let (text, fixed) = prompt_split("d", Some("guide"), &known, &[]);
         assert_eq!(fixed, text.len(), "no documents: all of it is fixed");
         assert!(text.ends_with("Extract the knowledge in these documents.\n"));

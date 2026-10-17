@@ -525,12 +525,22 @@ fn properties(mapping: &m::RecordMapping) -> Vec<&str> {
 }
 
 /// The aliases of a record's entity by `mapping`, given its identity: `<name> (<identity>)`
-/// first, so it names the node, then the identity, then the mapped aliases, each once. `None`
-/// without a name.
+/// first, so it names the node, then the identity, then the mapped aliases, then each alias
+/// template rendered ([`render_template`]), each once. `None` without a name.
 fn aliases(mapping: &m::RecordMapping, record: &Value, identity: &str) -> Option<Vec<String>> {
     let name = text_at(record, &mapping.name)?;
     let mut out = vec![format!("{name} ({identity})"), identity.to_string()];
-    for alias in mapping.aliases.iter().flat_map(|p| texts_at(record, p)) {
+    let templates = mapping
+        .alias_templates
+        .iter()
+        .flatten()
+        .filter_map(|t| render_template(t, record));
+    for alias in mapping
+        .aliases
+        .iter()
+        .flat_map(|p| texts_at(record, p))
+        .chain(templates)
+    {
         if !out.contains(&alias) {
             out.push(alias);
         }
@@ -538,16 +548,87 @@ fn aliases(mapping: &m::RecordMapping, record: &Value, identity: &str) -> Option
     Some(out)
 }
 
-/// `template` (`cortex.instance.RecordMapping.alias_templates`) rendered from `record`.
-pub fn render_template(template: &str, record: &Value) -> Option<String> {
-    let _ = (template, record);
-    None
+/// One part of an alias template: fixed text, or the dotted path of a `{path}` placeholder.
+enum TemplatePart<'t> {
+    Text(&'t str),
+    Field(&'t str),
 }
 
-/// Why `template` is no alias template.
+/// The parts of `template`, or why it is no alias template: it is empty, names no field, or has a
+/// placeholder other than `{path}` with a dotted path (`$.` allowed before it) of letters, digits,
+/// `_` and `-`.
+fn template_parts(template: &str) -> Result<Vec<TemplatePart<'_>>, String> {
+    if template.is_empty() {
+        return Err("an empty template".into());
+    }
+    let mut parts = Vec::new();
+    let mut rest = template;
+    while !rest.is_empty() {
+        let open = rest.find('{');
+        let close = rest.find('}');
+        match (open, close) {
+            (None, Some(_)) => {
+                return Err("a `}` that closes no placeholder".into());
+            }
+            (Some(o), Some(c)) if c < o => {
+                return Err("a `}` that closes no placeholder".into());
+            }
+            (None, None) => {
+                parts.push(TemplatePart::Text(rest));
+                break;
+            }
+            (Some(o), _) => {
+                if o > 0 {
+                    parts.push(TemplatePart::Text(&rest[..o]));
+                }
+                let inner = &rest[o + 1..];
+                let Some(end) = inner.find('}') else {
+                    return Err("a `{` that is never closed".into());
+                };
+                let path = &inner[..end];
+                if path.contains('{') {
+                    return Err("a `{` inside a placeholder".into());
+                }
+                let steps = path.strip_prefix("$.").unwrap_or(path);
+                let step_ok = |s: &str| {
+                    !s.is_empty()
+                        && s.chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+                };
+                if !steps.split('.').all(step_ok) {
+                    return Err(format!(
+                        "the placeholder {{{path}}}: a path is dotted names of letters, digits, \
+                         `_` and `-`"
+                    ));
+                }
+                parts.push(TemplatePart::Field(path));
+                rest = &inner[end + 1..];
+            }
+        }
+    }
+    if !parts.iter().any(|p| matches!(p, TemplatePart::Field(_))) {
+        return Err("no `{field}` placeholder, so every record would share the alias".into());
+    }
+    Ok(parts)
+}
+
+/// `template` (`cortex.instance.RecordMapping.alias_templates`) rendered from `record`: each
+/// `{path}` replaced by the scalar there. `None` when a field is missing, not a scalar or blank,
+/// or the template is no alias template ([`template_refusal`]).
+pub fn render_template(template: &str, record: &Value) -> Option<String> {
+    let mut out = String::new();
+    for part in template_parts(template).ok()? {
+        match part {
+            TemplatePart::Text(t) => out.push_str(t),
+            TemplatePart::Field(path) => out.push_str(&text_at(record, path)?),
+        }
+    }
+    Some(out)
+}
+
+/// Why `template` is no alias template, or `None` when it is one.
 pub fn template_refusal(template: &str) -> Option<String> {
-    let _ = template;
-    None
+    template_parts(template).err()
 }
 
 /// One structured source as a run maps it: its identity prefix, its mapping, its child operations
@@ -1697,7 +1778,10 @@ mod tests {
                 "{record}"
             );
         }
-        assert_eq!(render_template("{a.b}", &json!({"a": {"b": true}})), Some("true".into()));
+        assert_eq!(
+            render_template("{a.b}", &json!({"a": {"b": true}})),
+            Some("true".into())
+        );
         assert_eq!(render_template("{a.b}", &json!({"a": {"c": 1}})), None);
     }
 

@@ -10,53 +10,173 @@ use cortex_model::instance as m;
 use serde_json::Value;
 
 use crate::evidence::Issued;
+use crate::sources::Origin;
 
 /// Known entity names per node type, of origin `Run`, given to the model.
 pub const RUN_PER_TYPE: usize = 50;
 
 /// How a name is compared: case folded.
 pub fn fold(text: &str) -> String {
-    let _ = text;
-    String::new()
+    text.to_lowercase()
 }
 
 /// The terms of `batch` a store node may be named by, each [`fold`]ed: each document's key and, for
 /// a record, its id: after the last `#` of a file record's key, after `<adapter>:<operation>:` of
 /// a Connectors record's.
 pub fn terms(batch: &[Issued]) -> BTreeSet<String> {
-    let _ = batch;
-    BTreeSet::new()
+    let mut out = BTreeSet::new();
+    for issued in batch {
+        let key = &issued.doc.key;
+        out.insert(fold(key));
+        let id = match issued.doc.origin {
+            Origin::FileRecord => key.rsplit_once('#').map(|(_, id)| id),
+            Origin::Record => key.splitn(3, ':').nth(2),
+            Origin::Url | Origin::File => None,
+        };
+        if let Some(id) = id.filter(|id| !id.trim().is_empty()) {
+            out.insert(fold(id));
+        }
+    }
+    out
 }
 
 /// Every node of `snapshot` (`ekr snapshot`) whose canonical name or one of whose aliases, folded,
 /// is one of `terms`, of any type, each once, as a known entity of origin `Store`: its type's name
 /// from `ontology` (`ekr ontology`), its canonical name and its other aliases. In the snapshot's
 /// node order; a node of a type the ontology does not name is left out.
-pub fn store_hits(snapshot: &Value, ontology: &Value, terms: &BTreeSet<String>) -> Vec<m::KnownEntity> {
-    let _ = (snapshot, ontology, terms);
-    Vec::new()
+pub fn store_hits(
+    snapshot: &Value,
+    ontology: &Value,
+    terms: &BTreeSet<String>,
+) -> Vec<m::KnownEntity> {
+    if terms.is_empty() {
+        return Vec::new();
+    }
+    let types: BTreeMap<&str, &str> = ontology["node_types"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|t| Some((t["id"].as_str()?, t["name"].as_str()?)))
+        .collect();
+    let mut hits = Vec::new();
+    for node in snapshot["graph"]["graph"]["nodes"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(_, n)| n)
+    {
+        let Some(name) = node["canonical_name"].as_str() else {
+            continue;
+        };
+        let aliases: Vec<&str> = node["aliases"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect();
+        let named = std::iter::once(name)
+            .chain(aliases.iter().copied())
+            .any(|n| terms.contains(&fold(n)));
+        if !named {
+            continue;
+        }
+        let Some(node_type) = node["type_id"].as_str().and_then(|id| types.get(id)) else {
+            continue;
+        };
+        let mut others: Vec<String> = Vec::new();
+        for alias in aliases {
+            if alias != name && !others.iter().any(|o| o == alias) {
+                others.push(alias.to_string());
+            }
+        }
+        hits.push(m::KnownEntity {
+            node_type: node_type.to_string(),
+            name: name.to_string(),
+            aliases: others,
+            origin: m::KnownOrigin::Store,
+        });
+    }
+    hits
 }
 
 /// `store` hits, then the run's own names (`run`, by node type), at most [`RUN_PER_TYPE`] of a
 /// type, as known entities of origin `Run`. A run name equal, folded, to the name or an alias of a
 /// store hit of its type is shown once, as the store hit.
-pub fn merge(store: Vec<m::KnownEntity>, run: &BTreeMap<String, Vec<String>>) -> Vec<m::KnownEntity> {
-    let _ = run;
-    store
+pub fn merge(
+    store: Vec<m::KnownEntity>,
+    run: &BTreeMap<String, Vec<String>>,
+) -> Vec<m::KnownEntity> {
+    let held: BTreeSet<(String, String)> = store
+        .iter()
+        .flat_map(|e| {
+            std::iter::once(&e.name)
+                .chain(&e.aliases)
+                .map(|n| (e.node_type.clone(), fold(n)))
+        })
+        .collect();
+    let mut out = store;
+    for (ty, names) in run {
+        let kept = names
+            .iter()
+            .filter(|n| !held.contains(&(ty.clone(), fold(n))))
+            .take(RUN_PER_TYPE)
+            .map(|n| m::KnownEntity {
+                node_type: ty.clone(),
+                name: n.clone(),
+                aliases: Vec::new(),
+                origin: m::KnownOrigin::Run,
+            });
+        out.extend(kept);
+    }
+    out
+}
+
+/// The known entities of `batch`: [`store_hits`] of one read of `store` (`ekr snapshot`),
+/// [`merge`]d with the run's own names `run`.
+pub fn for_batch(
+    store: &crate::ekr::Store,
+    ontology: &Value,
+    batch: &[Issued],
+    run: &BTreeMap<String, Vec<String>>,
+) -> Result<Vec<m::KnownEntity>, String> {
+    let terms = terms(batch);
+    let hits = if terms.is_empty() {
+        Vec::new()
+    } else {
+        store_hits(&store.snapshot()?, ontology, &terms)
+    };
+    Ok(merge(hits, run))
 }
 
 /// The known-entity lines of a prompt, one per node type in name order: `- <type>: ` and each
 /// entity of it, store hits first, separated by `; `. A run name is written as it is; a store hit
 /// as `<name> (in the store; also <alias>, <alias>)`.
 pub fn lines(entities: &[m::KnownEntity]) -> Vec<String> {
-    let _ = entities;
-    Vec::new()
+    let mut by_type: BTreeMap<&str, (Vec<String>, Vec<String>)> = BTreeMap::new();
+    for e in entities {
+        let (store, run) = by_type.entry(e.node_type.as_str()).or_default();
+        match e.origin {
+            m::KnownOrigin::Store if e.aliases.is_empty() => {
+                store.push(format!("{} (in the store)", e.name));
+            }
+            m::KnownOrigin::Store => store.push(format!(
+                "{} (in the store; also {})",
+                e.name,
+                e.aliases.join(", ")
+            )),
+            m::KnownOrigin::Run => run.push(e.name.clone()),
+        }
+    }
+    by_type
+        .into_iter()
+        .map(|(ty, (store, run))| format!("- {ty}: {}", [store, run].concat().join("; ")))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sources::{Document, Origin};
+    use crate::sources::Document;
     use serde_json::json;
 
     fn issued(key: &str, origin: Origin) -> Issued {
@@ -178,14 +298,20 @@ mod tests {
             vec![store("Repository", "acme/api", &["repo:acme/api"])],
             &by_type,
         );
-        assert_eq!(merged[0], store("Repository", "acme/api", &["repo:acme/api"]));
+        assert_eq!(
+            merged[0],
+            store("Repository", "acme/api", &["repo:acme/api"])
+        );
         let repos: Vec<_> = merged
             .iter()
             .filter(|e| e.node_type == "Repository" && e.origin == m::KnownOrigin::Run)
             .collect();
         assert_eq!(repos.len(), RUN_PER_TYPE);
         assert_eq!(repos[0], &run("Repository", "r0"));
-        assert!(merged.contains(&run("Person", "ACME/API")), "another type's name stays");
+        assert!(
+            merged.contains(&run("Person", "ACME/API")),
+            "another type's name stays"
+        );
         assert!(!merged.contains(&run("Repository", "ACME/api")));
     }
 

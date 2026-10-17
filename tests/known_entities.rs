@@ -206,15 +206,15 @@ fn a_node_another_writer_stored_is_shown_under_its_own_type_and_a_reusing_model_
     let line = known_line(&prompts[0], "Repository")
         .unwrap_or_else(|| panic!("no known Repository in the prompt:\n{}", prompts[0]));
     assert!(line.contains("acme/api"), "{line}");
-    assert!(line.contains("repo:acme/api"), "the aliases are shown: {line}");
+    assert!(
+        line.contains("repo:acme/api"),
+        "the aliases are shown: {line}"
+    );
     assert!(line.contains("store"), "the origin is shown: {line}");
 
     let after = nodes(&w, "kn");
     assert_eq!(after.len(), before.len(), "{after:?}");
-    assert!(
-        !after.iter().any(|(ty, _, _)| ty == "Service"),
-        "{after:?}"
-    );
+    assert!(!after.iter().any(|(ty, _, _)| ty == "Service"), "{after:?}");
 }
 
 #[test]
@@ -260,7 +260,11 @@ fn a_template_alias_reaches_the_store_node_another_writer_gave_that_alias() {
         r#"{"repos": [{"id": 7, "namespace": "acme", "path": "api"}, {"id": 8, "path": "web"}]}"#,
     )
     .unwrap();
-    create(&w, "tpl", &structured_source(r#"["repo:{namespace}/{path}"]"#));
+    create(
+        &w,
+        "tpl",
+        &structured_source(r#"["repo:{namespace}/{path}"]"#),
+    );
     foreign_writer(&w, "tpl");
     let before = nodes(&w, "tpl");
 
