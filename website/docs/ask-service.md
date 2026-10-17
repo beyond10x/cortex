@@ -158,7 +158,9 @@ latency, the token counts of its `done` event and the time. A request refused be
 (401, 429, 400) leaves no record. The records are cortex's own: they live in
 `instances/<name>/ask.sqlite` in the instance directory, never in the EKR store, and the file
 carries its schema version, migrated when the service starts. A file written by a newer cortex is
-refused.
+refused. The question, the answer, the `tool` events' arguments, a vote's comment and a close's
+reason are kept with every credential shape masked (`[masked:<shape>]`), whatever the instance's
+`redaction` policy; the mask is irreversible.
 
 The record routes need the identity header too (401 without it) and answer JSON; a refusal is
 `{"error": <reason>, "message": <text>}`.
@@ -178,8 +180,14 @@ cause, and an item, once opened, stays as it was whatever happens after:
 | `failed` | the answer's outcome is `failed` or `limited` |
 | `slow` | the answer took longer than `slow_after_ms` |
 
+A vote or a close that meets a purge or another close keeps to these answers: a vote whose answer
+the purge takes answers 404 `no-such-answer` and leaves no vote or review item behind, and of two
+closes of one item at once one closes it and the other answers 409 `review-not-open`.
+
 A record older than `retention_days` is deleted with its votes and review items, in one
-transaction, when the service starts (before the ready line) and every 24 hours after.
+transaction, when the service starts (before the ready line) and every 24 hours after; any vote or
+review item whose record is gone goes with them. A `retention_days` too large to count keeps every
+record.
 
 :::note[PostgreSQL stores]
 On a `postgres` store the records belong in a schema of their own, opened through a Connectors
