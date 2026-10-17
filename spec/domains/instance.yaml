@@ -240,8 +240,10 @@ types:
   # scalar or as blank text, yields no alias for that record and no error. Absent means none.
   # UNMAPPED: the spec check refuses (exit 2, naming the source and the template, for `create`,
   # `update`, `adopt` and a run alike) an empty template, a template that names no field, and a
-  # template whose placeholders are not `{path}` with a dotted path of letters, digits, `_` and
-  # `-` (an unclosed `{`, a lone `}`, `{}`, a nested `{`, or another character in a path). ESS
+  # template whose placeholders are not `{path}` with a dotted path of ASCII letters, digits, `_`
+  # and `-` (an unclosed `{`, a lone `}`, `{}`, a nested `{`, or another character in a path, a
+  # non-ASCII letter included). A template alias matches a store node of the mapping's own
+  # `node_type` only. ESS
   # has no construct for the grammar of a String; `spec::check` holds it and
   # `tests/known_entities.rs` tests it.
   - name: cortex.instance.RecordMapping
@@ -1651,17 +1653,24 @@ commands:
       # tests/connections_revalidate_retry.rs hold it.
       # UNMAPPED: before each batch is sent to the model, the run reads the store once
       # (`ekr snapshot`) and takes every node, of any type, whose canonical name or one of whose
-      # aliases equals one of the batch's terms after case folding: each document's key and, for
-      # a record, its id (after the last `#` of a file record's key, after
+      # aliases equals one of the batch's terms, both lowercased: each document's key and, for a
+      # record, its id (after the first `#` of a file record's key `<path>#<id>`, after
       # `<adapter>:<operation>:` of a Connectors record's). Those nodes are shown to the model as
       # `cortex.instance.KnownEntity` of origin `Store`, each once, ahead of the names of origin
       # `Run` (the entities file the run's own batches grow, at most 50 per node type; a run name
       # equal to a store hit's name of its type is shown once). The cap holds for run names
-      # only: every store hit of the batch is shown. Store hits pass through the instance's
-      # redaction like every known name. ESS has no construct for a read of the store's graph or
-      # for what a prompt holds; `src/run.rs` holds it and `tests/known_entities.rs` tests it.
+      # only: every store hit of the batch is shown. A store hit's name and aliases are masked
+      # for credential shapes on every run, with or without a redaction policy, before they are
+      # merged with the run names, and then pass through the instance's redaction like every
+      # known name. Each name and alias is written on its one line of the prompt: a line break
+      # or another control character in it is written as a space. Behind a model window the
+      # batch size counts the store hits' lines in the request's fixed part: a batch of more
+      # than one document whose documents and known-entity lines exceed the size is split in
+      # two before it is sent. ESS has no construct for a read of the store's graph or for what
+      # a prompt holds; `src/run.rs` holds it and `tests/known_entities.rs` tests it.
       # A structured source calls no model; `alias_templates` reach the store as aliases of its
-      # entities, by which EKR resolves them to a node of their type.
+      # entities, by which EKR resolves them to a node of their type: a template alias matches a
+      # store node of the mapping's own type only.
       # UNMAPPED: with `fetch_only` (`cortex run --fetch-only`), `fetched` exits 0 and
       # `fetch-only-failed` exits 1 and prints `fetch-failed`. Neither writes the source's status
       # file, `metrics.prom`, `cortex.log`, the seen documents or the window (`pending_since`),
