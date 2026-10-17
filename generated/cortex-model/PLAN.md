@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 35445edbfb924602bf5ee4c9b32cce8f1c4d409e8e17675c8b68b61dbaf6bec5
-  contract digest 6cc21d245bef94a86dddf5ce3002dec278709616b6c49500ec2220a65697e5a7
+  model digest 7d8468225c0615bc54d37ab20d8a5ed011c6af620b27b8f62299e46196457ec1
+  contract digest e28cd1562bab08223ec6f65f42a29bccbb41a2ebb899f233ef6abd757672022d
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-229 capabilities: **221 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+235 capabilities: **227 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -136,6 +136,8 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | command behaviour | `cortex.ask.PurgeExpired` |
 | command contract | `cortex.ask.RecordAnswer` |
 | command behaviour | `cortex.ask.RecordAnswer` |
+| command contract | `cortex.instance.AddEvalCase` |
+| command behaviour | `cortex.instance.AddEvalCase` |
 | command contract | `cortex.instance.AddSource` |
 | command behaviour | `cortex.instance.AddSource` |
 | command contract | `cortex.instance.AdoptInstance` |
@@ -170,6 +172,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | event type | `cortex.ask.ReviewClosed` |
 | event type | `cortex.ask.ReviewOpened` |
 | event type | `cortex.ask.Voted` |
+| event type | `cortex.instance.EvalCaseAdded` |
 | event type | `cortex.instance.EvalRan` |
 | event type | `cortex.instance.InstanceAdopted` |
 | event type | `cortex.instance.InstanceCreated` |
@@ -201,6 +204,9 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | error type | `cortex.instance.BatchTooLarge` |
 | error type | `cortex.instance.ConnectionMissing` |
 | error type | `cortex.instance.ConnectionUnavailable` |
+| error type | `cortex.instance.EvalCaseExists` |
+| error type | `cortex.instance.EvalReviewNotFound` |
+| error type | `cortex.instance.EvalReviewOpen` |
 | error type | `cortex.instance.EvalRunnerFailed` |
 | error type | `cortex.instance.EvalSetInvalid` |
 | error type | `cortex.instance.ExtractionFailed` |
@@ -260,5 +266,5 @@ What the specification fully determines is generated; what it cannot determine i
 | actor grants | `cortex.ask.Asker` | planning | may invoke `cortex.ask.Ask`, `cortex.ask.CastVote`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |
 | actor grants | `cortex.ask.Reviewer` | planning | may invoke `cortex.ask.CloseReview`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |
 | actor grants | `cortex.ask.Service` | planning | may invoke `cortex.ask.OpenReview`, `cortex.ask.PurgeExpired`, `cortex.ask.RecordAnswer`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |
-| actor grants | `cortex.instance.Operator` | planning | may invoke `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.ApplySchemaProposals`, `cortex.instance.ApproveSchemaProposals`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.ProposeSchemaChanges`, `cortex.instance.RejectSchemaProposals`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.RunEval`, `cortex.instance.UpdateInstance`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |
+| actor grants | `cortex.instance.Operator` | planning | may invoke `cortex.instance.AddEvalCase`, `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.ApplySchemaProposals`, `cortex.instance.ApproveSchemaProposals`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.ProposeSchemaChanges`, `cortex.instance.RejectSchemaProposals`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.RunEval`, `cortex.instance.UpdateInstance`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |
 | actor grants | `cortex.instance.Scheduler` | planning | may invoke `cortex.instance.RecordFailure`, `cortex.instance.RunSource`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry |

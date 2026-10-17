@@ -23,9 +23,9 @@ use cortex_model::instance as m;
 use serde_json::{json, Value};
 
 use super::{
-    cause_name, cause_of, ms_of, outcome_name, outcome_of, review_state_name, review_state_of,
-    stamp, tools_json, tools_of, value_name, value_of, Purge, RecordStore, NO_SUCH_ANSWER,
-    REVIEW_NOT_OPEN, SCHEMA_VERSION,
+    cause_name, cause_of, list_of, list_text, ms_of, outcome_name, outcome_of, review_state_name,
+    review_state_of, stamp, tools_json, tools_of, value_name, value_of, Purge, RecordStore,
+    NO_SUCH_ANSWER, REVIEW_NOT_OPEN, SCHEMA_VERSION,
 };
 
 /// The name of the `[consumers]` entry in the operator's Connectors configuration that pins the
@@ -34,7 +34,8 @@ pub const CONSUMER: &str = "cortex-records";
 
 /// The schema of the records, one step per version as for `ask.sqlite`: step `i` takes version
 /// `i` to `i + 1`, and the one row of `schema_version` holds the version a schema is at.
-const MIGRATIONS: &[&str] = &["
+const MIGRATIONS: &[&str] = &[
+    "
     CREATE TABLE answers (
         answer_id TEXT PRIMARY KEY,
         instance_name TEXT NOT NULL,
@@ -73,7 +74,12 @@ const MIGRATIONS: &[&str] = &["
     );
     CREATE INDEX reviews_answer ON reviews (answer_id);
     CREATE INDEX reviews_state ON reviews (state, opened_ms);
-"];
+",
+    "
+    ALTER TABLE reviews ADD COLUMN expect_facts TEXT;
+    ALTER TABLE reviews ADD COLUMN expect_nodes TEXT;
+",
+];
 
 const _: () = assert!(MIGRATIONS.len() as i64 == SCHEMA_VERSION);
 
@@ -807,7 +813,7 @@ const ANSWER: &str = "SELECT answer_id, instance_name, identity, question, answe
     steps, at_ms FROM answers";
 const VOTE: &str = "SELECT vote_id, answer_id, identity, value, comment, at_ms FROM votes";
 const REVIEW: &str = "SELECT review_id, answer_id, cause, state, opened_ms, close_reason, \
-    closed_ms FROM reviews";
+    closed_ms, expect_facts, expect_nodes FROM reviews";
 
 fn answer_row(row: &[Value]) -> Result<ma::AnswerRecordData, String> {
     let id = text_at(row, 0)?;
@@ -859,6 +865,12 @@ fn review_row(row: &[Value]) -> Result<ma::ReviewItemSnapshot, String> {
             "review item {id}: cause {cause:?}, state {state:?}"
         ));
     };
+    let (facts, nodes) = (opt_text_at(row, 7)?, opt_text_at(row, 8)?);
+    let (Some(expect_facts), Some(expect_nodes)) =
+        (list_of(facts.as_deref()), list_of(nodes.as_deref()))
+    else {
+        return Err(format!("review item {id}: expectations"));
+    };
     Ok(ma::ReviewItemSnapshot {
         state,
         data: ma::ReviewItemData {
@@ -868,6 +880,8 @@ fn review_row(row: &[Value]) -> Result<ma::ReviewItemSnapshot, String> {
             opened_at: stamp(int_at(row, 4)?),
             close_reason: opt_text_at(row, 5)?,
             closed_at: opt_int_at(row, 6)?.map(stamp),
+            expect_facts,
+            expect_nodes,
         },
     })
 }
@@ -1029,13 +1043,16 @@ impl RecordStore for PgRecords {
             ma::ReviewItemState::Closed => {
                 let written = self.exec(
                     "UPDATE reviews SET state = $2::text, close_reason = $3::text, \
-                     closed_ms = $4::bigint WHERE review_id = $1::text AND state = $5::text",
+                     closed_ms = $4::bigint, expect_facts = $6::text, expect_nodes = $7::text \
+                     WHERE review_id = $1::text AND state = $5::text",
                     &[
                         Param::text(&d.review_id.0),
                         Param::text(review_state_name(item.state)),
                         Param::Text(d.close_reason.clone()),
                         Param::Int(closed),
                         Param::text(review_state_name(ma::ReviewItemState::Open)),
+                        Param::Text(list_text(&d.expect_facts)),
+                        Param::Text(list_text(&d.expect_nodes)),
                     ],
                 )?;
                 if written == 0 {

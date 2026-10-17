@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 35445edbfb924602bf5ee4c9b32cce8f1c4d409e8e17675c8b68b61dbaf6bec5
-// contract digest 6cc21d245bef94a86dddf5ce3002dec278709616b6c49500ec2220a65697e5a7
+// model digest 7d8468225c0615bc54d37ab20d8a5ed011c6af620b27b8f62299e46196457ec1
+// contract digest e28cd1562bab08223ec6f65f42a29bccbb41a2ebb899f233ef6abd757672022d
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -18,6 +18,8 @@
 /// An event this component declares it publishes, on its way to the system's transport.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PublishedEvent {
+    /// `cortex.instance.EvalCaseAdded`.
+    EvalCaseAdded(crate::instance::EvalCaseAdded),
     /// `cortex.instance.EvalRan`.
     EvalRan(crate::instance::EvalRan),
     /// `cortex.instance.InstanceAdopted`.
@@ -80,8 +82,28 @@ impl<B> Cortex<B> {
 
 impl<B> Cortex<B>
 where
-    B: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunEvalBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    B: crate::instance::obligations::AddEvalCaseBehavior + crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunEvalBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
 {
+    /// Accepts `cortex.instance.AddEvalCase`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn add_eval_case(&mut self, input: crate::instance::AddEvalCase) -> Result<crate::instance::AddEvalCaseOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.add_eval_case(input)?;
+        match &outcome {
+            crate::instance::AddEvalCaseOutcome::SetInvalid { .. } => {}
+            crate::instance::AddEvalCaseOutcome::NoSuchReview { .. } => {}
+            crate::instance::AddEvalCaseOutcome::ReviewOpen { .. } => {}
+            crate::instance::AddEvalCaseOutcome::CaseExists { .. } => {}
+            crate::instance::AddEvalCaseOutcome::Added { eval_case_added, .. } => {
+                self.outbox.push(PublishedEvent::EvalCaseAdded(eval_case_added.clone()));
+            }
+            crate::instance::AddEvalCaseOutcome::NoSuchInstance { .. } => {}
+        }
+        Ok(outcome)
+    }
+
     /// Accepts `cortex.instance.AddSource`: runs the behaviour obligation, then publishes the declared events
     /// the outcome carries.
     ///

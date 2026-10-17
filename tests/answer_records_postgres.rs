@@ -846,10 +846,22 @@ fn answer_records_live_in_a_postgres_schema_of_their_own_and_never_in_ekrs() {
         let (status, body) = service.call(
             "POST",
             &format!("/review/{review_id}/close"),
-            Some(json!({"reason": "the gateway was down"})),
+            Some(
+                json!({"reason": "the gateway was down", "expect_facts": ["Alpha ships in May"],
+                        "expect_nodes": ["n-7"]}),
+            ),
         );
         assert_eq!(status, 200, "{body}");
         assert!(causes_of(&service.reviews(), &failed).is_empty());
+        // The close keeps what a right answer holds, in the records schema.
+        assert_eq!(
+            pg.psql(&format!(
+                "SELECT expect_facts || ' ' || expect_nodes FROM cortex_ask.reviews \
+                 WHERE review_id = '{review_id}'"
+            ))
+            .trim(),
+            r#"["Alpha ships in May"] ["n-7"]"#
+        );
         let (status, _) = service.call(
             "POST",
             &format!("/review/{review_id}/close"),

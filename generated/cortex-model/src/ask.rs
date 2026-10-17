@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 35445edbfb924602bf5ee4c9b32cce8f1c4d409e8e17675c8b68b61dbaf6bec5
-// contract digest 6cc21d245bef94a86dddf5ce3002dec278709616b6c49500ec2220a65697e5a7
+// model digest 7d8468225c0615bc54d37ab20d8a5ed011c6af620b27b8f62299e46196457ec1
+// contract digest e28cd1562bab08223ec6f65f42a29bccbb41a2ebb899f233ef6abd757672022d
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Answers — `cortex.ask`.
@@ -451,6 +451,10 @@ pub struct ReviewItemData {
     pub close_reason: Option<String>,
     /// `closed_at` — `Optional<Timestamp>`.
     pub closed_at: Option<crate::primitives::Timestamp>,
+    /// `expect_facts` — `Optional<List<String>>`.
+    pub expect_facts: Option<Vec<String>>,
+    /// `expect_nodes` — `Optional<List<String>>`.
+    pub expect_nodes: Option<Vec<String>>,
 }
 
 /// The states of `cortex.ask.ReviewItem`, at the type level.
@@ -861,6 +865,10 @@ pub struct CloseReview {
     pub review_id: ReviewId,
     /// `reason` — `String`.
     pub reason: String,
+    /// `expect_facts` — `List<String>`.
+    pub expect_facts: Vec<String>,
+    /// `expect_nodes` — `List<String>`.
+    pub expect_nodes: Vec<String>,
 }
 
 /// Everything `cortex.ask.CloseReview` can result in — one variant per declared outcome.

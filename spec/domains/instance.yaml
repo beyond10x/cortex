@@ -693,7 +693,11 @@ types:
   # One question of an eval set, `format` `cortex.eval-case/1`. `id` is unique in its set.
   # An answer passes when it contains every `expect_facts` string (letter case and runs of white
   # space ignored) and cites every `expect_nodes` id. `source` says where the case came from, and
-  # is not scored.
+  # is not scored. `review_id` names the closed review item (`cortex.ask.ReviewItem`) the case was
+  # made from (`cortex.instance.AddEvalCase`), and is not scored either.
+  # UNMAPPED: the relation from a case to its review item is a reference from a struct in a set
+  # file to an entity of another domain's store, which the specification has no construct for;
+  # `src/eval.rs` holds it (one case per review item) and `tests/eval_run.rs` tests it.
   - name: cortex.instance.EvalCase
     kind: struct
     fields:
@@ -703,6 +707,7 @@ types:
       - {name: expect_facts, type: List<String>}
       - {name: expect_nodes, type: List<String>}
       - {name: source, type: Optional<String>}
+      - {name: review_id, type: Optional<cortex.ask.ReviewId>}
 
   # An eval set file: a JSON object whose `cases` are `cortex.eval-case/1` cases, at least one,
   # with distinct ids.
@@ -1015,6 +1020,7 @@ actors:
       - cortex.instance.RestoreSnapshot
       - cortex.instance.MeasureQuality
       - cortex.instance.RunEval
+      - cortex.instance.AddEvalCase
       - cortex.instance.ProposeSchemaChanges
       - cortex.instance.ApproveSchemaProposals
       - cortex.instance.RejectSchemaProposals
@@ -1212,6 +1218,27 @@ errors:
       keeps the results of the cases answered before; no `summary.json` was written.
     fields:
       - {name: reason, type: String}
+
+  - name: cortex.instance.EvalReviewNotFound
+    summary: >-
+      The instance's answer records hold no review item with this id, or not the answer record
+      it belongs to (a purge took them); no case was added.
+    fields:
+      - {name: review_id, type: cortex.ask.ReviewId}
+
+  - name: cortex.instance.EvalReviewOpen
+    summary: >-
+      The review item is still open: its expected facts and nodes are written when a reviewer
+      closes it, so it yields no case yet.
+    fields:
+      - {name: review_id, type: cortex.ask.ReviewId}
+
+  - name: cortex.instance.EvalCaseExists
+    summary: >-
+      The set already holds the case of this review item, or a case with its id; one review item
+      yields one case in a set.
+    fields:
+      - {name: review_id, type: cortex.ask.ReviewId}
 
   - name: cortex.instance.ProposeFailed
     summary: >-
@@ -2141,6 +2168,87 @@ commands:
             name: input.name
         summary: Nothing was asked or written.
 
+  - name: cortex.instance.AddEvalCase
+    naming:
+      wire: case
+      display: Add an eval case from a review
+    # `cortex eval case add <name> --set <set> --from-review <review id>`: the closed review item
+    # `from_review` (`cortex.ask.ReviewItem`) of the instance's answer records becomes one case
+    # appended to the `cortex.instance.EvalSet` file `set`: its `id` and `review_id` are the
+    # review id, its `question` that of the item's answer record (`cortex.ask.AnswerRecord`), and
+    # its `expect_facts` and `expect_nodes` those the reviewer wrote when closing the item
+    # (`cortex.ask.CloseReview`). A set file that does not exist yet is created holding the one
+    # case. The records are read, never written; nothing but the set file changes, and a refusal
+    # leaves it as it was. One review item yields at most one case in a set.
+    # UNMAPPED: the command line is `eval case add`, a word below the group the specification's
+    # one level of command groups cannot name; the wire `case` is that word, `add` is clap's, and
+    # the clap ⇔ spec test in `src/main.rs` walks it.
+    # UNMAPPED: `added` writes the set file, a file the operator names outside the instance; one
+    # outcome does one thing to one entity, and `no-such-instance` needs the outcome to name the
+    # Instance, so `added` updates the Instance as RunEval's `evaluated` does, and `src/eval.rs`
+    # writes the file; `tests/eval_run.rs` tests it.
+    input:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: set, type: String}
+      - {name: from_review, type: cortex.ask.ReviewId}
+    outcomes:
+      - name: set-invalid
+        external: The set file exists and cannot be read or is not a cortex.eval-case/1 set
+        error: cortex.instance.EvalSetInvalid
+        payload:
+          cortex.instance.EvalSetInvalid:
+            reason: {generated: true}
+        summary: The set file is unchanged.
+
+      - name: no-such-review
+        external: The instance's answer records hold no review item from_review names, or not its answer
+        error: cortex.instance.EvalReviewNotFound
+        payload:
+          cortex.instance.EvalReviewNotFound:
+            review_id: input.from_review
+        summary: The set file is unchanged.
+
+      - name: review-open
+        external: The review item from_review names is still open
+        error: cortex.instance.EvalReviewOpen
+        payload:
+          cortex.instance.EvalReviewOpen:
+            review_id: input.from_review
+        summary: >-
+          The item has no expectations until a reviewer closes it; the set file is unchanged.
+
+      - name: case-exists
+        external: The set already holds a case with the review id as its id or its review_id
+        error: cortex.instance.EvalCaseExists
+        payload:
+          cortex.instance.EvalCaseExists:
+            review_id: input.from_review
+        summary: The set file is unchanged.
+
+      - name: added
+        updates: cortex.instance.Instance
+        instance: name
+        emits:
+          - cortex.instance.EvalCaseAdded
+        payload:
+          cortex.instance.EvalCaseAdded:
+            name: input.name
+            set: input.set
+            review_id: input.from_review
+            id: {generated: true}
+            cases: {generated: true}
+        summary: >-
+          The set file ends with the new case; `id` is the case's id and `cases` counts the
+          set's cases with it.
+
+      - name: no-such-instance
+        unknown_instance: true
+        error: cortex.instance.InstanceNotFound
+        payload:
+          cortex.instance.InstanceNotFound:
+            name: input.name
+        summary: Nothing was read or written.
+
   - name: cortex.instance.ProposeSchemaChanges
     naming:
       wire: schema
@@ -2605,6 +2713,15 @@ events:
       - {name: input_tokens, type: Optional<Integer>}
       - {name: output_tokens, type: Optional<Integer>}
       - {name: cost_usd, type: Optional<Decimal>}
+
+  # `id` is the new case's id and `cases` counts the set's cases with it.
+  - name: cortex.instance.EvalCaseAdded
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: set, type: String}
+      - {name: review_id, type: cortex.ask.ReviewId}
+      - {name: id, type: String}
+      - {name: cases, type: Integer}
 
   # `proposed` counts the lines of `proposals.jsonl`; `applied`, `refused`, `recorded_only`,
   # `invalid` and `pending` count them by status, and the rest are `dry-run`. `dropped` counts the

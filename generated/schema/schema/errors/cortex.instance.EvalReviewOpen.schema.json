@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvalReviewOpen payload",
+  "description": "The review item is still open: its expected facts and nodes are written when a reviewer closes it, so it yields no case yet.",
+  "x-ess-name": "cortex.instance.EvalReviewOpen",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "review_id": {
+      "$ref": "#/$defs/cortex.ask.ReviewId"
+    }
+  },
+  "required": [
+    "review_id"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "7d8468225c0615bc54d37ab20d8a5ed011c6af620b27b8f62299e46196457ec1",
+    "contract_digest": "slice-sha256/2:225b169873570c2c24fabc08f5abb9bdfd677c64276cae267ce3d04326627e77",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.ReviewId": {
+      "title": "ReviewId",
+      "x-ess-name": "cortex.ask.ReviewId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

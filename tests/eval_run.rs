@@ -5,8 +5,11 @@
 mod common;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use common::{executable, World};
+use cortex_cli::ask::records::{Asked, Keeper, Records};
+use cortex_model::ask as ma;
 use serde_json::{json, Value};
 
 /// An answering stand-in for the `mcp` runner: records its arguments and that it started, then
@@ -595,4 +598,196 @@ fn the_mcp_runner_under_a_policy_shows_the_model_no_value_and_scores_the_restore
     );
     assert_eq!(result["passed"], true, "{result}");
     assert_eq!(result["question"], "What does Zorblat lead?", "{result}");
+}
+
+// `cortex eval case add <instance> --set <set> --from-review <review id>`
+// (`story:eval-cases-from-review`): a closed review item of the instance's answer records becomes
+// one case of the set; an open one, an unknown one or one the set already holds is refused and the
+// set file is left as it was.
+
+/// The answer records of the instance `name`, as `cortex ask serve` keeps them.
+fn keeper(w: &World, name: &str) -> Keeper {
+    let path = w.home.join("instances").join(name).join("ask.sqlite");
+    Keeper {
+        store: Arc::new(Records::open(&path).expect("ask.sqlite opens")),
+        instance: name.into(),
+        retention_days: 90,
+        slow_after_ms: None,
+    }
+}
+
+/// Records a failed answer to `question` under `answer_id`, which opens its `failed` review item;
+/// answers the item's id.
+fn failed_answer(keeper: &Keeper, answer_id: &str, question: &str) -> String {
+    let asked = Asked {
+        answer_id: answer_id.into(),
+        identity: "alice".into(),
+        question: question.into(),
+        tool_calls: vec![],
+        latency_ms: 5,
+        at_ms: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64,
+    };
+    let failed = ma::AskOutcome::ModelFailed {
+        error: ma::ModelFailed {
+            reason: "down".into(),
+        },
+    };
+    keeper.record(asked, &failed).expect("recorded");
+    format!("{answer_id}:failed")
+}
+
+fn case_add(w: &World, name: &str, set: &Path, review: &str) -> (i32, Value) {
+    w.cortex(&[
+        "eval",
+        "case",
+        "add",
+        name,
+        "--set",
+        set.to_str().unwrap(),
+        "--from-review",
+        review,
+    ])
+}
+
+#[test]
+fn a_closed_review_becomes_one_case_with_its_question_expectations_and_review_id() {
+    let w = instance("cases");
+    let records = keeper(&w, "cases");
+    let review = failed_answer(&records, "a1", "Who develops the Widget engine?");
+    let (closed, _) = records
+        .close(
+            &review,
+            "the answer should name the maker",
+            vec!["Example Labs".into()],
+            vec!["node-widget".into()],
+        )
+        .expect("closed");
+    assert!(
+        matches!(closed, ma::CloseReviewOutcome::Closed { .. }),
+        "{closed:?}"
+    );
+    let set = two_cases(&w);
+
+    let (code, out) = case_add(&w, "cases", &set, &review);
+    assert_eq!((code, out["outcome"].as_str()), (0, Some("added")), "{out}");
+    assert_eq!(out["detail"]["review_id"], review.as_str());
+    assert_eq!(out["detail"]["id"], review.as_str());
+    assert_eq!(out["detail"]["cases"], 3);
+
+    let doc: Value = serde_json::from_str(&std::fs::read_to_string(&set).unwrap()).unwrap();
+    let cases = doc["cases"].as_array().unwrap();
+    assert_eq!(cases.len(), 3, "{doc}");
+    assert_eq!(cases[0]["id"], "widget");
+    assert_eq!(cases[1]["id"], "gadget");
+    assert_eq!(
+        cases[2],
+        json!({
+            "format": "cortex.eval-case/1",
+            "id": review,
+            "question": "Who develops the Widget engine?",
+            "expect_facts": ["Example Labs"],
+            "expect_nodes": ["node-widget"],
+            "review_id": review,
+        })
+    );
+    // The set is still one `eval run` reads.
+    let parsed = cortex_cli::eval::parse_set(&std::fs::read_to_string(&set).unwrap())
+        .expect("the set parses");
+    assert_eq!(
+        parsed.cases[2].review_id.as_ref().map(|r| r.0.as_str()),
+        Some(review.as_str())
+    );
+}
+
+#[test]
+fn an_open_review_is_refused_and_the_set_file_is_unchanged() {
+    let w = instance("cases");
+    let records = keeper(&w, "cases");
+    let review = failed_answer(&records, "a1", "Who develops the Widget engine?");
+    let set = two_cases(&w);
+    let before = std::fs::read(&set).unwrap();
+
+    let (code, out) = case_add(&w, "cases", &set, &review);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("review-open")),
+        "{out}"
+    );
+    assert_eq!(out["detail"]["review_id"], review.as_str());
+    assert_eq!(std::fs::read(&set).unwrap(), before);
+}
+
+#[test]
+fn an_unknown_review_a_second_add_an_invalid_set_and_an_unknown_instance_change_no_set() {
+    let w = instance("cases");
+    let records = keeper(&w, "cases");
+    let review = failed_answer(&records, "a1", "Who develops the Widget engine?");
+    records
+        .close(&review, "checked", vec!["Example Labs".into()], vec![])
+        .expect("closed");
+    let set = two_cases(&w);
+    let before = std::fs::read(&set).unwrap();
+
+    let (code, out) = case_add(&w, "cases", &set, "nothing:failed");
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("no-such-review")),
+        "{out}"
+    );
+    assert_eq!(std::fs::read(&set).unwrap(), before);
+
+    let (code, out) = case_add(&w, "unknown", &set, &review);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("no-such-instance")),
+        "{out}"
+    );
+    assert_eq!(std::fs::read(&set).unwrap(), before);
+
+    let invalid = w.root.join("invalid.json");
+    std::fs::write(&invalid, r#"{"cases": [{"format": "other/1"}]}"#).unwrap();
+    let (code, out) = case_add(&w, "cases", &invalid, &review);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("set-invalid")),
+        "{out}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&invalid).unwrap(),
+        r#"{"cases": [{"format": "other/1"}]}"#
+    );
+
+    let (code, out) = case_add(&w, "cases", &set, &review);
+    assert_eq!((code, out["outcome"].as_str()), (0, Some("added")), "{out}");
+    let after = std::fs::read(&set).unwrap();
+    let (code, out) = case_add(&w, "cases", &set, &review);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("case-exists")),
+        "{out}"
+    );
+    assert_eq!(std::fs::read(&set).unwrap(), after);
+}
+
+#[test]
+fn a_set_file_that_does_not_exist_is_created_with_the_one_case() {
+    let w = instance("cases");
+    let records = keeper(&w, "cases");
+    let review = failed_answer(&records, "a1", "Who develops the Widget engine?");
+    records
+        .close(&review, "checked", vec![], vec!["node-widget".into()])
+        .expect("closed");
+    let set = w.root.join("new-set.json");
+
+    let (code, out) = case_add(&w, "cases", &set, &review);
+    assert_eq!((code, out["outcome"].as_str()), (0, Some("added")), "{out}");
+    assert_eq!(out["detail"]["cases"], 1);
+    let parsed = cortex_cli::eval::parse_set(&std::fs::read_to_string(&set).unwrap())
+        .expect("the new set parses");
+    assert_eq!(parsed.cases.len(), 1);
+    assert_eq!(parsed.cases[0].question, "Who develops the Widget engine?");
+    assert_eq!(parsed.cases[0].expect_nodes, ["node-widget"]);
 }

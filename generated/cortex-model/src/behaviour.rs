@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 35445edbfb924602bf5ee4c9b32cce8f1c4d409e8e17675c8b68b61dbaf6bec5
-// contract digest 6cc21d245bef94a86dddf5ce3002dec278709616b6c49500ec2220a65697e5a7
+// model digest 7d8468225c0615bc54d37ab20d8a5ed011c6af620b27b8f62299e46196457ec1
+// contract digest e28cd1562bab08223ec6f65f42a29bccbb41a2ebb899f233ef6abd757672022d
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -107,6 +107,8 @@ pub enum ExternalCommand<'a> {
     CortexAskAsk(&'a crate::ask::Ask),
     /// The executing `cortex.ask.CastVote` input.
     CortexAskCastVote(&'a crate::ask::CastVote),
+    /// The executing `cortex.instance.AddEvalCase` input.
+    CortexInstanceAddEvalCase(&'a crate::instance::AddEvalCase),
     /// The executing `cortex.instance.AdoptInstance` input.
     CortexInstanceAdoptInstance(&'a crate::instance::AdoptInstance),
     /// The executing `cortex.instance.ApplySchemaProposals` input.
@@ -133,6 +135,7 @@ impl ExternalCommand<'_> {
         match self {
             Self::CortexAskAsk(_) => "cortex.ask.Ask",
             Self::CortexAskCastVote(_) => "cortex.ask.CastVote",
+            Self::CortexInstanceAddEvalCase(_) => "cortex.instance.AddEvalCase",
             Self::CortexInstanceAdoptInstance(_) => "cortex.instance.AdoptInstance",
             Self::CortexInstanceApplySchemaProposals(_) => "cortex.instance.ApplySchemaProposals",
             Self::CortexInstanceApproveSchemaProposals(_) => "cortex.instance.ApproveSchemaProposals",
@@ -352,6 +355,8 @@ where
         let mut next = moved.snapshot();
         next.data.close_reason = Some(input.reason.clone());
         next.data.closed_at = self.ports.try_generate_optional_timestamp()?;
+        next.data.expect_facts = Some(input.expect_facts.clone());
+        next.data.expect_nodes = Some(input.expect_nodes.clone());
         let answer = crate::ask::CloseReviewOutcome::Closed { review_closed: crate::ask::ReviewClosed { review_id: input.review_id.clone(), reason: input.reason.clone() } };
         ReviewItemStorage::put(&mut self.ports, next);
         return Ok(answer);
@@ -378,6 +383,8 @@ where
             opened_at: self.ports.try_generate_timestamp()?,
             close_reason: None,
             closed_at: None,
+            expect_facts: None,
+            expect_nodes: None,
         };
         let answer = crate::ask::OpenReviewOutcome::Opened { review_opened: crate::ask::ReviewOpened { review_id: identity.clone(), answer_id: input.answer_id.clone(), cause: input.cause.clone() } };
         ReviewItemStorage::put(&mut self.ports, crate::ask::AnyReviewItem::Open(crate::ask::ReviewItem::new(data)).snapshot());
@@ -429,6 +436,41 @@ where
         }
         let answer = crate::ask::RecordAnswerOutcome::Recorded { answer_recorded: crate::ask::AnswerRecorded { answer_id: identity.clone(), outcome: input.outcome.clone() } };
         AnswerRecordStorage::put(&mut self.ports, crate::ask::AnyAnswerRecord::Kept(crate::ask::AnswerRecord::new(data)).snapshot());
+        return Ok(answer);
+    }
+}
+
+/// `cortex.instance.AddEvalCase`, generated: every outcome is one the specification fully determines.
+impl<P> crate::instance::obligations::AddEvalCaseBehavior for Generated<P>
+where
+    P: TryContext + InstanceStorage,
+{
+    fn add_eval_case(&mut self, input: crate::instance::AddEvalCase) -> Result<crate::instance::AddEvalCaseOutcome, UnmetObligation> {
+        let _ = &input;
+        // `set-invalid`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceAddEvalCase(&input), "set-invalid")? {
+            return Ok(crate::instance::AddEvalCaseOutcome::SetInvalid { error: crate::instance::EvalSetInvalid { reason: self.ports.try_generate_string()? } });
+        }
+        // `no-such-review`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceAddEvalCase(&input), "no-such-review")? {
+            return Ok(crate::instance::AddEvalCaseOutcome::NoSuchReview { error: crate::instance::EvalReviewNotFound { review_id: input.from_review.clone() } });
+        }
+        // `review-open`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceAddEvalCase(&input), "review-open")? {
+            return Ok(crate::instance::AddEvalCaseOutcome::ReviewOpen { error: crate::instance::EvalReviewOpen { review_id: input.from_review.clone() } });
+        }
+        // `case-exists`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceAddEvalCase(&input), "case-exists")? {
+            return Ok(crate::instance::AddEvalCaseOutcome::CaseExists { error: crate::instance::EvalCaseExists { review_id: input.from_review.clone() } });
+        }
+        // `added`: the default.
+        let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
+            return Ok(crate::instance::AddEvalCaseOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        };
+        let _ = &held;
+        let next = held;
+        let answer = crate::instance::AddEvalCaseOutcome::Added { eval_case_added: crate::instance::EvalCaseAdded { name: input.name.clone(), set: input.set.clone(), review_id: input.from_review.clone(), id: self.ports.try_generate_string()?, cases: self.ports.try_generate_integer()? } };
+        InstanceStorage::put(&mut self.ports, next);
         return Ok(answer);
     }
 }

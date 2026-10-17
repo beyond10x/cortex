@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 35445edbfb924602bf5ee4c9b32cce8f1c4d409e8e17675c8b68b61dbaf6bec5
-// contract digest 6cc21d245bef94a86dddf5ce3002dec278709616b6c49500ec2220a65697e5a7
+// model digest 7d8468225c0615bc54d37ab20d8a5ed011c6af620b27b8f62299e46196457ec1
+// contract digest e28cd1562bab08223ec6f65f42a29bccbb41a2ebb899f233ef6abd757672022d
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! The `cortex` system, v1: its components assembled, its bindings wired, and its one transport.
@@ -31,6 +31,8 @@ pub enum SystemEvent {
     ReviewOpened(crate::ask::ReviewOpened),
     /// `cortex.ask.Voted`.
     Voted(crate::ask::Voted),
+    /// `cortex.instance.EvalCaseAdded`.
+    EvalCaseAdded(crate::instance::EvalCaseAdded),
     /// `cortex.instance.EvalRan`.
     EvalRan(crate::instance::EvalRan),
     /// `cortex.instance.InstanceAdopted`.
@@ -73,6 +75,7 @@ impl SystemEvent {
             Self::ReviewClosed(_) => "cortex.ask.ReviewClosed",
             Self::ReviewOpened(_) => "cortex.ask.ReviewOpened",
             Self::Voted(_) => "cortex.ask.Voted",
+            Self::EvalCaseAdded(_) => "cortex.instance.EvalCaseAdded",
             Self::EvalRan(_) => "cortex.instance.EvalRan",
             Self::InstanceAdopted(_) => "cortex.instance.InstanceAdopted",
             Self::InstanceCreated(_) => "cortex.instance.InstanceCreated",
@@ -95,6 +98,7 @@ impl SystemEvent {
 impl From<crate::ports::cortex::PublishedEvent> for SystemEvent {
     fn from(event: crate::ports::cortex::PublishedEvent) -> Self {
         match event {
+            crate::ports::cortex::PublishedEvent::EvalCaseAdded(event) => Self::EvalCaseAdded(event),
             crate::ports::cortex::PublishedEvent::EvalRan(event) => Self::EvalRan(event),
             crate::ports::cortex::PublishedEvent::InstanceAdopted(event) => Self::InstanceAdopted(event),
             crate::ports::cortex::PublishedEvent::InstanceCreated(event) => Self::InstanceCreated(event),
@@ -173,7 +177,7 @@ impl<CortexBehaviors, CortexAskBehaviors> System<CortexBehaviors, CortexAskBehav
 
 impl<CortexBehaviors, CortexAskBehaviors> System<CortexBehaviors, CortexAskBehaviors>
 where
-    CortexBehaviors: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunEvalBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    CortexBehaviors: crate::instance::obligations::AddEvalCaseBehavior + crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunEvalBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
     CortexAskBehaviors: crate::ask::obligations::AskBehavior + crate::ask::obligations::CastVoteBehavior + crate::ask::obligations::CloseReviewBehavior + crate::ask::obligations::OpenReviewBehavior + crate::ask::obligations::PurgeExpiredBehavior + crate::ask::obligations::RecordAnswerBehavior + crate::ask::obligations::OpenReviewsQuery,
 {
     /// Delivers until quiescent: collects every component's outbox onto the log. No binding

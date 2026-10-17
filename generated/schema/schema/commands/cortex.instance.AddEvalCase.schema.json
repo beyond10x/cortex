@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Add an eval case from a review input",
+  "x-ess-name": "cortex.instance.AddEvalCase",
+  "x-ess-kind": "command-input",
+  "type": "object",
+  "properties": {
+    "name": {
+      "$ref": "#/$defs/cortex.instance.InstanceName"
+    },
+    "set": {
+      "type": "string"
+    },
+    "from_review": {
+      "$ref": "#/$defs/cortex.ask.ReviewId"
+    }
+  },
+  "required": [
+    "name",
+    "set",
+    "from_review"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "7d8468225c0615bc54d37ab20d8a5ed011c6af620b27b8f62299e46196457ec1",
+    "contract_digest": "slice-sha256/2:05bc0f9bab0bc6bd6d016806d1f6ae74c9af7efe11b516d464badc4ce5c83c5e",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.ReviewId": {
+      "title": "ReviewId",
+      "x-ess-name": "cortex.ask.ReviewId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    },
+    "cortex.instance.InstanceName": {
+      "title": "InstanceName",
+      "x-ess-name": "cortex.instance.InstanceName",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

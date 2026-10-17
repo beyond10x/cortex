@@ -712,3 +712,70 @@ fn a_postgres_store_needs_records_of_their_own_never_in_ekrs_schema() {
         assert!(!world.records_file().exists());
     }
 }
+
+/// `story:eval-cases-from-review`: a close carries the reviewer's expected facts and nodes, kept on
+/// the item and answered with it; a blank expectation or one that is not a list of strings answers
+/// 400 and leaves the item open; a close without them keeps two empty lists.
+#[test]
+fn a_close_keeps_the_reviewers_expected_facts_and_nodes() {
+    let world = World::new();
+    let url = gateway(vec![(0, text_reply("An answer.", (5, 2, 0)))]);
+    let service = serve(&world, &world.spec(&url, "", ""));
+    let (first, _) = service.answered("alice", "first?");
+    let (second, _) = service.answered("alice", "second?");
+    for id in [&first, &second] {
+        assert_eq!(service.vote(id, "bob", "down").0, 200);
+    }
+    let path = format!("/review/{first}:voted-down/close");
+
+    for bad in [
+        json!({"reason": "x", "expect_facts": ["  "]}),
+        json!({"reason": "x", "expect_nodes": "node-1"}),
+        json!({"reason": "x", "expect_facts": [1]}),
+    ] {
+        let (status, body) = service.call("POST", &path, Some("reviewer"), Some(bad.clone()));
+        assert_eq!(status, 400, "{bad}: {body}");
+    }
+    assert_eq!(causes_of(&service.reviews(), &first), ["voted-down"]);
+
+    let (status, body) = service.call(
+        "POST",
+        &path,
+        Some("reviewer"),
+        Some(json!({
+            "reason": "it should name the maker",
+            "expect_facts": ["Example Labs"],
+            "expect_nodes": ["node-widget", "node-labs"],
+        })),
+    );
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["expect_facts"], json!(["Example Labs"]));
+    assert_eq!(body["expect_nodes"], json!(["node-widget", "node-labs"]));
+    let kept = world.records().reviews(&first).unwrap();
+    assert_eq!(kept[0].state, ma::ReviewItemState::Closed);
+    assert_eq!(
+        kept[0].data.expect_facts,
+        Some(vec!["Example Labs".to_string()])
+    );
+    assert_eq!(
+        kept[0].data.expect_nodes,
+        Some(vec!["node-widget".to_string(), "node-labs".to_string()])
+    );
+
+    let (status, body) = service.call(
+        "POST",
+        &format!("/review/{second}:voted-down/close"),
+        Some("reviewer"),
+        Some(json!({"reason": "fine"})),
+    );
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["expect_facts"], json!([]));
+    let kept = world.records().reviews(&second).unwrap();
+    assert_eq!(
+        (
+            kept[0].data.expect_facts.as_deref(),
+            kept[0].data.expect_nodes.as_deref()
+        ),
+        (Some(&[][..]), Some(&[][..]))
+    );
+}

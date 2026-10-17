@@ -10,18 +10,32 @@
     },
     "reason": {
       "type": "string"
+    },
+    "expect_facts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expect_nodes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [
     "review_id",
-    "reason"
+    "reason",
+    "expect_facts",
+    "expect_nodes"
   ],
   "additionalProperties": false,
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "35445edbfb924602bf5ee4c9b32cce8f1c4d409e8e17675c8b68b61dbaf6bec5",
-    "contract_digest": "slice-sha256/2:95cdc6df6a15d67754ad02dac35788bb9126b24837f6f8e3089d06b4a221c7e9",
+    "source_digest": "7d8468225c0615bc54d37ab20d8a5ed011c6af620b27b8f62299e46196457ec1",
+    "contract_digest": "slice-sha256/2:9e4a40b4fbadfcdd27d94c64de215f57a6cde73d9ca29aaf1e775a4f2305e7ff",
     "regenerate": "ess generate"
   },
   "$defs": {
