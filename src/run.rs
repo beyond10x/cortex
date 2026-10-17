@@ -1687,6 +1687,16 @@ impl Held {
         }
     }
 
+    /// Undoes the hold after a write failed, whether or not EKR confirmed its commit: on `sqlite`
+    /// the write may have taken effect with its answer lost, so the snapshot is kept and
+    /// restored. On `postgres` the stage is settled as [`Held::undo`] does.
+    pub fn undo_after_error(mut self) -> String {
+        if self.undo.staged.is_none() {
+            self.undo.committed();
+        }
+        self.undo()
+    }
+
     /// Undoes everything the hold committed: abandons the stage, or restores the snapshot taken
     /// before. Answers what was done.
     pub fn undo(mut self) -> String {
