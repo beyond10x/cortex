@@ -36,6 +36,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Added
+
+- A figure renderer for the ask service (`cortex.ask.FigureSpec`): a bar chart, a timeline or a
+  relationship graph drawn as SVG by cortex's own code, from typed values only. The SVG holds only
+  allow-listed elements and attributes, with every label as escaped text; the same figure gives
+  the same bytes; a figure over a cap (50 bars, 200 timeline entries, 100 nodes, 300 edges,
+  256 KiB) is refused whole. No endpoint draws one yet.
+
 ## 0.6.0 — 2026-10-17
 
 ### Added
