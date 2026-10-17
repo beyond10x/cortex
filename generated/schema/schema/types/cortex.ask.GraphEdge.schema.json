@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.GraphEdge",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "0f7251f0c444abe6dc1366bd90cef115ffd6b3c2bd521752108a810a42d41fc1",
+    "contract_digest": "slice-sha256/2:7d32b4f420ef26e64c4fe1d8b6c45ff5c6905c29cc32466f7ff0bcea017dfb0d",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.GraphEdge": {
+      "title": "GraphEdge",
+      "x-ess-name": "cortex.ask.GraphEdge",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target",
+        "label"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

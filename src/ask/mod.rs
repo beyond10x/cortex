@@ -12,6 +12,7 @@
 //! restored as it is streamed. [`proxy`] does the same for the eval `mcp` runner's `claude`.
 
 pub mod cite;
+pub mod figure;
 pub mod limit;
 pub mod mcp;
 pub mod model;

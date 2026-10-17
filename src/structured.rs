@@ -525,17 +525,110 @@ fn properties(mapping: &m::RecordMapping) -> Vec<&str> {
 }
 
 /// The aliases of a record's entity by `mapping`, given its identity: `<name> (<identity>)`
-/// first, so it names the node, then the identity, then the mapped aliases, each once. `None`
-/// without a name.
+/// first, so it names the node, then the identity, then the mapped aliases, then each alias
+/// template rendered ([`render_template`]), each once. `None` without a name.
 fn aliases(mapping: &m::RecordMapping, record: &Value, identity: &str) -> Option<Vec<String>> {
     let name = text_at(record, &mapping.name)?;
     let mut out = vec![format!("{name} ({identity})"), identity.to_string()];
-    for alias in mapping.aliases.iter().flat_map(|p| texts_at(record, p)) {
+    let templates = mapping
+        .alias_templates
+        .iter()
+        .flatten()
+        .filter_map(|t| render_template(t, record));
+    for alias in mapping
+        .aliases
+        .iter()
+        .flat_map(|p| texts_at(record, p))
+        .chain(templates)
+    {
         if !out.contains(&alias) {
             out.push(alias);
         }
     }
     Some(out)
+}
+
+/// One part of an alias template: fixed text, or the dotted path of a `{path}` placeholder.
+enum TemplatePart<'t> {
+    Text(&'t str),
+    Field(&'t str),
+}
+
+/// The parts of `template`, or why it is no alias template: it is empty, names no field, or has a
+/// placeholder other than `{path}` with a dotted path (`$.` allowed before it) of ASCII letters,
+/// digits, `_` and `-` (a non-ASCII letter is refused).
+fn template_parts(template: &str) -> Result<Vec<TemplatePart<'_>>, String> {
+    if template.is_empty() {
+        return Err("an empty template".into());
+    }
+    let mut parts = Vec::new();
+    let mut rest = template;
+    while !rest.is_empty() {
+        let open = rest.find('{');
+        let close = rest.find('}');
+        match (open, close) {
+            (None, Some(_)) => {
+                return Err("a `}` that closes no placeholder".into());
+            }
+            (Some(o), Some(c)) if c < o => {
+                return Err("a `}` that closes no placeholder".into());
+            }
+            (None, None) => {
+                parts.push(TemplatePart::Text(rest));
+                break;
+            }
+            (Some(o), _) => {
+                if o > 0 {
+                    parts.push(TemplatePart::Text(&rest[..o]));
+                }
+                let inner = &rest[o + 1..];
+                let Some(end) = inner.find('}') else {
+                    return Err("a `{` that is never closed".into());
+                };
+                let path = &inner[..end];
+                if path.contains('{') {
+                    return Err("a `{` inside a placeholder".into());
+                }
+                let steps = path.strip_prefix("$.").unwrap_or(path);
+                let step_ok = |s: &str| {
+                    !s.is_empty()
+                        && s.chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+                };
+                if !steps.split('.').all(step_ok) {
+                    return Err(format!(
+                        "the placeholder {{{path}}}: a path is dotted names of ASCII letters, \
+                         digits, `_` and `-`"
+                    ));
+                }
+                parts.push(TemplatePart::Field(path));
+                rest = &inner[end + 1..];
+            }
+        }
+    }
+    if !parts.iter().any(|p| matches!(p, TemplatePart::Field(_))) {
+        return Err("no `{field}` placeholder, so every record would share the alias".into());
+    }
+    Ok(parts)
+}
+
+/// `template` (`cortex.instance.RecordMapping.alias_templates`) rendered from `record`: each
+/// `{path}` replaced by the scalar there. `None` when a field is missing, not a scalar or blank,
+/// or the template is no alias template ([`template_refusal`]).
+pub fn render_template(template: &str, record: &Value) -> Option<String> {
+    let mut out = String::new();
+    for part in template_parts(template).ok()? {
+        match part {
+            TemplatePart::Text(t) => out.push_str(t),
+            TemplatePart::Field(path) => out.push_str(&text_at(record, path)?),
+        }
+    }
+    Some(out)
+}
+
+/// Why `template` is no alias template, or `None` when it is one.
+pub fn template_refusal(template: &str) -> Option<String> {
+    template_parts(template).err()
 }
 
 /// One structured source as a run maps it: its identity prefix, its mapping, its child operations
@@ -1579,6 +1672,7 @@ mod tests {
                 target_type: "Team".into(),
                 target_name: "$.teams".into(),
             }],
+            alias_templates: None,
         }
     }
 
@@ -1647,6 +1741,61 @@ mod tests {
             json!({"name": "MEMBER_OF", "source_types": ["Person"], "target_types": ["Team"],
                 "cardinality": "Many", "properties": []})
         );
+    }
+
+    #[test]
+    fn an_alias_template_adds_its_rendered_alias_after_the_mapped_ones() {
+        let mut m = mapping();
+        m.alias_templates = Some(vec!["repo:{namespace}/{path}".into(), "{$.id}".into()]);
+        let record = json!({"name": "API", "namespace": "acme", "path": "api", "id": 7,
+            "handles": ["api"]});
+        assert_eq!(
+            aliases(&m, &record, "dir:people.list:7"),
+            Some(vec![
+                "API (dir:people.list:7)".to_string(),
+                "dir:people.list:7".into(),
+                "api".into(),
+                "repo:acme/api".into(),
+                "7".into(),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_template_whose_field_the_record_lacks_yields_no_alias_and_no_error() {
+        let mut m = mapping();
+        m.alias_templates = Some(vec!["repo:{namespace}/{path}".into()]);
+        for record in [
+            json!({"name": "Web", "path": "web"}),
+            json!({"name": "Web", "path": "web", "namespace": null}),
+            json!({"name": "Web", "path": "web", "namespace": " "}),
+            json!({"name": "Web", "path": "web", "namespace": {"a": 1}}),
+            json!({"name": "Web", "path": "web", "namespace": ["acme"]}),
+        ] {
+            assert_eq!(
+                aliases(&m, &record, "x:1"),
+                Some(vec!["Web (x:1)".to_string(), "x:1".into()]),
+                "{record}"
+            );
+        }
+        assert_eq!(
+            render_template("{a.b}", &json!({"a": {"b": true}})),
+            Some("true".into())
+        );
+        assert_eq!(render_template("{a.b}", &json!({"a": {"c": 1}})), None);
+    }
+
+    #[test]
+    fn a_template_of_another_placeholder_syntax_is_named_and_a_good_one_is_not() {
+        for good in ["repo:{namespace}/{path}", "{$.a}", "x-{a_b.c-D9}"] {
+            assert_eq!(template_refusal(good), None, "{good}");
+        }
+        for bad in [
+            "", "fixed", "{a", "a}", "{}", "{{a}}", "{a b}", "{a[0]}", "{a..b}", "{.a}", "{a.}",
+            "{$.}", "{a}{",
+        ] {
+            assert!(template_refusal(bad).is_some(), "{bad:?}");
+        }
     }
 
     #[test]
@@ -1872,6 +2021,7 @@ mod tests {
                 aliases: Vec::new(),
                 properties: Vec::new(),
                 relations: Vec::new(),
+                alias_templates: None,
             },
             time: Some("$.at".into()),
             parent: "IN_PROJECT".into(),

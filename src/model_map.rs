@@ -409,6 +409,7 @@ fn record_mapping(mapping: &s::CortexInstanceRecordMapping) -> m::RecordMapping 
                 target_name: r.target_name.clone(),
             })
             .collect(),
+        alias_templates: opt(&mapping.alias_templates),
     }
 }
 

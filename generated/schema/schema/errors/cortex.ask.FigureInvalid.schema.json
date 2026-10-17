@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FigureInvalid payload",
+  "description": "The figure holds a value it cannot be drawn from: a negative bar count, a timeline instant that is not RFC 3339, a node id given twice, or an edge to a node the graph does not have; nothing is drawn. `field` names the value, `reason` says why, for a person.",
+  "x-ess-name": "cortex.ask.FigureInvalid",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "field": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "field",
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "0f7251f0c444abe6dc1366bd90cef115ffd6b3c2bd521752108a810a42d41fc1",
+    "contract_digest": "slice-sha256/2:20dc08bfbf2dc546ef31e92b5a790858b92155e93d273d8d038c10acdcd02c56",
+    "regenerate": "ess generate"
+  }
+}

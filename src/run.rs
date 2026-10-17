@@ -44,6 +44,12 @@ pub enum Failure {
     /// A part of an extraction batch still did not fit the model's window after the batch was
     /// split as far as it may be: not a fault of the source, so it is not counted.
     BatchTooLarge(String),
+    /// The run was sent SIGTERM and stopped at its next safe point ([`crate::terminate`]): not a
+    /// fault of the source, so it is not counted. A gated run is undone ([`settle`]).
+    Terminated(String),
+    /// The model could not be reached ([`extract::unavailable`]): not a fault of the source, so it
+    /// is not counted. The batches before it stay applied.
+    ModelUnavailable(extract::Unavailable, String),
 }
 
 #[derive(Debug)]
@@ -257,8 +263,8 @@ fn batch_size(
         .saturating_sub(fixed()? as i64);
     Ok(chars.clamp(DERIVED_MIN_CHARS, BATCH_CHARS as i64) as usize)
 }
-/// Known entity names per node type given to the model.
-const KNOWN_PER_TYPE: usize = 50;
+/// Known entity names per node type, of the run's own, given to the model.
+const KNOWN_PER_TYPE: usize = crate::known::RUN_PER_TYPE;
 
 /// Cuts `text` to `max` characters; answers whether it cut anything.
 fn truncate(text: &mut String, max: usize) -> bool {
@@ -409,7 +415,14 @@ pub fn count(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<C
 pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Report, Failure> {
     let planned = Planned::of(layout, source)?;
     let (window, seen_path) = (planned.window, planned.seen_path.clone());
-    let ran = planned.fetch(tools).and_then(|fetched| {
+    // A stop of the whole unit (`systemctl stop`, a pod's deadline) ends the `connectors` child
+    // too: a fetch that failed after SIGTERM is the stop, not a failure of the source.
+    let fetched = planned.fetch(tools).or_else(|failure| {
+        stop_point("while it fetched")?;
+        Err(failure)
+    });
+    let ran = fetched.and_then(|fetched| {
+        stop_point("before it used the documents it fetched")?;
         process(
             layout,
             tools,
@@ -882,12 +895,17 @@ fn process_in(
 
     // The fixed part as the first request will carry it: the system prompt and the answer's
     // schema (both sent as flags) and the prompt up to the documents.
+    // `assumed`: that fixed part, when the size was derived from the model's window; each batch's
+    // own fixed part (its store hits' known-entity lines) is held to it before the batch is sent.
+    let mut assumed: Option<usize> = None;
     let size = batch_size(&spec.model, || {
         let ontology = store.ontology().map_err(Failure::Apply)?;
-        let known = Known::from_ontology(&ontology, entities.clone());
+        let known = Known::from_ontology(&ontology, crate::known::merge(Vec::new(), &entities));
         let (_, fixed) =
             extract::prompt_split(&spec.description, instructions.as_deref(), &known, &[]);
-        Ok(extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed)
+        let fixed = extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed;
+        assumed = Some(fixed);
+        Ok(fixed)
     })?;
     report.batch_chars = size;
     let issued: Vec<_> = selected
@@ -897,10 +915,14 @@ fn process_in(
     let batches = batches(issued, size);
     // `refuse_if_left`: every batch is checked as the model would be shown it before the first
     // model call, so a refusal fails the run with nothing sent and nothing stored.
+    // The known entities are checked too, each batch's store hits included.
     if let Some(r) = redactor.as_ref().filter(|r| r.refuses()) {
+        let ontology = store.ontology().map_err(Failure::Apply)?;
         for batch in &batches {
             let mut p = r.batch();
-            let (shown, known) = pseudonymise(&mut p, batch, &uncut, &entities);
+            let known = crate::known::for_batch(&store, &ontology, batch, &entities)
+                .map_err(Failure::Apply)?;
+            let (shown, known) = pseudonymise(&mut p, batch, &uncut, &known);
             if let Some(why) = refused(&p, &shown, &known) {
                 return Err(Failure::Extract(why));
             }
@@ -913,9 +935,10 @@ fn process_in(
     let mut n = 0;
     // Why the run ended `batch-too-large`, when a part still did not fit.
     let mut too_large: Option<String> = None;
+    // Why the run ended `model-unavailable`, when the model could not be reached.
+    let mut unreachable: Option<(extract::Unavailable, String)> = None;
     while let Some((batch, depth)) = queue.pop_front() {
-        let dir = run_dir.join(format!("batch-{n}"));
-        n += 1;
+        stop_point(&format!("before batch {n}"))?;
         // Behind a gateway no dollar amount bounds the call, and none is passed to `claude`.
         let remaining = match budget {
             Some(budget) if budget - spent <= 0.0 => {
@@ -939,11 +962,14 @@ fn process_in(
             }
         };
         let ontology = store.ontology().map_err(Failure::Apply)?;
+        // The store's nodes the batch names, of any type, then the run's own names.
+        let known = crate::known::for_batch(&store, &ontology, &batch, &entities)
+            .map_err(Failure::Apply)?;
         // The model is shown the batch with personal data replaced by placeholders; the mapping
         // stays in `pseudonyms`, in memory, until this batch's answer is restored.
         let ((prompt, fixed), pseudonyms) = match &redactor {
             None => {
-                let known = Known::from_ontology(&ontology, entities.clone());
+                let known = Known::from_ontology(&ontology, known);
                 let prompt = extract::prompt_split(
                     &spec.description,
                     instructions.as_deref(),
@@ -954,7 +980,7 @@ fn process_in(
             }
             Some(r) => {
                 let mut p = r.batch();
-                let (shown, known) = pseudonymise(&mut p, &batch, &uncut, &entities);
+                let (shown, known) = pseudonymise(&mut p, &batch, &uncut, &known);
                 // Checked again: the known entity names grow with each batch applied.
                 if let Some(why) = refused(&p, &shown, &known) {
                     if report.documents_applied == 0 {
@@ -970,14 +996,30 @@ fn process_in(
                     &known,
                     &shown,
                 );
-                if let Some(counts) = report.redacted.as_mut() {
-                    for (name, n) in p.counts() {
-                        *counts.entry(name.clone()).or_default() += n;
-                    }
-                }
                 (prompt, Some(p))
             }
         };
+        // The system prompt, the answer's schema (both sent as flags) and the prompt up to the
+        // documents.
+        let fixed_bytes = extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed;
+        // Behind a model window, the batch's own fixed part counts against the size: its store
+        // hits' known-entity lines may be longer than the part the size was derived with, so a
+        // batch they push past the size is split in two before it is sent.
+        if assumed.is_some_and(|assumed| over_size(&batch, size, assumed, fixed_bytes)) {
+            let mut first = batch;
+            let second = first.split_off(first.len() / 2);
+            queue.push_front((second, depth));
+            queue.push_front((first, depth));
+            report.splits += 1;
+            continue;
+        }
+        if let (Some(p), Some(counts)) = (&pseudonyms, report.redacted.as_mut()) {
+            for (name, n) in p.counts() {
+                *counts.entry(name.clone()).or_default() += n;
+            }
+        }
+        let dir = run_dir.join(format!("batch-{n}"));
+        n += 1;
         let asked = model.ask(&dir.join("claude"), &schema, &prompt, remaining);
         let (calls, usage) = match &asked {
             Ok(answer) => (answer.calls, answer.usage),
@@ -993,12 +1035,17 @@ fn process_in(
             &usage,
         );
         tokens.add(&usage);
-        // Every model call counts, a failed one included. The fixed part is the system prompt,
-        // the answer's schema (both sent as flags) and the prompt up to the documents.
-        let fixed_bytes = extract::SYSTEM_PROMPT.len() + schema.to_string().len() + fixed;
+        // Every model call counts, a failed one included.
         report.add_calls(calls, usage, fixed_bytes, prompt.len() - fixed);
         let answer = match asked {
             Ok(answer) => answer,
+            Err(refused) if refused.terminated => {
+                return Err(Failure::Terminated(format!(
+                    "the run was sent SIGTERM while the model was asked for batch {}; the call \
+                     was ended",
+                    n - 1
+                )))
+            }
             // Too long for the model's window, or cut off at the output limit: split in two by
             // documents and ask each half, down to one document and at most 3 splits deep. A part
             // of one document is left out alone, as a record that does not convert is: named in
@@ -1030,6 +1077,22 @@ fn process_in(
                      batches after it, and a smaller model.batch_chars makes its batches smaller",
                     refused.unfit.map_or("", extract::Unfit::text),
                     keys.join(", ")
+                ));
+                break;
+            }
+            // The model, not the batch, failed: the batches before it stay applied, and this one
+            // and the rest are extracted by a later run.
+            Err(refused) if refused.unavailable.is_some() => {
+                let cause = refused.unavailable.expect("matched");
+                unreachable = Some((
+                    cause,
+                    format!(
+                        "the model could not be reached ({}) for batch {}: {}; a later run \
+                         extracts it and the batches after it",
+                        cause.name(),
+                        n - 1,
+                        refused.message
+                    ),
                 ));
                 break;
             }
@@ -1115,6 +1178,12 @@ fn process_in(
         }
         report.stopped = Some(why.clone());
     }
+    if let Some((cause, why)) = &unreachable {
+        if report.documents_applied == 0 {
+            return Err(Failure::ModelUnavailable(*cause, why.clone()));
+        }
+        report.stopped = Some(why.clone());
+    }
     unread(&mut report, &fetched.unread, redactor.as_ref());
     if undoable {
         held_to_gate(
@@ -1123,7 +1192,9 @@ fn process_in(
             &store,
             label,
             &report,
-            too_large.as_deref(),
+            too_large
+                .as_deref()
+                .or(unreachable.as_ref().map(|(_, why)| why.as_str())),
             before,
             started,
         )?;
@@ -1133,9 +1204,10 @@ fn process_in(
         &mut seen, &seen_path, &report, wanted, held_since, window, failures,
     )?;
     log(layout, label, &report, started);
-    match too_large {
-        Some(why) => Err(Failure::BatchTooLarge(why)),
-        None => Ok(report),
+    match (too_large, unreachable) {
+        (Some(why), _) => Err(Failure::BatchTooLarge(why)),
+        (None, Some((cause, why))) => Err(Failure::ModelUnavailable(cause, why)),
+        (None, None) => Ok(report),
     }
 }
 
@@ -1192,6 +1264,20 @@ fn settle(
     ran: Result<Report, Failure>,
     mut before: Undo,
 ) -> Result<Report, Failure> {
+    // A run sent SIGTERM is undone when it is gated: its stage abandoned, or its kept snapshot
+    // restored, as a run its gate refuses is; an ungated run keeps the batches it applied.
+    if let Err(Failure::Terminated(why)) = &ran {
+        return Err(Failure::Terminated(match before.staged.take() {
+            Some(staged) => format!("{why}; {}", staged.abandon()),
+            None if gated(spec) && before.kept.is_some() => {
+                undo_stopped(layout, spec, label, "terminated", why, &before)
+            }
+            None if before.applied => {
+                format!("{why}; the batches applied before it stay applied and seen")
+            }
+            None => format!("{why}; nothing was applied"),
+        }));
+    }
     let Some(staged) = before.staged.take() else {
         return match ran {
             // A gated run outside a stage whose write was unknown: an earlier batch committed
@@ -1252,6 +1338,27 @@ fn undo_unknown(
     why: String,
     before: &Undo,
 ) -> Failure {
+    Failure::StoreOutcomeUnknown(undo_stopped(
+        layout,
+        spec,
+        label,
+        "store-outcome-unknown",
+        &why,
+        before,
+    ))
+}
+
+/// Undoes a gated run outside a stage that ended as `outcome` after a batch committed, from its
+/// kept snapshot, with [`undo`]: the reason `why`, followed by what was done, which `cortex.log`
+/// records beside the snapshot restored.
+fn undo_stopped(
+    layout: &Layout,
+    spec: &m::InstanceSpec,
+    label: &str,
+    outcome: &str,
+    why: &str,
+    before: &Undo,
+) -> String {
     let home = layout
         .dir
         .parent()
@@ -1267,11 +1374,22 @@ fn undo_unknown(
     layout.log_line(&json!({
         "at": now_ms(),
         "source": label,
-        "outcome": "store-outcome-unknown",
+        "outcome": outcome,
         "restored": restored,
         "reason": reason,
     }));
-    Failure::StoreOutcomeUnknown(reason)
+    reason
+}
+
+/// A safe point of the run: [`Failure::Terminated`] once the run was sent SIGTERM, saying where
+/// it stopped.
+fn stop_point(at: &str) -> Result<(), Failure> {
+    if crate::terminate::requested() {
+        return Err(Failure::Terminated(format!(
+            "the run was sent SIGTERM and stopped {at}"
+        )));
+    }
+    Ok(())
 }
 
 /// The failure a stage verb's error is: [`Failure::StoreOutcomeUnknown`] when EKR could not say
@@ -1296,6 +1414,8 @@ impl Failure {
                 Failure::ConnectionUnavailable(format!("{m}; {more}"))
             }
             Failure::BatchTooLarge(m) => Failure::BatchTooLarge(format!("{m}; {more}")),
+            Failure::Terminated(m) => Failure::Terminated(format!("{m}; {more}")),
+            Failure::ModelUnavailable(c, m) => Failure::ModelUnavailable(c, format!("{m}; {more}")),
         }
     }
 
@@ -1307,7 +1427,9 @@ impl Failure {
             | Failure::Apply(m)
             | Failure::StoreOutcomeUnknown(m)
             | Failure::ConnectionUnavailable(m)
-            | Failure::BatchTooLarge(m) => m,
+            | Failure::BatchTooLarge(m)
+            | Failure::Terminated(m)
+            | Failure::ModelUnavailable(_, m) => m,
         }
     }
 }
@@ -1727,6 +1849,16 @@ impl Held {
     }
 }
 
+/// Whether `batch`, of more than one document, is over `size` as it would be sent: its documents'
+/// text (counted as [`batches`] counts it) plus what its request's fixed part (`fixed`) grew past
+/// the fixed part the size was derived with (`assumed`), chiefly the batch's store hits'
+/// known-entity lines. A batch of one document never is: it is asked alone, and the model's
+/// window decides.
+fn over_size(batch: &[evidence::Issued], size: usize, assumed: usize, fixed: usize) -> bool {
+    let text: usize = batch.iter().map(|i| i.doc.text.len()).sum();
+    batch.len() > 1 && text + fixed.saturating_sub(assumed) > size
+}
+
 /// `issued` in batches of at most `size` characters of text, counted as UTF-8 bytes (as before
 /// `model.batch_chars`: a non-Latin character counts 2 to 3), a longer document alone.
 fn batches(issued: Vec<evidence::Issued>, size: usize) -> Vec<Vec<evidence::Issued>> {
@@ -1820,6 +1952,7 @@ fn apply_records(
     }
     let index = r.source.index(&issued, r.parents);
     for (n, batch) in batches(issued, BATCH_CHARS).into_iter().enumerate() {
+        stop_point(&format!("before record batch {n}"))?;
         let mapped = r.source.document(&batch, &index);
         let (doc, refused) = extract::merge(&mapped.document, &batch);
         report.facts_refused += refused;
@@ -1973,7 +2106,7 @@ fn masked_key(redactor: Option<&Redactor>, key: &str) -> String {
 fn refused(
     p: &redact::Batch<'_>,
     shown: &[evidence::Issued],
-    known: &BTreeMap<String, Vec<String>>,
+    known: &[m::KnownEntity],
 ) -> Option<String> {
     let mut left = BTreeSet::new();
     for issued in shown {
@@ -1986,7 +2119,10 @@ fn refused(
             left.extend(p.left(text));
         }
     }
-    for name in known.values().flatten() {
+    for name in known
+        .iter()
+        .flat_map(|e| std::iter::once(&e.name).chain(&e.aliases))
+    {
         left.extend(p.left(name));
     }
     (!left.is_empty()).then(|| {
@@ -2139,8 +2275,8 @@ fn pseudonymise(
     p: &mut redact::Batch<'_>,
     batch: &[evidence::Issued],
     uncut: &HashMap<String, Vec<Uncut>>,
-    entities: &BTreeMap<String, Vec<String>>,
-) -> (Vec<evidence::Issued>, BTreeMap<String, Vec<String>>) {
+    entities: &[m::KnownEntity],
+) -> (Vec<evidence::Issued>, Vec<m::KnownEntity>) {
     let find = |doc: &sources::Document| -> Option<&Uncut> {
         uncut
             .get(&doc.key)
@@ -2183,7 +2319,10 @@ fn pseudonymise(
             p.reserve(&text);
         }
     }
-    for name in entities.values().flatten() {
+    for name in entities
+        .iter()
+        .flat_map(|e| std::iter::once(&e.name).chain(&e.aliases))
+    {
         p.reserve_name(name);
     }
     let shown = batch
@@ -2207,7 +2346,11 @@ fn pseudonymise(
         .collect();
     let known = entities
         .iter()
-        .map(|(ty, names)| (ty.clone(), names.iter().map(|n| p.replace(n)).collect()))
+        .map(|e| m::KnownEntity {
+            name: p.replace(&e.name),
+            aliases: e.aliases.iter().map(|a| p.replace(a)).collect(),
+            ..e.clone()
+        })
         .collect();
     (shown, known)
 }
@@ -2215,6 +2358,45 @@ fn pseudonymise(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_heavily_aliased_store_hit_counts_in_the_fixed_part_and_pushes_its_batch_over_the_size() {
+        let doc = |key: &str| evidence::Issued {
+            id: "e".into(),
+            item: serde_yaml_ng::Value::Null,
+            doc: sources::Document {
+                key: key.into(),
+                origin: sources::Origin::FileRecord,
+                title: None,
+                description: None,
+                published: None,
+                text: "x".repeat(1_000),
+                hash: None,
+            },
+        };
+        let batch = vec![doc("a.jsonl#1"), doc("a.jsonl#2")];
+        let fixed = |entities: Vec<m::KnownEntity>| {
+            let known = Known::from_ontology(&serde_json::json!({}), entities);
+            extract::prompt_split("d", None, &known, &[]).1
+        };
+        // The size was derived with the run's own names only: 2,000 bytes of text fit 2,500.
+        let run = BTreeMap::from([("Repository".to_string(), vec!["billing".to_string()])]);
+        let assumed = fixed(crate::known::merge(Vec::new(), &run));
+        assert!(!over_size(&batch, 2_500, assumed, assumed));
+        // One store hit of 200 aliases adds well over 500 bytes of known-entity lines.
+        let hit = m::KnownEntity {
+            node_type: "Repository".into(),
+            name: "acme/api".into(),
+            aliases: (0..200).map(|n| format!("repo:acme/api-{n}")).collect(),
+            origin: m::KnownOrigin::Store,
+        };
+        let grown = fixed(crate::known::merge(vec![hit], &run));
+        assert!(grown > assumed + 500, "{grown} {assumed}");
+        assert!(over_size(&batch, 2_500, assumed, grown));
+        // Its halves are one document each: asked alone, whatever the fixed part.
+        assert!(!over_size(&batch[..1], 2_500, assumed, grown));
+        assert!(!over_size(&batch[1..], 2_500, assumed, grown));
+    }
 
     #[test]
     fn a_run_costs_zero_without_a_model_call_the_sum_when_all_are_costed_and_none_otherwise() {

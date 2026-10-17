@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.ModelUnavailableCause",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "0f7251f0c444abe6dc1366bd90cef115ffd6b3c2bd521752108a810a42d41fc1",
+    "contract_digest": "slice-sha256/2:f940cbd7e01f7e8cc034cbf7cf9c12ceee8dc653320c36dd820ec6017edf2899",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.ModelUnavailableCause": {
+      "title": "ModelUnavailableCause",
+      "x-ess-name": "cortex.instance.ModelUnavailableCause",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "refused",
+        "not-loaded",
+        "gateway-down"
+      ]
+    }
+  }
+}

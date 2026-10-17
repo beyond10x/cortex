@@ -232,6 +232,20 @@ types:
       - {name: target_type, type: String}
       - {name: target_name, type: String}
 
+  # `alias_templates` adds one alias per template to a record's entity, after its mapped
+  # `aliases`: each template is fixed text with `{field.path}` placeholders (a dotted path into
+  # the record, as `aliases` and `properties` name one, `$.` allowed before it), rendered per
+  # record, so a source's key scheme can match the aliases another writer gave a store's nodes
+  # (`repo:{namespace}/{path}`). A template one of whose fields the record lacks, or holds as no
+  # scalar or as blank text, yields no alias for that record and no error. Absent means none.
+  # UNMAPPED: the spec check refuses (exit 2, naming the source and the template, for `create`,
+  # `update`, `adopt` and a run alike) an empty template, a template that names no field, and a
+  # template whose placeholders are not `{path}` with a dotted path of ASCII letters, digits, `_`
+  # and `-` (an unclosed `{`, a lone `}`, `{}`, a nested `{`, or another character in a path, a
+  # non-ASCII letter included). A template alias matches a store node of the mapping's own
+  # `node_type` only. ESS
+  # has no construct for the grammar of a String; `spec::check` holds it and
+  # `tests/known_entities.rs` tests it.
   - name: cortex.instance.RecordMapping
     kind: struct
     fields:
@@ -241,6 +255,25 @@ types:
       - {name: aliases, type: List<String>}
       - {name: properties, type: List<cortex.instance.PropertyMapping>}
       - {name: relations, type: List<cortex.instance.RelationMapping>}
+      - {name: alias_templates, type: Optional<List<String>>}
+
+  # Where a known entity shown to the model came from: `Store`, a node the store holds that one
+  # of the batch's keys or aliases names; `Run`, a name cortex's own earlier runs extracted.
+  - name: cortex.instance.KnownOrigin
+    kind: enum
+    variants: [Store, Run]
+
+  # One known entity a run shows the model before a batch, so the model reuses that node instead
+  # of creating it again under another type: its node type, its canonical name, its other aliases
+  # and where it came from. Not persisted; a run computes the list per batch
+  # (`cortex.instance.RunSource`).
+  - name: cortex.instance.KnownEntity
+    kind: struct
+    fields:
+      - {name: node_type, type: String}
+      - {name: name, type: String}
+      - {name: aliases, type: List<String>}
+      - {name: origin, type: cortex.instance.KnownOrigin}
 
   - name: cortex.instance.StructuredChild
     kind: struct
@@ -612,10 +645,19 @@ types:
   # (`cortex sources`) and the metric file report.
   - name: cortex.instance.RunOutcome
     kind: enum
-    variants: [ran, fetch-failed, extraction-failed, apply-refused, store-outcome-unknown, connection-unavailable, batch-too-large, disabled]
+    variants: [ran, fetch-failed, extraction-failed, apply-refused, store-outcome-unknown, connection-unavailable, batch-too-large, terminated, model-unavailable, disabled]
+
+  # Why a run's model could not be reached (`cortex.instance.ModelUnavailable`): `refused`, the
+  # model process could not be started or its connection was refused; `not-loaded`, the server
+  # behind the gateway answered that the model is not loaded or still loading; `gateway-down`,
+  # the gateway or the API answered HTTP 502, 503, 504 or 529 (overloaded).
+  - name: cortex.instance.ModelUnavailableCause
+    kind: enum
+    variants: [refused, not-loaded, gateway-down]
 
   # A command cortex calls once for each run of a source that answers `fetch-failed`,
-  # `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable` or `batch-too-large`:
+  # `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable`,
+  # `batch-too-large`, `terminated` or `model-unavailable`:
   # `command` is its argument vector (no shell), started in
   # the instance directory, in a process group of its own, with the source id and the outcome
   # appended as its last two arguments. A relative program path holding a `/` is read against the
@@ -639,9 +681,24 @@ types:
   # Where a run reports besides its printed line, `cortex.log` and the source's status. With
   # `metrics: true`, every run of a source rewrites `metrics.prom` in the instance directory whole
   # (a temporary file, then a rename), in the Prometheus text format, for a textfile collector or a
-  # sidecar; cortex serves no port. It holds `cortex_source_runs_total{source, outcome}`, the runs
-  # of each source by outcome, and `cortex_source_last_run_timestamp_seconds{source}`. A metric
-  # file cortex cannot write is recorded in `cortex.log` and changes no run's outcome.
+  # sidecar; cortex serves no port. It holds, per source:
+  # - `cortex_source_runs_total{source, outcome}` (counter), the runs by outcome;
+  # - `cortex_source_last_run_timestamp_seconds{source}` (gauge), when the last run started;
+  # - `cortex_source_last_run_duration_seconds{source}` (gauge), how long it took, to the moment
+  #   it recorded its outcome;
+  # - `cortex_source_last_run_documents{source, kind}` (gauge), the last run's documents: `read`,
+  #   the new or changed documents it selected to extract (`SourceRan.documents_new`), and
+  #   `applied` (`SourceRan.documents_applied`); present only when the last run ended `ran`;
+  # - `cortex_source_documents_total{source, kind}` (counter), the same, added up over every run
+  #   that ended `ran`;
+  # - `cortex_source_model_tokens_total{source, kind}` (counter), the model tokens those runs
+  #   reported: `input` (`input_tokens` and `cache_creation_input_tokens`), `cached`
+  #   (`cache_read_input_tokens`) and `output` (`output_tokens`); a run whose answers did not
+  #   report a count adds nothing to it.
+  # Every label is the source id or a fixed name: no series holds a credential, a prompt, a
+  # question or document content. A source's status file (`status/<source>.json`) keeps these
+  # figures, so the whole file is rewritten from the status files. A metric file cortex cannot
+  # write is recorded in `cortex.log` and changes no run's outcome.
   - name: cortex.instance.MonitoringSpec
     kind: struct
     fields:
@@ -1185,6 +1242,26 @@ errors:
     fields:
       - {name: reason, type: String}
 
+  - name: cortex.instance.RunTerminated
+    summary: >-
+      The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended,
+      and stopped at the next safe point: a model call in flight was ended. A gated run is undone
+      (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it
+      applied, and a later run extracts the rest. Nothing about the source was wrong: the failure
+      is not counted against it.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.instance.ModelUnavailable
+    summary: >-
+      The run's model could not be reached: `cause` says how (`refused`, `not-loaded`,
+      `gateway-down`), and `reason` holds the model call's error text, masked for credential
+      shapes and bounded, never a prompt. Nothing about the source was wrong: the failure is not
+      counted against it, and the next run asks the model again.
+    fields:
+      - {name: cause, type: cortex.instance.ModelUnavailableCause}
+      - {name: reason, type: String}
+
   - name: cortex.instance.SampleFailed
     summary: >-
       EKR could not draw the sample (`ekr sample`): the size is outside 1 to 1000, or the store
@@ -1586,9 +1663,10 @@ commands:
       # UNMAPPED: the exit status of each outcome, which an external scheduler reads instead of
       # the printed line: `ran` 0; `fetch-failed`, `extraction-failed`, `apply-refused` and
       # `no-such-source` 1; `disabled` 3; `store-outcome-unknown` 4; `connection-unavailable` 5; `batch-too-large` 6;
-      # and 2 for an error before any outcome. ESS declares no exit status for a command line's
-      # outcomes; tests/e2e.rs, tests/run_status.rs, tests/store_outcome_unknown.rs and
-      # tests/connections_revalidate_retry.rs hold it.
+      # `model-unavailable` 7; `terminated` 8; and 2 for an error before any outcome. ESS declares no exit status for a
+      # command line's outcomes; tests/e2e.rs, tests/run_status.rs, tests/store_outcome_unknown.rs,
+      # tests/connections_revalidate_retry.rs, tests/run_metrics.rs and
+      # tests/model_unavailable.rs hold it.
       # UNMAPPED: `<instance>/seed`, when the instance is active and has no source named `seed`,
       # names the instance's seed documents: it extracts those no seed extraction applied yet (what
       # a `partial` create left) and answers these outcomes with no Source to update. Like a source
@@ -1612,12 +1690,35 @@ commands:
       # refused on `creates:`, `affects:` only updates), so the per-source state file holds it and
       # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.
       # UNMAPPED: after every outcome that names a source, the instance's `monitoring` reports it:
-      # `metrics.prom` is rewritten with the source's run counted under its outcome, and for
+      # `metrics.prom` is rewritten with the source's run counted under its outcome, its duration,
+      # and for `ran` its documents and model tokens (`cortex.instance.MonitoringSpec`), and for
       # `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`,
-      # `connection-unavailable` and `batch-too-large` the hook is called once, with `disabled` instead when the
-      # recorded failure disabled the source. ESS declares no effect outside the model's records;
-      # tests/run_status.rs, tests/store_outcome_unknown.rs and
-      # tests/connections_revalidate_retry.rs hold it.
+      # `connection-unavailable`, `batch-too-large`, `terminated` and `model-unavailable` the hook
+      # is called once, with
+      # `disabled` instead when the recorded failure disabled the source. ESS declares no effect
+      # outside the model's records and no metric; tests/run_status.rs,
+      # tests/store_outcome_unknown.rs, tests/connections_revalidate_retry.rs and
+      # tests/run_metrics.rs hold it.
+      # UNMAPPED: before each batch is sent to the model, the run reads the store once
+      # (`ekr snapshot`) and takes every node, of any type, whose canonical name or one of whose
+      # aliases equals one of the batch's terms, both lowercased: each document's key and, for a
+      # record, its id (after the first `#` of a file record's key `<path>#<id>`, after
+      # `<adapter>:<operation>:` of a Connectors record's). Those nodes are shown to the model as
+      # `cortex.instance.KnownEntity` of origin `Store`, each once, ahead of the names of origin
+      # `Run` (the entities file the run's own batches grow, at most 50 per node type; a run name
+      # equal to a store hit's name of its type is shown once). The cap holds for run names
+      # only: every store hit of the batch is shown. A store hit's name and aliases are masked
+      # for credential shapes on every run, with or without a redaction policy, before they are
+      # merged with the run names, and then pass through the instance's redaction like every
+      # known name. Each name and alias is written on its one line of the prompt: a line break
+      # or another control character in it is written as a space. Behind a model window the
+      # batch size counts the store hits' lines in the request's fixed part: a batch of more
+      # than one document whose documents and known-entity lines exceed the size is split in
+      # two before it is sent. ESS has no construct for a read of the store's graph or for what
+      # a prompt holds; `src/run.rs` holds it and `tests/known_entities.rs` tests it.
+      # A structured source calls no model; `alias_templates` reach the store as aliases of its
+      # entities, by which EKR resolves them to a node of their type: a template alias matches a
+      # store node of the mapping's own type only.
       # UNMAPPED: with `fetch_only` (`cortex run --fetch-only`), `fetched` exits 0 and
       # `fetch-only-failed` exits 1 and prints `fetch-failed`. Neither writes the source's status
       # file, `metrics.prom`, `cortex.log`, the seen documents or the window (`pending_since`),
@@ -1701,7 +1802,7 @@ commands:
           scheduler then sends RecordFailure.
 
       - name: extraction-failed
-        external: The model call fails, times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait
+        external: The model call fails (other than as `model-unavailable` says), times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait
         error: cortex.instance.ExtractionFailed
         compensates: true
         updates: cortex.instance.Source
@@ -1832,6 +1933,71 @@ commands:
           the batch, not the source, failed, so the failure is not counted and never disables the
           source. The batches before it stay applied; the rest are extracted by a later run.
           A part of one document is not this outcome: the run leaves it out and goes on.
+
+      # UNMAPPED: the signal and the safe point. `cortex run` (not `--fetch-only`) handles SIGTERM:
+      # the run stops at its next safe point, before a fetch result is used, before each batch, or
+      # by ending the model call in flight (its process group is sent SIGTERM, then SIGKILL after
+      # 5 s); a structured source stops before each record batch. A gated run is undone as a run
+      # its gate refuses is: its stage abandoned and `state/` put back, or its kept snapshot
+      # restored; an ungated run keeps the batches it applied, each marked seen, and its window
+      # is kept pending, as a failed run's is. A second SIGTERM ends the process at once, exit
+      # 143, recording nothing. `terminated` exits 8; its status, metric and hook report it while
+      # the scheduler counts nothing. ESS has no signal construct and declares no exit status;
+      # tests/run_metrics.rs holds it.
+      - name: terminated
+        external: The run is sent SIGTERM before it ends
+        error: cortex.instance.RunTerminated
+        compensates: true
+        updates: cortex.instance.Source
+        instance: source_id
+        sets:
+          last_outcome: terminated
+          last_run_at: {generated: true}
+          last_reason: {generated: true}
+        payload:
+          cortex.instance.RunTerminated:
+            reason: {generated: true}
+        summary: >-
+          The run stopped at its next safe point; the source's status records the outcome and its
+          reason, which says what was undone, and the scheduler sends no RecordFailure: the run
+          was stopped, the source did not fail, so the failure is not counted and never disables
+          the source. The next scheduled run starts as usual.
+
+      # UNMAPPED: how a model call's failure is told to be `model-unavailable`: by its error text,
+      # in any case. `refused`: `claude` (through `timeout`) could not be started (exit 126 or
+      # 127), or its error says `connection refused`, `ECONNREFUSED`, `Connection error` or
+      # `Unable to connect`; `not-loaded`: `model not loaded`, `no models loaded`, `model is
+      # loading` or `currently loading`; `gateway-down`: an `API Error` with status 502, 503,
+      # 504 or 529, `Bad Gateway`, `Service Unavailable`, `Gateway Timeout` or `overloaded`. A
+      # call that timed out, an answer that is not valid, and every other error stay
+      # `extraction-failed`. An error answer
+      # that cost zero is asked once more first, as any is. What the run leaves: the batches before
+      # it are applied, held to the gate and seen, as for `batch-too-large`; that batch and every
+      # later one are not marked seen. `model-unavailable` exits 7; its status, metric and hook
+      # report it while the scheduler counts nothing. ESS states neither a classification of
+      # text nor an exit status; tests/model_unavailable.rs holds it.
+      - name: model-unavailable
+        external: >-
+          The run's model cannot be reached: its process cannot be started, its connection is
+          refused, the server behind the gateway has not loaded the model, or the gateway answers
+          HTTP 502, 503, 504 or 529 (overloaded)
+        error: cortex.instance.ModelUnavailable
+        compensates: true
+        updates: cortex.instance.Source
+        instance: source_id
+        sets:
+          last_outcome: model-unavailable
+          last_run_at: {generated: true}
+          last_reason: {generated: true}
+        payload:
+          cortex.instance.ModelUnavailable:
+            cause: {generated: true}
+            reason: {generated: true}
+        summary: >-
+          The source's status records the outcome and its reason, and the scheduler sends no
+          RecordFailure: the model, not the source, failed, so the failure is not counted and
+          never disables the source, however often the model is down. The batches before it stay
+          applied; the rest are extracted by a later run.
 
       # UNMAPPED: a part of one document that still does not fit the model's window is left out
       # alone, as a record whose value does not convert is: it is named, by its key, in the run's

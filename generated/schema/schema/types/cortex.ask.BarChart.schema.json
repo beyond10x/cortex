@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.BarChart",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "0f7251f0c444abe6dc1366bd90cef115ffd6b3c2bd521752108a810a42d41fc1",
+    "contract_digest": "slice-sha256/2:c8d807183caaa6e0dc16e0f5380c3abdb1b3d4e43291c05ae0ddb91e29648558",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.Bar": {
+      "title": "Bar",
+      "x-ess-name": "cortex.ask.Bar",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label",
+        "count"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.ask.BarChart": {
+      "title": "BarChart",
+      "x-ess-name": "cortex.ask.BarChart",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "bars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cortex.ask.Bar"
+          }
+        }
+      },
+      "required": [
+        "title",
+        "bars"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

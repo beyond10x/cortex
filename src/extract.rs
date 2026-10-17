@@ -113,6 +113,10 @@ pub struct Refused {
     pub error_answer: bool,
     /// The error answer said the request did not fit the model's window ([`unfit`]).
     pub unfit: Option<Unfit>,
+    /// The call was ended because the run was sent SIGTERM ([`crate::terminate`]).
+    pub terminated: bool,
+    /// The model could not be reached ([`unavailable`]): not a fault of the batch or the source.
+    pub unavailable: Option<Unavailable>,
     /// The model calls made: `0` when no model was asked.
     pub calls: i64,
     /// The tokens those calls reported.
@@ -208,6 +212,8 @@ impl Refused {
             cost_usd: Some(0.0),
             error_answer: false,
             unfit: None,
+            terminated: false,
+            unavailable: None,
             calls: 0,
             usage: Usage::ZERO,
         }
@@ -220,8 +226,19 @@ impl Refused {
             cost_usd: None,
             error_answer: false,
             unfit: None,
+            terminated: false,
+            unavailable: None,
             calls: 1,
             usage: Usage::UNKNOWN,
+        }
+    }
+
+    /// A call ended because the run was sent SIGTERM: a model was asked, and what it cost is not
+    /// known.
+    fn terminated() -> Self {
+        Self {
+            terminated: true,
+            ..Self::uncosted("the model call was ended: the run was sent SIGTERM".into())
         }
     }
 
@@ -278,6 +295,68 @@ pub fn unfit(text: &str) -> Option<Unfit> {
     }
 }
 
+/// Why a model could not be reached (`cortex.instance.ModelUnavailableCause`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unavailable {
+    /// The model process could not be started, or its connection was refused.
+    Refused,
+    /// The server behind the gateway has not loaded the model, or is still loading it.
+    NotLoaded,
+    /// The gateway or the API answered HTTP 502, 503, 504 or 529 (overloaded).
+    GatewayDown,
+}
+
+impl Unavailable {
+    /// As the spec names it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Unavailable::Refused => "refused",
+            Unavailable::NotLoaded => "not-loaded",
+            Unavailable::GatewayDown => "gateway-down",
+        }
+    }
+}
+
+/// Whether a model call's error text says the model could not be reached, in any case:
+/// [`Unavailable::NotLoaded`] for `model not loaded`, `no models loaded`, `model is loading` or
+/// `currently loading`; [`Unavailable::GatewayDown`] for an `API Error` with status 502, 503, 504
+/// or 529, `Bad Gateway`, `Service Unavailable`, `Gateway Timeout` or `overloaded`;
+/// [`Unavailable::Refused`] for `connection refused`, `ECONNREFUSED`, `Connection error` (how
+/// `claude -p` words a connection that failed) or `Unable to connect`. A timeout and every other
+/// error are not.
+pub fn unavailable(text: &str) -> Option<Unavailable> {
+    let text = text.to_lowercase();
+    let any = |words: &[&str]| words.iter().any(|w| text.contains(w));
+    if any(&[
+        "model not loaded",
+        "no models loaded",
+        "model is loading",
+        "currently loading",
+    ]) {
+        return Some(Unavailable::NotLoaded);
+    }
+    let status = regex::Regex::new(r"api error:?\s*(502|503|504|529)\b").expect("a valid pattern");
+    if status.is_match(&text)
+        || any(&[
+            "bad gateway",
+            "service unavailable",
+            "gateway timeout",
+            "overloaded",
+        ])
+    {
+        return Some(Unavailable::GatewayDown);
+    }
+    if any(&[
+        "connection refused",
+        "econnrefused",
+        "connection error",
+        "unable to connect",
+    ]) {
+        return Some(Unavailable::Refused);
+    }
+    None
+}
+
 /// How long an extraction waits before asking again after an error answer that cost zero.
 const RETRY_WAIT_MS: u64 = 60_000;
 
@@ -329,14 +408,18 @@ pub struct Known {
     pub node_types: Vec<String>,
     /// `RELATION: Source -> Target`.
     pub edge_types: Vec<String>,
-    /// Up to 50 names per node type, from earlier runs.
-    pub entities: BTreeMap<String, Vec<String>>,
+    /// The known entities shown to the model (`crate::known`): the store's nodes the batch names,
+    /// then up to 50 names per node type from earlier runs.
+    pub entities: Vec<cortex_model::instance::KnownEntity>,
 }
 
 impl Known {
     /// The names of `ontology` (`ekr ontology`), each node type's properties with their value
     /// kind (`value_type.value_kind`) and nothing else of their declaration.
-    pub fn from_ontology(ontology: &Value, entities: BTreeMap<String, Vec<String>>) -> Self {
+    pub fn from_ontology(
+        ontology: &Value,
+        entities: Vec<cortex_model::instance::KnownEntity>,
+    ) -> Self {
         let names = |v: &Value| -> Vec<String> {
             v.as_array()
                 .into_iter()
@@ -432,8 +515,9 @@ pub fn prompt_split(
     p.push('\n');
     if !known.entities.is_empty() {
         p.push_str("Known entities:\n");
-        for (ty, names) in &known.entities {
-            p.push_str(&format!("- {ty}: {}\n", names.join("; ")));
+        for line in crate::known::lines(&known.entities) {
+            p.push_str(&line);
+            p.push('\n');
         }
     }
     p.push_str("\nExtract the knowledge in these documents.\n");
@@ -499,6 +583,102 @@ impl Drop for PrivateFile {
     }
 }
 
+/// How a model call's process ended.
+enum Waited {
+    Done(std::process::Output),
+    /// It could not be waited for, or the prompt not sent: why.
+    Failed(String),
+    /// The run was sent SIGTERM, and the call was ended.
+    Terminated,
+}
+
+/// How long a model call ended on SIGTERM may take to exit before its process group is killed.
+const TERMINATE_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Sends `prompt` to `child` and waits for it, reading its output, until it exits or the run is
+/// sent SIGTERM ([`crate::terminate::requested`]). Then the child's process group, `timeout` and
+/// what it started (`timeout` runs in a group of its own), is sent SIGTERM, and SIGKILL after
+/// [`TERMINATE_GRACE`]. A child that exits before reading the prompt closes the pipe; its exit
+/// status and stderr say why, so a broken pipe is not the error reported.
+fn wait_or_terminate(child: &mut std::process::Child, prompt: &str) -> Waited {
+    use std::io::Read;
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let text = prompt.to_owned();
+    let writer = std::thread::spawn(move || stdin.write_all(text.as_bytes()));
+    let read = |pipe: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.read_to_end(&mut bytes);
+            }
+            bytes
+        })
+    };
+    let stdout = read(
+        child
+            .stdout
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    );
+    let stderr = read(
+        child
+            .stderr
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    );
+    let status = loop {
+        match child.try_wait() {
+            // A stop of the whole unit signals the call too: one that ended after the run was
+            // sent SIGTERM ended because of it, whatever its status says.
+            Ok(Some(_)) if crate::terminate::requested() => {
+                end(child);
+                return Waited::Terminated;
+            }
+            Ok(Some(status)) => break status,
+            Ok(None) if crate::terminate::requested() => {
+                end(child);
+                return Waited::Terminated;
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(20)),
+            Err(e) => {
+                end(child);
+                return Waited::Failed(format!("claude did not finish: {e}"));
+            }
+        }
+    };
+    match writer.join() {
+        Ok(Err(e)) if e.kind() != std::io::ErrorKind::BrokenPipe => {
+            return Waited::Failed(format!("cannot send the prompt: {e}"));
+        }
+        _ => {}
+    }
+    Waited::Done(std::process::Output {
+        status,
+        stdout: stdout.join().unwrap_or_default(),
+        stderr: stderr.join().unwrap_or_default(),
+    })
+}
+
+/// Ends a model call's process and its group: SIGTERM, then SIGKILL after [`TERMINATE_GRACE`].
+fn end(child: &mut std::process::Child) {
+    use rustix::process::{kill_process, kill_process_group, Pid, Signal};
+    let pid = Pid::from_child(child);
+    let signal = |s: Signal| {
+        let _ = kill_process_group(pid, s);
+        let _ = kill_process(pid, s);
+    };
+    signal(Signal::TERM);
+    let until = std::time::Instant::now() + TERMINATE_GRACE;
+    while std::time::Instant::now() < until {
+        if !matches!(child.try_wait(), Ok(None)) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    signal(Signal::KILL);
+    let _ = child.wait();
+}
+
 impl Model {
     /// One extraction call for one batch, through the spec's backend, run in `dir`: [`ask_with`]
     /// and the extraction prompt [`SYSTEM_PROMPT`]. An error answer that cost zero is asked once
@@ -516,7 +696,19 @@ impl Model {
     ) -> Result<Answer, Refused> {
         match self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd) {
             Err(first) if first.free_error_answer() => {
-                std::thread::sleep(retry_wait());
+                // The wait ends early on SIGTERM: a pod's grace period is shorter than it.
+                let until = std::time::Instant::now() + retry_wait();
+                while std::time::Instant::now() < until && !crate::terminate::requested() {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                if crate::terminate::requested() {
+                    return Err(Refused {
+                        calls: first.calls,
+                        usage: first.usage,
+                        cost_usd: first.cost_usd,
+                        ..Refused::terminated()
+                    });
+                }
                 match self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd) {
                     Ok(mut answer) => {
                         answer.calls += first.calls;
@@ -660,29 +852,32 @@ impl Model {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| Refused::free(format!("cannot run claude: {e}")))?;
-        // A `claude` that exits before reading the prompt closes the pipe; its exit status and
-        // stderr, read below, say why, so a broken pipe is not the error reported.
-        match child
-            .stdin
-            .take()
-            .expect("piped stdin")
-            .write_all(prompt.as_bytes())
-        {
-            Err(e) if e.kind() != std::io::ErrorKind::BrokenPipe => {
-                return Err(Refused::uncosted(format!("cannot send the prompt: {e}")));
-            }
-            _ => {}
-        }
-        let out = child
-            .wait_with_output()
-            .map_err(|e| Refused::uncosted(format!("claude did not finish: {e}")))?;
+            .map_err(|e| Refused {
+                unavailable: Some(Unavailable::Refused),
+                ..Refused::free(format!("cannot run claude: {e}"))
+            })?;
+        // The prompt is written, and the answer read, on threads of their own, so a run sent
+        // SIGTERM ends the call however far it got ([`crate::terminate`]).
+        let out = match wait_or_terminate(&mut child, prompt) {
+            Waited::Done(out) => out,
+            Waited::Failed(e) => return Err(Refused::uncosted(e)),
+            Waited::Terminated => return Err(Refused::terminated()),
+        };
         let answer: Value = serde_json::from_slice(&out.stdout).map_err(|_| {
-            Refused::uncosted(format!(
-                "claude exited {} without a JSON answer: {}",
-                out.status,
-                String::from_utf8_lossy(&out.stderr).trim()
-            ))
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            // `timeout` exits 126 when it cannot run `claude`, 127 when it finds none.
+            let unavailable = match out.status.code() {
+                Some(126 | 127) => Some(Unavailable::Refused),
+                _ => unavailable(&stderr),
+            };
+            Refused {
+                unavailable,
+                ..Refused::uncosted(format!(
+                    "claude exited {} without a JSON answer: {}",
+                    out.status,
+                    error_text(&stderr)
+                ))
+            }
         })?;
         let cost_usd = answer["total_cost_usd"].as_f64();
         let usage = Usage::read(&answer);
@@ -690,6 +885,10 @@ impl Model {
             // Claude's own text says why (a sign-in, a usage limit); kept masked and bounded in
             // the reason and in `error.txt`, where nothing else of the failed call is written.
             let unfit = unfit(answer["result"].as_str().unwrap_or_default());
+            let unavailable = unfit
+                .is_none()
+                .then(|| unavailable(answer["result"].as_str().unwrap_or_default()))
+                .flatten();
             let said = error_text(answer["result"].as_str().unwrap_or_default());
             let _ = std::fs::write(dir.join("error.txt"), &said);
             let mut message = format!(
@@ -706,6 +905,8 @@ impl Model {
                 cost_usd,
                 error_answer: true,
                 unfit,
+                terminated: false,
+                unavailable,
                 calls: 1,
                 usage,
             });
@@ -725,6 +926,8 @@ impl Model {
                 cost_usd,
                 error_answer: false,
                 unfit: None,
+                terminated: false,
+                unavailable: None,
                 calls: 1,
                 usage,
             }),
@@ -937,6 +1140,46 @@ pub fn entity_names(model: &Value) -> Vec<(String, String)> {
 mod tests {
     use super::*;
 
+    /// `story:model-unavailable-outcome`: a model that cannot be reached is told by its error
+    /// text; a timeout, a refusal of the request and an invalid answer are not.
+    #[test]
+    fn an_error_text_names_why_the_model_could_not_be_reached() {
+        for (text, cause) in [
+            ("API Error: Connection error.", Some(Unavailable::Refused)),
+            (
+                "connect ECONNREFUSED 127.0.0.1:4000",
+                Some(Unavailable::Refused),
+            ),
+            ("API Error: 502 Bad Gateway", Some(Unavailable::GatewayDown)),
+            (
+                "API Error: 503 {error:upstream}",
+                Some(Unavailable::GatewayDown),
+            ),
+            ("api error: 504 timeout", Some(Unavailable::GatewayDown)),
+            (
+                r#"API Error: 529 {"type":"error","error":{"type":"overloaded_error"}}"#,
+                Some(Unavailable::GatewayDown),
+            ),
+            ("Overloaded", Some(Unavailable::GatewayDown)),
+            (
+                "API Error: 503 {error:Model is currently loading}",
+                Some(Unavailable::NotLoaded),
+            ),
+            (
+                "No models loaded. Load a model first",
+                Some(Unavailable::NotLoaded),
+            ),
+            ("API Error: 500 internal", None),
+            ("API Error: 400 invalid request", None),
+            ("API Error: 401 authentication_error", None),
+            ("Request timed out.", None),
+            ("claude returned no structured output", None),
+            ("the document mentions port 5020 and 5030", None),
+        ] {
+            assert_eq!(unavailable(text), cause, "{text}");
+        }
+    }
+
     #[test]
     fn a_rejected_fact_names_the_evidence_it_cites_and_another_part_names_none() {
         let doc = tagged(&json!({"facts": [
@@ -986,7 +1229,7 @@ mod tests {
             ]},
             {"id": "t3", "name": "Organization", "parents": [], "properties": []},
         ], "edge_types": []});
-        let known = Known::from_ontology(&ontology, BTreeMap::new());
+        let known = Known::from_ontology(&ontology, Vec::new());
         let text = prompt("d", None, &known, &[]);
         assert!(text.contains("release_date: String"), "{text}");
         assert!(
@@ -1054,7 +1297,7 @@ mod tests {
 
     #[test]
     fn the_fixed_part_of_a_prompt_ends_where_its_documents_begin() {
-        let known = Known::from_ontology(&json!({}), BTreeMap::new());
+        let known = Known::from_ontology(&json!({}), Vec::new());
         let (text, fixed) = prompt_split("d", Some("guide"), &known, &[]);
         assert_eq!(fixed, text.len(), "no documents: all of it is fixed");
         assert!(text.ends_with("Extract the knowledge in these documents.\n"));
