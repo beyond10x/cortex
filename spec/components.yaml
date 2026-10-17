@@ -19,6 +19,9 @@ components:
         - cortex.instance.RestoreSnapshot
         - cortex.instance.MeasureQuality
         - cortex.instance.ProposeSchemaChanges
+        - cortex.instance.ApproveSchemaProposals
+        - cortex.instance.RejectSchemaProposals
+        - cortex.instance.ApplySchemaProposals
     publishes:
       events:
         - cortex.instance.InstanceCreated
@@ -33,6 +36,8 @@ components:
         - cortex.instance.SnapshotRestored
         - cortex.instance.QualityMeasured
         - cortex.instance.SchemaChangesProposed
+        - cortex.instance.SchemaProposalsDecided
+        - cortex.instance.SchemaProposalsApplied
     reached_by: command_line
     cli:
       binary: cortex
@@ -52,6 +57,12 @@ components:
             - cortex.instance.AddSource
             - cortex.instance.RecordFailure
             - cortex.instance.EnableSource
+        - name: schema
+          summary: The decisions on a review run of schema proposals, and their apply
+          commands:
+            - cortex.instance.ApproveSchemaProposals
+            - cortex.instance.RejectSchemaProposals
+            - cortex.instance.ApplySchemaProposals
       views:
         - cortex.instance.Instances
         - cortex.instance.Sources

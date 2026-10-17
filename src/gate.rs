@@ -221,6 +221,27 @@ pub fn evaluate(
     failed
 }
 
+/// The checks of `gate` a store write outside a source run failed (`cortex schema apply`): only
+/// those on a number of `ekr quality`, asked once through `quality`; a check on a run-report
+/// measure ([`REPORT_MEASURES`]) is a source run's and is not read.
+pub fn evaluate_store(
+    gate: &m::RunGate,
+    quality: impl FnOnce() -> Result<Value, String>,
+) -> Vec<Failed> {
+    let checks = m::RunGate {
+        checks: gate
+            .checks
+            .iter()
+            .filter(|c| !REPORT_MEASURES.contains(&c.measure.as_str()))
+            .cloned()
+            .collect(),
+    };
+    if checks.checks.is_empty() {
+        return Vec::new();
+    }
+    evaluate(&checks, &Report::default(), quality)
+}
+
 /// Why a run failed its gate, naming each failed check's measure and value.
 pub fn reason(failed: &[Failed]) -> String {
     format!(

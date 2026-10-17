@@ -387,7 +387,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 
 ### `SchemaProposal`
 
-`cortex.instance.SchemaProposal` is a record of 10 fields:
+`cortex.instance.SchemaProposal` is a record of 12 fields:
 
 - `format` — `String`
 - `change` — `cortex.instance.SchemaChange`
@@ -399,10 +399,12 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 - `note` — `Optional<String>`, which may be absent
 - `revision` — `Optional<Integer>`, which may be absent
 - `schema_version` — `Optional<String>`, which may be absent
+- `decision_reason` — `Optional<String>`, which may be absent
+- `decided_by` — `Optional<String>`, which may be absent
 
 ### `SchemaProposalStatus`
 
-`cortex.instance.SchemaProposalStatus` is one of `applied`, `refused`, `recorded-only`, `invalid` and `dry-run`.
+`cortex.instance.SchemaProposalStatus` is one of `pending`, `approved`, `rejected`, `applied`, `refused`, `recorded-only`, `invalid` and `dry-run`.
 
 ### `SchemaProposals`
 
@@ -827,6 +829,52 @@ It has six outcomes.
 
 **`adopted`** — The store answers the head it had, `revision`; nothing was seeded, extracted or written to it. A SQLite store was copied into the instance directory, which grows the copy; a PostgreSQL store is used where it is. The sources are added by AddSource, one per source in the spec. The default branch, taken when no other outcome's condition matched. It creates a `cortex.instance.Instance`, which starts in `Active`. The new instance's identity is published as `name` on `cortex.instance.InstanceAdopted`. It emits `cortex.instance.InstanceAdopted`. It sets `description` from `input.description`, `model` from `input.model`, `ekr_version` from `input.ekr_version` and `seed_digest` from `input.seed_digest`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
+### `ApplySchemaProposals`
+
+`cortex.instance.ApplySchemaProposals`, shown to a person as "Apply approved schema proposals" and called `apply` on the wire.
+
+It takes:
+
+- `name` — `cortex.instance.InstanceName`
+- `stamp` — `String`
+
+It has seven outcomes.
+
+**`no-such-run`** — Nothing was applied. Decided outside the input: The instance has no readable `schema/<stamp>/proposals.jsonl`. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaRunNotFound`, carrying `stamp` and `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`not-approved`** — Nothing was applied. Decided outside the input: The run holds no `approved` proposal. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaProposalsNotApproved`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`gate-failed`** — Nothing was published; every approved proposal is still `approved`, and the store's head is where it was (`postgres`) or back at the snapshot (`sqlite`). Decided outside the input: The store after the changes fails a check of the spec's gate. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaGateFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`apply-failed`** — Nothing was published; every approved proposal is still `approved`. Decided outside the input: EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaApplyFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`store-outcome-unknown`** — Every approved proposal is still `approved`. The stage is kept in `stage.json`, and the next run of a source settles it. Decided outside the input: EKR cannot say whether the stage's begin or publish took effect. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.StoreOutcomeUnknown`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`applied`** — Every approved proposal is decided: `applied` with the revision and schema version it committed, or `refused`, `recorded-only` or `invalid` with why. `revision` is the store's head after the apply. Proposals still `pending` stay so. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaProposalsApplied`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+
+**`no-such-instance`** — Nothing was applied. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
+
+### `ApproveSchemaProposals`
+
+`cortex.instance.ApproveSchemaProposals`, shown to a person as "Approve schema proposals" and called `approve` on the wire.
+
+It takes:
+
+- `name` — `cortex.instance.InstanceName`
+- `stamp` — `String`
+- `only` — `List<Integer>`
+- `by` — `Optional<String>`, which may be absent
+
+It has four outcomes.
+
+**`no-such-run`** — Nothing was decided. Decided outside the input: The instance has no readable `schema/<stamp>/proposals.jsonl`. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaRunNotFound`, carrying `stamp` and `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`not-pending`** — Nothing was decided. Decided outside the input: A proposal `only` names is not in the run or is not `pending`, or the run has no pending proposal. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaProposalsNotPending`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`approved`** — Each named proposal is `approved`; `decided` counts them, `pending` what the run still holds undecided. `decision` is `approved`. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaProposalsDecided`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+
+**`no-such-instance`** — Nothing was decided. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
+
 ### `CreateInstance`
 
 `cortex.instance.CreateInstance`, shown to a person as "Create an instance" and called `create` on the wire.
@@ -896,14 +944,17 @@ It takes:
 - `name` — `cortex.instance.InstanceName`
 - `sample` — `Integer`
 - `dry_run` — `Boolean`
+- `review` — `Boolean`
 
-It has five outcomes.
+It has six outcomes.
 
 **`sample-failed`** — No model was asked and nothing was written. Decided outside the input: EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SampleFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`propose-failed`** — Nothing was applied and no `proposals.jsonl` was written. Decided outside the input: A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ProposeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`proposed`** — A dry run: every proposal not dropped is recorded and none is applied; `applied` and `refused` are 0, and a change EKR would be asked to apply is `dry-run`. `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. Taken when `dry_run` holds of the input. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaChangesProposed`. A test reaches it by constructing an input that satisfies that condition.
+
+**`reviewed`** — A review run: every proposal not dropped is recorded `pending` and none is applied, except one whose name holds a placeholder of the redaction policy, `invalid`; `pending` counts them and `applied`, `refused` and `recorded_only` are 0. `stamp` names the run for `approve`, `reject` and `apply`. `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. Taken when `review` holds of the input. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaChangesProposed`. A test reaches it by constructing an input that satisfies that condition.
 
 **`applied`** — Every proposal EKR accepted is committed, each as its own schema transaction and schema version; `applied` counts them, 0 when it accepted none. `revision` is the head the sample was drawn at, so `ekr ontology --at <revision>` still answers the schema before. `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaChangesProposed`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -927,6 +978,28 @@ It has four outcomes.
 **`already-disabled`** — The source was already disabled; nothing was counted. Taken when the subject is resting in a state none of this command's moves start from — a `cortex.instance.Source` in `Disabled`, which is what is left of the lifecycle once this command's own moves are taken away. The document lists none of it. No entity in this specification changes. It reports `cortex.instance.SourceDisabledError`, carrying `source_id`. It emits nothing. A test reaches it by driving an instance into one of those states and then issuing the command, because no input selects this branch.
 
 **`no-such-source`** — Nothing was counted. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.SourceNotFound`, carrying `source_id`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
+
+### `RejectSchemaProposals`
+
+`cortex.instance.RejectSchemaProposals`, shown to a person as "Reject schema proposals" and called `reject` on the wire.
+
+It takes:
+
+- `name` — `cortex.instance.InstanceName`
+- `stamp` — `String`
+- `only` — `List<Integer>`
+- `reason` — `String`
+- `by` — `Optional<String>`, which may be absent
+
+It has four outcomes.
+
+**`no-such-run`** — Nothing was decided. Decided outside the input: The instance has no readable `schema/<stamp>/proposals.jsonl`. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaRunNotFound`, carrying `stamp` and `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`not-pending`** — Nothing was decided. Decided outside the input: A proposal `only` names is not in the run or is not `pending`, the run has no pending proposal, or the reason is blank. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaProposalsNotPending`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`rejected`** — Each named proposal is `rejected` with the reason; `decided` counts them, `pending` what the run still holds undecided. `decision` is `rejected`. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaProposalsDecided`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+
+**`no-such-instance`** — Nothing was decided. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
 ### `RemoveInstance`
 
@@ -1134,10 +1207,47 @@ It carries:
 - `refused` — `Integer`
 - `recorded_only` — `Integer`
 - `invalid` — `Integer`
+- `pending` — `Integer`
 - `dropped` — `Integer`
 - `cost_usd` — `Optional<Decimal>`, which may be absent
 
-Emitted by `cortex.instance.ProposeSchemaChanges` on its `proposed` and `applied` outcomes.
+Emitted by `cortex.instance.ProposeSchemaChanges` on its `proposed`, `reviewed` and `applied` outcomes.
+
+Nothing in this system reacts to it.
+
+### `SchemaProposalsApplied`
+
+`cortex.instance.SchemaProposalsApplied`.
+
+It carries:
+
+- `name` — `cortex.instance.InstanceName`
+- `stamp` — `String`
+- `applied` — `Integer`
+- `refused` — `Integer`
+- `recorded_only` — `Integer`
+- `invalid` — `Integer`
+- `revision` — `Integer`
+
+Emitted by `cortex.instance.ApplySchemaProposals` on its `applied` outcome.
+
+Nothing in this system reacts to it.
+
+### `SchemaProposalsDecided`
+
+`cortex.instance.SchemaProposalsDecided`.
+
+It carries:
+
+- `name` — `cortex.instance.InstanceName`
+- `stamp` — `String`
+- `decision` — `String`
+- `decided` — `Integer`
+- `pending` — `Integer`
+
+Emitted by `cortex.instance.ApproveSchemaProposals` on its `approved` outcome.
+
+Emitted by `cortex.instance.RejectSchemaProposals` on its `rejected` outcome.
 
 Nothing in this system reacts to it.
 
@@ -1341,9 +1451,15 @@ It carries:
 
 - `name` — `cortex.instance.InstanceName`
 
+Reported by `cortex.instance.ApplySchemaProposals` on its `no-such-instance` outcome.
+
+Reported by `cortex.instance.ApproveSchemaProposals` on its `no-such-instance` outcome.
+
 Reported by `cortex.instance.MeasureQuality` on its `no-such-instance` outcome.
 
 Reported by `cortex.instance.ProposeSchemaChanges` on its `no-such-instance` outcome.
+
+Reported by `cortex.instance.RejectSchemaProposals` on its `no-such-instance` outcome.
 
 Reported by `cortex.instance.RemoveInstance` on its `no-such-instance` outcome.
 
@@ -1404,6 +1520,63 @@ It carries:
 Reported by `cortex.instance.MeasureQuality` on its `sample-failed` outcome.
 
 Reported by `cortex.instance.ProposeSchemaChanges` on its `sample-failed` outcome.
+
+### `SchemaApplyFailed`
+
+EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction. Nothing was published: the stage was abandoned, or on `sqlite` the snapshot taken before was restored; every approved proposal is still `approved`.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.ApplySchemaProposals` on its `apply-failed` outcome.
+
+### `SchemaGateFailed`
+
+The applied schema changes failed the spec's `gate`. Nothing was published: the stage was abandoned, or on `sqlite` the snapshot taken before was restored; every approved proposal is still `approved`.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.ApplySchemaProposals` on its `gate-failed` outcome.
+
+### `SchemaProposalsNotApproved`
+
+`apply` found no approved proposal in the run: none was approved, or every approved one is applied or decided. Nothing was applied.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.ApplySchemaProposals` on its `not-approved` outcome.
+
+### `SchemaProposalsNotPending`
+
+`approve` or `reject` named a proposal the run does not have or that is already decided, or the run has no pending proposal left. A decided proposal is not decided again; nothing changed.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.instance.ApproveSchemaProposals` on its `not-pending` outcome.
+
+Reported by `cortex.instance.RejectSchemaProposals` on its `not-pending` outcome.
+
+### `SchemaRunNotFound`
+
+The instance has no schema run by this stamp: no `schema/<stamp>/proposals.jsonl`, or one that cannot be read.
+
+It carries:
+
+- `stamp` — `String`
+- `reason` — `String`
+
+Reported by `cortex.instance.ApplySchemaProposals` on its `no-such-run` outcome.
+
+Reported by `cortex.instance.ApproveSchemaProposals` on its `no-such-run` outcome.
+
+Reported by `cortex.instance.RejectSchemaProposals` on its `no-such-run` outcome.
 
 ### `SeedChangeRefused`
 
@@ -1497,6 +1670,8 @@ It carries:
 
 - `reason` — `String`
 
+Reported by `cortex.instance.ApplySchemaProposals` on its `store-outcome-unknown` outcome.
+
 Reported by `cortex.instance.RunSource` on its `store-outcome-unknown` outcome.
 
 ### `StoreUnreadable`
@@ -1517,7 +1692,7 @@ An actor is who may ask this context for something. Every grant below points at 
 
 `cortex.instance.Operator`, shown to a person as "Operator".
 
-It may invoke [`AddSource`](#addsource), [`AdoptInstance`](#adoptinstance), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`MeasureQuality`](#measurequality), [`ProposeSchemaChanges`](#proposeschemachanges), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot) and [`UpdateInstance`](#updateinstance).
+It may invoke [`AddSource`](#addsource), [`AdoptInstance`](#adoptinstance), [`ApplySchemaProposals`](#applyschemaproposals), [`ApproveSchemaProposals`](#approveschemaproposals), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`MeasureQuality`](#measurequality), [`ProposeSchemaChanges`](#proposeschemachanges), [`RejectSchemaProposals`](#rejectschemaproposals), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot) and [`UpdateInstance`](#updateinstance).
 
 ### `Scheduler`
 
@@ -1528,4 +1703,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58` · contract digest `slice-sha256/2:b1983b6adc7d8842e9db4813bfcf4a4607ea84f282db7184e5764a85fa9b152c`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `2ce17e0fbcf490d2ef1d8e110063c04e4e9e78f0826a42886b2f5ad9c6cc68d9` · contract digest `slice-sha256/2:43225ed42ba038a39e958e5f854b03fd46a7513ab11106f58f122e45534860ce`. Do not edit this file; change the specification and regenerate it with `task generate`.

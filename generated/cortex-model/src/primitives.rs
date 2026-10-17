@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58
-// contract digest b1983b6adc7d8842e9db4813bfcf4a4607ea84f282db7184e5764a85fa9b152c
+// model digest 2ce17e0fbcf490d2ef1d8e110063c04e4e9e78f0826a42886b2f5ad9c6cc68d9
+// contract digest 43225ed42ba038a39e958e5f854b03fd46a7513ab11106f58f122e45534860ce
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! How the specification's primitives are spelled in this workspace.

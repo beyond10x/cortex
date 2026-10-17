@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58
-// contract digest b1983b6adc7d8842e9db4813bfcf4a4607ea84f282db7184e5764a85fa9b152c
+// model digest 2ce17e0fbcf490d2ef1d8e110063c04e4e9e78f0826a42886b2f5ad9c6cc68d9
+// contract digest 43225ed42ba038a39e958e5f854b03fd46a7513ab11106f58f122e45534860ce
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -63,12 +63,18 @@ pub trait SourceStorage {
 pub enum ExternalCommand<'a> {
     /// The executing `cortex.instance.AdoptInstance` input.
     CortexInstanceAdoptInstance(&'a crate::instance::AdoptInstance),
+    /// The executing `cortex.instance.ApplySchemaProposals` input.
+    CortexInstanceApplySchemaProposals(&'a crate::instance::ApplySchemaProposals),
+    /// The executing `cortex.instance.ApproveSchemaProposals` input.
+    CortexInstanceApproveSchemaProposals(&'a crate::instance::ApproveSchemaProposals),
     /// The executing `cortex.instance.CreateInstance` input.
     CortexInstanceCreateInstance(&'a crate::instance::CreateInstance),
     /// The executing `cortex.instance.MeasureQuality` input.
     CortexInstanceMeasureQuality(&'a crate::instance::MeasureQuality),
     /// The executing `cortex.instance.ProposeSchemaChanges` input.
     CortexInstanceProposeSchemaChanges(&'a crate::instance::ProposeSchemaChanges),
+    /// The executing `cortex.instance.RejectSchemaProposals` input.
+    CortexInstanceRejectSchemaProposals(&'a crate::instance::RejectSchemaProposals),
     /// The executing `cortex.instance.RestoreSnapshot` input.
     CortexInstanceRestoreSnapshot(&'a crate::instance::RestoreSnapshot),
 }
@@ -78,9 +84,12 @@ impl ExternalCommand<'_> {
     pub fn name(&self) -> &'static str {
         match self {
             Self::CortexInstanceAdoptInstance(_) => "cortex.instance.AdoptInstance",
+            Self::CortexInstanceApplySchemaProposals(_) => "cortex.instance.ApplySchemaProposals",
+            Self::CortexInstanceApproveSchemaProposals(_) => "cortex.instance.ApproveSchemaProposals",
             Self::CortexInstanceCreateInstance(_) => "cortex.instance.CreateInstance",
             Self::CortexInstanceMeasureQuality(_) => "cortex.instance.MeasureQuality",
             Self::CortexInstanceProposeSchemaChanges(_) => "cortex.instance.ProposeSchemaChanges",
+            Self::CortexInstanceRejectSchemaProposals(_) => "cortex.instance.RejectSchemaProposals",
             Self::CortexInstanceRestoreSnapshot(_) => "cortex.instance.RestoreSnapshot",
         }
     }
@@ -245,6 +254,72 @@ where
     }
 }
 
+/// `cortex.instance.ApplySchemaProposals`, generated: every outcome is one the specification fully determines.
+impl<P> crate::instance::obligations::ApplySchemaProposalsBehavior for Generated<P>
+where
+    P: TryContext + InstanceStorage,
+{
+    fn apply_schema_proposals(&mut self, input: crate::instance::ApplySchemaProposals) -> Result<crate::instance::ApplySchemaProposalsOutcome, UnmetObligation> {
+        let _ = &input;
+        // `no-such-run`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceApplySchemaProposals(&input), "no-such-run")? {
+            return Ok(crate::instance::ApplySchemaProposalsOutcome::NoSuchRun { error: crate::instance::SchemaRunNotFound { stamp: input.stamp.clone(), reason: self.ports.try_generate_string()? } });
+        }
+        // `not-approved`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceApplySchemaProposals(&input), "not-approved")? {
+            return Ok(crate::instance::ApplySchemaProposalsOutcome::NotApproved { error: crate::instance::SchemaProposalsNotApproved { reason: self.ports.try_generate_string()? } });
+        }
+        // `gate-failed`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceApplySchemaProposals(&input), "gate-failed")? {
+            return Ok(crate::instance::ApplySchemaProposalsOutcome::GateFailed { error: crate::instance::SchemaGateFailed { reason: self.ports.try_generate_string()? } });
+        }
+        // `apply-failed`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceApplySchemaProposals(&input), "apply-failed")? {
+            return Ok(crate::instance::ApplySchemaProposalsOutcome::ApplyFailed { error: crate::instance::SchemaApplyFailed { reason: self.ports.try_generate_string()? } });
+        }
+        // `store-outcome-unknown`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceApplySchemaProposals(&input), "store-outcome-unknown")? {
+            return Ok(crate::instance::ApplySchemaProposalsOutcome::StoreOutcomeUnknown { error: crate::instance::StoreOutcomeUnknown { reason: self.ports.try_generate_string()? } });
+        }
+        // `applied`: the default.
+        let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
+            return Ok(crate::instance::ApplySchemaProposalsOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        };
+        let _ = &held;
+        let next = held;
+        let answer = crate::instance::ApplySchemaProposalsOutcome::Applied { schema_proposals_applied: crate::instance::SchemaProposalsApplied { name: input.name.clone(), stamp: input.stamp.clone(), applied: self.ports.try_generate_integer()?, refused: self.ports.try_generate_integer()?, recorded_only: self.ports.try_generate_integer()?, invalid: self.ports.try_generate_integer()?, revision: self.ports.try_generate_integer()? } };
+        InstanceStorage::put(&mut self.ports, next);
+        return Ok(answer);
+    }
+}
+
+/// `cortex.instance.ApproveSchemaProposals`, generated: every outcome is one the specification fully determines.
+impl<P> crate::instance::obligations::ApproveSchemaProposalsBehavior for Generated<P>
+where
+    P: TryContext + InstanceStorage,
+{
+    fn approve_schema_proposals(&mut self, input: crate::instance::ApproveSchemaProposals) -> Result<crate::instance::ApproveSchemaProposalsOutcome, UnmetObligation> {
+        let _ = &input;
+        // `no-such-run`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceApproveSchemaProposals(&input), "no-such-run")? {
+            return Ok(crate::instance::ApproveSchemaProposalsOutcome::NoSuchRun { error: crate::instance::SchemaRunNotFound { stamp: input.stamp.clone(), reason: self.ports.try_generate_string()? } });
+        }
+        // `not-pending`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceApproveSchemaProposals(&input), "not-pending")? {
+            return Ok(crate::instance::ApproveSchemaProposalsOutcome::NotPending { error: crate::instance::SchemaProposalsNotPending { reason: self.ports.try_generate_string()? } });
+        }
+        // `approved`: the default.
+        let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
+            return Ok(crate::instance::ApproveSchemaProposalsOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        };
+        let _ = &held;
+        let next = held;
+        let answer = crate::instance::ApproveSchemaProposalsOutcome::Approved { schema_proposals_decided: crate::instance::SchemaProposalsDecided { name: input.name.clone(), stamp: input.stamp.clone(), decision: self.ports.try_generate_string()?, decided: self.ports.try_generate_integer()?, pending: self.ports.try_generate_integer()? } };
+        InstanceStorage::put(&mut self.ports, next);
+        return Ok(answer);
+    }
+}
+
 /// `cortex.instance.CreateInstance`, generated: every outcome is one the specification fully determines.
 impl<P> crate::instance::obligations::CreateInstanceBehavior for Generated<P>
 where
@@ -370,7 +445,18 @@ where
             };
             let _ = &held;
             let next = held;
-            let answer = crate::instance::ProposeSchemaChangesOutcome::Proposed { schema_changes_proposed: crate::instance::SchemaChangesProposed { name: input.name.clone(), stamp: self.ports.try_generate_string()?, revision: self.ports.try_generate_integer()?, proposed: self.ports.try_generate_integer()?, applied: self.ports.try_generate_integer()?, refused: self.ports.try_generate_integer()?, recorded_only: self.ports.try_generate_integer()?, invalid: self.ports.try_generate_integer()?, dropped: self.ports.try_generate_integer()?, cost_usd: self.ports.try_generate_optional_decimal()? } };
+            let answer = crate::instance::ProposeSchemaChangesOutcome::Proposed { schema_changes_proposed: crate::instance::SchemaChangesProposed { name: input.name.clone(), stamp: self.ports.try_generate_string()?, revision: self.ports.try_generate_integer()?, proposed: self.ports.try_generate_integer()?, applied: self.ports.try_generate_integer()?, refused: self.ports.try_generate_integer()?, recorded_only: self.ports.try_generate_integer()?, invalid: self.ports.try_generate_integer()?, pending: self.ports.try_generate_integer()?, dropped: self.ports.try_generate_integer()?, cost_usd: self.ports.try_generate_optional_decimal()? } };
+            InstanceStorage::put(&mut self.ports, next);
+            return Ok(answer);
+        }
+        // `reviewed`: an accepting branch, in declaration order.
+        if decided(Some(&input.review).map(|value| *value), "cortex.instance.ProposeSchemaChanges")? {
+            let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
+                return Ok(crate::instance::ProposeSchemaChangesOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+            };
+            let _ = &held;
+            let next = held;
+            let answer = crate::instance::ProposeSchemaChangesOutcome::Reviewed { schema_changes_proposed: crate::instance::SchemaChangesProposed { name: input.name.clone(), stamp: self.ports.try_generate_string()?, revision: self.ports.try_generate_integer()?, proposed: self.ports.try_generate_integer()?, applied: self.ports.try_generate_integer()?, refused: self.ports.try_generate_integer()?, recorded_only: self.ports.try_generate_integer()?, invalid: self.ports.try_generate_integer()?, pending: self.ports.try_generate_integer()?, dropped: self.ports.try_generate_integer()?, cost_usd: self.ports.try_generate_optional_decimal()? } };
             InstanceStorage::put(&mut self.ports, next);
             return Ok(answer);
         }
@@ -380,7 +466,7 @@ where
         };
         let _ = &held;
         let next = held;
-        let answer = crate::instance::ProposeSchemaChangesOutcome::Applied { schema_changes_proposed: crate::instance::SchemaChangesProposed { name: input.name.clone(), stamp: self.ports.try_generate_string()?, revision: self.ports.try_generate_integer()?, proposed: self.ports.try_generate_integer()?, applied: self.ports.try_generate_integer()?, refused: self.ports.try_generate_integer()?, recorded_only: self.ports.try_generate_integer()?, invalid: self.ports.try_generate_integer()?, dropped: self.ports.try_generate_integer()?, cost_usd: self.ports.try_generate_optional_decimal()? } };
+        let answer = crate::instance::ProposeSchemaChangesOutcome::Applied { schema_changes_proposed: crate::instance::SchemaChangesProposed { name: input.name.clone(), stamp: self.ports.try_generate_string()?, revision: self.ports.try_generate_integer()?, proposed: self.ports.try_generate_integer()?, applied: self.ports.try_generate_integer()?, refused: self.ports.try_generate_integer()?, recorded_only: self.ports.try_generate_integer()?, invalid: self.ports.try_generate_integer()?, pending: self.ports.try_generate_integer()?, dropped: self.ports.try_generate_integer()?, cost_usd: self.ports.try_generate_optional_decimal()? } };
         InstanceStorage::put(&mut self.ports, next);
         return Ok(answer);
     }
@@ -389,6 +475,33 @@ where
 impl<P: crate::instance::obligations::RecordFailureBehavior> crate::instance::obligations::RecordFailureBehavior for Generated<P> {
     fn record_failure(&mut self, input: crate::instance::RecordFailure) -> Result<crate::instance::RecordFailureOutcome, UnmetObligation> {
         crate::instance::obligations::RecordFailureBehavior::record_failure(&mut self.ports, input)
+    }
+}
+
+/// `cortex.instance.RejectSchemaProposals`, generated: every outcome is one the specification fully determines.
+impl<P> crate::instance::obligations::RejectSchemaProposalsBehavior for Generated<P>
+where
+    P: TryContext + InstanceStorage,
+{
+    fn reject_schema_proposals(&mut self, input: crate::instance::RejectSchemaProposals) -> Result<crate::instance::RejectSchemaProposalsOutcome, UnmetObligation> {
+        let _ = &input;
+        // `no-such-run`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceRejectSchemaProposals(&input), "no-such-run")? {
+            return Ok(crate::instance::RejectSchemaProposalsOutcome::NoSuchRun { error: crate::instance::SchemaRunNotFound { stamp: input.stamp.clone(), reason: self.ports.try_generate_string()? } });
+        }
+        // `not-pending`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceRejectSchemaProposals(&input), "not-pending")? {
+            return Ok(crate::instance::RejectSchemaProposalsOutcome::NotPending { error: crate::instance::SchemaProposalsNotPending { reason: self.ports.try_generate_string()? } });
+        }
+        // `rejected`: the default.
+        let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
+            return Ok(crate::instance::RejectSchemaProposalsOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        };
+        let _ = &held;
+        let next = held;
+        let answer = crate::instance::RejectSchemaProposalsOutcome::Rejected { schema_proposals_decided: crate::instance::SchemaProposalsDecided { name: input.name.clone(), stamp: input.stamp.clone(), decision: self.ports.try_generate_string()?, decided: self.ports.try_generate_integer()?, pending: self.ports.try_generate_integer()? } };
+        InstanceStorage::put(&mut self.ports, next);
+        return Ok(answer);
     }
 }
 

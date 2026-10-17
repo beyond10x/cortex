@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58",
-    "contract_digest": "b1983b6adc7d8842e9db4813bfcf4a4607ea84f282db7184e5764a85fa9b152c",
+    "spec_digest": "2ce17e0fbcf490d2ef1d8e110063c04e4e9e78f0826a42886b2f5ad9c6cc68d9",
+    "contract_digest": "43225ed42ba038a39e958e5f854b03fd46a7513ab11106f58f122e45534860ce",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
@@ -222,6 +222,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -357,6 +365,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -555,6 +571,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -877,6 +901,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -1066,6 +1098,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -1343,6 +1383,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -1709,6 +1757,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -1794,6 +1850,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -1993,6 +2057,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -2270,6 +2342,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -2459,6 +2539,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -2736,6 +2824,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -2931,6 +3027,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -3208,6 +3312,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -3233,6 +3345,2529 @@
         {
           "kind": "error",
           "name": "cortex.instance.StoreUnreadable"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.ApplySchemaProposals/outcome/applied": {
+      "purpose": "`cortex.instance.ApplySchemaProposals` answers `applied` for an input no other branch's guard claims",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "batch_chars": 1.0,
+                  "budget_tokens": 1.0,
+                  "budget_usd": 1.0,
+                  "daily_ceiling_tokens": 1.0,
+                  "daily_ceiling_usd": 1.0,
+                  "gateway": {
+                    "base_url": "spec.model.gateway.base_url",
+                    "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
+                    "token_env": "spec.model.gateway.token_env"
+                  },
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.ApplySchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "applied"
+          }
+        },
+        {
+          "step": "expect_event_values",
+          "event": "cortex.instance.SchemaProposalsApplied",
+          "payload": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          },
+          "shape": {
+            "applied": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "invalid": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "name": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "recorded_only": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "refused": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "revision": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "stamp": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Instances"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Instances",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "description": {
+                "kind": "literal",
+                "value": "description"
+              },
+              "ekr_version": {
+                "kind": "literal",
+                "value": "ekr_version"
+              },
+              "model": {
+                "kind": "literal",
+                "value": "model"
+              },
+              "name": {
+                "kind": "instance",
+                "instance": "instance"
+              },
+              "seed_digest": {
+                "kind": "literal",
+                "value": "seed_digest"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Active"
+              }
+            }
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.ApplySchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "applied"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Instances"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.ApplySchemaProposals/outcome/apply-failed": {
+      "purpose": "`cortex.instance.ApplySchemaProposals` answers `apply-failed` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "apply-failed"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.ApplySchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "apply-failed"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.SchemaApplyFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.ApplySchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "apply-failed"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.SchemaApplyFailed"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.ApplySchemaProposals/outcome/gate-failed": {
+      "purpose": "`cortex.instance.ApplySchemaProposals` answers `gate-failed` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "gate-failed"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.ApplySchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "gate-failed"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.SchemaGateFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.ApplySchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "gate-failed"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.SchemaGateFailed"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.ApplySchemaProposals/outcome/no-such-instance": {
+      "purpose": "`cortex.instance.ApplySchemaProposals` for an identity no record carries takes `no-such-instance` and reports `cortex.instance.InstanceNotFound`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.ApplySchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name-1048576"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "no-such-instance"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.InstanceNotFound",
+          "fields": {
+            "name": "name-1048576"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.ApplySchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "no-such-instance"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.InstanceNotFound"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.ApplySchemaProposals/outcome/no-such-run": {
+      "purpose": "`cortex.instance.ApplySchemaProposals` answers `no-such-run` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "no-such-run"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.ApplySchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "no-such-run"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.SchemaRunNotFound",
+          "fields": {
+            "stamp": "stamp"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.ApplySchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "no-such-run"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.SchemaRunNotFound"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.ApplySchemaProposals/outcome/not-approved": {
+      "purpose": "`cortex.instance.ApplySchemaProposals` answers `not-approved` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "not-approved"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.ApplySchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "not-approved"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.SchemaProposalsNotApproved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.ApplySchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "not-approved"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.SchemaProposalsNotApproved"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.ApplySchemaProposals/outcome/store-outcome-unknown": {
+      "purpose": "`cortex.instance.ApplySchemaProposals` answers `store-outcome-unknown` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "store-outcome-unknown"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.ApplySchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "store-outcome-unknown"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.StoreOutcomeUnknown"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.ApplySchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.ApplySchemaProposals",
+            "outcome": "store-outcome-unknown"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.StoreOutcomeUnknown"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.ApproveSchemaProposals/outcome/approved": {
+      "purpose": "`cortex.instance.ApproveSchemaProposals` answers `approved` for an input no other branch's guard claims",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "batch_chars": 1.0,
+                  "budget_tokens": 1.0,
+                  "budget_usd": 1.0,
+                  "daily_ceiling_tokens": 1.0,
+                  "daily_ceiling_usd": 1.0,
+                  "gateway": {
+                    "base_url": "spec.model.gateway.base_url",
+                    "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
+                    "token_env": "spec.model.gateway.token_env"
+                  },
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.ApproveSchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "by": {
+              "kind": "literal",
+              "value": "by"
+            },
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "only": {
+              "kind": "literal",
+              "value": []
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.ApproveSchemaProposals",
+            "outcome": "approved"
+          }
+        },
+        {
+          "step": "expect_event_values",
+          "event": "cortex.instance.SchemaProposalsDecided",
+          "payload": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          },
+          "shape": {
+            "decided": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "decision": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "name": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "pending": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "stamp": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Instances"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Instances",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "description": {
+                "kind": "literal",
+                "value": "description"
+              },
+              "ekr_version": {
+                "kind": "literal",
+                "value": "ekr_version"
+              },
+              "model": {
+                "kind": "literal",
+                "value": "model"
+              },
+              "name": {
+                "kind": "instance",
+                "instance": "instance"
+              },
+              "seed_digest": {
+                "kind": "literal",
+                "value": "seed_digest"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Active"
+              }
+            }
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.ApproveSchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.ApproveSchemaProposals",
+            "outcome": "approved"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Instances"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.ApproveSchemaProposals/outcome/no-such-instance": {
+      "purpose": "`cortex.instance.ApproveSchemaProposals` for an identity no record carries takes `no-such-instance` and reports `cortex.instance.InstanceNotFound`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.ApproveSchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "by": {
+              "kind": "literal",
+              "value": "by"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name-1048576"
+            },
+            "only": {
+              "kind": "literal",
+              "value": []
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.ApproveSchemaProposals",
+            "outcome": "no-such-instance"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.InstanceNotFound",
+          "fields": {
+            "name": "name-1048576"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.ApproveSchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.ApproveSchemaProposals",
+            "outcome": "no-such-instance"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.InstanceNotFound"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.ApproveSchemaProposals/outcome/no-such-run": {
+      "purpose": "`cortex.instance.ApproveSchemaProposals` answers `no-such-run` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.ApproveSchemaProposals",
+            "outcome": "no-such-run"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.ApproveSchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "by": {
+              "kind": "literal",
+              "value": "by"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "only": {
+              "kind": "literal",
+              "value": []
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.ApproveSchemaProposals",
+            "outcome": "no-such-run"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.SchemaRunNotFound",
+          "fields": {
+            "stamp": "stamp"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.ApproveSchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.ApproveSchemaProposals",
+            "outcome": "no-such-run"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.SchemaRunNotFound"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.ApproveSchemaProposals/outcome/not-pending": {
+      "purpose": "`cortex.instance.ApproveSchemaProposals` answers `not-pending` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.ApproveSchemaProposals",
+            "outcome": "not-pending"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.ApproveSchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "by": {
+              "kind": "literal",
+              "value": "by"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "only": {
+              "kind": "literal",
+              "value": []
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.ApproveSchemaProposals",
+            "outcome": "not-pending"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.SchemaProposalsNotPending"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.ApproveSchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.ApproveSchemaProposals",
+            "outcome": "not-pending"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.SchemaProposalsNotPending"
         },
         {
           "kind": "actor",
@@ -3393,6 +6028,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -3673,6 +6316,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -3860,6 +6511,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -4179,6 +6838,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -4544,6 +7211,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -4894,6 +7569,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -4986,6 +7669,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -5187,6 +7878,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -5509,6 +8208,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -5694,6 +8401,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -5971,6 +8686,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -6337,6 +9060,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -6495,6 +9226,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -6589,6 +9328,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -6659,6 +9406,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -6946,6 +9701,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -7045,6 +9808,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -7270,6 +10041,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -7395,6 +10174,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -7497,6 +10284,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -7567,6 +10362,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -7834,6 +10637,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -7959,6 +10770,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -8057,6 +10876,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -8127,6 +10954,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -8232,6 +11067,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -8302,6 +11145,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -8472,6 +11323,10 @@
               "kind": "instance",
               "instance": "instance"
             },
+            "review": {
+              "kind": "literal",
+              "value": false
+            },
             "sample": {
               "kind": "literal",
               "value": 1.0
@@ -8515,6 +11370,10 @@
             "name": {
               "holds": "primitive",
               "kind": "string"
+            },
+            "pending": {
+              "holds": "primitive",
+              "kind": "integer"
             },
             "proposed": {
               "holds": "primitive",
@@ -8565,6 +11424,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -8693,6 +11560,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -8740,6 +11615,10 @@
             "name": {
               "kind": "literal",
               "value": "name-1048576"
+            },
+            "review": {
+              "kind": "literal",
+              "value": true
             },
             "sample": {
               "kind": "literal",
@@ -8792,6 +11671,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -8868,6 +11755,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -8923,6 +11818,10 @@
               "kind": "literal",
               "value": "name"
             },
+            "review": {
+              "kind": "literal",
+              "value": true
+            },
             "sample": {
               "kind": "literal",
               "value": 1.0
@@ -8971,6 +11870,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -9044,6 +11951,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -9214,6 +12129,10 @@
               "kind": "instance",
               "instance": "instance"
             },
+            "review": {
+              "kind": "literal",
+              "value": true
+            },
             "sample": {
               "kind": "literal",
               "value": 1.0
@@ -9257,6 +12176,10 @@
             "name": {
               "holds": "primitive",
               "kind": "string"
+            },
+            "pending": {
+              "holds": "primitive",
+              "kind": "integer"
             },
             "proposed": {
               "holds": "primitive",
@@ -9307,6 +12230,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -9435,6 +12366,426 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Instances"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.ProposeSchemaChanges/outcome/reviewed": {
+      "purpose": "`cortex.instance.ProposeSchemaChanges` answers `reviewed` for an input that satisfies that branch's guard",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "batch_chars": 1.0,
+                  "budget_tokens": 1.0,
+                  "budget_usd": 1.0,
+                  "daily_ceiling_tokens": 1.0,
+                  "daily_ceiling_usd": 1.0,
+                  "gateway": {
+                    "base_url": "spec.model.gateway.base_url",
+                    "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
+                    "token_env": "spec.model.gateway.token_env"
+                  },
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.ProposeSchemaChanges",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "dry_run": {
+              "kind": "literal",
+              "value": false
+            },
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "review": {
+              "kind": "literal",
+              "value": true
+            },
+            "sample": {
+              "kind": "literal",
+              "value": 1.0
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.ProposeSchemaChanges",
+            "outcome": "reviewed"
+          }
+        },
+        {
+          "step": "expect_event_values",
+          "event": "cortex.instance.SchemaChangesProposed",
+          "payload": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            }
+          },
+          "shape": {
+            "applied": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "cost_usd": {
+              "holds": "primitive",
+              "kind": "decimal",
+              "optional": true
+            },
+            "dropped": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "invalid": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "name": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "pending": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "proposed": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "recorded_only": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "refused": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "revision": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "stamp": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Instances"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Instances",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "description": {
+                "kind": "literal",
+                "value": "description"
+              },
+              "ekr_version": {
+                "kind": "literal",
+                "value": "ekr_version"
+              },
+              "model": {
+                "kind": "literal",
+                "value": "model"
+              },
+              "name": {
+                "kind": "instance",
+                "instance": "instance"
+              },
+              "seed_digest": {
+                "kind": "literal",
+                "value": "seed_digest"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Active"
+              }
+            }
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.ProposeSchemaChanges"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.ProposeSchemaChanges",
+            "outcome": "reviewed"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -9490,6 +12841,10 @@
               "kind": "literal",
               "value": "name"
             },
+            "review": {
+              "kind": "literal",
+              "value": true
+            },
             "sample": {
               "kind": "literal",
               "value": 1.0
@@ -9538,6 +12893,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -9611,6 +12974,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -9913,6 +13284,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -10079,6 +13458,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -10439,6 +13826,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -10611,6 +14006,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -10713,6 +14116,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -10786,6 +14197,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -10815,6 +14234,1009 @@
         {
           "kind": "actor",
           "name": "cortex.instance.Scheduler"
+        }
+      ]
+    },
+    "cortex.instance.RejectSchemaProposals/outcome/no-such-instance": {
+      "purpose": "`cortex.instance.RejectSchemaProposals` for an identity no record carries takes `no-such-instance` and reports `cortex.instance.InstanceNotFound`",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RejectSchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "by": {
+              "kind": "literal",
+              "value": "by"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name-1048576"
+            },
+            "only": {
+              "kind": "literal",
+              "value": []
+            },
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RejectSchemaProposals",
+            "outcome": "no-such-instance"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.InstanceNotFound",
+          "fields": {
+            "name": "name-1048576"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RejectSchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RejectSchemaProposals",
+            "outcome": "no-such-instance"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.InstanceNotFound"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.RejectSchemaProposals/outcome/no-such-run": {
+      "purpose": "`cortex.instance.RejectSchemaProposals` answers `no-such-run` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.RejectSchemaProposals",
+            "outcome": "no-such-run"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RejectSchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "by": {
+              "kind": "literal",
+              "value": "by"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "only": {
+              "kind": "literal",
+              "value": []
+            },
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RejectSchemaProposals",
+            "outcome": "no-such-run"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.SchemaRunNotFound",
+          "fields": {
+            "stamp": "stamp"
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RejectSchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RejectSchemaProposals",
+            "outcome": "no-such-run"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.SchemaRunNotFound"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.RejectSchemaProposals/outcome/not-pending": {
+      "purpose": "`cortex.instance.RejectSchemaProposals` answers `not-pending` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.RejectSchemaProposals",
+            "outcome": "not-pending"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RejectSchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "by": {
+              "kind": "literal",
+              "value": "by"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "only": {
+              "kind": "literal",
+              "value": []
+            },
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RejectSchemaProposals",
+            "outcome": "not-pending"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.SchemaProposalsNotPending"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RejectSchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RejectSchemaProposals",
+            "outcome": "not-pending"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.SchemaProposalsNotPending"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.RejectSchemaProposals/outcome/rejected": {
+      "purpose": "`cortex.instance.RejectSchemaProposals` answers `rejected` for an input no other branch's guard claims",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "description"
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "ekr_version"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "model"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "seed_digest"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "spec.description",
+                "ekr": {
+                  "bin": "spec.ekr.bin",
+                  "version": "spec.ekr.version"
+                },
+                "format": "spec.format",
+                "gate": {
+                  "checks": []
+                },
+                "model": {
+                  "backend": "Claude",
+                  "batch_chars": 1.0,
+                  "budget_tokens": 1.0,
+                  "budget_usd": 1.0,
+                  "daily_ceiling_tokens": 1.0,
+                  "daily_ceiling_usd": 1.0,
+                  "gateway": {
+                    "base_url": "spec.model.gateway.base_url",
+                    "max_context_tokens": 1.0,
+                    "max_output_tokens": 1.0,
+                    "token_env": "spec.model.gateway.token_env"
+                  },
+                  "instructions": "spec.model.instructions",
+                  "model": "spec.model.model",
+                  "timeout_s": 1.0
+                },
+                "monitoring": {
+                  "hook": {
+                    "command": [],
+                    "timeout_s": 1.0
+                  },
+                  "metrics": true
+                },
+                "name": "spec.name",
+                "redaction": {
+                  "classes": [],
+                  "known_names": [],
+                  "rare_limit": 1.0,
+                  "refuse_if_left": [],
+                  "rules": []
+                },
+                "seed": {
+                  "documents": [],
+                  "ekr_seed": "spec.seed.ekr_seed",
+                  "schema": "spec.seed.schema"
+                },
+                "serve": {
+                  "view_port": 1.0
+                },
+                "snapshots": {
+                  "keep": 1.0
+                },
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "spec.store.config",
+                    "connection": {
+                      "adapter": "spec.store.connection.adapter",
+                      "connection": "spec.store.connection.connection",
+                      "profile": "spec.store.connection.profile"
+                    },
+                    "schema_connection": {
+                      "adapter": "spec.store.schema_connection.adapter",
+                      "connection": "spec.store.schema_connection.connection",
+                      "profile": "spec.store.schema_connection.profile"
+                    }
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "store"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "capture_instance",
+          "instance": "instance",
+          "entity": "cortex.instance.Instance",
+          "event": "cortex.instance.InstanceAdopted",
+          "field": "name"
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.RejectSchemaProposals",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "by": {
+              "kind": "literal",
+              "value": "by"
+            },
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "only": {
+              "kind": "literal",
+              "value": []
+            },
+            "reason": {
+              "kind": "literal",
+              "value": "reason"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.RejectSchemaProposals",
+            "outcome": "rejected"
+          }
+        },
+        {
+          "step": "expect_event_values",
+          "event": "cortex.instance.SchemaProposalsDecided",
+          "payload": {
+            "name": {
+              "kind": "instance",
+              "instance": "instance"
+            },
+            "stamp": {
+              "kind": "literal",
+              "value": "stamp"
+            }
+          },
+          "shape": {
+            "decided": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "decision": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "name": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "pending": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "stamp": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          }
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        },
+        {
+          "step": "query_view",
+          "view": "cortex.instance.Instances"
+        },
+        {
+          "step": "expect_view",
+          "view": "cortex.instance.Instances",
+          "expectation": {
+            "expect": "contains",
+            "fields": {
+              "description": {
+                "kind": "literal",
+                "value": "description"
+              },
+              "ekr_version": {
+                "kind": "literal",
+                "value": "ekr_version"
+              },
+              "model": {
+                "kind": "literal",
+                "value": "model"
+              },
+              "name": {
+                "kind": "instance",
+                "instance": "instance"
+              },
+              "seed_digest": {
+                "kind": "literal",
+                "value": "seed_digest"
+              },
+              "state": {
+                "kind": "literal",
+                "value": "Active"
+              }
+            }
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "entity",
+          "name": "cortex.instance.Instance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.RejectSchemaProposals"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.RejectSchemaProposals",
+            "outcome": "rejected"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "view",
+          "name": "cortex.instance.Instances"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
         }
       ]
     },
@@ -10877,6 +15299,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -10950,6 +15380,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -11171,6 +15609,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -11296,6 +15742,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -11401,6 +15855,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -11471,6 +15933,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -11576,6 +16046,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -11646,6 +16124,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -11747,6 +16233,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -11817,6 +16311,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -11925,6 +16427,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -11995,6 +16505,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -12232,6 +16750,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SourceAdded"
         },
         {
@@ -12350,6 +16876,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -12636,6 +17170,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -12781,6 +17323,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -13075,6 +17625,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -13220,6 +17778,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -13514,6 +18080,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -13659,6 +18233,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -14075,6 +18657,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -14242,6 +18832,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -14528,6 +19126,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -14673,6 +19279,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -14967,6 +19581,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -15112,6 +19734,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -15506,6 +20136,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -15616,6 +20254,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -16063,6 +20709,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -16221,6 +20875,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -16319,6 +20981,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -16389,6 +21059,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -16764,6 +21442,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -16909,6 +21595,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -17199,6 +21893,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -17344,6 +22046,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -22079,6 +26789,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -22196,6 +26914,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -22560,6 +27286,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -22670,6 +27404,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -23030,6 +27772,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -23199,6 +27949,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -23569,6 +28327,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -23724,6 +28490,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -23907,6 +28681,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -23977,6 +28759,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -24143,6 +28933,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -24489,6 +29287,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -24817,6 +29623,14 @@
         },
         {
           "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
           "name": "cortex.instance.SnapshotRestored"
         },
         {
@@ -24984,6 +29798,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -25312,6 +30134,14 @@
         },
         {
           "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
           "event": "cortex.instance.SnapshotRestored"
         },
         {
@@ -25622,6 +30452,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",
@@ -25958,6 +30796,14 @@
         {
           "step": "expect_no_event",
           "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "step": "expect_no_event",
@@ -26312,6 +31158,14 @@
         {
           "kind": "event",
           "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
         },
         {
           "kind": "event",

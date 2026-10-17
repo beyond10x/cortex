@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest fb56b7a67e9f6a2966abcb282fce966ede50929d42eba598d7d30c0c223ccd58
-// contract digest b1983b6adc7d8842e9db4813bfcf4a4607ea84f282db7184e5764a85fa9b152c
+// model digest 2ce17e0fbcf490d2ef1d8e110063c04e4e9e78f0826a42886b2f5ad9c6cc68d9
+// contract digest 43225ed42ba038a39e958e5f854b03fd46a7513ab11106f58f122e45534860ce
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -650,11 +650,21 @@ pub struct SchemaProposal {
     pub revision: Option<i64>,
     /// `schema_version` — `Optional<String>`.
     pub schema_version: Option<String>,
+    /// `decision_reason` — `Optional<String>`.
+    pub decision_reason: Option<String>,
+    /// `decided_by` — `Optional<String>`.
+    pub decided_by: Option<String>,
 }
 
 /// SchemaProposalStatus — `cortex.instance.SchemaProposalStatus`: one of a closed set of names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SchemaProposalStatus {
+    /// `pending`.
+    Pending,
+    /// `approved`.
+    Approved,
+    /// `rejected`.
+    Rejected,
     /// `applied`.
     Applied,
     /// `refused`.
@@ -1621,6 +1631,127 @@ pub enum AdoptInstanceOutcome {
     },
 }
 
+/// Apply approved schema proposals — the input of `cortex.instance.ApplySchemaProposals`.
+///
+/// Everything it can result in is [`ApplySchemaProposalsOutcome`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApplySchemaProposals {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `stamp` — `String`.
+    pub stamp: String,
+}
+
+/// Everything `cortex.instance.ApplySchemaProposals` can result in — one variant per declared outcome.
+///
+/// An infrastructure failure is deliberately not in here: a refusal is a fact about the domain,
+/// a transport fault is a fact about the run, and conflating the two is what the declared
+/// outcomes exist to prevent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ApplySchemaProposalsOutcome {
+    /// `no-such-run` — externally decided (The instance has no readable `schema/<stamp>/proposals.jsonl`).
+    ///
+    /// Nothing was applied.
+    NoSuchRun {
+        /// Why it was refused: `cortex.instance.SchemaRunNotFound`.
+        error: SchemaRunNotFound,
+    },
+    /// `not-approved` — externally decided (The run holds no `approved` proposal).
+    ///
+    /// Nothing was applied.
+    NotApproved {
+        /// Why it was refused: `cortex.instance.SchemaProposalsNotApproved`.
+        error: SchemaProposalsNotApproved,
+    },
+    /// `gate-failed` — externally decided (The store after the changes fails a check of the spec's gate).
+    ///
+    /// Nothing was published; every approved proposal is still `approved`, and the store's head is where it was (`postgres`) or back at the snapshot (`sqlite`).
+    GateFailed {
+        /// Why it was refused: `cortex.instance.SchemaGateFailed`.
+        error: SchemaGateFailed,
+    },
+    /// `apply-failed` — externally decided (EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction).
+    ///
+    /// Nothing was published; every approved proposal is still `approved`.
+    ApplyFailed {
+        /// Why it was refused: `cortex.instance.SchemaApplyFailed`.
+        error: SchemaApplyFailed,
+    },
+    /// `store-outcome-unknown` — externally decided (EKR cannot say whether the stage's begin or publish took effect).
+    ///
+    /// Every approved proposal is still `approved`. The stage is kept in `stage.json`, and the next run of a source settles it.
+    StoreOutcomeUnknown {
+        /// Why it was refused: `cortex.instance.StoreOutcomeUnknown`.
+        error: StoreOutcomeUnknown,
+    },
+    /// `applied` — otherwise.
+    ///
+    /// Every approved proposal is decided: `applied` with the revision and schema version it committed, or `refused`, `recorded-only` or `invalid` with why. `revision` is the store's head after the apply. Proposals still `pending` stay so.
+    Applied {
+        /// The `cortex.instance.SchemaProposalsApplied` this outcome publishes.
+        schema_proposals_applied: SchemaProposalsApplied,
+    },
+    /// `no-such-instance` — for an identity no record carries.
+    ///
+    /// Nothing was applied.
+    NoSuchInstance {
+        /// Why it was refused: `cortex.instance.InstanceNotFound`.
+        error: InstanceNotFound,
+    },
+}
+
+/// Approve schema proposals — the input of `cortex.instance.ApproveSchemaProposals`.
+///
+/// Everything it can result in is [`ApproveSchemaProposalsOutcome`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApproveSchemaProposals {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `stamp` — `String`.
+    pub stamp: String,
+    /// `only` — `List<Integer>`.
+    pub only: Vec<i64>,
+    /// `by` — `Optional<String>`.
+    pub by: Option<String>,
+}
+
+/// Everything `cortex.instance.ApproveSchemaProposals` can result in — one variant per declared outcome.
+///
+/// An infrastructure failure is deliberately not in here: a refusal is a fact about the domain,
+/// a transport fault is a fact about the run, and conflating the two is what the declared
+/// outcomes exist to prevent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ApproveSchemaProposalsOutcome {
+    /// `no-such-run` — externally decided (The instance has no readable `schema/<stamp>/proposals.jsonl`).
+    ///
+    /// Nothing was decided.
+    NoSuchRun {
+        /// Why it was refused: `cortex.instance.SchemaRunNotFound`.
+        error: SchemaRunNotFound,
+    },
+    /// `not-pending` — externally decided (A proposal `only` names is not in the run or is not `pending`, or the run has no pending proposal).
+    ///
+    /// Nothing was decided.
+    NotPending {
+        /// Why it was refused: `cortex.instance.SchemaProposalsNotPending`.
+        error: SchemaProposalsNotPending,
+    },
+    /// `approved` — otherwise.
+    ///
+    /// Each named proposal is `approved`; `decided` counts them, `pending` what the run still holds undecided. `decision` is `approved`.
+    Approved {
+        /// The `cortex.instance.SchemaProposalsDecided` this outcome publishes.
+        schema_proposals_decided: SchemaProposalsDecided,
+    },
+    /// `no-such-instance` — for an identity no record carries.
+    ///
+    /// Nothing was decided.
+    NoSuchInstance {
+        /// Why it was refused: `cortex.instance.InstanceNotFound`.
+        error: InstanceNotFound,
+    },
+}
+
 /// Create an instance — the input of `cortex.instance.CreateInstance`.
 ///
 /// Everything it can result in is [`CreateInstanceOutcome`].
@@ -1782,6 +1913,8 @@ pub struct ProposeSchemaChanges {
     pub sample: i64,
     /// `dry_run` — `Boolean`.
     pub dry_run: bool,
+    /// `review` — `Boolean`.
+    pub review: bool,
 }
 
 /// Everything `cortex.instance.ProposeSchemaChanges` can result in — one variant per declared outcome.
@@ -1809,6 +1942,13 @@ pub enum ProposeSchemaChangesOutcome {
     ///
     /// A dry run: every proposal not dropped is recorded and none is applied; `applied` and `refused` are 0, and a change EKR would be asked to apply is `dry-run`. `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it.
     Proposed {
+        /// The `cortex.instance.SchemaChangesProposed` this outcome publishes.
+        schema_changes_proposed: SchemaChangesProposed,
+    },
+    /// `reviewed` — when `review`.
+    ///
+    /// A review run: every proposal not dropped is recorded `pending` and none is applied, except one whose name holds a placeholder of the redaction policy, `invalid`; `pending` counts them and `applied`, `refused` and `recorded_only` are 0. `stamp` names the run for `approve`, `reject` and `apply`. `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it.
+    Reviewed {
         /// The `cortex.instance.SchemaChangesProposed` this outcome publishes.
         schema_changes_proposed: SchemaChangesProposed,
     },
@@ -1873,6 +2013,60 @@ pub enum RecordFailureOutcome {
     NoSuchSource {
         /// Why it was refused: `cortex.instance.SourceNotFound`.
         error: SourceNotFound,
+    },
+}
+
+/// Reject schema proposals — the input of `cortex.instance.RejectSchemaProposals`.
+///
+/// Everything it can result in is [`RejectSchemaProposalsOutcome`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RejectSchemaProposals {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `stamp` — `String`.
+    pub stamp: String,
+    /// `only` — `List<Integer>`.
+    pub only: Vec<i64>,
+    /// `reason` — `String`.
+    pub reason: String,
+    /// `by` — `Optional<String>`.
+    pub by: Option<String>,
+}
+
+/// Everything `cortex.instance.RejectSchemaProposals` can result in — one variant per declared outcome.
+///
+/// An infrastructure failure is deliberately not in here: a refusal is a fact about the domain,
+/// a transport fault is a fact about the run, and conflating the two is what the declared
+/// outcomes exist to prevent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RejectSchemaProposalsOutcome {
+    /// `no-such-run` — externally decided (The instance has no readable `schema/<stamp>/proposals.jsonl`).
+    ///
+    /// Nothing was decided.
+    NoSuchRun {
+        /// Why it was refused: `cortex.instance.SchemaRunNotFound`.
+        error: SchemaRunNotFound,
+    },
+    /// `not-pending` — externally decided (A proposal `only` names is not in the run or is not `pending`, the run has no pending proposal, or the reason is blank).
+    ///
+    /// Nothing was decided.
+    NotPending {
+        /// Why it was refused: `cortex.instance.SchemaProposalsNotPending`.
+        error: SchemaProposalsNotPending,
+    },
+    /// `rejected` — otherwise.
+    ///
+    /// Each named proposal is `rejected` with the reason; `decided` counts them, `pending` what the run still holds undecided. `decision` is `rejected`.
+    Rejected {
+        /// The `cortex.instance.SchemaProposalsDecided` this outcome publishes.
+        schema_proposals_decided: SchemaProposalsDecided,
+    },
+    /// `no-such-instance` — for an identity no record carries.
+    ///
+    /// Nothing was decided.
+    NoSuchInstance {
+        /// Why it was refused: `cortex.instance.InstanceNotFound`.
+        error: InstanceNotFound,
     },
 }
 
@@ -2217,10 +2411,46 @@ pub struct SchemaChangesProposed {
     pub recorded_only: i64,
     /// `invalid` — `Integer`.
     pub invalid: i64,
+    /// `pending` — `Integer`.
+    pub pending: i64,
     /// `dropped` — `Integer`.
     pub dropped: i64,
     /// `cost_usd` — `Optional<Decimal>`.
     pub cost_usd: Option<crate::primitives::Decimal>,
+}
+
+/// SchemaProposalsApplied — the event `cortex.instance.SchemaProposalsApplied`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaProposalsApplied {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `stamp` — `String`.
+    pub stamp: String,
+    /// `applied` — `Integer`.
+    pub applied: i64,
+    /// `refused` — `Integer`.
+    pub refused: i64,
+    /// `recorded_only` — `Integer`.
+    pub recorded_only: i64,
+    /// `invalid` — `Integer`.
+    pub invalid: i64,
+    /// `revision` — `Integer`.
+    pub revision: i64,
+}
+
+/// SchemaProposalsDecided — the event `cortex.instance.SchemaProposalsDecided`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaProposalsDecided {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `stamp` — `String`.
+    pub stamp: String,
+    /// `decision` — `String`.
+    pub decision: String,
+    /// `decided` — `Integer`.
+    pub decided: i64,
+    /// `pending` — `Integer`.
+    pub pending: i64,
 }
 
 /// SnapshotRestored — the event `cortex.instance.SnapshotRestored`.
@@ -2452,6 +2682,53 @@ pub struct SampleFailed {
     pub reason: String,
 }
 
+/// The declared error `cortex.instance.SchemaApplyFailed`.
+///
+/// EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction. Nothing was published: the stage was abandoned, or on `sqlite` the snapshot taken before was restored; every approved proposal is still `approved`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaApplyFailed {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
+/// The declared error `cortex.instance.SchemaGateFailed`.
+///
+/// The applied schema changes failed the spec's `gate`. Nothing was published: the stage was abandoned, or on `sqlite` the snapshot taken before was restored; every approved proposal is still `approved`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaGateFailed {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
+/// The declared error `cortex.instance.SchemaProposalsNotApproved`.
+///
+/// `apply` found no approved proposal in the run: none was approved, or every approved one is applied or decided. Nothing was applied.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaProposalsNotApproved {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
+/// The declared error `cortex.instance.SchemaProposalsNotPending`.
+///
+/// `approve` or `reject` named a proposal the run does not have or that is already decided, or the run has no pending proposal left. A decided proposal is not decided again; nothing changed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaProposalsNotPending {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
+/// The declared error `cortex.instance.SchemaRunNotFound`.
+///
+/// The instance has no schema run by this stamp: no `schema/<stamp>/proposals.jsonl`, or one that cannot be read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaRunNotFound {
+    /// `stamp` — `String`.
+    pub stamp: String,
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
 /// The declared error `cortex.instance.SeedChangeRefused`.
 ///
 /// An update may change sources, model and serve settings only; the seed of an existing store cannot change.
@@ -2622,6 +2899,28 @@ pub mod obligations {
         fn adopt_instance(&mut self, input: super::AdoptInstance) -> Result<super::AdoptInstanceOutcome, crate::obligation::UnmetObligation>;
     }
 
+    /// The behaviour `cortex.instance.ApplySchemaProposals` — generated.
+    ///
+    /// The specification fully determines it: [`crate::behaviour::Generated`] implements it
+    /// over the storage and context ports. Implement it yourself to replace that behaviour.
+    pub trait ApplySchemaProposalsBehavior {
+        /// Decides and enacts exactly one declared outcome of `cortex.instance.ApplySchemaProposals`.
+        ///
+        /// `Err` is the typed refusal of a request the model declares no outcome for.
+        fn apply_schema_proposals(&mut self, input: super::ApplySchemaProposals) -> Result<super::ApplySchemaProposalsOutcome, crate::obligation::UnmetObligation>;
+    }
+
+    /// The behaviour `cortex.instance.ApproveSchemaProposals` — generated.
+    ///
+    /// The specification fully determines it: [`crate::behaviour::Generated`] implements it
+    /// over the storage and context ports. Implement it yourself to replace that behaviour.
+    pub trait ApproveSchemaProposalsBehavior {
+        /// Decides and enacts exactly one declared outcome of `cortex.instance.ApproveSchemaProposals`.
+        ///
+        /// `Err` is the typed refusal of a request the model declares no outcome for.
+        fn approve_schema_proposals(&mut self, input: super::ApproveSchemaProposals) -> Result<super::ApproveSchemaProposalsOutcome, crate::obligation::UnmetObligation>;
+    }
+
     /// The behaviour `cortex.instance.CreateInstance` — generated.
     ///
     /// The specification fully determines it: [`crate::behaviour::Generated`] implements it
@@ -2677,6 +2976,17 @@ pub mod obligations {
         /// `Err` is the typed refusal of an obligation nothing has satisfied; a satisfying
         /// implementation never returns it.
         fn record_failure(&mut self, input: super::RecordFailure) -> Result<super::RecordFailureOutcome, crate::obligation::UnmetObligation>;
+    }
+
+    /// The behaviour `cortex.instance.RejectSchemaProposals` — generated.
+    ///
+    /// The specification fully determines it: [`crate::behaviour::Generated`] implements it
+    /// over the storage and context ports. Implement it yourself to replace that behaviour.
+    pub trait RejectSchemaProposalsBehavior {
+        /// Decides and enacts exactly one declared outcome of `cortex.instance.RejectSchemaProposals`.
+        ///
+        /// `Err` is the typed refusal of a request the model declares no outcome for.
+        fn reject_schema_proposals(&mut self, input: super::RejectSchemaProposals) -> Result<super::RejectSchemaProposalsOutcome, crate::obligation::UnmetObligation>;
     }
 
     /// The behaviour `cortex.instance.RemoveInstance` — generated.
