@@ -44,16 +44,35 @@ pub struct Purge {
     pub reviews: i64,
 }
 
+/// The `Err` of [`RecordStore::put_vote`] and [`RecordStore::put_review`] when the answer the vote
+/// or the item belongs to is not kept (a purge took it after the command read it): nothing was
+/// written.
+pub const NO_SUCH_ANSWER: &str = "the answer is not kept";
+
+/// The `Err` of [`RecordStore::put_review`] when a closed item is written over one that is no
+/// longer open (another close won, or a purge took it): nothing was written.
+pub const REVIEW_NOT_OPEN: &str = "the review item is not open";
+
 /// Where the records live: the seam a backend implements. Every method is one statement or one
-/// transaction of the backend; an `Err` is the backend's failure, in words.
+/// transaction of the backend; an `Err` is the backend's failure, in words, or one of
+/// [`NO_SUCH_ANSWER`] and [`REVIEW_NOT_OPEN`] for a write whose condition no longer holds.
+///
+/// A command reads, then writes, and another request can land between the two, so each write
+/// holds its own condition in the same statement: a vote and an open item are written only while
+/// their answer is kept, an open item never over an existing one, and a closed item only over an
+/// open one.
 pub trait RecordStore: Send + Sync {
     fn answer(&self, id: &ma::AnswerId) -> Result<Option<ma::AnswerRecordSnapshot>, String>;
     fn put_answer(&self, record: &ma::AnswerRecordSnapshot) -> Result<(), String>;
     fn delete_answer(&self, id: &ma::AnswerId) -> Result<(), String>;
     fn vote(&self, id: &ma::VoteId) -> Result<Option<ma::VoteSnapshot>, String>;
+    /// Casts or changes a vote while its answer is kept; [`NO_SUCH_ANSWER`] otherwise.
     fn put_vote(&self, vote: &ma::VoteSnapshot) -> Result<(), String>;
     fn delete_vote(&self, id: &ma::VoteId) -> Result<(), String>;
     fn review(&self, id: &ma::ReviewId) -> Result<Option<ma::ReviewItemSnapshot>, String>;
+    /// An open item is written while its answer is kept ([`NO_SUCH_ANSWER`] otherwise) and never
+    /// over an item that exists; a closed item only over an open one ([`REVIEW_NOT_OPEN`]
+    /// otherwise).
     fn put_review(&self, item: &ma::ReviewItemSnapshot) -> Result<(), String>;
     fn delete_review(&self, id: &ma::ReviewId) -> Result<(), String>;
     /// Every record, oldest first.
@@ -64,8 +83,8 @@ pub trait RecordStore: Send + Sync {
     fn reviews(&self, answer_id: &str) -> Result<Vec<ma::ReviewItemSnapshot>, String>;
     /// The view `cortex.ask.OpenReviews`: every open item, oldest first.
     fn open_reviews(&self) -> Result<Vec<ma::OpenReviews>, String>;
-    /// Deletes every record whose `at` is before `before_ms`, with its votes and review items, in
-    /// one transaction.
+    /// Deletes every record whose `at` is before `before_ms`, with its votes and review items, and
+    /// any vote or review item whose answer is gone, in one transaction.
     fn purge(&self, before_ms: i64) -> Result<Purge, String>;
 }
 
@@ -364,10 +383,13 @@ impl RecordStore for Records {
     fn put_vote(&self, vote: &ma::VoteSnapshot) -> Result<(), String> {
         let d = &vote.data;
         let at = ms_of(&d.at)?;
-        self.with(|db| {
+        // The answer's presence is checked in the statement that writes the vote, so a purge
+        // between the command's check and this write leaves no vote behind.
+        let written = self.with(|db| {
             db.execute(
                 "INSERT INTO votes (vote_id, answer_id, identity, value, comment, at_ms) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6) \
+                 SELECT ?1, ?2, ?3, ?4, ?5, ?6 \
+                 WHERE EXISTS (SELECT 1 FROM answers WHERE answer_id = ?2) \
                  ON CONFLICT (vote_id) DO UPDATE SET answer_id = ?2, identity = ?3, value = ?4, \
                  comment = ?5, at_ms = ?6",
                 params![
@@ -379,8 +401,11 @@ impl RecordStore for Records {
                     at
                 ],
             )
-            .map(drop)
-        })
+        })?;
+        if written == 0 {
+            return Err(NO_SUCH_ANSWER.into());
+        }
+        Ok(())
     }
 
     fn delete_vote(&self, id: &ma::VoteId) -> Result<(), String> {
@@ -406,24 +431,62 @@ impl RecordStore for Records {
         let d = &item.data;
         let opened = ms_of(&d.opened_at)?;
         let closed = d.closed_at.as_ref().map(ms_of).transpose()?;
-        self.with(|db| {
-            db.execute(
-                "INSERT INTO reviews (review_id, answer_id, cause, state, opened_ms, \
-                 close_reason, closed_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) \
-                 ON CONFLICT (review_id) DO UPDATE SET answer_id = ?2, cause = ?3, state = ?4, \
-                 opened_ms = ?5, close_reason = ?6, closed_ms = ?7",
-                params![
-                    d.review_id.0,
-                    d.answer_id.0,
-                    cause_name(d.cause),
-                    review_state_name(item.state),
-                    opened,
-                    d.close_reason,
-                    closed
-                ],
-            )
-            .map(drop)
-        })
+        // Each write holds its condition in its own statement: a close between another close's
+        // read and its write, or a purge between an open's check and its write, changes no row.
+        match item.state {
+            ma::ReviewItemState::Open => {
+                let (written, kept) = self.with(|db| {
+                    let written = db.execute(
+                        "INSERT INTO reviews (review_id, answer_id, cause, state, opened_ms, \
+                         close_reason, closed_ms) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7 \
+                         WHERE EXISTS (SELECT 1 FROM answers WHERE answer_id = ?2) \
+                         ON CONFLICT (review_id) DO NOTHING",
+                        params![
+                            d.review_id.0,
+                            d.answer_id.0,
+                            cause_name(d.cause),
+                            review_state_name(item.state),
+                            opened,
+                            d.close_reason,
+                            closed
+                        ],
+                    )?;
+                    let kept = db
+                        .query_row(
+                            "SELECT 1 FROM answers WHERE answer_id = ?1",
+                            [&d.answer_id.0],
+                            |_| Ok(()),
+                        )
+                        .optional()?
+                        .is_some();
+                    Ok((written, kept))
+                })?;
+                // An item opened at once by another request is the one this open meant.
+                if written == 0 && !kept {
+                    return Err(NO_SUCH_ANSWER.into());
+                }
+                Ok(())
+            }
+            ma::ReviewItemState::Closed => {
+                let written = self.with(|db| {
+                    db.execute(
+                        "UPDATE reviews SET state = ?2, close_reason = ?3, closed_ms = ?4 \
+                         WHERE review_id = ?1 AND state = ?5",
+                        params![
+                            d.review_id.0,
+                            review_state_name(item.state),
+                            d.close_reason,
+                            closed,
+                            review_state_name(ma::ReviewItemState::Open)
+                        ],
+                    )
+                })?;
+                if written == 0 {
+                    return Err(REVIEW_NOT_OPEN.into());
+                }
+                Ok(())
+            }
+        }
     }
 
     fn delete_review(&self, id: &ma::ReviewId) -> Result<(), String> {
@@ -468,15 +531,12 @@ impl RecordStore for Records {
     fn purge(&self, before_ms: i64) -> Result<Purge, String> {
         self.with(|db| {
             let tx = db.transaction()?;
-            let expired = "SELECT answer_id FROM answers WHERE at_ms < ?1";
-            let votes = tx.execute(
-                &format!("DELETE FROM votes WHERE answer_id IN ({expired})"),
-                [before_ms],
-            )?;
-            let reviews = tx.execute(
-                &format!("DELETE FROM reviews WHERE answer_id IN ({expired})"),
-                [before_ms],
-            )?;
+            // A vote or an item whose answer is gone has no meaning: it goes too, whatever left it.
+            let expired = "answer_id IN (SELECT answer_id FROM answers WHERE at_ms < ?1) \
+                OR answer_id NOT IN (SELECT answer_id FROM answers)";
+            let votes = tx.execute(&format!("DELETE FROM votes WHERE {expired}"), [before_ms])?;
+            let reviews =
+                tx.execute(&format!("DELETE FROM reviews WHERE {expired}"), [before_ms])?;
             let records = tx.execute("DELETE FROM answers WHERE at_ms < ?1", [before_ms])?;
             tx.commit()?;
             Ok(Purge {
@@ -727,7 +787,8 @@ impl Keeper {
     }
 
     /// Records one answer (`cortex.ask.RecordAnswer`), then opens its review items: `failed` for
-    /// an outcome other than `answered`, `slow` for a latency past `slow_after_ms`.
+    /// an outcome other than `answered`, `slow` for a latency past `slow_after_ms`. The question,
+    /// the answer and the tools' arguments are kept with their credential shapes masked.
     pub fn record(&self, asked: Asked, outcome: &ma::AskOutcome) -> Result<(), String> {
         let zero = ma::AskDone {
             answer_id: String::new(),
@@ -766,11 +827,19 @@ impl Keeper {
             answer_id: ma::AnswerId(asked.answer_id.clone()),
             instance_name: m::InstanceName(self.instance.clone()),
             identity: asked.identity,
-            question: asked.question,
-            answer: (kind == ma::AnswerOutcome::Answered).then(|| done.answer.clone()),
+            question: masked(&asked.question),
+            answer: (kind == ma::AnswerOutcome::Answered).then(|| masked(&done.answer)),
             reason,
             outcome: kind,
-            tool_calls: asked.tool_calls,
+            // A tool's arguments are the model's, and can repeat what the question carried.
+            tool_calls: asked
+                .tool_calls
+                .into_iter()
+                .map(|t| ma::AskTool {
+                    arguments: masked(&t.arguments),
+                    ..t
+                })
+                .collect(),
             latency_ms: asked.latency_ms.max(0),
             input_tokens: done.input_tokens,
             output_tokens: done.output_tokens,
@@ -804,7 +873,9 @@ impl Keeper {
     }
 
     /// `identity`'s vote on `answer_id` (`cortex.ask.CastVote`), cast or changed; a `down` vote
-    /// opens the answer's `voted-down` review item. The vote as it is kept.
+    /// opens the answer's `voted-down` review item. The vote as it is kept, its comment with its
+    /// credential shapes masked. An answer a purge takes during the vote refuses it as one that
+    /// was never kept; the purge takes the vote with the answer.
     pub fn vote(
         &self,
         answer_id: &str,
@@ -824,7 +895,7 @@ impl Keeper {
             answer_id: id,
             identity: identity.into(),
             value,
-            comment,
+            comment: comment.as_deref().map(masked),
         };
         let outcome = self
             .run(
@@ -835,7 +906,7 @@ impl Keeper {
                 },
                 |app| app.cast_vote(input),
             )
-            .map_err(VoteRefused::Store)?;
+            .map_err(refused)?;
         match outcome {
             ma::CastVoteOutcome::NoSuchAnswer { .. } => return Err(VoteRefused::NoSuchAnswer),
             ma::CastVoteOutcome::Unidentified { .. } => {
@@ -847,14 +918,12 @@ impl Keeper {
         }
         if value == ma::VoteValue::Down {
             self.open_review(answer_id, ma::ReviewCause::VotedDown)
-                .map_err(VoteRefused::Store)?;
+                .map_err(refused)?;
         }
+        // Only a purge deletes a vote, and it takes the answer with it.
         match self.store.vote(&vote_id).map_err(VoteRefused::Store)? {
             Some(vote) => Ok(vote.data),
-            None => Err(VoteRefused::Store(format!(
-                "the vote {} was not kept",
-                vote_id.0
-            ))),
+            None => Err(VoteRefused::NoSuchAnswer),
         }
     }
 
@@ -864,7 +933,9 @@ impl Keeper {
     }
 
     /// Closes a review item with `reason` (`cortex.ask.CloseReview`): the outcome, and the item as
-    /// it is kept after it.
+    /// it is kept after it. The reason is kept with its credential shapes masked. Of two closes of
+    /// one item at once, the one whose write finds the item closed answers `wrong-state`, and one
+    /// whose item a purge took answers `no-such-review`.
     pub fn close(
         &self,
         review_id: &str,
@@ -873,16 +944,32 @@ impl Keeper {
         let id = ma::ReviewId(review_id.into());
         let input = ma::CloseReview {
             review_id: id.clone(),
-            reason: reason.into(),
+            reason: masked(reason),
         };
-        let outcome = self.run(|_| {}, |app| app.close_review(input))?;
-        Ok((outcome, self.store.review(&id)?))
+        let outcome = match self.run(|_| {}, |app| app.close_review(input)) {
+            Err(e) if e == REVIEW_NOT_OPEN => None,
+            other => Some(other?),
+        };
+        let item = self.store.review(&id)?;
+        let outcome = match (outcome, &item) {
+            (Some(outcome), _) => outcome,
+            (None, Some(_)) => ma::CloseReviewOutcome::WrongState {
+                error: ma::ReviewNotOpen { review_id: id },
+            },
+            (None, None) => ma::CloseReviewOutcome::NoSuchReview {
+                error: ma::ReviewNotFound { review_id: id },
+            },
+        };
+        Ok((outcome, item))
     }
 
     /// Purges every record older than `retention_days` before `now_ms`, with its votes and review
-    /// items (`cortex.ask.PurgeExpired`).
+    /// items (`cortex.ask.PurgeExpired`). A retention too long to count before now keeps every
+    /// record: the cutoff stops at [`EARLIEST_MS`] rather than wrap.
     pub fn purge(&self, now_ms: i64) -> Result<ma::Purged, String> {
-        let before_ms = now_ms - self.retention_days * 86_400_000;
+        let before_ms = now_ms
+            .saturating_sub(self.retention_days.saturating_mul(DAY_MS))
+            .max(EARLIEST_MS);
         let purged = self.store.purge(before_ms)?;
         let outcome = self.run(
             |shared| {
@@ -902,6 +989,27 @@ impl Keeper {
 }
 
 const CAST_VOTE: &str = "cortex.ask.CastVote";
+
+const DAY_MS: i64 = 86_400_000;
+
+/// The earliest instant a [`Timestamp`] writes, 0001-01-01T00:00:00Z, in Unix milliseconds: the
+/// furthest back a purge's cutoff goes.
+pub const EARLIEST_MS: i64 = -62_135_596_800_000;
+
+/// `text` with every credential shape masked (`crate::mask`), as a record keeps it.
+fn masked(text: &str) -> String {
+    crate::mask::mask(text).0
+}
+
+/// A store failure during a vote as the vote's refusal: [`NO_SUCH_ANSWER`] is an answer a purge
+/// took after the vote read it.
+fn refused(e: String) -> VoteRefused {
+    if e == NO_SUCH_ANSWER {
+        VoteRefused::NoSuchAnswer
+    } else {
+        VoteRefused::Store(e)
+    }
+}
 
 /// Why `cortex ask serve` does not start on an instance whose store is `postgres`.
 pub const POSTGRES_NOT_YET: &str = "store.backend: the answer records of an instance on a \

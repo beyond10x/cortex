@@ -1580,3 +1580,61 @@ fn the_shape_check_holds_each_field_to_the_shape_the_suite_states() {
         );
     }
 }
+
+/// The `ranked` expectation refuses rows out of order, a row without the key and keys of mixed
+/// kinds, and reads a later key only on a tie. What it cannot see: zero or one row, and rows tied
+/// on every key, which the `OpenReviews` rows of one scenario are (`opened_at` is stamped to the
+/// second).
+#[test]
+fn the_ranked_expectation_refuses_rows_out_of_order_a_missing_key_and_mixed_kinds() {
+    let view = "cortex.ask.OpenReviews";
+    let holds = |rows: Vec<Value>, order_by: Value| {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut s = Scenario::new();
+            s.views.insert(view.to_string(), rows);
+            s.step(&json!({
+                "step": "expect_view",
+                "view": view,
+                "expectation": {"expect": "ranked", "order_by": order_by},
+            }));
+        }))
+        .is_ok()
+    };
+    let asc = json!(["opened_at asc"]);
+    let row = |id: &str, at: &str| json!({"review_id": id, "opened_at": at});
+    let (early, late) = ("2026-10-17T09:00:00Z", "2026-10-17T09:00:01Z");
+
+    assert!(holds(vec![row("a", early), row("b", late)], asc.clone()));
+    assert!(
+        !holds(vec![row("b", late), row("a", early)], asc.clone()),
+        "rows out of order held"
+    );
+    assert!(holds(
+        vec![row("b", late), row("a", early)],
+        json!(["opened_at desc"])
+    ));
+    assert!(
+        !holds(
+            vec![row("a", early), json!({"review_id": "b"})],
+            asc.clone()
+        ),
+        "a row without the key held"
+    );
+    assert!(
+        !holds(
+            vec![json!({"review_id": "a", "opened_at": 1}), row("b", late)],
+            asc.clone()
+        ),
+        "keys of mixed kinds held"
+    );
+    assert!(
+        !holds(
+            vec![row("b", early), row("a", early)],
+            json!(["opened_at asc", "review_id asc"])
+        ),
+        "a tie on the first key was not decided by the second"
+    );
+    // The limits: a tie on every key is in order, and one row has no pair to rank.
+    assert!(holds(vec![row("b", early), row("a", early)], asc.clone()));
+    assert!(holds(vec![row("b", late)], asc));
+}

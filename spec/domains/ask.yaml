@@ -60,7 +60,9 @@ types:
   # votes and review items: the service purges older ones when it starts and every 24 hours after
   # (`cortex.ask.PurgeExpired`); absent means 90. `slow_after_ms` is the latency in milliseconds
   # past which an answer is slow and opens a review item (`cortex.ask.ReviewCause` `slow`); absent
-  # means no answer is slow. Each is an Integer above 0.
+  # means no answer is slow. Each is an Integer above 0. A `retention_days` too large to count in
+  # milliseconds before now keeps every record: the purge's `before` stops at the earliest instant
+  # a Timestamp writes (0001-01-01T00:00:00Z) and never wraps into the future.
   # UNMAPPED: the refusal of a `retention_days` or `slow_after_ms` of 0 or less (the service does
   # not start, exit 2, naming the field) is a check on an Integer the specification has no
   # construct for; `ask::check` holds it and `tests/answer_records.rs` tests it.
@@ -211,6 +213,9 @@ entities:
   # `error` event's reason otherwise. `tool_calls` are the `tool` events of the answer, in order.
   # The token counts and `steps` are those of the `done` event (0 without one); `latency_ms` the
   # milliseconds from the question to the last event; `at` when the question was asked.
+  # `question` and `answer` are kept with every credential shape masked (`[masked:<shape>]`,
+  # `crate::mask`), whatever the instance's `redaction` policy, as everywhere cortex writes text;
+  # the mask is irreversible. A vote's `comment` and a review item's `close_reason` are kept so too.
   - name: cortex.ask.AnswerRecord
     identity:
       name: answer_id
@@ -495,6 +500,9 @@ commands:
     # `identity` is the value of the spec's `identity_header` and `vote_id` is
     # `<answer_id>:<identity>` (`cortex.ask.VoteId`). It answers 200 with the vote. A `down` vote
     # then opens a review item with cause `voted-down` (`cortex.ask.OpenReview`), once per answer.
+    # The vote is written only while its answer is kept: a vote whose answer a purge took after the
+    # check answers `no-such-answer`, and neither it nor a review item outlives the answer. A purge
+    # also takes any vote or review item whose answer is gone.
     input:
       - {name: vote_id, type: cortex.ask.VoteId}
       - {name: answer_id, type: cortex.ask.AnswerId}
@@ -595,6 +603,8 @@ commands:
     # `POST /review/{review_id}/close` with the JSON body `{"reason": …}`, a reason that is not
     # empty; it answers 200 with the item. `GET /review` lists the open items
     # (`cortex.ask.OpenReviews`). Both answer 401 without an identity, as `POST /ask` does.
+    # A close writes only an item that is still open: of two closes of one item at once, one is
+    # `closed` and the other `wrong-state`, and the item keeps the first one's reason.
     input:
       - {name: review_id, type: cortex.ask.ReviewId}
       - {name: reason, type: String}
