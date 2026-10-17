@@ -1,0 +1,252 @@
+domain: cortex.ask
+
+summary: >-
+  The answer service of an instance: `cortex ask serve` answers a question over the instance's
+  store as a stream of events. It reads the store only through the EKR MCP reader (`ekr mcp`) and
+  writes nothing to it; its model is the instance's model gateway, spoken to as an
+  OpenAI-compatible endpoint. An answer is streamed, not stored.
+
+naming:
+  wire: ask
+  display: Answers
+
+types:
+  # The limits of one answer. `max_steps` is the most model calls one answer makes: a step is one
+  # model call, with the tool calls it asks for; a model that still asks for a tool at step
+  # `max_steps` ends the answer with an `error` event whose `reason` is `step-limit`.
+  # `max_result_bytes` is the most bytes of one tool result the model is shown: a longer result,
+  # rewritten into compact text, is cut at a character boundary to at most that many bytes, and its
+  # `tool` event says so (`truncated`). `max_seconds` is the most wall-clock seconds one answer
+  # takes, every model and tool call included; past it the answer ends with `error`, `reason`
+  # `time-limit`. `per_identity_per_minute` is the most questions one identity asks in a minute (a
+  # sliding window of 60 seconds); the next answers 429 with an `error` event whose `reason` is
+  # `rate-limit` and whose `retry_after` is the whole seconds until the oldest question of the
+  # window leaves it, at least 1. Each is an Integer above 0.
+  # UNMAPPED: the refusal of a limit of 0 or less (the service does not start, exit 2, naming the
+  # field) is a check on an Integer the specification has no construct for; `ask::check` holds it
+  # and `tests/ask_service.rs` tests it.
+  - name: cortex.ask.AskLimits
+    kind: struct
+    fields:
+      - {name: max_steps, type: Integer}
+      - {name: max_result_bytes, type: Integer}
+      - {name: max_seconds, type: Integer}
+      - {name: per_identity_per_minute, type: Integer}
+
+  # How a citation in an answer becomes a link. The model cites a node as `[node:<id>]` and an
+  # evidence as `[evidence:<id>]`; the service replaces each marker in the answer by a Markdown link
+  # `[<id>](<url>)`, the URL being the template with `{id}` replaced by the percent-encoded id.
+  # Without a template for its kind a marker is left as written. Either way the id is cited
+  # (`cortex.ask.AskDone`).
+  - name: cortex.ask.LinkTemplates
+    kind: struct
+    fields:
+      - {name: node, type: Optional<String>}
+      - {name: evidence, type: Optional<String>}
+
+  # The optional `ask` section of an instance spec (`cortex.instance.InstanceSpec`): how
+  # `cortex ask serve` answers. `listen` is the address it binds, `host:port`.
+  # `identity_header` names the request header that carries the identity of the asker, verified
+  # by the guard in front of the service; cortex verifies no token. A request without that header,
+  # or with an empty one, answers 401 and asks no model. `guidance`, when given, is added to the
+  # service's system prompt. The model route is the instance's `model.gateway`
+  # (`cortex.instance.ModelGateway`) and its model `model.model`; the service does not start
+  # without a gateway. No field carries a credential: the gateway's token is read from the variable
+  # `model.gateway.token_env` names.
+  - name: cortex.ask.AskSpec
+    kind: struct
+    fields:
+      - {name: listen, type: String}
+      - {name: identity_header, type: String}
+      - {name: limits, type: cortex.ask.AskLimits}
+      - {name: link_templates, type: Optional<cortex.ask.LinkTemplates>}
+      - {name: guidance, type: Optional<String>}
+
+  # The first event of every answer, and one per step after it. `format` is the event contract,
+  # `cortex.ask-events/1`; `step` the model call about to be made, 0 before the first; `message`
+  # a short text for a person.
+  - name: cortex.ask.AskStatus
+    kind: struct
+    fields:
+      - {name: format, type: String}
+      - {name: step, type: Integer}
+      - {name: message, type: String}
+
+  # One tool call the model asked for, after its result was read. `arguments` is the call's
+  # arguments as the model gave them (JSON text); `result_bytes` the bytes of the rewritten result
+  # the model is shown; `truncated` whether it was cut to `max_result_bytes`; `failed` whether the
+  # reader answered an error, which the model is shown as the result.
+  - name: cortex.ask.AskTool
+    kind: struct
+    fields:
+      - {name: step, type: Integer}
+      - {name: name, type: String}
+      - {name: arguments, type: String}
+      - {name: result_bytes, type: Integer}
+      - {name: truncated, type: Boolean}
+      - {name: failed, type: Boolean}
+
+  # A piece of the model's text, in order. Text of a step that then asks for a tool is withdrawn by
+  # a `discard` event.
+  - name: cortex.ask.AskDelta
+    kind: struct
+    fields:
+      - {name: text, type: String}
+
+  # Withdraws every `delta` since the last `discard`: that text was the model's thinking before a
+  # tool call, not the answer.
+  - name: cortex.ask.AskDiscard
+    kind: struct
+    fields:
+      - {name: step, type: Integer}
+
+  # The last event of an answer. `answer` is the answer with its citation markers turned into links
+  # (`cortex.ask.LinkTemplates`); `nodes` and `evidence` the ids it cites, each once, in the order
+  # they first appear. The token counts add up, over every model call of the answer, what the
+  # gateway reported in its `usage`: `prompt_tokens`, `completion_tokens` and
+  # `prompt_tokens_details.cached_tokens` (0 when not reported). `context_tokens` is the prompt
+  # tokens of the last call, the size of the context the answer was made in; `steps` the model
+  # calls made.
+  - name: cortex.ask.AskDone
+    kind: struct
+    fields:
+      - {name: answer, type: String}
+      - {name: nodes, type: List<String>}
+      - {name: evidence, type: List<String>}
+      - {name: input_tokens, type: Integer}
+      - {name: output_tokens, type: Integer}
+      - {name: cached_tokens, type: Integer}
+      - {name: context_tokens, type: Integer}
+      - {name: steps, type: Integer}
+
+  # The last event of an answer that has none. `reason` is one of `unidentified`, `rate-limit`,
+  # `step-limit`, `time-limit`, `model-failed`, `reader-failed` and `bad-request`; `message` says
+  # more, for a person; `retry_after` is given with `rate-limit` only, in whole seconds.
+  - name: cortex.ask.AskError
+    kind: struct
+    fields:
+      - {name: reason, type: String}
+      - {name: message, type: String}
+      - {name: retry_after, type: Optional<Integer>}
+
+  # One event of the stream `POST /ask` answers, `text/event-stream`: the SSE `event:` line is the
+  # variant's name and its `data:` line the event as one JSON object, `{"event": <name>, "value":
+  # <the variant's fields>}`. An answer is `status`, then any `status`, `tool`, `delta` and
+  # `discard` events, then exactly one `done` or `error`, which ends the stream. A refusal before
+  # the answer starts (401, 429) is a stream of that one `error` event.
+  - name: cortex.ask.AskEvent
+    kind: union
+    tag: event
+    variants:
+      status: cortex.ask.AskStatus
+      tool: cortex.ask.AskTool
+      delta: cortex.ask.AskDelta
+      discard: cortex.ask.AskDiscard
+      done: cortex.ask.AskDone
+      error: cortex.ask.AskError
+
+actors:
+  # The asker, as the guard in front of the service identifies it in the spec's
+  # `identity_header`.
+  - name: cortex.ask.Asker
+    may:
+      - cortex.ask.Ask
+    naming:
+      display: Asker
+
+errors:
+  - name: cortex.ask.Unidentified
+    summary: The request carries no identity in the header the spec names; it answers 401.
+    fields:
+      - {name: header, type: String}
+
+  - name: cortex.ask.RateLimited
+    summary: >-
+      The identity asked `per_identity_per_minute` questions in the last minute; it answers 429.
+      Ask again after `retry_after` seconds.
+    fields:
+      - {name: identity, type: String}
+      - {name: retry_after, type: Integer}
+
+  - name: cortex.ask.LimitReached
+    summary: The answer reached the spec's step or time limit before the model answered.
+    fields:
+      - {name: limit, type: String}
+
+  - name: cortex.ask.ModelFailed
+    summary: The model gateway could not be reached or answered an error or no message.
+    fields:
+      - {name: reason, type: String}
+
+  - name: cortex.ask.ReaderFailed
+    summary: The EKR MCP reader could not be started or stopped answering.
+    fields:
+      - {name: reason, type: String}
+
+commands:
+  - name: cortex.ask.Ask
+    naming:
+      wire: ask
+      display: Ask a question
+    # `POST /ask` with the JSON body `{"question": …}`; `identity` is the value of the spec's
+    # `identity_header`. The answer is the event stream of `cortex.ask.AskEvent`; an outcome's
+    # error is its `error` event, and `answered` is its `done` event.
+    input:
+      - {name: question, type: String}
+      - {name: identity, type: String}
+    outcomes:
+      - name: unidentified
+        external: The request carries no identity in the header the spec names
+        error: cortex.ask.Unidentified
+        payload:
+          cortex.ask.Unidentified:
+            header: {generated: true}
+        summary: It answers 401; no model was asked.
+
+      - name: rate-limited
+        external: The identity asked its per-minute limit of questions in the last minute
+        error: cortex.ask.RateLimited
+        payload:
+          cortex.ask.RateLimited:
+            identity: input.identity
+            retry_after: {generated: true}
+        summary: It answers 429 with an `error` event carrying `retry_after`; no model was asked.
+
+      - name: limit-reached
+        external: The model still asks for a tool at the step limit, or the time limit passes
+        error: cortex.ask.LimitReached
+        payload:
+          cortex.ask.LimitReached:
+            limit: {generated: true}
+        summary: The stream ends with an `error` event naming the limit, and no `done`.
+
+      - name: model-failed
+        external: The model gateway cannot be reached or answers an error
+        error: cortex.ask.ModelFailed
+        payload:
+          cortex.ask.ModelFailed:
+            reason: {generated: true}
+        summary: The stream ends with an `error` event, and no `done`.
+
+      - name: reader-failed
+        external: The EKR MCP reader cannot be started or stops answering
+        error: cortex.ask.ReaderFailed
+        payload:
+          cortex.ask.ReaderFailed:
+            reason: {generated: true}
+        summary: The stream ends with an `error` event, and no `done`.
+
+      - name: answered
+        emits:
+          - cortex.ask.Answered
+        payload:
+          cortex.ask.Answered:
+            identity: input.identity
+            done: {generated: true}
+        summary: The stream ends with a `done` event carrying the answer and what it cites.
+
+events:
+  - name: cortex.ask.Answered
+    fields:
+      - {name: identity, type: String}
+      - {name: done, type: cortex.ask.AskDone}

@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7
-// contract digest a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96
+// model digest b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64
+// contract digest 38571540d03e174471671e428e08bfba610dca6caa7e6de6077494ad0f35ae34
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Every actor the specification declares, and the commands each may invoke — as data.
@@ -13,6 +13,8 @@
 /// An actor the specification declares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Actor {
+    /// `cortex.ask.Asker`.
+    Asker,
     /// `cortex.instance.Operator`.
     Operator,
     /// `cortex.instance.Scheduler`.
@@ -22,6 +24,7 @@ pub enum Actor {
 impl Actor {
     /// Every declared actor, ordered by qualified name.
     pub const ALL: &'static [Actor] = &[
+        Actor::Asker,
         Actor::Operator,
         Actor::Scheduler,
     ];
@@ -29,6 +32,7 @@ impl Actor {
     /// The actor's qualified name, as the specification spells it.
     pub const fn name(self) -> &'static str {
         match self {
+            Actor::Asker => "cortex.ask.Asker",
             Actor::Operator => "cortex.instance.Operator",
             Actor::Scheduler => "cortex.instance.Scheduler",
         }
@@ -39,6 +43,9 @@ impl Actor {
 /// actor that only observes.
 pub fn may(actor: Actor) -> &'static [&'static str] {
     match actor {
+        Actor::Asker => &[
+            "cortex.ask.Ask",
+        ],
         Actor::Operator => &[
             "cortex.instance.AddSource",
             "cortex.instance.AdoptInstance",

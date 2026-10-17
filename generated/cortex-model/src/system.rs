@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7
-// contract digest a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96
+// model digest b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64
+// contract digest 38571540d03e174471671e428e08bfba610dca6caa7e6de6077494ad0f35ae34
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! The `cortex` system, v1: its components assembled, its bindings wired, and its one transport.
@@ -19,6 +19,8 @@
 /// escalates into.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SystemEvent {
+    /// `cortex.ask.Answered`.
+    Answered(crate::ask::Answered),
     /// `cortex.instance.InstanceAdopted`.
     InstanceAdopted(crate::instance::InstanceAdopted),
     /// `cortex.instance.InstanceCreated`.
@@ -53,6 +55,7 @@ impl SystemEvent {
     /// The qualified name the specification declares this event under.
     pub fn name(&self) -> &'static str {
         match self {
+            Self::Answered(_) => "cortex.ask.Answered",
             Self::InstanceAdopted(_) => "cortex.instance.InstanceAdopted",
             Self::InstanceCreated(_) => "cortex.instance.InstanceCreated",
             Self::InstanceRemoved(_) => "cortex.instance.InstanceRemoved",
@@ -92,23 +95,34 @@ impl From<crate::ports::cortex::PublishedEvent> for SystemEvent {
     }
 }
 
+impl From<crate::ports::cortex_ask::PublishedEvent> for SystemEvent {
+    fn from(event: crate::ports::cortex_ask::PublishedEvent) -> Self {
+        match event {
+            crate::ports::cortex_ask::PublishedEvent::Answered(event) => Self::Answered(event),
+        }
+    }
+}
+
 /// The `cortex` system: every component behind its port, and the transport between them.
 ///
 /// The component fields are public because commands enter the system through a component's own
 /// port; the log and its delivery cursor are not, because publishing happens by pumping, not by
 /// writing history directly.
-pub struct System<CortexBehaviors> {
+pub struct System<CortexBehaviors, CortexAskBehaviors> {
     /// The `cortex` component.
     pub cortex: crate::ports::cortex::Cortex<CortexBehaviors>,
+    /// The `cortex-ask` component.
+    pub cortex_ask: crate::ports::cortex_ask::CortexAsk<CortexAskBehaviors>,
     published: Vec<SystemEvent>,
     cursor: usize,
 }
 
-impl<CortexBehaviors> System<CortexBehaviors> {
+impl<CortexBehaviors, CortexAskBehaviors> System<CortexBehaviors, CortexAskBehaviors> {
     /// Assembles the system from its components.
-    pub fn new(cortex: crate::ports::cortex::Cortex<CortexBehaviors>) -> Self {
+    pub fn new(cortex: crate::ports::cortex::Cortex<CortexBehaviors>, cortex_ask: crate::ports::cortex_ask::CortexAsk<CortexAskBehaviors>) -> Self {
         Self {
             cortex,
+            cortex_ask,
             published: Vec::new(),
             cursor: 0,
         }
@@ -133,9 +147,10 @@ impl<CortexBehaviors> System<CortexBehaviors> {
     }
 }
 
-impl<CortexBehaviors> System<CortexBehaviors>
+impl<CortexBehaviors, CortexAskBehaviors> System<CortexBehaviors, CortexAskBehaviors>
 where
     CortexBehaviors: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    CortexAskBehaviors: crate::ask::obligations::AskBehavior,
 {
     /// Delivers until quiescent: collects every component's outbox onto the log. No binding
     /// reacts to anything this specification publishes, so collecting is the whole delivery.
@@ -152,6 +167,9 @@ where
     /// Moves every component's outbox onto the log, in component order.
     fn collect(&mut self) {
         for event in self.cortex.drain_outbox() {
+            self.published.push(SystemEvent::from(event));
+        }
+        for event in self.cortex_ask.drain_outbox() {
             self.published.push(SystemEvent::from(event));
         }
     }

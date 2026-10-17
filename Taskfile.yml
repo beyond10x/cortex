@@ -11,7 +11,7 @@ tasks:
       - rm -rf generated/cortex-model generated/spec-types generated/schema generated/docs
       - '{{.ESS}} specify validate --path spec --strict-requires'
       - '{{.ESS}} generate synthesize --path spec --target rust --layout crate --out generated/cortex-model --strict-requires'
-      - '{{.ESS}} generate types --path spec --target rust --root cortex.instance.InstanceSpec --package cortex-spec-types --out generated/spec-types --strict-requires'
+      - '{{.ESS}} generate types --path spec --target rust --root cortex.instance.InstanceSpec --root cortex.ask.AskEvent --package cortex-spec-types --out generated/spec-types --strict-requires'
       - '{{.ESS}} generate --path spec --kind schema --out generated/schema --strict-requires'
       - '{{.ESS}} generate --path spec --kind docs --out generated/docs --strict-requires'
       - '{{.ESS}} verify conform synthesize --path spec --out spec/suite.json --strict-requires'
@@ -26,7 +26,7 @@ tasks:
         trap 'rm -rf "$tmp"' EXIT
         mkdir -p "$tmp/generated"
         {{.ESS}} generate synthesize --path spec --target rust --layout crate --out "$tmp/generated/cortex-model" --strict-requires >/dev/null
-        {{.ESS}} generate types --path spec --target rust --root cortex.instance.InstanceSpec --package cortex-spec-types --out "$tmp/generated/spec-types" --strict-requires >/dev/null
+        {{.ESS}} generate types --path spec --target rust --root cortex.instance.InstanceSpec --root cortex.ask.AskEvent --package cortex-spec-types --out "$tmp/generated/spec-types" --strict-requires >/dev/null
         {{.ESS}} generate --path spec --kind schema --out "$tmp/generated/schema" --strict-requires >/dev/null
         {{.ESS}} generate --path spec --kind docs --out "$tmp/generated/docs" --strict-requires >/dev/null
         {{.ESS}} verify conform synthesize --path spec --out "$tmp/suite.json" --strict-requires >/dev/null

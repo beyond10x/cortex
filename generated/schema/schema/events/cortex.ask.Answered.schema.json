@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Answered payload",
+  "x-ess-name": "cortex.ask.Answered",
+  "x-ess-kind": "event-payload",
+  "type": "object",
+  "properties": {
+    "identity": {
+      "type": "string"
+    },
+    "done": {
+      "$ref": "#/$defs/cortex.ask.AskDone"
+    }
+  },
+  "required": [
+    "identity",
+    "done"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64",
+    "contract_digest": "slice-sha256/2:cdac9fe4b312448ebc44a31b484700f17824d87ddad067bf6a97603cc44aafda",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AskDone": {
+      "title": "AskDone",
+      "x-ess-name": "cortex.ask.AskDone",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "answer": {
+          "type": "string"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "input_tokens": {
+          "type": "integer"
+        },
+        "output_tokens": {
+          "type": "integer"
+        },
+        "cached_tokens": {
+          "type": "integer"
+        },
+        "context_tokens": {
+          "type": "integer"
+        },
+        "steps": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "answer",
+        "nodes",
+        "evidence",
+        "input_tokens",
+        "output_tokens",
+        "cached_tokens",
+        "context_tokens",
+        "steps"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

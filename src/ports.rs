@@ -157,6 +157,20 @@ impl Context for Ports {
             .pop_front()
             .unwrap_or_default()
     }
+    /// Only `cortex.ask.Ask`'s `answered` asks, and the service answers it from its own tool loop
+    /// (`ask::answer`); through the ports the answer is an empty one.
+    fn generate_cortex_ask_ask_done(&mut self) -> cortex_model::ask::AskDone {
+        cortex_model::ask::AskDone {
+            answer: String::new(),
+            nodes: vec![],
+            evidence: vec![],
+            input_tokens: 0,
+            output_tokens: 0,
+            cached_tokens: 0,
+            context_tokens: 0,
+            steps: 0,
+        }
+    }
     fn external(&mut self, command: ExternalCommand<'_>, outcome: &'static str) -> bool {
         self.decided(command.name(), outcome)
     }

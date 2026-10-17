@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.LinkTemplates",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64",
+    "contract_digest": "slice-sha256/2:2152eaae8f694f93f7490f3952b974d21fd57dd26e9371040955444f69f5199f",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.LinkTemplates": {
+      "title": "LinkTemplates",
+      "x-ess-name": "cortex.ask.LinkTemplates",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

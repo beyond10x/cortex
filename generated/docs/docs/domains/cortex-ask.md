@@ -1,0 +1,213 @@
+<!--
+generated from cortex v1
+model digest b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64
+contract digest slice-sha256/2:eb9d9040257afd2b99404e861eaa56d3dbd7585241b55e941b4fcec42d236377
+do not edit: regenerate with `ess generate`
+-->
+
+# Answers
+
+The answer service of an instance: `cortex ask serve` answers a question over the instance's store as a stream of events. It reads the store only through the EKR MCP reader (`ekr mcp`) and writes nothing to it; its model is the instance's model gateway, spoken to as an OpenAI-compatible endpoint. An answer is streamed, not stored.
+
+`cortex.ask` is one of cortex's bounded contexts. [Back to the index](../index.md).
+
+## Types
+
+### `AskDelta`
+
+`cortex.ask.AskDelta` is a record of one field:
+
+- `text` — `String`
+
+### `AskDiscard`
+
+`cortex.ask.AskDiscard` is a record of one field:
+
+- `step` — `Integer`
+
+### `AskDone`
+
+`cortex.ask.AskDone` is a record of eight fields:
+
+- `answer` — `String`
+- `nodes` — `List<String>`
+- `evidence` — `List<String>`
+- `input_tokens` — `Integer`
+- `output_tokens` — `Integer`
+- `cached_tokens` — `Integer`
+- `context_tokens` — `Integer`
+- `steps` — `Integer`
+
+### `AskError`
+
+`cortex.ask.AskError` is a record of three fields:
+
+- `reason` — `String`
+- `message` — `String`
+- `retry_after` — `Optional<Integer>`, which may be absent
+
+### `AskEvent`
+
+`cortex.ask.AskEvent` is one of six shapes, told apart by a `event` field — tagged, so a decoder never has to guess which branch it is reading:
+
+- `delta` — `cortex.ask.AskDelta`
+- `discard` — `cortex.ask.AskDiscard`
+- `done` — `cortex.ask.AskDone`
+- `error` — `cortex.ask.AskError`
+- `status` — `cortex.ask.AskStatus`
+- `tool` — `cortex.ask.AskTool`
+
+### `AskLimits`
+
+`cortex.ask.AskLimits` is a record of four fields:
+
+- `max_steps` — `Integer`
+- `max_result_bytes` — `Integer`
+- `max_seconds` — `Integer`
+- `per_identity_per_minute` — `Integer`
+
+### `AskSpec`
+
+`cortex.ask.AskSpec` is a record of five fields:
+
+- `listen` — `String`
+- `identity_header` — `String`
+- `limits` — `cortex.ask.AskLimits`
+- `link_templates` — `Optional<cortex.ask.LinkTemplates>`, which may be absent
+- `guidance` — `Optional<String>`, which may be absent
+
+### `AskStatus`
+
+`cortex.ask.AskStatus` is a record of three fields:
+
+- `format` — `String`
+- `step` — `Integer`
+- `message` — `String`
+
+### `AskTool`
+
+`cortex.ask.AskTool` is a record of six fields:
+
+- `step` — `Integer`
+- `name` — `String`
+- `arguments` — `String`
+- `result_bytes` — `Integer`
+- `truncated` — `Boolean`
+- `failed` — `Boolean`
+
+### `LinkTemplates`
+
+`cortex.ask.LinkTemplates` is a record of two fields:
+
+- `node` — `Optional<String>`, which may be absent
+- `evidence` — `Optional<String>`, which may be absent
+
+One of the types above is reached by nothing else in this system: `cortex.ask.AskEvent`. No entity, view, command, event, error or crossing names it, so it is either vocabulary something outside this specification uses or a leftover — and only a person can tell which.
+
+## Commands
+
+### `Ask`
+
+`cortex.ask.Ask`, shown to a person as "Ask a question" and called `ask` on the wire.
+
+It takes:
+
+- `question` — `String`
+- `identity` — `String`
+
+It has six outcomes.
+
+**`unidentified`** — It answers 401; no model was asked. Decided outside the input: The request carries no identity in the header the spec names. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.Unidentified`, carrying `header`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`rate-limited`** — It answers 429 with an `error` event carrying `retry_after`; no model was asked. Decided outside the input: The identity asked its per-minute limit of questions in the last minute. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.RateLimited`, carrying `identity` and `retry_after`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`limit-reached`** — The stream ends with an `error` event naming the limit, and no `done`. Decided outside the input: The model still asks for a tool at the step limit, or the time limit passes. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.LimitReached`, carrying `limit`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`model-failed`** — The stream ends with an `error` event, and no `done`. Decided outside the input: The model gateway cannot be reached or answers an error. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.ModelFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`reader-failed`** — The stream ends with an `error` event, and no `done`. Decided outside the input: The EKR MCP reader cannot be started or stops answering. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.ReaderFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`answered`** — The stream ends with a `done` event carrying the answer and what it cites. The default branch, taken when no other outcome's condition matched. No entity in this specification changes. It emits `cortex.ask.Answered`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+
+## Events
+
+### `Answered`
+
+`cortex.ask.Answered`.
+
+It carries:
+
+- `identity` — `String`
+- `done` — `cortex.ask.AskDone`
+
+Emitted by `cortex.ask.Ask` on its `answered` outcome.
+
+Nothing in this system reacts to it.
+
+## Errors
+
+### `LimitReached`
+
+The answer reached the spec's step or time limit before the model answered.
+
+It carries:
+
+- `limit` — `String`
+
+Reported by `cortex.ask.Ask` on its `limit-reached` outcome.
+
+### `ModelFailed`
+
+The model gateway could not be reached or answered an error or no message.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.ask.Ask` on its `model-failed` outcome.
+
+### `RateLimited`
+
+The identity asked `per_identity_per_minute` questions in the last minute; it answers 429. Ask again after `retry_after` seconds.
+
+It carries:
+
+- `identity` — `String`
+- `retry_after` — `Integer`
+
+Reported by `cortex.ask.Ask` on its `rate-limited` outcome.
+
+### `ReaderFailed`
+
+The EKR MCP reader could not be started or stopped answering.
+
+It carries:
+
+- `reason` — `String`
+
+Reported by `cortex.ask.Ask` on its `reader-failed` outcome.
+
+### `Unidentified`
+
+The request carries no identity in the header the spec names; it answers 401.
+
+It carries:
+
+- `header` — `String`
+
+Reported by `cortex.ask.Ask` on its `unidentified` outcome.
+
+## Actors
+
+An actor is who may ask this context for something. Every grant below points at a command this specification declares — a grant is a resolved reference, so "may invoke" something nobody wrote is not a permission this model can express, and an authorisation that authorises nothing cannot ship quietly.
+
+### `Asker`
+
+`cortex.ask.Asker`, shown to a person as "Asker".
+
+It may invoke [`Ask`](#ask).
+
+
+---
+
+Generated from cortex v1 · model digest `b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64` · contract digest `slice-sha256/2:eb9d9040257afd2b99404e861eaa56d3dbd7585241b55e941b4fcec42d236377`. Do not edit this file; change the specification and regenerate it with `ess generate`.

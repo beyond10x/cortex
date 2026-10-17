@@ -10,3 +10,4 @@ summary: >-
 
 domains:
   - cortex.instance
+  - cortex.ask

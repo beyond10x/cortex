@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.ask.AskDelta",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "b4ec307bf35577cc40141d0d9ecfa84be945b1cfc5886af1ad638bfa53af8d64",
+    "contract_digest": "slice-sha256/2:459deb4027ee517a6b8f989abca0dcde6feb1921adf3442da458b5f4eb310072",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.ask.AskDelta": {
+      "title": "AskDelta",
+      "x-ess-name": "cortex.ask.AskDelta",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
