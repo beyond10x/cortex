@@ -133,6 +133,28 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "cost_usd": e.cost_usd.map(|c| c.0),
             }),
         ),
+        PublishedEvent::EvalRan(e) => (
+            "EvalRan",
+            json!({
+                "name": e.name.0,
+                "stamp": e.stamp,
+                "runner": match e.runner {
+                    m::EvalRunner::Mcp => "mcp",
+                    m::EvalRunner::Ask => "ask",
+                    m::EvalRunner::Replay => "replay",
+                },
+                "cases": e.cases,
+                "passed": e.passed,
+                "facts_expected": e.facts_expected,
+                "facts_found": e.facts_found,
+                "nodes_expected": e.nodes_expected,
+                "nodes_found": e.nodes_found,
+                "model_calls": e.model_calls,
+                "input_tokens": e.input_tokens,
+                "output_tokens": e.output_tokens,
+                "cost_usd": e.cost_usd.map(|c| c.0),
+            }),
+        ),
         PublishedEvent::SchemaChangesProposed(e) => (
             "SchemaChangesProposed",
             json!({
@@ -657,6 +679,36 @@ impl Scenario {
                     Some(("InstanceNotFound", json!({"name": error.name.0}))),
                 ),
             },
+            "cortex.instance.RunEval" => match app
+                .run_eval(m::RunEval {
+                    name: m::InstanceName(s("name")),
+                    set: s("set"),
+                    runner: match s("runner").as_str() {
+                        "ask" => m::EvalRunner::Ask,
+                        "replay" => m::EvalRunner::Replay,
+                        _ => m::EvalRunner::Mcp,
+                    },
+                    from: input
+                        .get("from")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                })
+                .unwrap()
+            {
+                m::RunEvalOutcome::Evaluated { .. } => ("evaluated", None),
+                m::RunEvalOutcome::SetInvalid { error } => (
+                    "set-invalid",
+                    Some(("EvalSetInvalid", json!({"reason": error.reason}))),
+                ),
+                m::RunEvalOutcome::RunnerFailed { error } => (
+                    "runner-failed",
+                    Some(("EvalRunnerFailed", json!({"reason": error.reason}))),
+                ),
+                m::RunEvalOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+            },
             "cortex.instance.ProposeSchemaChanges" => match app
                 .propose_schema_changes(m::ProposeSchemaChanges {
                     name: m::InstanceName(s("name")),
@@ -1046,7 +1098,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        83,
+        87,
         "the suite's scenario count moved; update this floor"
     );
     assert!(
