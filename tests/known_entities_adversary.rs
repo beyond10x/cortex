@@ -321,7 +321,7 @@ fn a_store_alias_with_a_line_break_adds_no_line_to_the_known_entities() {
 
 /// The same at the renderer: every entity stays on its type's one line.
 #[test]
-#[ignore = "finding: known::lines writes a name or alias holding a line break as several prompt lines (src/known.rs:293-303)"]
+#[ignore = "finding: known::lines writes a name or alias holding a line break as several prompt lines (src/known.rs:154-174)"]
 fn the_known_entity_lines_are_one_line_per_type_whatever_a_name_holds() {
     let shown = known::lines(&[store_entity(
         "Repository",
@@ -356,7 +356,7 @@ fn a_connectors_record_id_holding_colons_is_a_term_whole() {
 /// "Exact match after case folding": full case folding takes `ß` to `ss`, so a key `STRASSE`
 /// names a node `Straße`. `str::to_lowercase` is not case folding.
 #[test]
-#[ignore = "finding: fold() is to_lowercase, not case folding: STRASSE does not match Straße (src/known.rs:150)"]
+#[ignore = "finding: fold() is to_lowercase, not case folding: STRASSE does not match Straße (src/known.rs:20)"]
 fn case_folding_folds_sharp_s() {
     assert_eq!(known::fold("STRASSE"), known::fold("Straße"));
 }
@@ -507,7 +507,7 @@ fn a_template_alias_reaches_a_store_node_of_another_type() {
 /// The specification and the docs say a path is "letters, digits, `_` and `-`"; `aliases` and
 /// `properties` paths take any key. A record key of a non-ASCII letter cannot be named.
 #[test]
-#[ignore = "finding: a placeholder of non-ASCII letters is refused though the grammar says letters and mapped paths take any key (src/structured.rs:746 is_ascii_alphanumeric)"]
+#[ignore = "finding: a placeholder of non-ASCII letters is refused though the grammar says letters and mapped paths take any key (src/structured.rs:596 is_ascii_alphanumeric)"]
 fn a_placeholder_of_non_ascii_letters_is_a_path() {
     assert_eq!(template_refusal("{größe}"), None);
     assert_eq!(
