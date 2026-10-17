@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7
-contract digest a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96
+model digest 83febf50f5dbcd59902e08dbd381b04e1e4896bbbebfd8cbfdaa1aa579c892da
+contract digest 28c3cafdeedfaa558a6284d314ae46982a6ffd47cad7bde37551a08bbee342aa
 do not edit: regenerate with `ess generate`
 -->
 
@@ -30,26 +30,28 @@ flowchart TB
         cmd9["cortex.instance.RejectSchemaProposals"]
         cmd10["cortex.instance.RemoveInstance"]
         cmd11["cortex.instance.RestoreSnapshot"]
-        cmd12["cortex.instance.RunSource"]
-        cmd13["cortex.instance.UpdateInstance"]
-        evt0["cortex.instance.InstanceAdopted"]
-        evt1["cortex.instance.InstanceCreated"]
-        evt2["cortex.instance.InstanceRemoved"]
-        evt3["cortex.instance.InstanceUpdated"]
-        evt4["cortex.instance.QualityMeasured"]
-        evt5["cortex.instance.RunFailed"]
-        evt7["cortex.instance.SchemaChangesProposed"]
-        evt8["cortex.instance.SchemaProposalsApplied"]
-        evt9["cortex.instance.SchemaProposalsDecided"]
-        evt10["cortex.instance.SnapshotRestored"]
-        evt11["cortex.instance.SourceAdded"]
-        evt12["cortex.instance.SourceDisabled"]
-        evt13["cortex.instance.SourceEnabled"]
-        evt15["cortex.instance.SourceRan"]
+        cmd12["cortex.instance.RunEval"]
+        cmd13["cortex.instance.RunSource"]
+        cmd14["cortex.instance.UpdateInstance"]
+        evt0["cortex.instance.EvalRan"]
+        evt1["cortex.instance.InstanceAdopted"]
+        evt2["cortex.instance.InstanceCreated"]
+        evt3["cortex.instance.InstanceRemoved"]
+        evt4["cortex.instance.InstanceUpdated"]
+        evt5["cortex.instance.QualityMeasured"]
+        evt6["cortex.instance.RunFailed"]
+        evt8["cortex.instance.SchemaChangesProposed"]
+        evt9["cortex.instance.SchemaProposalsApplied"]
+        evt10["cortex.instance.SchemaProposalsDecided"]
+        evt11["cortex.instance.SnapshotRestored"]
+        evt12["cortex.instance.SourceAdded"]
+        evt13["cortex.instance.SourceDisabled"]
+        evt14["cortex.instance.SourceEnabled"]
+        evt16["cortex.instance.SourceRan"]
     end
     subgraph unowned["owned by no component"]
-        evt6["cortex.instance.RunSkipped"]
-        evt14["cortex.instance.SourceFetched"]
+        evt7["cortex.instance.RunSkipped"]
+        evt15["cortex.instance.SourceFetched"]
     end
     who0 -->|"may invoke"| cmd0
     who0 -->|"may invoke"| cmd1
@@ -62,42 +64,44 @@ flowchart TB
     who0 -->|"may invoke"| cmd9
     who0 -->|"may invoke"| cmd10
     who0 -->|"may invoke"| cmd11
-    who0 -->|"may invoke"| cmd13
+    who0 -->|"may invoke"| cmd12
+    who0 -->|"may invoke"| cmd14
     who1 -->|"may invoke"| cmd8
-    who1 -->|"may invoke"| cmd12
-    cmd0 -->|"added"| evt11
-    cmd1 -->|"adopted"| evt0
-    cmd2 -->|"applied"| evt8
-    cmd3 -->|"approved"| evt9
-    cmd4 -->|"partial"| evt1
-    cmd4 -->|"created"| evt1
-    cmd5 -->|"enabled"| evt13
-    cmd6 -->|"measured"| evt4
-    cmd7 -->|"proposed"| evt7
-    cmd7 -->|"reviewed"| evt7
-    cmd7 -->|"applied"| evt7
-    cmd8 -->|"disabled"| evt12
-    cmd8 -->|"counted"| evt5
-    cmd9 -->|"rejected"| evt9
-    cmd10 -->|"removed"| evt2
-    cmd11 -->|"restored"| evt10
-    cmd12 -->|"disabled"| evt6
-    cmd12 -->|"fetched"| evt14
-    cmd12 -->|"ran"| evt15
-    cmd13 -->|"updated"| evt3
+    who1 -->|"may invoke"| cmd13
+    cmd0 -->|"added"| evt12
+    cmd1 -->|"adopted"| evt1
+    cmd2 -->|"applied"| evt9
+    cmd3 -->|"approved"| evt10
+    cmd4 -->|"partial"| evt2
+    cmd4 -->|"created"| evt2
+    cmd5 -->|"enabled"| evt14
+    cmd6 -->|"measured"| evt5
+    cmd7 -->|"proposed"| evt8
+    cmd7 -->|"reviewed"| evt8
+    cmd7 -->|"applied"| evt8
+    cmd8 -->|"disabled"| evt13
+    cmd8 -->|"counted"| evt6
+    cmd9 -->|"rejected"| evt10
+    cmd10 -->|"removed"| evt3
+    cmd11 -->|"restored"| evt11
+    cmd12 -->|"evaluated"| evt0
+    cmd13 -->|"disabled"| evt7
+    cmd13 -->|"fetched"| evt15
+    cmd13 -->|"ran"| evt16
+    cmd14 -->|"updated"| evt4
 ```
 
 A command is accepted by the component that owns its context, emits the events one of its outcomes declares, and a dashed edge is a binding carrying an event into the next command. Design §9 begins one step earlier, at the actor who invokes the first command, and so does this graph: a solid edge out of an actor is a grant, and an actor drawn with no edge at all may invoke nothing — which is something the model says, not an arrow somebody forgot.
 
 ## Bounded contexts
 
-- **[Instances](domains/cortex-instance.md)** (`cortex.instance`) — Instances of a knowledge brain and the data sources that feed them. An instance owns one EKR store, created from the instance spec's seed. A source fetches documents on its own schedule, keeps those that are new or changed, has a model extract them into an EKR extraction document and applies it to the instance's store. 75 types, three entities, two views, 14 commands, 16 events, 30 errors and two actors.
+- **[Instances](domains/cortex-instance.md)** (`cortex.instance`) — Instances of a knowledge brain and the data sources that feed them. An instance owns one EKR store, created from the instance spec's seed. A source fetches documents on its own schedule, keeps those that are new or changed, has a model extract them into an EKR extraction document and applies it to the instance's store. 79 types, four entities, two views, 15 commands, 17 events, 32 errors and two actors.
 
 ## Components
 
 A component is a unit of ownership, not a deployment. How many of each runs, and what each needs, is [the topology](topology.md).
 
-**`cortex`** — The operator's command line: create, update, run and remove instances, and switch a source off and on. A systemd user timer per source calls the same binary. It owns [`cortex.instance`](domains/cortex-instance.md). It accepts `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.ApplySchemaProposals`, `cortex.instance.ApproveSchemaProposals`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.ProposeSchemaChanges`, `cortex.instance.RecordFailure`, `cortex.instance.RejectSchemaProposals`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.RunSource` and `cortex.instance.UpdateInstance`. It publishes `cortex.instance.InstanceAdopted`, `cortex.instance.InstanceCreated`, `cortex.instance.InstanceRemoved`, `cortex.instance.InstanceUpdated`, `cortex.instance.QualityMeasured`, `cortex.instance.RunFailed`, `cortex.instance.SchemaChangesProposed`, `cortex.instance.SchemaProposalsApplied`, `cortex.instance.SchemaProposalsDecided`, `cortex.instance.SnapshotRestored`, `cortex.instance.SourceAdded`, `cortex.instance.SourceDisabled`, `cortex.instance.SourceEnabled` and `cortex.instance.SourceRan`.
+**`cortex`** — The operator's command line: create, update, run and remove instances, and switch a source off and on. A systemd user timer per source calls the same binary. It owns [`cortex.instance`](domains/cortex-instance.md). It accepts `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.ApplySchemaProposals`, `cortex.instance.ApproveSchemaProposals`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.ProposeSchemaChanges`, `cortex.instance.RecordFailure`, `cortex.instance.RejectSchemaProposals`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.RunEval`, `cortex.instance.RunSource` and `cortex.instance.UpdateInstance`. It publishes `cortex.instance.EvalRan`, `cortex.instance.InstanceAdopted`, `cortex.instance.InstanceCreated`, `cortex.instance.InstanceRemoved`, `cortex.instance.InstanceUpdated`, `cortex.instance.QualityMeasured`, `cortex.instance.RunFailed`, `cortex.instance.SchemaChangesProposed`, `cortex.instance.SchemaProposalsApplied`, `cortex.instance.SchemaProposalsDecided`, `cortex.instance.SnapshotRestored`, `cortex.instance.SourceAdded`, `cortex.instance.SourceDisabled`, `cortex.instance.SourceEnabled` and `cortex.instance.SourceRan`.
 
 ## The other pages
 
@@ -111,4 +115,4 @@ A component is a unit of ownership, not a deployment. How many of each runs, and
 
 ---
 
-Generated from cortex v1 · model digest `590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7` · contract digest `a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `83febf50f5dbcd59902e08dbd381b04e1e4896bbbebfd8cbfdaa1aa579c892da` · contract digest `28c3cafdeedfaa558a6284d314ae46982a6ffd47cad7bde37551a08bbee342aa`. Do not edit this file; change the specification and regenerate it with `ess generate`.

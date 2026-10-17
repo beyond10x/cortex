@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.EvalResult",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "83febf50f5dbcd59902e08dbd381b04e1e4896bbbebfd8cbfdaa1aa579c892da",
+    "contract_digest": "slice-sha256/2:0d1f7d1249037f9ea266b0999ea9996e6a73addbeaaf7b8a65efd1192c32c2c7",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.EvalResult": {
+      "title": "EvalResult",
+      "x-ess-name": "cortex.instance.EvalResult",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "question": {
+          "type": "string"
+        },
+        "answer": {
+          "type": "string"
+        },
+        "cited_nodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "missing_facts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missing_nodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "format",
+        "id",
+        "question",
+        "answer",
+        "cited_nodes",
+        "passed",
+        "missing_facts",
+        "missing_nodes"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

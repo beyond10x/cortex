@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.EvalCase",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "83febf50f5dbcd59902e08dbd381b04e1e4896bbbebfd8cbfdaa1aa579c892da",
+    "contract_digest": "slice-sha256/2:81d8372727c5cb56eaa3ae900a6d01e6ba7340b66baf38c4e17e653012e4fc07",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.EvalCase": {
+      "title": "EvalCase",
+      "x-ess-name": "cortex.instance.EvalCase",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "question": {
+          "type": "string"
+        },
+        "expect_facts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expect_nodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "id",
+        "question",
+        "expect_facts",
+        "expect_nodes"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

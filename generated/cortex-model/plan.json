@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7",
-    "contract_digest": "a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96"
+    "source_digest": "83febf50f5dbcd59902e08dbd381b04e1e4896bbbebfd8cbfdaa1aa579c892da",
+    "contract_digest": "28c3cafdeedfaa558a6284d314ae46982a6ffd47cad7bde37551a08bbee342aa"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -83,6 +83,41 @@
     {
       "kind": "domain_type",
       "source": "cortex.instance.EkrPin",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.EvalCase",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.EvalResult",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.EvalRun.State",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.EvalRunner",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.EvalSet",
       "disposition": {
         "disposition": "generated"
       }
@@ -558,6 +593,13 @@
     },
     {
       "kind": "entity_lifecycle",
+      "source": "cortex.instance.EvalRun",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "entity_lifecycle",
       "source": "cortex.instance.Instance",
       "disposition": {
         "disposition": "generated"
@@ -752,6 +794,20 @@
     },
     {
       "kind": "command_contract",
+      "source": "cortex.instance.RunEval",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_behavior",
+      "source": "cortex.instance.RunEval",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "command_contract",
       "source": "cortex.instance.RunSource",
       "disposition": {
         "disposition": "generated"
@@ -779,6 +835,13 @@
     {
       "kind": "command_behavior",
       "source": "cortex.instance.UpdateInstance",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "event_type",
+      "source": "cortex.instance.EvalRan",
       "disposition": {
         "disposition": "generated"
       }
@@ -926,6 +989,20 @@
     {
       "kind": "error_type",
       "source": "cortex.instance.ConnectionUnavailable",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.instance.EvalRunnerFailed",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.instance.EvalSetInvalid",
       "disposition": {
         "disposition": "generated"
       }
@@ -1140,7 +1217,7 @@
         "disposition": "refused",
         "reason": "needs_caller_identity",
         "stage": "planning",
-        "detail": "may invoke `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.ApplySchemaProposals`, `cortex.instance.ApproveSchemaProposals`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.ProposeSchemaChanges`, `cortex.instance.RejectSchemaProposals`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.UpdateInstance`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry"
+        "detail": "may invoke `cortex.instance.AddSource`, `cortex.instance.AdoptInstance`, `cortex.instance.ApplySchemaProposals`, `cortex.instance.ApproveSchemaProposals`, `cortex.instance.CreateInstance`, `cortex.instance.EnableSource`, `cortex.instance.MeasureQuality`, `cortex.instance.ProposeSchemaChanges`, `cortex.instance.RejectSchemaProposals`, `cortex.instance.RemoveInstance`, `cortex.instance.RestoreSnapshot`, `cortex.instance.RunEval`, `cortex.instance.UpdateInstance`; generated as data, not enforced: the grant is available as the declared actors and the qualified commands each may invoke, and enforcement stays with the caller, because a grant is checked against a caller identity, which types do not carry"
       }
     },
     {

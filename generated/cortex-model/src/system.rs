@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 590eec96e468842d47bbd36e564dfe80cfcb3f6ff17a1259e23fd89709ba10d7
-// contract digest a29e3a1337a53e4441a5e167da33ade01c37192a6adae9420ea33dbe05308d96
+// model digest 83febf50f5dbcd59902e08dbd381b04e1e4896bbbebfd8cbfdaa1aa579c892da
+// contract digest 28c3cafdeedfaa558a6284d314ae46982a6ffd47cad7bde37551a08bbee342aa
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! The `cortex` system, v1: its components assembled, its bindings wired, and its one transport.
@@ -19,6 +19,8 @@
 /// escalates into.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SystemEvent {
+    /// `cortex.instance.EvalRan`.
+    EvalRan(crate::instance::EvalRan),
     /// `cortex.instance.InstanceAdopted`.
     InstanceAdopted(crate::instance::InstanceAdopted),
     /// `cortex.instance.InstanceCreated`.
@@ -53,6 +55,7 @@ impl SystemEvent {
     /// The qualified name the specification declares this event under.
     pub fn name(&self) -> &'static str {
         match self {
+            Self::EvalRan(_) => "cortex.instance.EvalRan",
             Self::InstanceAdopted(_) => "cortex.instance.InstanceAdopted",
             Self::InstanceCreated(_) => "cortex.instance.InstanceCreated",
             Self::InstanceRemoved(_) => "cortex.instance.InstanceRemoved",
@@ -74,6 +77,7 @@ impl SystemEvent {
 impl From<crate::ports::cortex::PublishedEvent> for SystemEvent {
     fn from(event: crate::ports::cortex::PublishedEvent) -> Self {
         match event {
+            crate::ports::cortex::PublishedEvent::EvalRan(event) => Self::EvalRan(event),
             crate::ports::cortex::PublishedEvent::InstanceAdopted(event) => Self::InstanceAdopted(event),
             crate::ports::cortex::PublishedEvent::InstanceCreated(event) => Self::InstanceCreated(event),
             crate::ports::cortex::PublishedEvent::InstanceRemoved(event) => Self::InstanceRemoved(event),
@@ -135,7 +139,7 @@ impl<CortexBehaviors> System<CortexBehaviors> {
 
 impl<CortexBehaviors> System<CortexBehaviors>
 where
-    CortexBehaviors: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    CortexBehaviors: crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunEvalBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
 {
     /// Delivers until quiescent: collects every component's outbox onto the log. No binding
     /// reacts to anything this specification publishes, so collecting is the whole delivery.
