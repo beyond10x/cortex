@@ -688,13 +688,17 @@ types:
   #   it recorded its outcome;
   # - `cortex_source_last_run_documents{source, kind}` (gauge), the last run's documents: `read`,
   #   the new or changed documents it selected to extract (`SourceRan.documents_new`), and
-  #   `applied` (`SourceRan.documents_applied`); present only when the last run ended `ran`;
+  #   `applied` (`SourceRan.documents_applied`); present when the last run ended `ran`, and when
+  #   it applied a batch and then ended with another outcome (`extraction-failed`,
+  #   `apply-refused`, `store-outcome-unknown`, `batch-too-large`, `terminated`,
+  #   `model-unavailable`), which reports what it read and applied before it ended;
   # - `cortex_source_documents_total{source, kind}` (counter), the same, added up over every run
-  #   that ended `ran`;
+  #   that reports them; a run that ended before it applied a batch adds nothing;
   # - `cortex_source_model_tokens_total{source, kind}` (counter), the model tokens those runs
   #   reported: `input` (`input_tokens` and `cache_creation_input_tokens`), `cached`
-  #   (`cache_read_input_tokens`) and `output` (`output_tokens`); a run whose answers did not
-  #   report a count adds nothing to it.
+  #   (`cache_read_input_tokens`) and `output` (`output_tokens`), each summed over the answers
+  #   that reported it, a failed answer included; an answer that did not report a count adds
+  #   nothing to it.
   # Every label is the source id or a fixed name: no series holds a credential, a prompt, a
   # question or document content. A source's status file (`status/<source>.json`) keeps these
   # figures, so the whole file is rewritten from the status files. A metric file cortex cannot
@@ -1691,7 +1695,8 @@ commands:
       # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.
       # UNMAPPED: after every outcome that names a source, the instance's `monitoring` reports it:
       # `metrics.prom` is rewritten with the source's run counted under its outcome, its duration,
-      # and for `ran` its documents and model tokens (`cortex.instance.MonitoringSpec`), and for
+      # and for `ran`, or any outcome reached after a batch was applied, its documents and model
+      # tokens (`cortex.instance.MonitoringSpec`), and for
       # `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`,
       # `connection-unavailable`, `batch-too-large`, `terminated` and `model-unavailable` the hook
       # is called once, with

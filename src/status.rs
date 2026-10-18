@@ -76,10 +76,11 @@ pub struct Status {
     /// How long the last run took, in milliseconds, to the moment it recorded its outcome.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_duration_ms: Option<i64>,
-    /// The last run's documents by kind (`read`, `applied`): present only when it ended `ran`.
+    /// The last run's documents by kind (`read`, `applied`): present only when it ended `ran`, or
+    /// applied a batch and then failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_documents: Option<BTreeMap<String, u64>>,
-    /// The documents of every run that ended `ran`, by kind (`read`, `applied`).
+    /// The documents of every run that reported them, by kind (`read`, `applied`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub documents: BTreeMap<String, u64>,
     /// The model tokens those runs reported, by kind (`input`, `cached`, `output`).
@@ -87,9 +88,10 @@ pub struct Status {
     pub tokens: BTreeMap<String, u64>,
 }
 
-/// What a run that ended `ran` did, as `metrics.prom` reports it: the documents it read (the new
-/// or changed ones it selected, `SourceRan.documents_new`) and applied, and the model tokens its
-/// answers reported, each `None` when an answer did not report it.
+/// What a run that ended `ran`, or applied a batch and then failed, did, as `metrics.prom` reports
+/// it: the documents it read (the new or changed ones it selected, `SourceRan.documents_new`) and
+/// applied, and the model tokens its answers reported, each `None` when an answer did not report
+/// it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Figures {
     pub read: u64,
@@ -107,8 +109,8 @@ const DOCUMENT_KINDS: [&str; 2] = ["read", "applied"];
 const TOKEN_KINDS: [&str; 3] = ["input", "cached", "output"];
 
 impl Status {
-    /// Sets the last run's duration and figures, and adds the figures to the totals. A run that
-    /// did not end `ran` (no `figures`) reports no documents.
+    /// Sets the last run's duration and figures, and adds the figures to the totals, whatever the
+    /// outcome. A run that failed before it applied a batch (no `figures`) reports no documents.
     fn add(&mut self, duration_ms: Option<i64>, figures: Option<&Figures>) {
         self.last_duration_ms = duration_ms;
         self.last_documents = figures.map(|f| {
@@ -362,7 +364,7 @@ pub fn metrics_text(layout: &Layout, sources: &[String]) -> String {
     }
     text.push_str(
         "# HELP cortex_source_last_run_documents The documents the source's last run read and \
-         applied, when it ended ran.\n\
+         applied, when it ended ran or applied a batch before it failed.\n\
          # TYPE cortex_source_last_run_documents gauge\n",
     );
     for (id, status) in &statuses {
@@ -668,6 +670,49 @@ mod tests {
             hook_outcome(m::RunOutcome::Terminated, false),
             Some(m::RunOutcome::Terminated)
         );
+    }
+
+    /// `story:partial-run-counts`: a run that applied a batch and then failed reports its figures
+    /// as a run that ended `ran` does: the last run's documents, and its documents and tokens
+    /// added to the totals.
+    #[test]
+    fn a_failed_run_with_figures_reports_and_adds_them() {
+        let tmp = tempfile::tempdir().unwrap();
+        let layout = Layout::new(tmp.path().to_path_buf());
+        let figures = Figures {
+            read: 4,
+            applied: 1,
+            input_tokens: Some(100),
+            cached_tokens: Some(7),
+            output_tokens: Some(40),
+        };
+        for outcome in [
+            m::RunOutcome::ModelUnavailable,
+            m::RunOutcome::BatchTooLarge,
+        ] {
+            record_run(
+                &layout,
+                "news",
+                outcome,
+                1_000,
+                Some("stopped"),
+                Some(500),
+                Some(&figures),
+            )
+            .unwrap();
+        }
+        let text = metrics_text(&layout, &["t/news".into()]);
+        for line in [
+            "cortex_source_last_run_documents{source=\"t/news\",kind=\"read\"} 4\n",
+            "cortex_source_last_run_documents{source=\"t/news\",kind=\"applied\"} 1\n",
+            "cortex_source_documents_total{source=\"t/news\",kind=\"read\"} 8\n",
+            "cortex_source_documents_total{source=\"t/news\",kind=\"applied\"} 2\n",
+            "cortex_source_model_tokens_total{source=\"t/news\",kind=\"input\"} 200\n",
+            "cortex_source_model_tokens_total{source=\"t/news\",kind=\"cached\"} 14\n",
+            "cortex_source_model_tokens_total{source=\"t/news\",kind=\"output\"} 80\n",
+        ] {
+            assert!(text.contains(line), "{line}{text}");
+        }
     }
 
     /// `story:store-outcome-unknown-not-counted`: the hook is called for an unknown store outcome,
