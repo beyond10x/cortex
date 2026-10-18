@@ -380,9 +380,11 @@ cortex_source_model_tokens_total{source="example/news",kind="output"} 6120
 
 A run that applied batches and then ended with another outcome (`extraction-failed`,
 `apply-refused`, `store-outcome-unknown`, `batch-too-large`, `terminated` or `model-unavailable`)
-adds the documents it read and applied
+and kept its batches adds the documents it read and applied
 and the tokens its answers reported, as a run that ended `ran` does; a run that ended before it
-applied a batch adds none. Every label is the source id or a
+applied a batch adds none. A run that was undone afterwards (its gate refused it, or a gated run
+ended `terminated` or `store-outcome-unknown` and was undone) adds the documents it read and the
+tokens it spent but no applied document, as the store holds none of them. Every label is the source id or a
 fixed name: no series holds a credential, a prompt, a question or a document's content. The
 figures are kept in the status file and start from the first run cortex recorded them for.
 

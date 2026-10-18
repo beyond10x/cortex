@@ -90,8 +90,8 @@ pub struct Status {
 
 /// What a run that ended `ran`, or applied a batch and then failed, did, as `metrics.prom` reports
 /// it: the documents it read (the new or changed ones it selected, `SourceRan.documents_new`) and
-/// applied, and the model tokens its answers reported, each `None` when an answer did not report
-/// it.
+/// applied (`0` for a run that was undone), as counts, and the model tokens its answers reported,
+/// each `None` when an answer did not report it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Figures {
     pub read: u64,

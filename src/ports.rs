@@ -644,7 +644,8 @@ impl RunSourceBehavior for Ports {
         .find(|(outcome, _)| self.decided(RUN, outcome));
         // A run that applied a batch and then failed reports what it read, applied and spent,
         // as a run that ended `ran` does (main.rs, `status::Figures`); one that failed before it
-        // applied a batch reports none.
+        // applied a batch reports none. A run its gate undid reports what it read and spent,
+        // and no applied document: the store holds none.
         self.shared.borrow_mut().last_run = None;
         let mut partial = Report::default();
         let result = match forced {
@@ -658,7 +659,7 @@ impl RunSourceBehavior for Ports {
                 }
             }
         };
-        if result.is_err() && partial.documents_applied > 0 {
+        if result.is_err() && (partial.documents_applied > 0 || partial.undone) {
             self.shared.borrow_mut().last_run = Some(partial);
         }
         let report = match result {

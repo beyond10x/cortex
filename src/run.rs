@@ -59,6 +59,10 @@ pub struct Report {
     /// recorded and they were not extracted ([`SeenState::hash_unhashed`]).
     pub hashed: usize,
     pub documents_applied: i64,
+    /// Whether the run's applied batches were undone afterwards (its gate refused it, or a gated
+    /// run ended terminated or store-outcome-unknown): `documents_applied` is then `0`, the
+    /// store holding none of them, and the tokens the run spent stay counted.
+    pub undone: bool,
     /// `0` when no model was asked, the sum when every answer carried a cost, `None` as soon as
     /// one answer carried none: a missing cost is never written as `0`.
     pub cost_usd: Option<f64>,
@@ -174,6 +178,7 @@ impl Default for Report {
             documents_new: 0,
             hashed: 0,
             documents_applied: 0,
+            undone: false,
             cost_usd: Some(0.0),
             cost_counted: true,
             facts_refused: 0,
@@ -587,7 +592,13 @@ fn process(
         partial,
         None,
     );
-    settle(layout, spec, label, ran, before)
+    let settled = settle(layout, spec, label, ran, &mut before);
+    // The tokens the run spent stay counted; the documents of an undone run are not in the store.
+    if before.undone && settled.is_err() {
+        partial.documents_applied = 0;
+        partial.undone = true;
+    }
+    settled
 }
 
 /// [`process`], with the run's snapshot and stage in `before`, which [`settle`] settles once the
@@ -1256,6 +1267,9 @@ struct Undo {
     /// The snapshot's name, once the first `apply-extraction` committed and it was kept.
     kept: Option<String>,
     applied: bool,
+    /// Whether the run's applied batches were undone (a gate refusal, a gated run stopped or
+    /// unknown): the store does not hold its documents, so none is counted as applied.
+    undone: bool,
     /// The stage the run runs in, until the gate publishes or abandons it, or [`settle`] does.
     staged: Option<Staged>,
 }
@@ -1266,6 +1280,7 @@ impl Undo {
             before,
             kept: None,
             applied: false,
+            undone: false,
             staged: None,
         }
     }
@@ -1299,15 +1314,20 @@ fn settle(
     spec: &m::InstanceSpec,
     label: &str,
     ran: Result<Report, Failure>,
-    mut before: Undo,
+    before: &mut Undo,
 ) -> Result<Report, Failure> {
     // A run sent SIGTERM is undone when it is gated: its stage abandoned, or its kept snapshot
     // restored, as a run its gate refuses is; an ungated run keeps the batches it applied.
     if let Err(Failure::Terminated(why)) = &ran {
         return Err(Failure::Terminated(match before.staged.take() {
-            Some(staged) => format!("{why}; {}", staged.abandon()),
+            Some(staged) => {
+                before.undone = before.applied;
+                format!("{why}; {}", staged.abandon())
+            }
             None if gated(spec) && before.kept.is_some() => {
-                undo_stopped(layout, spec, label, "terminated", why, &before)
+                let (done, reason) = undo_stopped(layout, spec, label, "terminated", why, before);
+                before.undone = done;
+                reason
             }
             None if before.applied => {
                 format!("{why}; the batches applied before it stay applied and seen")
@@ -1320,7 +1340,7 @@ fn settle(
             // A gated run outside a stage whose write was unknown: an earlier batch committed
             // and the run never reached its gate, so it is undone as a run its gate refuses is.
             Err(Failure::StoreOutcomeUnknown(why)) if gated(spec) && before.kept.is_some() => {
-                Err(undo_unknown(layout, spec, label, why, &before))
+                Err(undo_unknown(layout, spec, label, why, before))
             }
             ran => ran,
         };
@@ -1373,16 +1393,11 @@ fn undo_unknown(
     spec: &m::InstanceSpec,
     label: &str,
     why: String,
-    before: &Undo,
+    before: &mut Undo,
 ) -> Failure {
-    Failure::StoreOutcomeUnknown(undo_stopped(
-        layout,
-        spec,
-        label,
-        "store-outcome-unknown",
-        &why,
-        before,
-    ))
+    let (done, reason) = undo_stopped(layout, spec, label, "store-outcome-unknown", &why, before);
+    before.undone = done;
+    Failure::StoreOutcomeUnknown(reason)
 }
 
 /// Undoes a gated run outside a stage that ended as `outcome` after a batch committed, from its
@@ -1395,7 +1410,7 @@ fn undo_stopped(
     outcome: &str,
     why: &str,
     before: &Undo,
-) -> String {
+) -> (bool, String) {
     let home = layout
         .dir
         .parent()
@@ -1415,7 +1430,7 @@ fn undo_stopped(
         "restored": restored,
         "reason": reason,
     }));
-    reason
+    (restored.is_some(), reason)
 }
 
 /// The failure a fetch's error is. A fetch the run stopped because it was sent SIGTERM
@@ -1719,6 +1734,7 @@ fn held_to_gate(
         .parent()
         .and_then(std::path::Path::parent)
         .unwrap_or(&layout.dir);
+    let staged_abandoned = before.staged.is_some();
     let (restored, undone) = match before.staged.take() {
         Some(staged) => (None, staged.abandon()),
         None => undo(
@@ -1728,6 +1744,7 @@ fn held_to_gate(
             &Systemd::from_env(home),
         ),
     };
+    before.undone = staged_abandoned || restored.is_some();
     let mut why = format!("{}; {undone}", gate::reason(&failed));
     if !report.too_large.is_empty() {
         why.push_str(&format!(
