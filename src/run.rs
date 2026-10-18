@@ -102,6 +102,9 @@ pub struct Report {
     /// The tokens those calls reported, summed with the rule of [`add_cost`]: `0` when no model
     /// was asked, `None` as soon as one answer did not carry the count.
     pub usage: extract::Usage,
+    /// The tokens those calls reported, each count summed over the answers that carried it: an
+    /// answer that did not carry a count adds nothing to it. What `metrics.prom` counts.
+    pub reported: extract::Usage,
     /// The input tokens (cache reads and writes included) apportioned by bytes to the fixed part
     /// of each request and to its documents ([`extract::split_tokens`]); `None` as the input is.
     pub fixed_input_tokens: Option<i64>,
@@ -186,6 +189,7 @@ impl Default for Report {
             daily_ceiling_reached: false,
             model_calls: 0,
             usage: extract::Usage::ZERO,
+            reported: extract::Usage::ZERO,
             fixed_input_tokens: Some(0),
             documents_input_tokens: Some(0),
             batch_chars: BATCH_CHARS,
@@ -201,6 +205,21 @@ impl Report {
     pub fn add_calls(&mut self, calls: i64, usage: extract::Usage, fixed: usize, documents: usize) {
         self.model_calls += calls;
         self.usage = self.usage.plus(usage);
+        let known = |total: Option<i64>, part: Option<i64>| {
+            Some(total.unwrap_or(0).saturating_add(part.unwrap_or(0)))
+        };
+        self.reported = extract::Usage {
+            input_tokens: known(self.reported.input_tokens, usage.input_tokens),
+            cache_creation_input_tokens: known(
+                self.reported.cache_creation_input_tokens,
+                usage.cache_creation_input_tokens,
+            ),
+            cache_read_input_tokens: known(
+                self.reported.cache_read_input_tokens,
+                usage.cache_read_input_tokens,
+            ),
+            output_tokens: known(self.reported.output_tokens, usage.output_tokens),
+        };
         let split = usage
             .all_input()
             .map(|tokens| extract::split_tokens(tokens, fixed, documents));
@@ -407,12 +426,22 @@ pub fn count(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<C
         planned.structured(),
         false,
         &mut Undo::new(BeforeApply::none()),
+        &mut Report::default(),
         Some(&mut counts),
     )?;
     Ok(counts)
 }
 
-pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Report, Failure> {
+///
+/// `partial` is left holding the run's report as it stood when the run failed: the documents it
+/// read and applied and the tokens it spent before it ended ([`Report::default`] when it failed
+/// before it processed anything).
+pub fn run(
+    layout: &Layout,
+    tools: &Tools,
+    source: &m::SourceData,
+    partial: &mut Report,
+) -> Result<Report, Failure> {
     let planned = Planned::of(layout, source)?;
     let (window, seen_path) = (planned.window, planned.seen_path.clone());
     // A stop of the whole unit (`systemctl stop`, a pod's deadline) ends the `connectors` child
@@ -433,6 +462,7 @@ pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Rep
             Some(window),
             planned.structured(),
             true,
+            partial,
         )
     });
     if ran.is_err() {
@@ -507,6 +537,7 @@ fn seed_documents(layout: &Layout, tools: &Tools, undoable: bool) -> Result<Repo
         None,
         None,
         undoable,
+        &mut Report::default(),
     )
 }
 
@@ -538,6 +569,7 @@ fn process(
     window: Option<Window>,
     structured_source: Option<&m::StructuredSource>,
     undoable: bool,
+    partial: &mut Report,
 ) -> Result<Report, Failure> {
     // A staged run that was killed left its stage and the `state/` from before it.
     Staged::recover(layout, spec)?;
@@ -553,6 +585,7 @@ fn process(
         structured_source,
         undoable,
         &mut before,
+        partial,
         None,
     );
     settle(layout, spec, label, ran, before)
@@ -575,13 +608,14 @@ fn process_in(
     structured_source: Option<&m::StructuredSource>,
     undoable: bool,
     before: &mut Undo,
+    partial: &mut Report,
     counts: Option<&mut Counts>,
 ) -> Result<Report, Failure> {
     let started = now_ms();
     let applied_at = window.map_or(started, |w| w.until_ms);
     let redactor = redact::compile(spec.redaction.as_ref()).map_err(Failure::Extract)?;
     // A message the fetch built can name a document key; it is masked as the key is.
-    let mut report = Report {
+    *partial = Report {
         skipped: fetched
             .skipped
             .iter()
@@ -590,6 +624,8 @@ fn process_in(
         cost_counted: spend::counts_dollars(&spec.model),
         ..Report::default()
     };
+    // The run's report as it grows: what a failure after a batch was applied reports ([`process`]).
+    let report = partial;
     // The keys of documents cut at `max_chars_per_document`: counted as they reach the model.
     let mut cut: HashSet<String> = HashSet::new();
     report.redacted = redactor.as_ref().map(Redactor::counts);
@@ -780,7 +816,7 @@ fn process_in(
             .iter()
             .map(|u| masked_key(redactor.as_ref(), u))
             .collect();
-        return Ok(report);
+        return Ok(std::mem::take(report));
     }
     let selected = seen.select(
         docs,
@@ -793,13 +829,13 @@ fn process_in(
     // A run with nothing new still compares the store with what the source lists, when it ends
     // what the source no longer lists.
     if selected.is_empty() && listed.is_none() {
-        unread(&mut report, &fetched.unread, redactor.as_ref());
+        unread(report, &fetched.unread, redactor.as_ref());
         let failures = fetched.child_failures.clone();
         finish(
-            &mut seen, &seen_path, &report, wanted, held_since, window, failures,
+            &mut seen, &seen_path, report, wanted, held_since, window, failures,
         )?;
-        log(layout, label, &report, started);
-        return Ok(report);
+        log(layout, label, report, started);
+        return Ok(std::mem::take(report));
     }
 
     let mut store = layout.store_handle(spec);
@@ -839,28 +875,22 @@ fn process_in(
             held: &held,
         };
         apply_records(
-            layout,
-            &records,
-            selected,
-            &mut seen,
-            &seen_path,
-            &mut report,
-            before,
+            layout, &records, selected, &mut seen, &seen_path, report, before,
         )?;
         // A fetch that left records unread lists only part of the source: nothing is ended.
         if let Some(listed) = listed.as_deref().filter(|_| fetched.unread.is_empty()) {
-            end_dropped(&records, listed, &seen, &mut report, before)?;
+            end_dropped(&records, listed, &seen, report, before)?;
         }
-        unread(&mut report, &fetched.unread, redactor.as_ref());
+        unread(report, &fetched.unread, redactor.as_ref());
         if undoable {
-            held_to_gate(layout, spec, &store, label, &report, None, before, started)?;
+            held_to_gate(layout, spec, &store, label, report, None, before, started)?;
         }
         let failures = fetched.child_failures.clone();
         finish(
-            &mut seen, &seen_path, &report, wanted, held_since, window, failures,
+            &mut seen, &seen_path, report, wanted, held_since, window, failures,
         )?;
-        log(layout, label, &report, started);
-        return Ok(report);
+        log(layout, label, report, started);
+        return Ok(std::mem::take(report));
     }
     let schema = crate::ekr::Binary(store.bin.clone())
         .model_schema()
@@ -1184,14 +1214,14 @@ fn process_in(
         }
         report.stopped = Some(why.clone());
     }
-    unread(&mut report, &fetched.unread, redactor.as_ref());
+    unread(report, &fetched.unread, redactor.as_ref());
     if undoable {
         held_to_gate(
             layout,
             spec,
             &store,
             label,
-            &report,
+            report,
             too_large
                 .as_deref()
                 .or(unreachable.as_ref().map(|(_, why)| why.as_str())),
@@ -1201,13 +1231,13 @@ fn process_in(
     }
     let failures = fetched.child_failures.clone();
     finish(
-        &mut seen, &seen_path, &report, wanted, held_since, window, failures,
+        &mut seen, &seen_path, report, wanted, held_since, window, failures,
     )?;
-    log(layout, label, &report, started);
+    log(layout, label, report, started);
     match (too_large, unreachable) {
         (Some(why), _) => Err(Failure::BatchTooLarge(why)),
         (None, Some((cause, why))) => Err(Failure::ModelUnavailable(cause, why)),
-        (None, None) => Ok(report),
+        (None, None) => Ok(std::mem::take(report)),
     }
 }
 

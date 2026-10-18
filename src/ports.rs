@@ -642,6 +642,11 @@ impl RunSourceBehavior for Ports {
         ]
         .into_iter()
         .find(|(outcome, _)| self.decided(RUN, outcome));
+        // A run that applied a batch and then failed reports what it read, applied and spent,
+        // as a run that ended `ran` does (main.rs, `status::Figures`); one that failed before it
+        // applied a batch reports none.
+        self.shared.borrow_mut().last_run = None;
+        let mut partial = Report::default();
         let result = match forced {
             Some((_, failure)) => Err(failure(self.generate_string())),
             None => {
@@ -649,10 +654,13 @@ impl RunSourceBehavior for Ports {
                 let layout = Layout::new(self.home.instance_dir(&found.data.instance_name.0));
                 match self.runner.as_mut() {
                     Some(runner) => runner(&found.data),
-                    None => run::run(&layout, &self.tools, &found.data),
+                    None => run::run(&layout, &self.tools, &found.data, &mut partial),
                 }
             }
         };
+        if result.is_err() && partial.documents_applied > 0 {
+            self.shared.borrow_mut().last_run = Some(partial);
+        }
         let report = match result {
             Err(Failure::Fetch(reason)) => {
                 self.note(found, m::RunOutcome::FetchFailed, Some(reason.clone()));

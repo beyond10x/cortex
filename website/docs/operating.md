@@ -368,12 +368,15 @@ cortex_source_model_tokens_total{source="example/news",kind="output"} 6120
 | `cortex_source_runs_total{source, outcome}` | counter | the source's runs under each outcome (`ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable`, `batch-too-large`, `terminated`, `model-unavailable`, `disabled`), every outcome written, 0 for one that never happened |
 | `cortex_source_last_run_timestamp_seconds{source}` | gauge | when the last run started |
 | `cortex_source_last_run_duration_seconds{source}` | gauge | how long the last run took, to the moment it recorded its outcome, whatever the outcome |
-| `cortex_source_last_run_documents{source, kind}` | gauge | the last run's documents: `read`, the new or changed documents it selected to extract (`documents_new`), and `applied` (`documents_applied`). Present only when the last run ended `ran` |
-| `cortex_source_documents_total{source, kind}` | counter | the same, added up over the runs that ended `ran` |
-| `cortex_source_model_tokens_total{source, kind}` | counter | the model tokens those runs reported: `input` (`input_tokens` and `cache_creation_input_tokens`), `cached` (`cache_read_input_tokens`) and `output` (`output_tokens`). A run whose answers did not report a count adds nothing to it |
+| `cortex_source_last_run_documents{source, kind}` | gauge | the last run's documents: `read`, the new or changed documents it selected to extract (`documents_new`), and `applied` (`documents_applied`). Present when the last run ended `ran`, and when it applied a batch and then ended with another outcome (`extraction-failed`, `apply-refused`, `store-outcome-unknown`, `batch-too-large`, `terminated`, `model-unavailable`): then it reports what the run read and applied before it ended. Absent after a run that ended before it applied a batch |
+| `cortex_source_documents_total{source, kind}` | counter | the same, added up over every run that reports them, whatever its outcome; a run that ended before it applied a batch adds nothing |
+| `cortex_source_model_tokens_total{source, kind}` | counter | the model tokens those runs reported: `input` (`input_tokens` and `cache_creation_input_tokens`), `cached` (`cache_read_input_tokens`) and `output` (`output_tokens`), each summed over the answers that reported it, a failed answer included. An answer that did not report a count adds nothing to it |
 
-A run that did not end `ran` adds no documents or tokens, even when it applied batches before it
-stopped (`batch-too-large`, `model-unavailable`, `terminated`). Every label is the source id or a
+A run that applied batches and then ended with another outcome (`extraction-failed`,
+`apply-refused`, `store-outcome-unknown`, `batch-too-large`, `terminated` or `model-unavailable`)
+adds the documents it read and applied
+and the tokens its answers reported, as a run that ended `ran` does; a run that ended before it
+applied a batch adds none. Every label is the source id or a
 fixed name: no series holds a credential, a prompt, a question or a document's content. The
 figures are kept in the status file and start from the first run cortex recorded them for.
 

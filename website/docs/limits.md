@@ -134,9 +134,10 @@ stand; [Status](./status.mdx) lists what is planned.
   [When the model cannot be reached](./operating.md#when-the-model-cannot-be-reached)); an outage
   a gateway words otherwise, or a call that times out, ends `extraction-failed` and is counted.
   The run does not retry the model beyond the one repeat of an error that cost zero.
-- **A run's figures count completed runs only.** `metrics.prom` adds the documents and model
-  tokens of runs that ended `ran`; a run that stopped (`batch-too-large`, `model-unavailable`,
-  `terminated`) after applying batches adds none of them, though its tokens were spent.
+- **A run's figures count only what was reported after a batch was applied.** `metrics.prom` adds
+  the documents and model tokens of a run that ended `ran` or applied a batch before it ended
+  otherwise; a run that ended before it applied a batch adds none of them, though a failed model
+  call may have spent tokens, and a model call ended by SIGTERM never reports its tokens.
 - **SIGTERM does not interrupt a fetch.** A run sent SIGTERM during a Connectors read stops when
   the read returns; only a model call is ended at once.
 - **The daily ceiling is per instance.** `daily_ceiling_usd` bounds what one instance's model calls

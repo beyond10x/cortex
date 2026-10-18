@@ -459,12 +459,10 @@ fn a_model_unavailable_reason_is_masked_and_bounded() {
 }
 
 /// A run that applied a batch before its model became unavailable spent tokens and applied a
-/// document; `metrics.prom` counts neither (only runs that ended `ran`), so
-/// `cortex_source_model_tokens_total` under-reports what the model cost and
-/// `cortex_source_documents_total{kind="applied"}` what the store holds. The story's series are
-/// "the model tokens it spent" and "the documents it read and applied".
+/// document; `metrics.prom` counts both, as for a run that ended `ran`, so
+/// `cortex_source_model_tokens_total` holds what the model cost and
+/// `cortex_source_documents_total{kind="applied"}` what the store holds.
 #[test]
-#[ignore = "finding: tokens spent and documents applied by a run that did not end ran are never counted in metrics.prom"]
 fn a_partial_model_unavailable_run_counts_the_tokens_it_spent_and_documents_it_applied() {
     let w = World::new();
     long_pages(&w);
