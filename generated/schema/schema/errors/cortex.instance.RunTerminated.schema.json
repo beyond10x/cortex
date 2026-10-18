@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RunTerminated payload",
-  "description": "The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended, and stopped at the next safe point: a model call in flight was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about the source was wrong: the failure is not counted against it.",
+  "description": "The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended, and stopped at the next safe point: a fetch or a model call in flight was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about the source was wrong: the failure is not counted against it.",
   "x-ess-name": "cortex.instance.RunTerminated",
   "x-ess-kind": "error-payload",
   "type": "object",
@@ -17,8 +17,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "0f7251f0c444abe6dc1366bd90cef115ffd6b3c2bd521752108a810a42d41fc1",
-    "contract_digest": "slice-sha256/2:62921b70313e022c2b3be397b1da06195d00c3e769c0b36941647a25ffb5ee77",
+    "source_digest": "85667ceb32a53d9e210fc6d890e3c3f9c26bc2d18e35b5238ae9cea441907a99",
+    "contract_digest": "slice-sha256/2:c58125c9109c64f1512178b52e0ab33cb4289c85b706718af6862cf2f36ff00c",
     "regenerate": "ess generate"
   }
 }

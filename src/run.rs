@@ -396,10 +396,7 @@ impl Planned {
             source.policy.max_chars_per_document.max(0) as usize,
             redactor.as_ref(),
         )
-        .map_err(|e| match e {
-            FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
-            FetchError::Unavailable(m) => Failure::ConnectionUnavailable(m),
-        })
+        .map_err(fetch_failure)
     }
 }
 
@@ -446,8 +443,11 @@ pub fn run(
     let (window, seen_path) = (planned.window, planned.seen_path.clone());
     // A stop of the whole unit (`systemctl stop`, a pod's deadline) ends the `connectors` child
     // too: a fetch that failed after SIGTERM is the stop, not a failure of the source.
+    // A fetch the run ended itself says so ([`FetchError::Terminated`]).
     let fetched = planned.fetch(tools).or_else(|failure| {
-        stop_point("while it fetched")?;
+        if !matches!(failure, Failure::Terminated(_)) {
+            stop_point("while it fetched")?;
+        }
         Err(failure)
     });
     let ran = fetched.and_then(|fetched| {
@@ -523,10 +523,7 @@ fn seed_documents(layout: &Layout, tools: &Tools, undoable: bool) -> Result<Repo
         policy.max_chars_per_document as usize,
         None,
     )
-    .map_err(|e| match e {
-        FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
-        FetchError::Unavailable(m) => Failure::ConnectionUnavailable(m),
-    })?;
+    .map_err(fetch_failure)?;
     process(
         layout,
         tools,
@@ -1070,7 +1067,14 @@ fn process_in(
         report.add_calls(calls, usage, fixed_bytes, prompt.len() - fixed);
         let answer = match asked {
             Ok(answer) => answer,
-            Err(refused) if refused.terminated => {
+            Err(refused) if refused.terminated == Some(extract::Stopped::Wait) => {
+                return Err(Failure::Terminated(format!(
+                    "the run was sent SIGTERM while it waited to ask the model again for batch \
+                     {}; no call was in flight",
+                    n - 1
+                )))
+            }
+            Err(refused) if refused.terminated.is_some() => {
                 return Err(Failure::Terminated(format!(
                     "the run was sent SIGTERM while the model was asked for batch {}; the call \
                      was ended",
@@ -1410,6 +1414,18 @@ fn undo_stopped(
         "reason": reason,
     }));
     reason
+}
+
+/// The failure a fetch's error is. A fetch the run stopped because it was sent SIGTERM
+/// ([`FetchError::Terminated`]) is [`Failure::Terminated`], saying what was ended.
+fn fetch_failure(e: FetchError) -> Failure {
+    match e {
+        FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
+        FetchError::Unavailable(m) => Failure::ConnectionUnavailable(m),
+        FetchError::Terminated(m) => Failure::Terminated(format!(
+            "the run was sent SIGTERM and stopped while it fetched; {m}"
+        )),
+    }
 }
 
 /// A safe point of the run: [`Failure::Terminated`] once the run was sent SIGTERM, saying where

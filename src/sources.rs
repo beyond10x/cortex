@@ -45,6 +45,9 @@ pub enum FetchError {
     /// [`InvokeError::Unavailable`]: Connectors could not revalidate the connection before the run
     /// fetched anything.
     Unavailable(String),
+    /// The run was sent SIGTERM ([`crate::terminate`]) and the fetch stopped: a `connectors` call
+    /// ended ([`InvokeError::Terminated`]), or no further page or file read. What it stopped.
+    Terminated(String),
 }
 
 impl From<InvokeError> for FetchError {
@@ -53,6 +56,7 @@ impl From<InvokeError> for FetchError {
             InvokeError::Missing(m) => FetchError::Missing(m),
             InvokeError::Failed(m) | InvokeError::Lapsed(m) => FetchError::Failed(m),
             InvokeError::Unavailable(m) => FetchError::Unavailable(m),
+            InvokeError::Terminated(m) => FetchError::Terminated(m),
         }
     }
 }
@@ -60,9 +64,20 @@ impl From<InvokeError> for FetchError {
 impl std::fmt::Display for FetchError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Missing(m) | Self::Failed(m) | Self::Unavailable(m) => f.write_str(m),
+            Self::Missing(m) | Self::Failed(m) | Self::Unavailable(m) | Self::Terminated(m) => {
+                f.write_str(m)
+            }
         }
     }
+}
+
+/// A safe point of a fetch, between its pages and its files: [`FetchError::Terminated`] once the
+/// run was sent SIGTERM ([`crate::terminate`]), naming what it did not read.
+fn stop_before(what: impl FnOnce() -> String) -> Result<(), FetchError> {
+    if crate::terminate::requested() {
+        return Err(FetchError::Terminated(format!("{} was not read", what())));
+    }
+    Ok(())
 }
 
 /// How far a run's `{since}` reaches back before the start of the last successful run: a record a
@@ -273,6 +288,7 @@ fn walk_until(
         .collect();
     let pages = paging.map_or(1, |p| p.max_pages.max(1));
     for n in 1..=pages {
+        stop_before(|| format!("{what}: page {n}"))?;
         let answer = invoke(&input)?;
         let answer = body(&answer);
         let page = at(answer, records)
@@ -576,6 +592,7 @@ fn fetch_structured_files(
             }
             matched = true;
             let path = entry.path().display();
+            stop_before(|| "the next file".into())?;
             let bytes = std::fs::read(entry.path())
                 .map_err(|e| FetchError::Failed(format!("{path}: {e}")))?;
             let unmarked = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
@@ -678,6 +695,8 @@ fn fetch_structured(
                         let records = added.into_iter().map(|(id, r)| (id, r.clone())).collect();
                         read.insert(child.operation.as_str(), Read { records, whole });
                     }
+                    // A stop is the run's, not a failure of the child call.
+                    Err(e @ FetchError::Terminated(_)) => return Err(e),
                     Err(e) => failed_children.push(ChildFailure {
                         parent: parent.clone(),
                         operation: child.operation.clone(),
@@ -1218,6 +1237,7 @@ fn fetch_files(
             if !glob.is_match(rel) {
                 continue;
             }
+            stop_before(|| "the next file".into())?;
             let Ok(bytes) = std::fs::read(entry.path()) else {
                 continue;
             };

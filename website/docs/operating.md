@@ -140,16 +140,19 @@ run's. A `store-outcome-unknown`, `connection-unavailable`, `batch-too-large`,
 ## Stopping a run
 
 `cortex run` handles SIGTERM, which a Kubernetes Job's deadline or `systemctl stop` sends. The
-run stops at its next safe point: once its fetch returns, before each batch, or at once during a
-model call, whose process group is sent SIGTERM and, after 5 seconds, SIGKILL. A structured
-source stops before each record batch. A gated run is then undone as a run its gate refuses is:
+run stops at its next safe point: at once during its fetch or a model call, whose process (with
+its process group) is sent SIGTERM and, after 5 seconds, SIGKILL; between the pages of a paged
+read and the files of a `files` source; before it uses what it fetched; before each batch; and in
+the wait before a model call is asked again. A structured source stops before each record batch.
+A run stopped during its fetch marks nothing seen and keeps its window, so the next run asks for
+the same `since`. A gated run is then undone as a run its gate refuses is:
 on `postgres` its stage is abandoned and `state/` put back, on `sqlite` its kept snapshot is
 restored once a batch committed. An ungated run keeps the batches it applied, each marked seen,
 and the next run extracts the rest. The run prints `terminated` with a `reason` saying where it
 stopped and what was undone, records it in the source's status, the metric file and the hook,
-and exits 8. A fetch from Connectors is not interrupted: the run stops when it returns, so leave
-a grace period (Kubernetes' `terminationGracePeriodSeconds`, systemd's `TimeoutStopSec`) longer
-than a fetch takes. A second SIGTERM ends the process at once with exit status 143, recording
+and exits 8. Leave a grace period (Kubernetes' `terminationGracePeriodSeconds`, systemd's
+`TimeoutStopSec`) of more than 5 seconds, so a child that ignores SIGTERM is killed before the
+run is. A second SIGTERM ends the process at once with exit status 143, recording
 nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
 
 ## What one run does

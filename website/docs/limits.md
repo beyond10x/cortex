@@ -138,8 +138,8 @@ stand; [Status](./status.mdx) lists what is planned.
   the documents and model tokens of a run that ended `ran` or applied a batch before it ended
   otherwise; a run that ended before it applied a batch adds none of them, though a failed model
   call may have spent tokens, and a model call ended by SIGTERM never reports its tokens.
-- **SIGTERM does not interrupt a fetch.** A run sent SIGTERM during a Connectors read stops when
-  the read returns; only a model call is ended at once.
+- **A stopped fetch keeps nothing.** A run sent SIGTERM during its fetch ends the Connectors call
+  in flight and drops the pages it already read: the next run reads the whole window again.
 - **The daily ceiling is per instance.** `daily_ceiling_usd` bounds what one instance's model calls
   spend in a UTC day; nothing bounds the instances of a home together. An answer that states no
   cost adds nothing to the spend of the day.
