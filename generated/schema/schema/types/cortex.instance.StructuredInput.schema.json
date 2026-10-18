@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "0f7251f0c444abe6dc1366bd90cef115ffd6b3c2bd521752108a810a42d41fc1",
-    "contract_digest": "slice-sha256/2:71c337723c193e8224ff8673c3047dc86a727f513bd37488f822fc13825fbdda",
+    "source_digest": "8722ddd6d5934a5124c04d561aaa97fa387b5df3f0816c27167594157fc396fc",
+    "contract_digest": "slice-sha256/2:078926c57cba022152c5d121f893357d42a4e79165766c4ca0cf1aaa7c6e88e6",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -157,6 +157,9 @@
           "items": {
             "type": "string"
           }
+        },
+        "store_lookup": {
+          "$ref": "#/$defs/cortex.instance.StoreLookup"
         }
       },
       "required": [
@@ -203,6 +206,16 @@
         "Decimal",
         "Boolean",
         "Timestamp"
+      ]
+    },
+    "cortex.instance.StoreLookup": {
+      "title": "StoreLookup",
+      "x-ess-name": "cortex.instance.StoreLookup",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "OwnType",
+        "AnyType"
       ]
     },
     "cortex.instance.StructuredChild": {

@@ -1081,6 +1081,9 @@
             "$ref": "#/$defs/cortex.instance.RelationMapping"
           },
           "type": "array"
+        },
+        "store_lookup": {
+          "$ref": "#/$defs/cortex.instance.StoreLookup"
         }
       },
       "required": [
@@ -1518,6 +1521,16 @@
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.SqliteStore"
     },
+    "cortex.instance.StoreLookup": {
+      "enum": [
+        "OwnType",
+        "AnyType"
+      ],
+      "title": "StoreLookup",
+      "type": "string",
+      "x-ess-kind": "enum",
+      "x-ess-name": "cortex.instance.StoreLookup"
+    },
     "cortex.instance.StoreSpec": {
       "oneOf": [
         {
@@ -1836,8 +1849,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:a1bb6c4ad002b2776bfd23a60362d0626e8753357fdb39f67189fe3ef7f86bf1",
-    "source_digest": "0f7251f0c444abe6dc1366bd90cef115ffd6b3c2bd521752108a810a42d41fc1",
+    "contract_digest": "slice-sha256/2:922b869713758b68def4fe63dbeadf3f998e28070db46be3fc680eef41359614",
+    "source_digest": "8722ddd6d5934a5124c04d561aaa97fa387b5df3f0816c27167594157fc396fc",
     "specification_version": "v1",
     "system": "cortex"
   }

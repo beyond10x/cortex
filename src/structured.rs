@@ -728,6 +728,55 @@ pub struct Mapped {
     pub entity_owners: Vec<Vec<String>>,
 }
 
+/// Where the records of a run whose mapping has `store_lookup: AnyType` meet the store, by
+/// identity ([`Source::lookup`]); a record it does not name is written as with `OwnType`.
+#[derive(Debug, Default)]
+pub struct Lookup {
+    met: BTreeMap<String, Met>,
+}
+
+/// Where one record meets the store under `store_lookup: AnyType`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Met {
+    /// Onto the store's node of `node_type` whose canonical name is `name`.
+    Node { node_type: String, name: String },
+    /// Refused alone, for this reason.
+    Refused(String),
+}
+
+impl Lookup {
+    /// Why the record whose identity is `identity` is refused, when it is.
+    pub fn refused(&self, identity: &str) -> Option<&str> {
+        match self.met.get(identity) {
+            Some(Met::Refused(why)) => Some(why),
+            _ => None,
+        }
+    }
+
+    /// The node type and canonical name of the store's node the record whose identity is
+    /// `identity` is written onto, when it is one of another type.
+    fn node(&self, identity: &str) -> Option<(&str, &str)> {
+        match self.met.get(identity) {
+            Some(Met::Node { node_type, name }) => Some((node_type, name)),
+            _ => None,
+        }
+    }
+
+    /// The named thing of `node_type` and `aliases` that stands for the record whose identity is
+    /// `identity`: the store's node it meets, named by that node's type and its canonical name
+    /// before `aliases`, or `node_type` and `aliases` as they are.
+    fn named(&self, identity: &str, node_type: &str, aliases: Vec<String>) -> Value {
+        match self.node(identity) {
+            Some((ty, name)) => {
+                let mut named = vec![name.to_string()];
+                named.extend(aliases.into_iter().filter(|a| a != name));
+                json!({"node_type": ty, "aliases": named})
+            }
+            None => json!({"node_type": node_type, "aliases": aliases}),
+        }
+    }
+}
+
 impl<'a> Source<'a> {
     pub fn new(st: &'a m::StructuredSource, redactor: Option<&'a Redactor>) -> Self {
         let prefix = prefix(st);
@@ -1040,6 +1089,124 @@ impl<'a> Source<'a> {
         out
     }
 
+    /// Whether a mapping of the source, its own or a child's, has `store_lookup: AnyType`, so a
+    /// run reads the store before each batch ([`Source::lookup`]).
+    pub fn looks_up(&self) -> bool {
+        std::iter::once(self.mapping)
+            .chain(self.children.iter().map(|(_, child)| &child.mapping))
+            .any(|mapping| mapping.store_lookup == Some(m::StoreLookup::AnyType))
+    }
+
+    /// Where each record of `index` whose mapping has `store_lookup: AnyType` meets the store
+    /// whose graph is `snapshot` (`ekr snapshot`) and ontology `ontology` (`ekr ontology`): the
+    /// nodes of any type whose canonical name or one of whose aliases equals the record's name or
+    /// one of its aliases, both lowercased ([`crate::known::fold`]). Matches all of one type other
+    /// than the mapping's are the node the record is written onto (the first such node's
+    /// canonical name names it); matches of more than one type, its own included, refuse the
+    /// record, naming the types; so does a mapped property that type declares in another kind
+    /// than the mapping writes. No match, or matches of its own type only, leave the record as
+    /// with `OwnType`, which EKR resolves.
+    pub fn lookup(&self, index: &Index, snapshot: &Value, ontology: &Value) -> Lookup {
+        use crate::known::fold;
+        let mut types: BTreeMap<&str, &str> = BTreeMap::new();
+        let mut declared: BTreeMap<(&str, &str), &str> = BTreeMap::new();
+        for t in ontology["node_types"].as_array().into_iter().flatten() {
+            let (Some(id), Some(name)) = (t["id"].as_str(), t["name"].as_str()) else {
+                continue;
+            };
+            types.insert(id, name);
+            for p in t["properties"].as_array().into_iter().flatten() {
+                if let (Some(p), Some(kind)) =
+                    (p["name"].as_str(), p["value_type"]["value_kind"].as_str())
+                {
+                    declared.insert((name, p), kind);
+                }
+            }
+        }
+        // Each folded name or alias, with the nodes it names: `(node id, type, canonical name)`.
+        let mut names: BTreeMap<String, Vec<(&str, &str, &str)>> = BTreeMap::new();
+        for (id, node) in snapshot["graph"]["graph"]["nodes"]
+            .as_object()
+            .into_iter()
+            .flatten()
+        {
+            let Some(name) = node["canonical_name"].as_str() else {
+                continue;
+            };
+            let Some(ty) = node["type_id"].as_str().and_then(|t| types.get(t)) else {
+                continue;
+            };
+            let aliases = node["aliases"].as_array().into_iter().flatten();
+            for n in std::iter::once(name).chain(aliases.filter_map(Value::as_str)) {
+                let held = names.entry(fold(n)).or_default();
+                if !held.iter().any(|(i, _, _)| *i == id.as_str()) {
+                    held.push((id.as_str(), ty, name));
+                }
+            }
+        }
+        let mut lookup = Lookup::default();
+        for r in &index.records {
+            let mapping = self.scope(&r.identity).mapping;
+            if mapping.store_lookup != Some(m::StoreLookup::AnyType) {
+                continue;
+            }
+            let mut found: Vec<(&str, &str, &str)> = Vec::new();
+            for term in r.names.iter().chain(&r.aliases) {
+                for hit in names.get(&fold(term)).into_iter().flatten() {
+                    if !found.iter().any(|(i, _, _)| *i == hit.0) {
+                        found.push(*hit);
+                    }
+                }
+            }
+            let met: BTreeSet<&str> = found.iter().map(|(_, ty, _)| *ty).collect();
+            if met.is_empty() || met == BTreeSet::from([mapping.node_type.as_str()]) {
+                continue;
+            }
+            if met.len() > 1 {
+                let named: Vec<&str> = met.into_iter().collect();
+                lookup.met.insert(
+                    r.identity.clone(),
+                    Met::Refused(format!(
+                        "its name or aliases match store nodes of more than one type \
+                         (store_lookup: AnyType): {}",
+                        named.join(", ")
+                    )),
+                );
+                continue;
+            }
+            let (_, ty, name) = found[0];
+            let differs: Vec<String> = mapping
+                .properties
+                .iter()
+                .filter_map(|p| {
+                    let held = declared.get(&(ty, p.property.as_str()))?;
+                    let writes = kind_name(self.kind(&mapping.node_type, &p.property));
+                    (*held != writes).then(|| {
+                        format!(
+                            "node type {ty}, property {}: the store declares {held}, and the \
+                             mapping writes {writes}",
+                            p.property
+                        )
+                    })
+                })
+                .collect();
+            let met = if differs.is_empty() {
+                Met::Node {
+                    node_type: ty.to_string(),
+                    name: name.to_string(),
+                }
+            } else {
+                Met::Refused(format!(
+                    "its name or aliases match a store node of type {ty} (store_lookup: \
+                     AnyType); {}",
+                    differs.join("; ")
+                ))
+            };
+            lookup.met.insert(r.identity.clone(), met);
+        }
+        lookup
+    }
+
     /// The run's records, whose keys are their identities ([`Source::prepare`]), and `parents`,
     /// the parents the run read ([`Source::parents`]).
     pub fn index(&self, records: &[Issued], parents: &Parents) -> Index {
@@ -1112,7 +1279,8 @@ impl<'a> Source<'a> {
             }
             for r in &scope.mapping.relations {
                 for target in texts_at(&record, &r.target_name) {
-                    let object = self.target(&scope, &index, &r.target_type, &target);
+                    let object =
+                        self.target(&scope, &index, &Lookup::default(), &r.target_type, &target);
                     let aliases = object["aliases"]
                         .as_array()
                         .into_iter()
@@ -1422,8 +1590,16 @@ impl<'a> Source<'a> {
     /// id in the scope (for a child, of the same parent), else the one record of the run of that
     /// type with it as its name or a mapped alias, named by all that record's aliases; else the
     /// target and its identity as an id, so it reaches a record of an earlier run by its id or by
-    /// a mapped alias. Of another type, the target alone.
-    fn target(&self, scope: &Scope<'_>, index: &Index, node_type: &str, target: &str) -> Value {
+    /// a mapped alias. A record of the run written onto a store node of another type ([`Lookup`])
+    /// is named as that node. Of another type, the target alone.
+    fn target(
+        &self,
+        scope: &Scope<'_>,
+        index: &Index,
+        lookup: &Lookup,
+        node_type: &str,
+        target: &str,
+    ) -> Value {
         if node_type != scope.mapping.node_type {
             return json!({"node_type": node_type, "aliases": [target]});
         }
@@ -1440,7 +1616,7 @@ impl<'a> Source<'a> {
             }
         };
         match by_id.or_else(by_name) {
-            Some(r) => json!({"node_type": node_type, "aliases": r.aliases}),
+            Some(r) => lookup.named(&r.identity, node_type, r.aliases.clone()),
             None => json!({"node_type": node_type, "aliases": [target, identity]}),
         }
     }
@@ -1449,9 +1625,15 @@ impl<'a> Source<'a> {
     /// in its kind ([`Source::kinds`]), each relation's target type, and each relation as an edge type from the node
     /// type to its target; then each child's node type, relations and relation to the parent's
     /// node type, and each link's relation from its changes' node type to its tags', an edge type
-    /// of one name declared once ([`join`]). `apply-extraction` adds only what the store does not
-    /// hold yet.
-    fn ontology(&self) -> Value {
+    /// of one name declared once ([`join`]). Then each of `met`, a `(node type, property, kind)`
+    /// a record written onto a store node of another type asserts ([`Lookup`]), and each of
+    /// `edges`, a `(relation, source type, target type)` a batch's relation joins. `apply-extraction`
+    /// adds only what the store does not hold yet.
+    fn ontology(
+        &self,
+        met: &[(String, String, m::SchemaValueKind)],
+        edges: &[(String, String, String)],
+    ) -> Value {
         let mapping = self.mapping;
         let mut node_types: NodeTypes<'_> = Vec::new();
         let mut edge_types = Vec::new();
@@ -1485,7 +1667,10 @@ impl<'a> Source<'a> {
                 join(&mut edge_types, &link.relation, changes, tags);
             }
         }
-        let node_types: Vec<Value> = node_types
+        for (relation, source, target) in edges {
+            join(&mut edge_types, relation, source, target);
+        }
+        let mut node_types: Vec<Value> = node_types
             .iter()
             .map(|(name, properties)| {
                 json!({
@@ -1499,20 +1684,42 @@ impl<'a> Source<'a> {
                 })
             })
             .collect();
+        for (node_type, p, kind) in met {
+            let at = match node_types.iter().position(|t| t["name"] == *node_type) {
+                Some(at) => at,
+                None => {
+                    node_types.push(json!({
+                        "name": node_type,
+                        "parents": [],
+                        "abstract_type": false,
+                        "properties": [],
+                    }));
+                    node_types.len() - 1
+                }
+            };
+            if let Some(properties) = node_types[at]["properties"].as_array_mut() {
+                if !properties.iter().any(|x| x["name"] == *p) {
+                    properties.push(property(p, *kind));
+                }
+            }
+        }
         json!({"node_types": node_types, "edge_types": edge_types})
     }
 
     /// The `ekr.extraction-document/1` of one batch of records, in the JSON form the model path
     /// answers in (`"!Property"` keys), without its evidence: `extract::merge` adds the items `batch`
     /// was issued. Each record whose text is JSON and has a name at its mapping's `name` is one
-    /// entity of the mapping's node type, named by its aliases; each mapped property with a value
-    /// that converts to its kind ([`convert`]) is a property of that kind; each relation target named at `target_name` (a scalar, or
-    /// each scalar of an array) is a relation to the named thing [`Source::target`] answers; a
-    /// child record has one relation, named by its child's `parent`, to its parent's entity, named
-    /// by all the parent's aliases ([`Index::parent`]); and a change has one relation, named by the
-    /// link's `relation`, to each tag it is linked to ([`LINKS`]), named by all the tag's aliases.
-    /// Every fact cites the evidence id of its record.
-    pub fn document(&self, batch: &[Issued], index: &Index) -> Mapped {
+    /// entity of the mapping's node type, named by its aliases, or, when `lookup` writes it onto a
+    /// store node of another type, of that node's type, named by that node's canonical name and
+    /// its aliases ([`Lookup`]); a record `lookup` refuses is left out. Each mapped property with
+    /// a value that converts to its kind ([`convert`]) is a property of that kind; each relation
+    /// target named at `target_name` (a scalar, or each scalar of an array) is a relation to the
+    /// named thing [`Source::target`] answers; a child record has one relation, named by its
+    /// child's `parent`, to its parent's entity, named by all the parent's aliases
+    /// ([`Index::parent`]); and a change has one relation, named by the link's `relation`, to each
+    /// tag it is linked to ([`LINKS`]), named by all the tag's aliases. Every fact cites the
+    /// evidence id of its record.
+    pub fn document(&self, batch: &[Issued], index: &Index, lookup: &Lookup) -> Mapped {
         let mut entities: Vec<Value> = Vec::new();
         let mut entity_owners: Vec<Vec<String>> = Vec::new();
         let mut entity = |e: Value, owner: &str| {
@@ -1529,7 +1736,13 @@ impl<'a> Source<'a> {
             }
         };
         let mut facts = Vec::new();
+        // What the records written onto a store node of another type add to the ontology.
+        let mut met: Vec<(String, String, m::SchemaValueKind)> = Vec::new();
+        let mut edges: Vec<(String, String, String)> = Vec::new();
         for issued in batch {
+            if lookup.refused(&issued.doc.key).is_some() {
+                continue;
+            }
             let Ok(record) = serde_json::from_str::<Value>(&issued.doc.text) else {
                 continue;
             };
@@ -1538,11 +1751,18 @@ impl<'a> Source<'a> {
             let Some(aliases) = aliases(mapping, &record, &issued.doc.key) else {
                 continue;
             };
-            let subject = json!({"node_type": mapping.node_type, "aliases": aliases});
+            let subject = lookup.named(&issued.doc.key, &mapping.node_type, aliases);
+            let subject_type = subject["node_type"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
             entity(subject.clone(), &issued.id);
             for p in &mapping.properties {
                 let kind = self.kind(&mapping.node_type, &p.property);
                 if let Ok(Some(value)) = convert(kind, at(&record, &p.path)) {
+                    if subject_type != mapping.node_type {
+                        met.push((subject_type.clone(), p.property.clone(), kind));
+                    }
                     facts.push(json!({"!Property": {
                         "subject": subject,
                         "property": p.property,
@@ -1553,6 +1773,13 @@ impl<'a> Source<'a> {
             }
             let mut relate = |relation: &str, object: Value| {
                 entity(object.clone(), &issued.id);
+                if let Some(target) = object["node_type"].as_str() {
+                    edges.push((
+                        relation.to_string(),
+                        subject_type.clone(),
+                        target.to_string(),
+                    ));
+                }
                 facts.push(json!({"!Relation": {
                     "subject": subject,
                     "relation": relation,
@@ -1564,27 +1791,24 @@ impl<'a> Source<'a> {
                 for target in texts_at(&record, &r.target_name) {
                     relate(
                         &r.relation,
-                        self.target(&scope, index, &r.target_type, &target),
+                        self.target(&scope, index, lookup, &r.target_type, &target),
                     );
                 }
             }
             if let Some((relation, parent)) = &scope.parent {
                 relate(
                     relation,
-                    json!({"node_type": self.mapping.node_type, "aliases": index.parent(parent)}),
+                    lookup.named(parent, &self.mapping.node_type, index.parent(parent)),
                 );
             }
             for (relation, node_type, tag) in self.linked(&scope, &record) {
-                relate(
-                    relation,
-                    json!({"node_type": node_type, "aliases": index.parent(&tag)}),
-                );
+                relate(relation, lookup.named(&tag, node_type, index.parent(&tag)));
             }
         }
         Mapped {
             document: json!({
                 "format": "ekr.extraction-document/1",
-                "ontology": self.ontology(),
+                "ontology": self.ontology(&met, &edges),
                 "entities": entities,
                 "facts": facts,
             }),
@@ -1673,6 +1897,7 @@ mod tests {
                 target_name: "$.teams".into(),
             }],
             alias_templates: None,
+            store_lookup: None,
         }
     }
 
@@ -1719,7 +1944,11 @@ mod tests {
             ),
             issued(&s, "e2", json!({"id": "8", "handles": "nameless"})),
         ];
-        let mapped = s.document(&batch, &s.index(&batch, &Parents::new()));
+        let mapped = s.document(
+            &batch,
+            &s.index(&batch, &Parents::new()),
+            &Lookup::default(),
+        );
         let doc = &mapped.document;
         let ada = json!({"node_type": "Person",
             "aliases": ["Ada (dir:people.list:7)", "dir:people.list:7", "ada", "Ada"]});
@@ -1820,7 +2049,7 @@ mod tests {
             "e2",
             json!({"id": "P-2", "name": "Grace", "manager": ["P-1", "Ada", "P-9"]}),
         )];
-        let doc = s.document(&batch, &index).document;
+        let doc = s.document(&batch, &index, &Lookup::default()).document;
         let full = json!({"node_type": "Person", "aliases": ["Ada (dir:people.list:P-1)", "dir:people.list:P-1"]});
         assert_eq!(doc["facts"][0]["!Relation"]["object"], full, "by id");
         assert_eq!(doc["facts"][1]["!Relation"]["object"], full, "by name");
@@ -1864,7 +2093,11 @@ mod tests {
             ),
             issued(&s, "e3", json!({"id": 3, "name": "Cy", "age": 3})),
         ];
-        let mapped = s.document(&batch, &s.index(&batch, &Parents::new()));
+        let mapped = s.document(
+            &batch,
+            &s.index(&batch, &Parents::new()),
+            &Lookup::default(),
+        );
         let rejected = |items: &[&str]| -> Vec<String> {
             let parts: Vec<_> = items.iter().map(|i| json!({"item": i})).collect();
             mapped
@@ -2022,6 +2255,7 @@ mod tests {
                 properties: Vec::new(),
                 relations: Vec::new(),
                 alias_templates: None,
+                store_lookup: None,
             },
             time: Some("$.at".into()),
             parent: "IN_PROJECT".into(),
@@ -2180,7 +2414,9 @@ mod tests {
             item: serde_yaml_ng::Value::Null,
             doc: tag.clone(),
         }];
-        let doc = s.document(&batch, &s.index(&batch, &parents)).document;
+        let doc = s
+            .document(&batch, &s.index(&batch, &parents), &Lookup::default())
+            .document;
         assert_eq!(
             doc["facts"],
             json!([{"!Relation": {
@@ -2304,7 +2540,9 @@ mod tests {
                 doc: change.clone(),
             },
         ];
-        let doc = s.document(&batch, &s.index(&batch, &parents)).document;
+        let doc = s
+            .document(&batch, &s.index(&batch, &parents), &Lookup::default())
+            .document;
         let shipped: Vec<&Value> = doc["facts"]
             .as_array()
             .unwrap()
@@ -2458,7 +2696,7 @@ mod tests {
             .insert(("Person".into(), "age".into()), m::SchemaValueKind::Integer);
         let a = issued(&s, "e1", json!({"id": "1", "name": "Ada", "age": "36"}));
         let index = s.index(std::slice::from_ref(&a), &Parents::new());
-        let doc = s.document(&[a], &index).document;
+        let doc = s.document(&[a], &index, &Lookup::default()).document;
         assert_eq!(
             doc["ontology"]["node_types"][0]["properties"][0]["value"],
             json!({"value_kind": "Integer"})

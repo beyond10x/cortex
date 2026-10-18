@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 0f7251f0c444abe6dc1366bd90cef115ffd6b3c2bd521752108a810a42d41fc1
-// contract digest 71c6e0b3e397e5f08a6ea7dcc3ecc06f49da3356d65a650fb479e65189f6fb60
+// model digest 8722ddd6d5934a5124c04d561aaa97fa387b5df3f0816c27167594157fc396fc
+// contract digest 149600d03fd42e1f199297e8fbc8e7c0c9027f25b91767ca9cc19806d52e4c76
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.

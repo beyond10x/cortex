@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "0f7251f0c444abe6dc1366bd90cef115ffd6b3c2bd521752108a810a42d41fc1",
-    "contract_digest": "71c6e0b3e397e5f08a6ea7dcc3ecc06f49da3356d65a650fb479e65189f6fb60",
+    "spec_digest": "8722ddd6d5934a5124c04d561aaa97fa387b5df3f0816c27167594157fc396fc",
+    "contract_digest": "149600d03fd42e1f199297e8fbc8e7c0c9027f25b91767ca9cc19806d52e4c76",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
@@ -11115,6 +11115,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.StoreLookup"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.StoreSpec"
         },
         {
@@ -11708,6 +11712,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreLookup"
         },
         {
           "kind": "type",
@@ -12892,6 +12900,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.StoreLookup"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.StoreSpec"
         },
         {
@@ -13484,6 +13496,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.StoreLookup"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.StoreSpec"
         },
         {
@@ -14073,6 +14089,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreLookup"
         },
         {
           "kind": "type",
@@ -17945,6 +17965,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.StoreLookup"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.StoreSpec"
         },
         {
@@ -18570,6 +18594,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreLookup"
         },
         {
           "kind": "type",
@@ -20251,6 +20279,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.StoreLookup"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.StoreSpec"
         },
         {
@@ -20840,6 +20872,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreLookup"
         },
         {
           "kind": "type",
@@ -48920,6 +48956,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.StoreLookup"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.StoreSpec"
         },
         {
@@ -49956,6 +49996,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.StoreLookup"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.StoreSpec"
         },
         {
@@ -50789,6 +50833,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreLookup"
         },
         {
           "kind": "type",

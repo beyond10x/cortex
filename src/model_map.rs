@@ -410,6 +410,10 @@ fn record_mapping(mapping: &s::CortexInstanceRecordMapping) -> m::RecordMapping 
             })
             .collect(),
         alias_templates: opt(&mapping.alias_templates),
+        store_lookup: opt(&mapping.store_lookup).map(|l| match *l {
+            s::CortexInstanceStoreLookup::V0 => m::StoreLookup::AnyType,
+            s::CortexInstanceStoreLookup::V1 => m::StoreLookup::OwnType,
+        }),
     }
 }
 

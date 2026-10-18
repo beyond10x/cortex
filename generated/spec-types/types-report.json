@@ -1,12 +1,12 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "0f7251f0c444abe6dc1366bd90cef115ffd6b3c2bd521752108a810a42d41fc1",
+  "source_digest": "8722ddd6d5934a5124c04d561aaa97fa387b5df3f0816c27167594157fc396fc",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:a1bb6c4ad002b2776bfd23a60362d0626e8753357fdb39f67189fe3ef7f86bf1",
-    "projection_digest": "2030fc16c9f328beade3ab071f407ad9714f7f786cc1b493faa93ce83015ea17"
+    "contract_digest": "slice-sha256/2:922b869713758b68def4fe63dbeadf3f998e28070db46be3fc680eef41359614",
+    "projection_digest": "c05e063c617859653ff6c23a4e5a48655aff314a0f4cb4ec6578a02c3f2c4441"
   },
   "generator_version": "0.60.0",
   "target": "rust",
@@ -72,6 +72,7 @@
     "cortex.instance.SourceSettings": "CortexInstanceSourceSettings",
     "cortex.instance.SourceSpec": "CortexInstanceSourceSpec",
     "cortex.instance.SqliteStore": "CortexInstanceSqliteStore",
+    "cortex.instance.StoreLookup": "CortexInstanceStoreLookup",
     "cortex.instance.StoreSpec": "CortexInstanceStoreSpec",
     "cortex.instance.StructuredChild": "CortexInstanceStructuredChild",
     "cortex.instance.StructuredConnectors": "CortexInstanceStructuredConnectors",
@@ -956,6 +957,21 @@
     },
     {
       "pointer": "/$defs/cortex.instance.SqliteStore/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.StoreLookup/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.StoreLookup/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.StoreLookup/x-ess-name",
       "rule": "x-ess-name",
       "detail": "model identity and wire mapping retained in source.schema.json"
     },
