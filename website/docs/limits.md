@@ -109,6 +109,16 @@ stand; [Status](./status.mdx) lists what is planned.
   whose text changed is extracted again only after `refresh_after_days`; cortex retracts nothing
   it applied from the earlier text. A record read from a file, and a `structured` change whose
   links to tags alone changed, are applied again on the next run.
+- **A structured record meets nodes of another type only with `store_lookup: AnyType`.** By
+  default EKR resolves a record's aliases, its alias templates included, within the mapping's
+  `node_type` only, so a store node of another type holding the same alias gets a second node
+  beside it. With `AnyType` the run reads the store before each batch and writes the record onto
+  that node. Names are compared lowercased, not case-folded. A record whose name or aliases
+  match nodes of more than one type is refused, and so is one whose matched node's type declares a
+  mapped property in another value kind; neither is merged. A relation names a record written
+  onto another type's node as that node only when the record is applied in the same run;
+  otherwise it names it in the mapping's own type. cortex never merges two nodes that already
+  hold the same alias.
 - **Text only.** A files source skips files that are not UTF-8 text; web sources read the text the
   websearch adapter returns.
 

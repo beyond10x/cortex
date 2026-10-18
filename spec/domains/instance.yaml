@@ -242,10 +242,24 @@ types:
   # `update`, `adopt` and a run alike) an empty template, a template that names no field, and a
   # template whose placeholders are not `{path}` with a dotted path of ASCII letters, digits, `_`
   # and `-` (an unclosed `{`, a lone `}`, `{}`, a nested `{`, or another character in a path, a
-  # non-ASCII letter included). A template alias matches a store node of the mapping's own
-  # `node_type` only. ESS
-  # has no construct for the grammar of a String; `spec::check` holds it and
-  # `tests/known_entities.rs` tests it.
+  # non-ASCII letter included). ESS has no construct for the grammar of a String; `spec::check`
+  # holds it and `tests/known_entities.rs` tests it.
+  # `store_lookup` is how a record meets the store's nodes (`cortex.instance.StoreLookup`); absent
+  # means `OwnType`.
+  # UNMAPPED: with `AnyType`, before each batch the run reads the store once (`ekr snapshot`) and
+  # takes, for every record of the run under that mapping, the nodes of any type whose canonical
+  # name or one of whose aliases equals the record's name or one of its aliases (its
+  # `alias_templates` included), both lowercased. A record whose matches are all of one type other
+  # than its `node_type` is written onto that node: its entity, properties and relations take that
+  # node's type and are named by that node's canonical name before the record's aliases, and a
+  # relation or a child's parent relation naming the record names that node. A record matching
+  # nodes of more than one type (its own included) is refused alone, naming the types: it is left
+  # out of its batch, named with its key in the run's `rejected` and not marked seen, and the rest
+  # of the batch is applied. So is a record whose matched node's type declares a mapped property in
+  # another value kind than the mapping writes, naming the type, the property and both kinds. A
+  # record matching no node, or nodes of its own type only, is written as with `OwnType`. ESS has
+  # no construct for a read of the store's graph; `src/structured.rs` holds it and
+  # `tests/known_entities_adversary.rs` tests it.
   - name: cortex.instance.RecordMapping
     kind: struct
     fields:
@@ -256,6 +270,15 @@ types:
       - {name: properties, type: List<cortex.instance.PropertyMapping>}
       - {name: relations, type: List<cortex.instance.RelationMapping>}
       - {name: alias_templates, type: Optional<List<String>>}
+      - {name: store_lookup, type: Optional<cortex.instance.StoreLookup>}
+
+  # How a structured record meets the store's nodes. `OwnType`: by its aliases, as EKR resolves
+  # them, within the mapping's `node_type` only (a template alias matches a store node of that
+  # type only). `AnyType`: by its name or one of its aliases, against nodes of every type
+  # (`cortex.instance.RecordMapping`).
+  - name: cortex.instance.StoreLookup
+    kind: enum
+    variants: [OwnType, AnyType]
 
   # Where a known entity shown to the model came from: `Store`, a node the store holds that one
   # of the batch's keys or aliases names; `Run`, a name cortex's own earlier runs extracted.
@@ -1727,8 +1750,10 @@ commands:
       # a prompt holds; `src/run.rs` and `src/extract.rs` hold it and `tests/known_entities.rs`
       # tests it.
       # A structured source calls no model; `alias_templates` reach the store as aliases of its
-      # entities, by which EKR resolves them to a node of their type: a template alias matches a
-      # store node of the mapping's own type only.
+      # entities, by which EKR resolves them to a node of their type: with the mapping's
+      # `store_lookup` absent or `OwnType`, a template alias matches a store node of the mapping's
+      # own type only; with `AnyType`, the run reads the store before each batch and writes a
+      # record onto the node of another type it names (`cortex.instance.RecordMapping`).
       # UNMAPPED: with `fetch_only` (`cortex run --fetch-only`), `fetched` exits 0 and
       # `fetch-only-failed` exits 1 and prints `fetch-failed`. Neither writes the source's status
       # file, `metrics.prom`, `cortex.log`, the seen documents or the window (`pending_since`),

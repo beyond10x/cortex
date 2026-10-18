@@ -83,7 +83,9 @@ pub struct Report {
     /// [`sources::CHILD_FAILURE_LIMIT`] or more consecutive runs; and structured records refused
     /// because their mapped values alone are over EKR's evidence bound.
     pub skipped: Vec<String>,
-    /// Applied documents a part EKR rejected belongs to, each with EKR's refusal.
+    /// Applied documents a part EKR rejected belongs to, each with EKR's refusal, and structured
+    /// records refused before their batch because they meet store nodes of more than one type
+    /// (`store_lookup: AnyType`), each with that refusal.
     pub rejected: Vec<Rejected>,
     /// Structured records left out because a mapped value does not convert to its property's
     /// kind (`structured::convert`); neither applied nor marked seen, so the next run reads them
@@ -1952,6 +1954,10 @@ struct Records<'a> {
 /// seen, as its next run would refuse it again. A record with a mapped value that does not convert
 /// to its property's kind ([`structured::Source::unconverted`]) is left out of its batch, named in
 /// `unconverted`, and marked seen like an applied one, so it is skipped until its text changes.
+/// With a mapping of `store_lookup: AnyType`, the store is read before each batch
+/// ([`structured::Source::lookup`]): a record is written onto the store node of another type its
+/// name or aliases meet, and one meeting nodes of more than one type is left out of its batch,
+/// named in `rejected` and not marked seen.
 fn apply_records(
     layout: &Layout,
     r: &Records<'_>,
@@ -2000,7 +2006,29 @@ fn apply_records(
     let index = r.source.index(&issued, r.parents);
     for (n, batch) in batches(issued, BATCH_CHARS).into_iter().enumerate() {
         stop_point(&format!("before record batch {n}"))?;
-        let mapped = r.source.document(&batch, &index);
+        // `store_lookup: AnyType`: the store is read once per batch, and a record whose name or
+        // aliases meet nodes of more than one type is refused alone, named in `rejected` and not
+        // marked seen; the rest of the batch is applied.
+        let lookup = if r.source.looks_up() {
+            let snapshot = r.store.snapshot().map_err(Failure::Apply)?;
+            let ontology = r.store.ontology().map_err(Failure::Apply)?;
+            r.source.lookup(&index, &snapshot, &ontology)
+        } else {
+            structured::Lookup::default()
+        };
+        let (refused, batch): (Vec<_>, Vec<_>) = batch
+            .into_iter()
+            .partition(|issued| lookup.refused(&issued.doc.key).is_some());
+        for issued in &refused {
+            let why = lookup.refused(&issued.doc.key).unwrap_or_default();
+            report
+                .rejected
+                .push(Rejected::new(&issued.doc.key, &[why.to_string()]));
+        }
+        if batch.is_empty() {
+            continue;
+        }
+        let mapped = r.source.document(&batch, &index, &lookup);
         let (doc, refused) = extract::merge(&mapped.document, &batch);
         report.facts_refused += refused;
         let dir = r.run_dir.join(format!("batch-{n}"));

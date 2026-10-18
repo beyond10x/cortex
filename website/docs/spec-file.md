@@ -538,6 +538,7 @@ and `$` alone is the answer itself.
 | `properties` | `property`, `path` and an optional `value_kind`: the value at the path is asserted for the property, in the property's value kind (below) |
 | `relations` | `relation`, `target_type` and `target_name`: a relation from the record's entity to the entity of `target_type` named by the value at the `target_name` path, one per value when it holds a list |
 | `alias_templates` | optional: fixed-format aliases, each a text with `{path}` placeholders filled from the record (below) |
+| `store_lookup` | optional: `OwnType` (the default) lets a record meet store nodes of its `node_type` only; `AnyType` writes it onto a store node of another type its name or an alias names (below) |
 
 A record without an id or a name is skipped, and a record whose id was already read in the run
 counts once.
@@ -590,7 +591,28 @@ or blank text there, gets no alias from that template, with no error. The spec c
 template, a template that names no field (every record would share its alias), and any other
 placeholder syntax: an unclosed `{`, a lone `}`, `{}`, a nested `{`, or a character in a path
 other than ASCII letters, digits, `_`, `-` and the dots between names (a non-ASCII letter is
-refused). A template alias matches a store node of the mapping's own `node_type` only.
+refused). A template alias matches a store node of the mapping's own `node_type` only, unless
+the mapping sets `store_lookup: AnyType`.
+
+**Store lookup.** EKR resolves an alias within one node type, so by default (`store_lookup:
+OwnType`, or no `store_lookup`) a record whose alias another writer gave a node of another type
+becomes a second node holding that alias. With `store_lookup: AnyType`, the run reads the store
+(`ekr snapshot`) before each batch and looks for the nodes, of any type, whose canonical name or
+one of whose aliases equals the record's name or one of its aliases (its alias templates
+included), both lowercased. In the example above with `store_lookup: AnyType` added, a store whose
+`Project` node holds `repo:acme/api` gets the record's properties and relations on that `Project`
+node, and no `Repository` node:
+
+- matches all of one type other than `node_type`: the record is written onto that node, as that
+  node's type, and a relation or a child's parent relation naming the record in the same run
+  names that node;
+- matches of more than one type (its own included): the record is refused alone, named in the
+  run's `rejected` with the types (`its name or aliases match store nodes of more than one type
+  (store_lookup: AnyType): Project, Service`), and not marked seen, so the next run tries it
+  again; the rest of its batch is applied;
+- a match whose type declares a mapped property in another value kind than the mapping writes:
+  refused alike, naming the type, the property and both kinds;
+- no match, or matches of its own type only: written as with `OwnType`.
 
 **Values.** Each mapped property is declared and written in one value kind: the `value_kind` its
 mapping names (`String`, `Integer`, `Decimal`, `Boolean` or `Timestamp`), else the kind the
