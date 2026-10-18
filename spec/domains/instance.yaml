@@ -691,9 +691,13 @@ types:
   #   `applied` (`SourceRan.documents_applied`); present when the last run ended `ran`, and when
   #   it applied a batch and then ended with another outcome (`extraction-failed`,
   #   `apply-refused`, `store-outcome-unknown`, `batch-too-large`, `terminated`,
-  #   `model-unavailable`), which reports what it read and applied before it ended;
+  #   `model-unavailable`), which reports what it read and applied before it ended; a run whose
+  #   applied batches were undone afterwards (its gate refused it, `apply-refused`, or a gated
+  #   run ended `terminated` or `store-outcome-unknown` and was undone) reports `applied` 0,
+  #   the store holding none of them, and still the documents it read and the tokens it spent;
   # - `cortex_source_documents_total{source, kind}` (counter), the same, added up over every run
-  #   that reports them; a run that ended before it applied a batch adds nothing;
+  #   that reports them; a run that ended before it applied a batch adds nothing, and a run
+  #   that was undone adds no applied documents;
   # - `cortex_source_model_tokens_total{source, kind}` (counter), the model tokens those runs
   #   reported: `input` (`input_tokens` and `cache_creation_input_tokens`), `cached`
   #   (`cache_read_input_tokens`) and `output` (`output_tokens`), each summed over the answers
