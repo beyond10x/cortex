@@ -1245,10 +1245,10 @@ errors:
   - name: cortex.instance.RunTerminated
     summary: >-
       The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended,
-      and stopped at the next safe point: a model call in flight was ended. A gated run is undone
-      (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it
-      applied, and a later run extracts the rest. Nothing about the source was wrong: the failure
-      is not counted against it.
+      and stopped at the next safe point: a fetch or a model call in flight was ended. A gated run
+      is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the
+      batches it applied, and a later run extracts the rest. Nothing about the source was wrong:
+      the failure is not counted against it.
     fields:
       - {name: reason, type: String}
 
@@ -1935,9 +1935,16 @@ commands:
           A part of one document is not this outcome: the run leaves it out and goes on.
 
       # UNMAPPED: the signal and the safe point. `cortex run` (not `--fetch-only`) handles SIGTERM:
-      # the run stops at its next safe point, before a fetch result is used, before each batch, or
-      # by ending the model call in flight (its process group is sent SIGTERM, then SIGKILL after
-      # 5 s); a structured source stops before each record batch. A gated run is undone as a run
+      # the run stops at its next safe point: during the fetch, by ending the `connectors` call in
+      # flight (its process group is sent SIGTERM, then SIGKILL after 5 s), before each page of a
+      # paged read, before each file of a `files` read and in a wait between Connectors attempts,
+      # with nothing marked seen and the window's `since` unchanged; before a fetch result is
+      # used; before each batch; in the wait before a model call is asked again; or by ending the
+      # model call in flight as a fetch's call is ended. A structured source stops before each
+      # record batch. The reason names the point: `stopped while it fetched`, `stopped before it
+      # used the documents it fetched`, `stopped before batch <n>`, `stopped before record batch
+      # <n>`, `while it waited to ask the model again for batch <n>; no call was in flight`, or
+      # `while the model was asked for batch <n>; the call was ended`. A gated run is undone as a run
       # its gate refuses is: its stage abandoned and `state/` put back, or its kept snapshot
       # restored; an ungated run keeps the batches it applied, each marked seen, and its window
       # is kept pending, as a failed run's is. A second SIGTERM ends the process at once, exit

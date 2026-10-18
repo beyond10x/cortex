@@ -18,6 +18,7 @@ use serde_yaml_ng::{Mapping, Value as Yaml};
 
 use crate::evidence::Issued;
 use crate::sources::Origin;
+use crate::terminate::Waited;
 
 pub const SYSTEM_PROMPT: &str = "\
 You extract knowledge for an EKR knowledge graph and answer with one ekr.extraction-document/1.
@@ -102,6 +103,15 @@ pub struct Answer {
     pub usage: Usage,
 }
 
+/// Where a run sent SIGTERM was in a model call ([`Refused::terminated`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stopped {
+    /// A model call was in flight, and was ended.
+    Call,
+    /// The run waited before it asked the model again ([`RETRY_WAIT_MS`]); no call was in flight.
+    Wait,
+}
+
 /// A model call that gave no answer, and what it cost.
 #[derive(Debug)]
 pub struct Refused {
@@ -113,8 +123,8 @@ pub struct Refused {
     pub error_answer: bool,
     /// The error answer said the request did not fit the model's window ([`unfit`]).
     pub unfit: Option<Unfit>,
-    /// The call was ended because the run was sent SIGTERM ([`crate::terminate`]).
-    pub terminated: bool,
+    /// The run was sent SIGTERM ([`crate::terminate`]): where it was when it stopped.
+    pub terminated: Option<Stopped>,
     /// The model could not be reached ([`unavailable`]): not a fault of the batch or the source.
     pub unavailable: Option<Unavailable>,
     /// The model calls made: `0` when no model was asked.
@@ -212,7 +222,7 @@ impl Refused {
             cost_usd: Some(0.0),
             error_answer: false,
             unfit: None,
-            terminated: false,
+            terminated: None,
             unavailable: None,
             calls: 0,
             usage: Usage::ZERO,
@@ -226,7 +236,7 @@ impl Refused {
             cost_usd: None,
             error_answer: false,
             unfit: None,
-            terminated: false,
+            terminated: None,
             unavailable: None,
             calls: 1,
             usage: Usage::UNKNOWN,
@@ -237,7 +247,7 @@ impl Refused {
     /// known.
     fn terminated() -> Self {
         Self {
-            terminated: true,
+            terminated: Some(Stopped::Call),
             ..Self::uncosted("the model call was ended: the run was sent SIGTERM".into())
         }
     }
@@ -583,102 +593,6 @@ impl Drop for PrivateFile {
     }
 }
 
-/// How a model call's process ended.
-enum Waited {
-    Done(std::process::Output),
-    /// It could not be waited for, or the prompt not sent: why.
-    Failed(String),
-    /// The run was sent SIGTERM, and the call was ended.
-    Terminated,
-}
-
-/// How long a model call ended on SIGTERM may take to exit before its process group is killed.
-const TERMINATE_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
-
-/// Sends `prompt` to `child` and waits for it, reading its output, until it exits or the run is
-/// sent SIGTERM ([`crate::terminate::requested`]). Then the child's process group, `timeout` and
-/// what it started (`timeout` runs in a group of its own), is sent SIGTERM, and SIGKILL after
-/// [`TERMINATE_GRACE`]. A child that exits before reading the prompt closes the pipe; its exit
-/// status and stderr say why, so a broken pipe is not the error reported.
-fn wait_or_terminate(child: &mut std::process::Child, prompt: &str) -> Waited {
-    use std::io::Read;
-    let mut stdin = child.stdin.take().expect("piped stdin");
-    let text = prompt.to_owned();
-    let writer = std::thread::spawn(move || stdin.write_all(text.as_bytes()));
-    let read = |pipe: Option<Box<dyn Read + Send>>| {
-        std::thread::spawn(move || {
-            let mut bytes = Vec::new();
-            if let Some(mut pipe) = pipe {
-                let _ = pipe.read_to_end(&mut bytes);
-            }
-            bytes
-        })
-    };
-    let stdout = read(
-        child
-            .stdout
-            .take()
-            .map(|p| Box::new(p) as Box<dyn Read + Send>),
-    );
-    let stderr = read(
-        child
-            .stderr
-            .take()
-            .map(|p| Box::new(p) as Box<dyn Read + Send>),
-    );
-    let status = loop {
-        match child.try_wait() {
-            // A stop of the whole unit signals the call too: one that ended after the run was
-            // sent SIGTERM ended because of it, whatever its status says.
-            Ok(Some(_)) if crate::terminate::requested() => {
-                end(child);
-                return Waited::Terminated;
-            }
-            Ok(Some(status)) => break status,
-            Ok(None) if crate::terminate::requested() => {
-                end(child);
-                return Waited::Terminated;
-            }
-            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(20)),
-            Err(e) => {
-                end(child);
-                return Waited::Failed(format!("claude did not finish: {e}"));
-            }
-        }
-    };
-    match writer.join() {
-        Ok(Err(e)) if e.kind() != std::io::ErrorKind::BrokenPipe => {
-            return Waited::Failed(format!("cannot send the prompt: {e}"));
-        }
-        _ => {}
-    }
-    Waited::Done(std::process::Output {
-        status,
-        stdout: stdout.join().unwrap_or_default(),
-        stderr: stderr.join().unwrap_or_default(),
-    })
-}
-
-/// Ends a model call's process and its group: SIGTERM, then SIGKILL after [`TERMINATE_GRACE`].
-fn end(child: &mut std::process::Child) {
-    use rustix::process::{kill_process, kill_process_group, Pid, Signal};
-    let pid = Pid::from_child(child);
-    let signal = |s: Signal| {
-        let _ = kill_process_group(pid, s);
-        let _ = kill_process(pid, s);
-    };
-    signal(Signal::TERM);
-    let until = std::time::Instant::now() + TERMINATE_GRACE;
-    while std::time::Instant::now() < until {
-        if !matches!(child.try_wait(), Ok(None)) {
-            return;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
-    signal(Signal::KILL);
-    let _ = child.wait();
-}
-
 impl Model {
     /// One extraction call for one batch, through the spec's backend, run in `dir`: [`ask_with`]
     /// and the extraction prompt [`SYSTEM_PROMPT`]. An error answer that cost zero is asked once
@@ -697,12 +611,12 @@ impl Model {
         match self.ask_with(SYSTEM_PROMPT, dir, schema, prompt, budget_usd) {
             Err(first) if first.free_error_answer() => {
                 // The wait ends early on SIGTERM: a pod's grace period is shorter than it.
-                let until = std::time::Instant::now() + retry_wait();
-                while std::time::Instant::now() < until && !crate::terminate::requested() {
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                }
-                if crate::terminate::requested() {
+                if crate::terminate::sleep(retry_wait()) {
                     return Err(Refused {
+                        message: "the run was sent SIGTERM while it waited to ask the model \
+                                  again"
+                            .into(),
+                        terminated: Some(Stopped::Wait),
                         calls: first.calls,
                         usage: first.usage,
                         cost_usd: first.cost_usd,
@@ -858,7 +772,7 @@ impl Model {
             })?;
         // The prompt is written, and the answer read, on threads of their own, so a run sent
         // SIGTERM ends the call however far it got ([`crate::terminate`]).
-        let out = match wait_or_terminate(&mut child, prompt) {
+        let out = match crate::terminate::wait(&mut child, Some(prompt.as_bytes()), "claude") {
             Waited::Done(out) => out,
             Waited::Failed(e) => return Err(Refused::uncosted(e)),
             Waited::Terminated => return Err(Refused::terminated()),
@@ -905,7 +819,7 @@ impl Model {
                 cost_usd,
                 error_answer: true,
                 unfit,
-                terminated: false,
+                terminated: None,
                 unavailable,
                 calls: 1,
                 usage,
@@ -926,7 +840,7 @@ impl Model {
                 cost_usd,
                 error_answer: false,
                 unfit: None,
-                terminated: false,
+                terminated: None,
                 unavailable: None,
                 calls: 1,
                 usage,
