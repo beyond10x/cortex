@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:fetch-stop-point
 kind: story
-status: draft
+status: active
 title: A run sent SIGTERM while it fetches stops within a bounded time
 summary: 'the fetch is a safe point: its child ended on SIGTERM, run ends terminated'
 relations:
 - serves: vision:self-updating-instances
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-18T00:28:45Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-18T00:28:45Z", actor: "human:timo", revision: 3}
 ---
 ## Outcome
 
