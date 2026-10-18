@@ -415,16 +415,22 @@ pub struct Known {
 
 impl Known {
     /// The names of `ontology` (`ekr ontology`), each node type's properties with their value
-    /// kind (`value_type.value_kind`) and nothing else of their declaration.
+    /// kind (`value_type.value_kind`) and nothing else of their declaration. Every name and kind
+    /// is masked for credential shapes (`crate::mask`) and written [`crate::known::one_line`], as
+    /// a store hit's name is: the store's ontology is another writer's text too.
     pub fn from_ontology(
         ontology: &Value,
         entities: Vec<cortex_model::instance::KnownEntity>,
     ) -> Self {
+        let clean = |v: &Value| -> Option<String> {
+            v.as_str()
+                .map(|s| crate::known::one_line(&crate::mask::mask(s).0))
+        };
         let names = |v: &Value| -> Vec<String> {
             v.as_array()
                 .into_iter()
                 .flatten()
-                .filter_map(|t| t["name"].as_str().map(str::to_string))
+                .filter_map(|t| clean(&t["name"]))
                 .collect()
         };
         let properties = |v: &Value| -> Vec<String> {
@@ -432,10 +438,10 @@ impl Known {
                 .into_iter()
                 .flatten()
                 .filter_map(|p| {
-                    let name = p["name"].as_str()?;
-                    Some(match p["value_type"]["value_kind"].as_str() {
+                    let name = clean(&p["name"])?;
+                    Some(match clean(&p["value_type"]["value_kind"]) {
                         Some(kind) => format!("{name}: {kind}"),
-                        None => name.to_string(),
+                        None => name,
                     })
                 })
                 .collect()
@@ -445,10 +451,10 @@ impl Known {
             .into_iter()
             .flatten()
             .filter_map(|t| {
-                let name = t["name"].as_str()?;
+                let name = clean(&t["name"])?;
                 let props = properties(&t["properties"]);
                 Some(if props.is_empty() {
-                    name.to_string()
+                    name
                 } else {
                     format!("{name}({})", props.join(", "))
                 })
@@ -461,7 +467,7 @@ impl Known {
             .filter_map(|e| {
                 Some(format!(
                     "{}: {} -> {}",
-                    e["name"].as_str()?,
+                    clean(&e["name"])?,
                     names(&e["source_types"]).join("|"),
                     names(&e["target_types"]).join("|")
                 ))

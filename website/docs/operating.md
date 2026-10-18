@@ -219,7 +219,10 @@ listed. Matching is exact after lowercasing (`str::to_lowercase`, not full case 
 does not match `Straße`); a similar name is not a hit. A store node's name and aliases are another
 writer's text: they are masked for credential shapes on every run, with or without a `redaction`
 policy, and then pass through the policy like every known name; a line break or another control
-character in a type, name or alias is written as a space, so each type keeps its one line. Behind
+character in a type, name or alias is written as a space, so each type keeps its one line. The
+store's ontology names the prompt lists (node types with their properties and value kinds,
+relations with their source and target types) are treated the same way: masked, then the
+policy, and each written on one line. Behind
 a model window, a batch whose store hits make its prompt's fixed part longer than the batch size
 allowed for is split in two before it is sent (see
 [the batch size](./spec-file.md#the-batch-size)). `ekr snapshot` reads the

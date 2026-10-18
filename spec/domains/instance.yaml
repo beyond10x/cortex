@@ -1719,8 +1719,13 @@ commands:
       # or another control character in it is written as a space. Behind a model window the
       # batch size counts the store hits' lines in the request's fixed part: a batch of more
       # than one document whose documents and known-entity lines exceed the size is split in
-      # two before it is sent. ESS has no construct for a read of the store's graph or for what
-      # a prompt holds; `src/run.rs` holds it and `tests/known_entities.rs` tests it.
+      # two before it is sent. The store's ontology names the prompt shows (`ekr ontology`: node
+      # type names, their property names and value kinds, edge type names with their source and
+      # target types) are masked for credential shapes and written on one line in the same way,
+      # with or without a redaction policy, and then pass through the instance's redaction like
+      # every known name. ESS has no construct for a read of the store's graph or for what
+      # a prompt holds; `src/run.rs` and `src/extract.rs` hold it and `tests/known_entities.rs`
+      # tests it.
       # A structured source calls no model; `alias_templates` reach the store as aliases of its
       # entities, by which EKR resolves them to a node of their type: a template alias matches a
       # store node of the mapping's own type only.
