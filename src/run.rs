@@ -922,6 +922,7 @@ fn process_in(
             let mut p = r.batch();
             let known = crate::known::for_batch(&store, &ontology, batch, &entities)
                 .map_err(Failure::Apply)?;
+            let known = Known::from_ontology(&ontology, known);
             let (shown, known) = pseudonymise(&mut p, batch, &uncut, &known);
             if let Some(why) = refused(&p, &shown, &known) {
                 return Err(Failure::Extract(why));
@@ -965,11 +966,12 @@ fn process_in(
         // The store's nodes the batch names, of any type, then the run's own names.
         let known = crate::known::for_batch(&store, &ontology, &batch, &entities)
             .map_err(Failure::Apply)?;
+        // With the store's ontology names, masked and one-line.
+        let known = Known::from_ontology(&ontology, known);
         // The model is shown the batch with personal data replaced by placeholders; the mapping
         // stays in `pseudonyms`, in memory, until this batch's answer is restored.
         let ((prompt, fixed), pseudonyms) = match &redactor {
             None => {
-                let known = Known::from_ontology(&ontology, known);
                 let prompt = extract::prompt_split(
                     &spec.description,
                     instructions.as_deref(),
@@ -989,7 +991,6 @@ fn process_in(
                     report.stopped = Some(why);
                     break;
                 }
-                let known = Known::from_ontology(&ontology, known);
                 let prompt = extract::prompt_split(
                     &spec.description,
                     instructions.as_deref(),
@@ -2101,13 +2102,9 @@ fn masked_key(redactor: Option<&Redactor>, key: &str) -> String {
 }
 
 /// Why the run refuses a batch: the classes `refuse_if_left` names that are still detected in
-/// what the model would be shown of it (`shown`, the known entity names `known`). Names the
-/// classes, never a value.
-fn refused(
-    p: &redact::Batch<'_>,
-    shown: &[evidence::Issued],
-    known: &[m::KnownEntity],
-) -> Option<String> {
+/// what the model would be shown of it (`shown`, the ontology and known entity names `known`).
+/// Names the classes, never a value.
+fn refused(p: &redact::Batch<'_>, shown: &[evidence::Issued], known: &Known) -> Option<String> {
     let mut left = BTreeSet::new();
     for issued in shown {
         let d = &issued.doc;
@@ -2119,10 +2116,7 @@ fn refused(
             left.extend(p.left(text));
         }
     }
-    for name in known
-        .iter()
-        .flat_map(|e| std::iter::once(&e.name).chain(&e.aliases))
-    {
+    for name in known_names(known) {
         left.extend(p.left(name));
     }
     (!left.is_empty()).then(|| {
@@ -2266,17 +2260,28 @@ struct Uncut {
     scrubbed: BTreeMap<String, usize>,
 }
 
-/// What the model is shown of `batch`, and the known entity names, with every value the
-/// redaction policy finds replaced by its placeholder in `p`: the document key (the `Source:`
-/// line), title, description and text. The text is the kept part of the text before the cut
-/// (`uncut`), so a value the cut splits is replaced too. What the irreversible rules replaced
-/// before storage is counted in `p` here, as the document is sent.
+/// Every name of `known` the prompt shows: the ontology's node type and relation lines, then each
+/// known entity's name and aliases.
+fn known_names(known: &Known) -> impl Iterator<Item = &String> {
+    known.node_types.iter().chain(&known.edge_types).chain(
+        known
+            .entities
+            .iter()
+            .flat_map(|e| std::iter::once(&e.name).chain(&e.aliases)),
+    )
+}
+
+/// What the model is shown of `batch`, and of `known` (the ontology names and the known entity
+/// names), with every value the redaction policy finds replaced by its placeholder in `p`: the
+/// document key (the `Source:` line), title, description and text. The text is the kept part of
+/// the text before the cut (`uncut`), so a value the cut splits is replaced too. What the
+/// irreversible rules replaced before storage is counted in `p` here, as the document is sent.
 fn pseudonymise(
     p: &mut redact::Batch<'_>,
     batch: &[evidence::Issued],
     uncut: &HashMap<String, Vec<Uncut>>,
-    entities: &[m::KnownEntity],
-) -> (Vec<evidence::Issued>, Vec<m::KnownEntity>) {
+    known: &Known,
+) -> (Vec<evidence::Issued>, Known) {
     let find = |doc: &sources::Document| -> Option<&Uncut> {
         uncut
             .get(&doc.key)
@@ -2319,10 +2324,7 @@ fn pseudonymise(
             p.reserve(&text);
         }
     }
-    for name in entities
-        .iter()
-        .flat_map(|e| std::iter::once(&e.name).chain(&e.aliases))
-    {
+    for name in known_names(known) {
         p.reserve_name(name);
     }
     let shown = batch
@@ -2344,14 +2346,19 @@ fn pseudonymise(
             }
         })
         .collect();
-    let known = entities
-        .iter()
-        .map(|e| m::KnownEntity {
-            name: p.replace(&e.name),
-            aliases: e.aliases.iter().map(|a| p.replace(a)).collect(),
-            ..e.clone()
-        })
-        .collect();
+    let known = Known {
+        node_types: known.node_types.iter().map(|t| p.replace(t)).collect(),
+        edge_types: known.edge_types.iter().map(|t| p.replace(t)).collect(),
+        entities: known
+            .entities
+            .iter()
+            .map(|e| m::KnownEntity {
+                name: p.replace(&e.name),
+                aliases: e.aliases.iter().map(|a| p.replace(a)).collect(),
+                ..e.clone()
+            })
+            .collect(),
+    };
     (shown, known)
 }
 
