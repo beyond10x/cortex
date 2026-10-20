@@ -24,7 +24,7 @@ scope:
   path: website/docs/operating.md
 - confidence: inferred
   path: website/docs/spec-file.md
-revision: 20
+revision: 21
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-15T03:29:14Z", actor: "human:timo", revision: 18, decided_on: {"recorded":{"review_outcome":3}}}
 - {from: "proposed", to: "active", at: "2026-10-15T03:29:15Z", actor: "human:timo", revision: 19, decided_on: {"recorded":{"review_outcome":3}}}
@@ -36,8 +36,8 @@ A run that fails its gate on a `postgres` store is undone: the store's head and 
 
 ## Why
 
-Found 2026-10-06 by the gap inventory for running Company Brain v3 entirely on cortex and EKR (cb3 `initiative:run-on-cortex`); no story covered it.
-Snapshots and the gate's undo are SQLite-only (`src/snapshot.rs`); a PostgreSQL-backed deployment, which the company brain uses, has no undo.
+Found 2026-10-06 by the gap inventory for running an organisation's knowledge store entirely on cortex and EKR (that store's `initiative:run-on-cortex`); no story covered it.
+Snapshots and the gate's undo are SQLite-only (`src/snapshot.rs`); a PostgreSQL-backed deployment, which that knowledge store uses, has no undo.
 
 ## Acceptance
 

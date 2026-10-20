@@ -27,7 +27,7 @@ scope:
   path: tests/adopt.rs
 - confidence: cited
   path: tests/conformance.rs
-revision: 18
+revision: 19
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T23:46:20Z", actor: "agent:claude", revision: 15, decided_on: {"recorded":{"review_outcome":1}}}
 - {from: "proposed", to: "active", at: "2026-10-05T23:46:20Z", actor: "agent:claude", revision: 16, decided_on: {"recorded":{"review_outcome":1}}}
@@ -71,6 +71,6 @@ Landed 2026-10-06 in `bcc2858` (wave 20261006a, merged `2e30e75`).
 
 - **Files:** `spec/domains/instance.yaml`, `spec/components.yaml` (AdoptInstance, 39 -> 45 scenarios) and what they regenerate, `src/instance.rs`, `src/main.rs`, `src/state.rs`, `Cargo.toml`/`Cargo.lock` (rustix), `tests/adopt.rs` (new, 13 cases), `tests/conformance.rs`, `README.md`, `AGENTS.md`, `website/docs/commands.md`, `operating.md`
 - **Beyond the story:** `--host` (ekr opens a store only under the tenant, agents and profile it was seeded with, measured), the `seed-types-missing` and `store-held` outcomes, `--seen <source>=<file>`, a free-space check, `seen_documents` and `seen_without_evidence` in the result
-- **For the Company Brain v3 move:** adopting its store needs that brain's own host document through `--host`
+- **For the move of an organisation's knowledge store:** adopting that store needs its own host document through `--host`
 - **Not tested:** adopt against a real PostgreSQL (stand-in `ekr` only)
 - **Review:** `review-result:adversary-adopt-existing-store-pass-1` (7, one blocker), fixed or documented; coordinator check of the correction
