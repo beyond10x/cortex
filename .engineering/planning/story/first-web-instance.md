@@ -15,7 +15,7 @@ scope:
   path: examples/agent-tooling.yaml
 - confidence: inferred
   path: examples/seed/agent-tooling.yaml
-revision: 18
+revision: 19
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":6}}}
 - {from: "proposed", to: "active", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":6}}}
@@ -153,3 +153,36 @@ The crawl was then started by hand (`systemctl --user start`, 2026-10-14 02:48 C
 - Day 1: 2026-10-15; days 1 to 7 (2026-10-15 to 2026-10-21) hold 7 news runs and 1 crawl
 - Read on day 8: 2026-10-22, after the 00:30 CEST news run, against the Acceptance
 - At the restart: news and crawl `runs: 0`, `consecutive_failures: 0` (`cortex sources`)
+
+## Restart (2026-10-16)
+
+`agent-tooling-4` stopped on day 1. Its news run failed on 2026-10-15 and 2026-10-16 00:30 CEST with
+`connections list: metadata_unavailable at observation` (outcome `fetch-failed`); the second failure
+disabled the source (`journalctl --user -u cortex-agent-tooling-4-news.service`). Cause, outside
+cortex, as recorded by the session that ran it: the shared Connectors state was rewritten by
+`connectors` 0.50.0, which the pinned 0.47.0 cannot read, as in the 2026-10-13
+restart. Its crawl, started by its timer on 2026-10-21 01:30 CEST, failed with `connections list: invalid_configuration at configuration`.
+
+The restart gives the instance Connectors state of its own, so a newer `connectors` run elsewhere
+on the machine cannot rewrite it. The run starts again as `agent-tooling-5`, in its own home
+`~/.local/share/cortex-at5`, with `XDG_CONFIG_HOME=~/.config/cortex-at5` and
+`XDG_STATE_HOME=~/.local/state/cortex-at5` copied into its units, a Tavily connection registered in
+that state, and spec `~/.config/cortex/agent-tooling-5/agent-tooling.yaml` (the `agent-tooling-4`
+spec with the name, the connection id, `ekr.version` `0.0.34` and `view_port` 18910 changed; not
+committed). Created 2026-10-16 13:12 UTC with `cortex create`; no unit was started by hand.
+
+| binary | version | sha256 |
+|---|---|---|
+| `bin/cortex` in the instance's home | cortex 0.5.0 | `4c4c368609092917a6f9bb20b082fd39c0c77d48b485ec523e22837f529897cb` |
+| `ekr` under `~/.cache/cortex/bin/0.0.34/` | 0.0.34 | `e10f2f0a3b2594b56f5f4738653cfbc13b452c0dd34f16a4128d84d272526e4a` |
+| `connectors` at `~/.local/share/cortex-pins/connectors/connectors-0.51.0`, named by the units' `CORTEX_CONNECTORS` | 0.51.0 | `a2afc83f6c80f3b35e9ad81cdc157e858b8b9ea34b3d88772be7c54b39c7af93` |
+| `claude` at `~/.local/share/cortex-pins/claude/claude-2.1.294`, unchanged | 2.1.294 | `27122ca7b624f537546fbef35b80c66370d974ff258f3d9b10ac50bb8771f262` |
+
+- Viewer: `http://127.0.0.1:18910/`
+- Day 1: 2026-10-17 (news 00:30 CEST); the crawl ran on 2026-10-21 01:30 CEST (day 5)
+- Read on day 8: 2026-10-24, after the 00:30 CEST news run, against the Acceptance
+- At 2026-10-21 23:00 CEST (`journalctl --user -u 'cortex-agent-tooling-5-*'`): 5 timer-started
+  news runs and 1 crawl, each `outcome: ran`, exit 0; 66 documents applied (15, 7, 9, 6, 10 and 19)
+
+`agent-tooling-4` was removed with `cortex remove` on 2026-10-21 21:09 UTC; its directory and store
+stay under `~/.local/share/cortex/instances/agent-tooling-4`.

@@ -36,6 +36,10 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Changed
+
+- cortex is specified and generated with ESS 0.67.0 (was 0.60.0); CI checks with ESS 0.67.0.
+
 ## 0.6.1 — 2026-10-17
 
 ### Added
