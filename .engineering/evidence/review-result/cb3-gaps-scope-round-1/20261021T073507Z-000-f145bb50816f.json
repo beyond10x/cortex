@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-21T07:35:07Z",
+  "actor": "human:timo",
+  "artifact": "review-result:cb3-gaps-scope-round-1",
+  "kind": "review-result",
+  "revision": 3,
+  "change": {
+    "change": "redaction",
+    "literal_sha256": "b5b2d15c36585dd4ee969a0417a981a89ae1565736e55af8e8e2f8623406a1d6",
+    "literal_chars": 13,
+    "replacement": "the predecessor knowledge store",
+    "count": 1,
+    "reason": "Remove a downstream project name before it joins the Gates forbidden literals; operator instruction of 2026-10-21, sweep the downstream name"
+  }
+}

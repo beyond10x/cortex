@@ -9,7 +9,7 @@ relations:
 - reviews: story:extraction-supersedes
 - reviews: story:postgres-run-undo
 - reviews: story:record-field-lookups
-revision: 2
+revision: 3
 transitions:
 - {from: "active", to: "archived", at: "2026-10-08T13:07:38Z", actor: "human:timo", revision: 2}
 ---
@@ -27,8 +27,8 @@ read-answers-name-types — the overlap with story:read-surface-specified is a p
 explain-bounds-documents — a bound argument and `truncated`/full-length fields change the `explain` tool's input schema, which story:read-surface-specified models as a view command and checks against `tools/list` (cited, its Build and Acceptance), and the "way to read the rest" may be the `describe_evidence` tool that story:read-surface-served-over-http adds; the body names neither — .engineering/planning/story/explain-bounds-documents.md:31
 read-answers-name-types — it and story:explain-bounds-documents edit `docs/cli.md` and the `[Unreleased]` changelog (neither lists `CHANGELOG.md`) beside the open wave 20261005b stories, but the wave's Selection records that hunk-sharing only for ocel-process-map — .engineering/planning/specification/wave-20261005b-extraction-parity.md:30
 secrets-scan-without-redact — it and story:retire-local-redaction claim one outcome, `task secrets` calling a working detector once `src/redact.rs` is gone (cited, retire-local-redaction line 45), and story:retire-ingestion also edits `Taskfile.yml` (line 26); none says so, and the typed scope is empty so `waves` lists it unassessed; add an edge or split — .engineering/planning/story/secrets-scan-without-redact.md:24
-served-channels-by-audience — `charts/company-brain/values.yaml` lies inside story:cortex-cutover's scope `charts/company-brain/` (line 29), and the `deploy/cortex/` spec it edits is a new file (it does not exist yet) that story:cortex-instance-spec creates (line 26); "(with story:cortex-instance-spec)" records no edge, and the typed scope is empty so `waves` lists it unassessed — .engineering/planning/story/served-channels-by-audience.md:28
-cortex-host-reaches-staff-db — `charts/company-brain/templates/database.yaml` and `network-policy.yaml` lie inside story:cortex-cutover's scope `charts/company-brain/` (cited, its line 29) with no edge, and the typed scope is empty so `waves` lists it unassessed — .engineering/planning/story/cortex-host-reaches-staff-db.md:24
+served-channels-by-audience — `charts/knowledge-store/values.yaml` lies inside story:cortex-cutover's scope `charts/knowledge-store/` (line 29), and the `deploy/cortex/` spec it edits is a new file (it does not exist yet) that story:cortex-instance-spec creates (line 26); "(with story:cortex-instance-spec)" records no edge, and the typed scope is empty so `waves` lists it unassessed — .engineering/planning/story/served-channels-by-audience.md:28
+cortex-host-reaches-staff-db — `charts/knowledge-store/templates/database.yaml` and `network-policy.yaml` lie inside story:cortex-cutover's scope `charts/knowledge-store/` (cited, its line 29) with no edge, and the typed scope is empty so `waves` lists it unassessed — .engineering/planning/story/cortex-host-reaches-staff-db.md:24
 
 What I read:
 - 9 stories, plus the 5 named cortex drafts, 6 EKR wave and read-surface stories, and 3 cb3 stories' neighbours (retire-ingestion, retire-local-redaction, cortex-cutover, cortex-instance-spec).
@@ -171,7 +171,7 @@ What I could not establish:
   "severity": "warning",
   "verdict": "needs-revision",
   "origin": "introduced",
-  "message": "charts/company-brain/values.yaml lies inside story:cortex-cutover's scope (line 29) and deploy/cortex/ is a file that does not exist yet, created by story:cortex-instance-spec (line 26); the \"(with story:cortex-instance-spec)\" remark records no edge, and the typed scope is empty so waves lists it unassessed"
+  "message": "charts/knowledge-store/values.yaml lies inside story:cortex-cutover's scope (line 29) and deploy/cortex/ is a file that does not exist yet, created by story:cortex-instance-spec (line 26); the \"(with story:cortex-instance-spec)\" remark records no edge, and the typed scope is empty so waves lists it unassessed"
  },
  {
   "file": ".engineering/planning/story/cortex-host-reaches-staff-db.md",
@@ -180,7 +180,7 @@ What I could not establish:
   "severity": "warning",
   "verdict": "needs-revision",
   "origin": "introduced",
-  "message": "charts/company-brain/templates/database.yaml and network-policy.yaml lie inside story:cortex-cutover's scope charts/company-brain/ (cited, line 29) with no edge, and the typed scope is empty so waves lists it unassessed"
+  "message": "charts/knowledge-store/templates/database.yaml and network-policy.yaml lie inside story:cortex-cutover's scope charts/knowledge-store/ (cited, line 29) with no edge, and the typed scope is empty so waves lists it unassessed"
  }
 ]
 ```

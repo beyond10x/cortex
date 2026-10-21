@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-21T07:35:06Z",
+  "actor": "human:timo",
+  "artifact": "review-result:cb3-gaps-design-round-1",
+  "kind": "review-result",
+  "revision": 3,
+  "change": {
+    "change": "redaction",
+    "literal_sha256": "0b63b4acfdfd0074e3bd87d24e122d7a650bfe093b21eba8fa8b1ced6873d0f1",
+    "literal_chars": 23,
+    "replacement": "the predecessor knowledge store",
+    "count": 10,
+    "reason": "Remove a downstream project name before it joins the Gates forbidden literals; operator instruction of 2026-10-21, sweep the downstream name"
+  }
+}

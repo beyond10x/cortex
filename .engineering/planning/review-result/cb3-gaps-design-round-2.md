@@ -9,7 +9,7 @@ relations:
 - reviews: story:extraction-supersedes
 - reviews: story:postgres-run-undo
 - reviews: story:record-field-lookups
-revision: 1
+revision: 2
 ---
 needs-revision
 
@@ -39,7 +39,7 @@ needs-revision
 **What I could not establish:**
 - Out of lane (acceptance): `story:retire-local-redaction` no longer holds the archived story's check that `task secrets` fails on a staged credential once `src/redact.rs` is gone.
 - Out of lane (acceptance): `story:served-channels-by-audience` does not say what turns a `restricted` class into an excluded channel (a cortex filter or a generator).
-- Out of lane (parallel-safety): `story:cortex-host-reaches-staff-db` and `story:postgres-store-backup` both touch `charts/company-brain/templates/`.
+- Out of lane (parallel-safety): `story:cortex-host-reaches-staff-db` and `story:postgres-store-backup` both touch `charts/knowledge-store/templates/`.
 - Out of lane (parallel-safety): `story:read-answers-name-types` edits `crates/ekr/src/cli/mcp.rs` and `view.rs`, which `story:read-surface-served-over-http` replaces with one dispatcher.
 - Out of lane (scope): the epic's "Stories here" list omits the new cb3 stories.
 - Pre-existing, not set against this round: `story:cortex-host-reaches-staff-db` names cortex `story:postgres-credential-from-connectors` in prose, with no `upstream-blocker` record, unlike the epic's stated convention.

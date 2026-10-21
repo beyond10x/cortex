@@ -9,7 +9,7 @@ relations:
 - reviews: story:extraction-supersedes
 - reviews: story:postgres-run-undo
 - reviews: story:record-field-lookups
-revision: 2
+revision: 4
 transitions:
 - {from: "active", to: "archived", at: "2026-10-08T13:07:38Z", actor: "human:timo", revision: 2}
 ---
@@ -17,11 +17,11 @@ needs-revision
 
 - `story:read-answers-name-types` — its type-read operation is half of the read surface that `story:read-surface-specified` defines as exactly 11 operations, with no `depends_on` edge, so both claim the same surface and the 11-operation acceptance breaks; split the type read into its own story that `depends_on` `story:read-surface-specified`, or fold it in — `~/.local/state/worktree/trees/b10x/epistemic-knowledge-runtime/ekr-wx-int/.engineering/planning/story/read-answers-name-types.md:24,29,35` against `read-surface-specified.md:43,59`
 - `story:explain-bounds-documents` — "a way to read the rest" names no operation, and over MCP the only candidate, `describe_evidence`, exists only after `story:read-surface-served-over-http` adds it, with no edge. Either name a self-contained window parameter on `explain` or add `depends_on story:read-surface-served-over-http` — `~/.local/state/worktree/trees/b10x/epistemic-knowledge-runtime/ekr-wx-int/.engineering/planning/story/explain-bounds-documents.md:20` against `read-surface-served-over-http.md:27` and `grep -n describe_evidence crates/ekr/src/cli/mcp.rs` (no match)
-- `story:secrets-scan-without-redact` — `story:retire-local-redaction` already owns "`task secrets` … call the shared detector, and `cb3 redact` … removed or calls it", while this story leaves the scanner open between a minimal `cb3 redact --scan` and gitleaks, so two stories own one replacement; fold it into `story:retire-local-redaction` or state which one owns the scanner and add `depends_on` — `<the company-brain store>/.engineering/planning/story/secrets-scan-without-redact.md:24-26` against `retire-local-redaction.md:45-46`
-- `story:retire-ingestion` — it deletes `src/redact.rs`, which `task secrets` runs (`Taskfile.yml:119-121`), and no edge orders it after `story:secrets-scan-without-redact`; add `depends_on story:secrets-scan-without-redact` — `<the company-brain store>/.engineering/planning/story/retire-ingestion.md:12-22` and `secrets-scan-without-redact.md:13,18`
-- `story:served-channels-by-audience` — its acceptance queries "the deployment", which serves the revision-547 store that already holds the excluded text, and `story:cortex-cutover` is what adopts that store, with no edge and no item for the removal; add `depends_on story:cortex-cutover` or a decision-blocker, or limit the outcome to what cortex writes — `<the company-brain store>/.engineering/planning/story/served-channels-by-audience.md:22,26` against `cortex-cutover.md:19,25`
-- `story:served-channels-by-audience` — the channel policy as data is already part of `story:cortex-instance-spec`'s outcome and both edit `deploy/cortex/`, so the audience class is half of one abstraction with no edge; add `depends_on story:cortex-instance-spec` — `<the company-brain store>/.engineering/planning/story/served-channels-by-audience.md:13,30` against `cortex-instance-spec.md:16`
-- `story:cortex-cutover` — "adopt the promoted store … on the PostgreSQL backend the deployment reads" cannot be shown until the timer host reaches that database, which `story:cortex-host-reaches-staff-db` delivers, and no edge records it; add `depends_on story:cortex-host-reaches-staff-db` — `<the company-brain store>/.engineering/planning/story/cortex-cutover.md:10,19` against `cortex-host-reaches-staff-db.md:13,18`
+- `story:secrets-scan-without-redact` — `story:retire-local-redaction` already owns "`task secrets` … call the shared detector, and `cb3 redact` … removed or calls it", while this story leaves the scanner open between a minimal `cb3 redact --scan` and gitleaks, so two stories own one replacement; fold it into `story:retire-local-redaction` or state which one owns the scanner and add `depends_on` — `<the predecessor knowledge store>/.engineering/planning/story/secrets-scan-without-redact.md:24-26` against `retire-local-redaction.md:45-46`
+- `story:retire-ingestion` — it deletes `src/redact.rs`, which `task secrets` runs (`Taskfile.yml:119-121`), and no edge orders it after `story:secrets-scan-without-redact`; add `depends_on story:secrets-scan-without-redact` — `<the predecessor knowledge store>/.engineering/planning/story/retire-ingestion.md:12-22` and `secrets-scan-without-redact.md:13,18`
+- `story:served-channels-by-audience` — its acceptance queries "the deployment", which serves the revision-547 store that already holds the excluded text, and `story:cortex-cutover` is what adopts that store, with no edge and no item for the removal; add `depends_on story:cortex-cutover` or a decision-blocker, or limit the outcome to what cortex writes — `<the predecessor knowledge store>/.engineering/planning/story/served-channels-by-audience.md:22,26` against `cortex-cutover.md:19,25`
+- `story:served-channels-by-audience` — the channel policy as data is already part of `story:cortex-instance-spec`'s outcome and both edit `deploy/cortex/`, so the audience class is half of one abstraction with no edge; add `depends_on story:cortex-instance-spec` — `<the predecessor knowledge store>/.engineering/planning/story/served-channels-by-audience.md:13,30` against `cortex-instance-spec.md:16`
+- `story:cortex-cutover` — "adopt the promoted store … on the PostgreSQL backend the deployment reads" cannot be shown until the timer host reaches that database, which `story:cortex-host-reaches-staff-db` delivers, and no edge records it; add `depends_on story:cortex-host-reaches-staff-db` — `<the predecessor knowledge store>/.engineering/planning/story/cortex-cutover.md:10,19` against `cortex-host-reaches-staff-db.md:13,18`
 - `story:structured-children` — "each event's valid time equals its record time" needs the evidence-time and valid-time work in `story:document-time-as-valid-time` and the open `upstream-blocker:ekr-extraction-valid-time`, which blocks only that story; add `depends_on story:document-time-as-valid-time` — `~/beyond10x/cortex/.engineering/planning/story/structured-children.md:32` against `document-time-as-valid-time.md:28` and `aep plan artifact graph` (`upstream-blocker:ekr-extraction-valid-time` blocks one story)
 - `story:structured-children` — "calls child operations per parent record" restates `ChildCall` from `story:connectors-source-walks`, whose reuse `story:structured-from-files-and-drops` states as "adds no second walk", and it shares `src/structured.rs` and `StructuredSource` with that story; add `depends_on story:structured-source` and `depends_on story:connectors-source-walks` and say it reuses the walk — `~/beyond10x/cortex/.engineering/planning/story/structured-children.md:23` against `connectors-source-walks.md:39` and `structured-from-files-and-drops.md:36`
 - `story:extraction-supersedes` — its dependency on the EKR supersession release is prose only, although `upstream-blocker:ekr-extraction-supersession` exists and blocks only `story:structured-from-files-and-drops`; record `upstream-blocker:ekr-extraction-supersession blocks story:extraction-supersedes` — `~/beyond10x/cortex/.engineering/planning/story/extraction-supersedes.md:30-32` and `aep plan artifact graph` (the `blocks` edges from `upstream-blocker:*`)
@@ -38,7 +38,7 @@ needs-revision
 - Out of lane:
   - parallel-safety: `src/extract.rs` (`story:extraction-supersedes`, `story:document-time-as-valid-time`, `story:codex-model-backend`) and `src/sources.rs` are shared.
   - parallel-safety: `tests/store_backend.rs` is shared between `story:postgres-run-undo` and `story:postgres-credential-from-connectors`.
-  - parallel-safety: `charts/company-brain/` is shared by `story:cortex-cutover`, `story:cortex-host-reaches-staff-db` and `story:served-channels-by-audience`.
+  - parallel-safety: `charts/knowledge-store/` is shared by `story:cortex-cutover`, `story:cortex-host-reaches-staff-db` and `story:served-channels-by-audience`.
   - acceptance: `story:structured-children` states an optional compare-derived link that its acceptance does not test.
   - scope: `epic:organisation-scale-instance`'s story table does not list the four new cortex stories.
 
@@ -63,7 +63,7 @@ needs-revision
   "message": "\"a way to read the rest\" names no operation, and over MCP the only candidate, describe_evidence, exists only after story:read-surface-served-over-http adds it, with no edge; either name a self-contained window parameter on explain or add depends_on story:read-surface-served-over-http"
  },
  {
-  "file": "<the company-brain store>/.engineering/planning/story/secrets-scan-without-redact.md",
+  "file": "<the predecessor knowledge store>/.engineering/planning/story/secrets-scan-without-redact.md",
   "line": 24,
   "category": "design",
   "severity": "blocker",
@@ -72,7 +72,7 @@ needs-revision
   "message": "story:retire-local-redaction already owns \"task secrets calls the shared detector, and cb3 redact removed or calls it\" while this story leaves the scanner open between a minimal cb3 redact --scan and gitleaks, so two stories own one replacement; fold it into story:retire-local-redaction or state which one owns the scanner and add depends_on"
  },
  {
-  "file": "<the company-brain store>/.engineering/planning/story/retire-ingestion.md",
+  "file": "<the predecessor knowledge store>/.engineering/planning/story/retire-ingestion.md",
   "line": 12,
   "category": "design",
   "severity": "blocker",
@@ -81,7 +81,7 @@ needs-revision
   "message": "it deletes src/redact.rs, which task secrets runs (Taskfile.yml:119-121), and no edge orders it after story:secrets-scan-without-redact; add depends_on story:secrets-scan-without-redact"
  },
  {
-  "file": "<the company-brain store>/.engineering/planning/story/served-channels-by-audience.md",
+  "file": "<the predecessor knowledge store>/.engineering/planning/story/served-channels-by-audience.md",
   "line": 22,
   "category": "design",
   "severity": "blocker",
@@ -90,7 +90,7 @@ needs-revision
   "message": "its acceptance queries the deployment, which serves the revision-547 store that already holds the excluded text, and story:cortex-cutover is what adopts that store, with no edge and no item for the removal; add depends_on story:cortex-cutover or a decision-blocker, or limit the outcome to what cortex writes"
  },
  {
-  "file": "<the company-brain store>/.engineering/planning/story/served-channels-by-audience.md",
+  "file": "<the predecessor knowledge store>/.engineering/planning/story/served-channels-by-audience.md",
   "line": 13,
   "category": "design",
   "severity": "warning",
@@ -99,7 +99,7 @@ needs-revision
   "message": "the channel policy as data is already part of story:cortex-instance-spec's outcome and both edit deploy/cortex/, so the audience class is half of one abstraction with no edge; add depends_on story:cortex-instance-spec"
  },
  {
-  "file": "<the company-brain store>/.engineering/planning/story/cortex-cutover.md",
+  "file": "<the predecessor knowledge store>/.engineering/planning/story/cortex-cutover.md",
   "line": 19,
   "category": "design",
   "severity": "warning",

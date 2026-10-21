@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-21T07:35:07Z",
+  "actor": "human:timo",
+  "artifact": "review-result:cb3-gaps-parallel-round-2",
+  "kind": "review-result",
+  "revision": 2,
+  "change": {
+    "change": "redaction",
+    "literal_sha256": "722e5b6ece8cf823aa6eba847b71b7a721d5a502deab0f406c7be828d1a9d347",
+    "literal_chars": 13,
+    "replacement": "knowledge-store",
+    "count": 8,
+    "reason": "Remove a downstream project name before it joins the Gates forbidden literals; operator instruction of 2026-10-21, sweep the downstream name"
+  }
+}

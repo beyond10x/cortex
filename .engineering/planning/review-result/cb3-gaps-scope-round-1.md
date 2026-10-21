@@ -9,7 +9,7 @@ relations:
 - reviews: story:extraction-supersedes
 - reviews: story:postgres-run-undo
 - reviews: story:record-field-lookups
-revision: 2
+revision: 3
 transitions:
 - {from: "active", to: "archived", at: "2026-10-08T13:07:38Z", actor: "human:timo", revision: 2}
 ---
@@ -47,7 +47,7 @@ No two stories claim the same outcome. Nothing in the nine reaches past the goal
 - Three things are out of my lane and did not set the verdict:
   - The new cb3 stories have no `depends_on` or `blocks` edge to `cortex-cutover` or `retire-ingestion`, so nothing gates those two on them (design).
   - `secrets-scan-without-redact` can only be tested once `redact.rs` is deleted, which is the last step (acceptance, design).
-  - The cortex stories decompose `epic:organisation-scale-instance`, which does not list them, and they name Company Brain v3 although that epic says the consumer "is named only in its own repository" (design).
+  - The cortex stories decompose `epic:organisation-scale-instance`, which does not list them, and they name the predecessor knowledge store v3 although that epic says the consumer "is named only in its own repository" (design).
 
 ```findings
 [
