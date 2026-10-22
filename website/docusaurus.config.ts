@@ -71,9 +71,12 @@ const config: Config = {
           items: [
             {label: 'Overview', to: '/docs/'},
             {label: 'Quickstart', to: '/docs/quickstart'},
+            {label: 'Use cases', to: '/docs/use-cases'},
+            {label: 'Status', to: '/docs/status'},
             {label: 'Spec file', to: '/docs/spec-file'},
             {label: 'Commands', to: '/docs/commands'},
             {label: 'Operating an instance', to: '/docs/operating'},
+            {label: 'Ask service', to: '/docs/ask-service'},
             {label: 'Limits', to: '/docs/limits'},
             {label: 'ESS specification', to: '/docs/reference/ess'},
           ],

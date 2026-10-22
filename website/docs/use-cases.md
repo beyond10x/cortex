@@ -12,7 +12,7 @@ your questions need. Every instance is served to agents through `ekr mcp`, with 
 `cortex mcp-line <name>` prints, and every answer cites the document it came from.
 
 **Ready** says what this release of cortex and the
-[Connectors](https://github.com/beyond10x/connectors) catalog (v0.33.0) provide for it today.
+[Connectors](https://github.com/beyond10x/connectors) catalog (v0.56.0) provide for it today.
 
 :::note[What an instance cannot do yet]
 A web page is cited as a statement naming its URL, not as URL evidence, and the Codex model
@@ -50,8 +50,8 @@ relations with no model call. Seed: `Service`, `Team`, `Person`, `Decision`, `In
 **Question.** "Who owns the billing service, and what was the last decision about its retry
 policy?"
 
-**Ready:** GitLab, Jira and Confluence are providers of the Connectors catalog. Chat threads are
-not: the catalog has no Slack provider.
+**Ready:** GitLab, Jira, Confluence and Slack (`conversations.history`, `conversations.replies`)
+are providers of the Connectors catalog.
 
 ## 3. Account knowledge for support and sales
 

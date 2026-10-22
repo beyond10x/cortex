@@ -40,6 +40,12 @@ serve: {}
 | `model` | the model that extracts, its per-run budget, its optional daily ceiling and its timeout |
 | `sources` | the data sources and their schedules |
 | `serve` | the viewer's port |
+| `store` | optional: the store's backend, SQLite or PostgreSQL ([`store`](#store)) |
+| `redaction` | optional: what is kept from the model, and what refuses a run ([`redaction`](#redaction)) |
+| `snapshots` | optional: how many snapshots of a `sqlite` store are kept ([`snapshots`](#snapshots)) |
+| `gate` | optional: the checks a run is held to ([`gate`](#gate)) |
+| `monitoring` | optional: what a run reports besides its printed line ([`monitoring`](#monitoring)) |
+| `ask` | optional: the ask service's settings ([Ask service](./ask-service.md#the-ask-section)) |
 
 Paths in `seed` and `model.instructions` are relative to the spec file's directory and may not
 leave it. `cortex create` copies the spec file and every file they name into the instance

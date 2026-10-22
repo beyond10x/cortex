@@ -27,7 +27,7 @@ feature set after a real instance ran for 7 days with nobody at the keyboard.
   stage it abandons on failure; two failed runs in a row disable a source, and a daily ceiling
   holds model spend. A metric file, a failure hook and `cortex sources` show how each run ended.
   `cortex quality` judges a sample of facts; `cortex schema` proposes schema changes.
-- **Project.** Specified in ESS with 58 conformance scenarios; CI runs `task check` on every pull
+- **Project.** Specified in ESS with 115 conformance scenarios; CI runs `task check` on every pull
   request; each release carries an `x86_64-unknown-linux-gnu` binary checked against `SHA256SUMS`.
 
 Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
