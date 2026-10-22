@@ -8,7 +8,7 @@
       "One spec file.",
       "A knowledge store that keeps itself current."
     ],
-    "lede": "cortex spins up knowledge instances on the Epistemic Knowledge Runtime (EKR). One spec file defines an instance: its seed schema, its model settings and its data sources. systemd timers run each source on its schedule, a model extracts what new or changed documents say, and EKR applies it to the instance's own SQLite store, which you browse with ekr view or serve to agents over MCP.",
+    "lede": "cortex spins up knowledge instances on the Epistemic Knowledge Runtime (EKR). One spec file defines an instance: its seed schema, its model settings and its data sources. systemd timers run each source on its schedule, a model extracts what new or changed documents say, and EKR applies it to the instance's own store (SQLite or PostgreSQL), which you browse with ekr view or serve to agents over MCP.",
     "actions": [
       {
         "label": "Read the documentation",
@@ -47,8 +47,8 @@
           "href": "/docs/spec-file"
         },
         {
-          "title": "Three kinds of source",
-          "description": "Web search or listed sites through a Connectors websearch adapter, the records of any Connectors operation, or local files matching a glob.",
+          "title": "Four kinds of source",
+          "description": "Web search or listed sites through a Connectors websearch adapter, the records of any Connectors operation, local files matching a glob, or structured records mapped to nodes with no model call.",
           "status": "shipped",
           "href": "/docs/spec-file"
         },
@@ -95,7 +95,7 @@
         {
           "label": "EKR",
           "title": "Apply",
-          "description": "ekr apply-extraction commits it to the instance's SQLite store."
+          "description": "ekr apply-extraction commits it to the instance's store, SQLite or PostgreSQL."
         }
       ]
     },

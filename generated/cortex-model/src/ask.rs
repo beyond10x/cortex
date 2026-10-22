@@ -1,11 +1,11 @@
 // generated from cortex v1
-// model digest 0f7251f0c444abe6dc1366bd90cef115ffd6b3c2bd521752108a810a42d41fc1
-// contract digest 71c6e0b3e397e5f08a6ea7dcc3ecc06f49da3356d65a650fb479e65189f6fb60
+// model digest 7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d
+// contract digest 45be6012d6ca07f5842ea4b833a0421e5880da4b6a06706d61c0d0abe43f7aab
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Answers — `cortex.ask`.
 //!
-//! The answer service of an instance: `cortex ask serve` answers a question over the instance's store as a stream of events. It reads the store only through the EKR MCP reader (`ekr mcp`) and writes nothing to it; its model is the instance's model gateway, spoken to as an OpenAI-compatible endpoint. Every answer is streamed and kept as an answer record, with the votes of its readers; an answer voted down, failed or slow is queued for review. The records are cortex's own, never in the store: in `ask.sqlite` in the instance directory on a `sqlite` store, in a PostgreSQL schema of their own on a `postgres` one; they are purged after the spec's `retention_days`.
+//! The answer service of an instance: cortex ask serve answers a question over the instance's store as a stream of events. It reads the store only through the EKR MCP reader (ekr mcp) and writes nothing to it; its model is the instance's model gateway, spoken to as an OpenAI-compatible endpoint. Every answer is streamed and kept as an answer record, with the votes of its readers; an answer voted down, failed or slow is queued for review. The records are cortex's own, never in the store: in ask.sqlite in the instance directory on a SQLite store, in a PostgreSQL schema of their own on a PostgreSQL one; they are purged after the spec's retention_days.
 //!
 //! Everything this bounded context declares that the synthesis plan marks generated.
 

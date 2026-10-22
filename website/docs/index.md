@@ -18,7 +18,8 @@ the store. You browse a store with `ekr view` and serve it to agents over MCP wi
 ```text
 spec file          name, seed schema, model, sources, schedules
    ↓  cortex create
-instance           one directory, one EKR store (SQLite or PostgreSQL), one viewer, one timer per source
+instance           one directory, one EKR store (SQLite or PostgreSQL),
+                   one viewer, one timer per source
    ↓  timer fires: cortex run <instance>/<source>
 fetch              web pages or operation records through Connectors, or local files
    ↓

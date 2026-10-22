@@ -229,7 +229,7 @@ lock again, and every proposal not dropped is recorded `pending`, except one who
 placeholder of the `redaction` policy, which is `invalid` as in any round. Its `reviewed` detail
 names the run's `stamp` and counts the proposals `pending`. A person then decides each one:
 
-```console
+```sh
 cortex schema approve acme 20261017T101500Z --only 1 --by ops
 cortex schema reject acme 20261017T101500Z --only 2 --reason "a maker is an organisation"
 cortex schema apply acme 20261017T101500Z

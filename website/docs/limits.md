@@ -96,7 +96,7 @@ stand; [Status](./status.mdx) lists what is planned.
 - **Some numbers that are not personal data are hidden from the model, but kept in the store.**
   Four-part version numbers and long digit ids that look like an IP address or a card number are
   replaced by a placeholder in the prompt.
-- **A web page is cited as a statement, not as a URL.** EKR 0.0.32 admits only `HumanStatement`
+- **A web page is cited as a statement, not as a URL.** EKR 0.0.34 admits only `HumanStatement`
   evidence in an extraction document (`extraction-evidence-kind-unsupported` for any other), so
   cortex files a page as a `HumanStatement` whose identity is its URL. URL evidence waits on an EKR
   release that admits it (EKR `story:extraction-admits-url-evidence`; here
