@@ -102,9 +102,7 @@ fn a_call_behind_a_start_and_a_stall_waits_at_most_one_deadline_for_it() {
     assert!(first.is_err(), "a stalled process answered: {first:?}");
     let before = query(&remote);
     std::thread::sleep(Duration::from_millis(100));
-    let (ours, took) = query(&remote)
-        .recv_timeout(BLOCKED)
-        .expect("our call ends");
+    let (ours, took) = query(&remote).recv_timeout(BLOCKED).expect("our call ends");
     let _ = before.recv_timeout(BLOCKED);
     assert!(
         took < DEADLINE + SLACK,

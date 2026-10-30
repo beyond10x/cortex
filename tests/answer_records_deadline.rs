@@ -264,3 +264,144 @@ fn the_record_routes_answer_store_failed_within_the_deadline_when_the_records_st
         );
     }
 }
+
+/// Record calls are served in the order they arrive. A caller making statements back to back
+/// (a vote reads the answer, writes the vote and may open a review item) does not get ahead of a
+/// call that was already waiting: that call is served after the statement in progress, not after
+/// the whole run of them, and so never fails in the queue behind a healthy process.
+///
+/// Each statement takes 0.3 s. The runner makes 8 in a row (2.4 s); the waiter arrives 0.1 s
+/// into the first, so served in order it is answered at about 0.6 s, well inside its deadline of
+/// 1 s, while a caller let in ahead of it again and again leaves it to fail at 1 s.
+#[test]
+fn a_waiting_call_is_served_before_the_next_statement_of_a_caller_making_them_back_to_back() {
+    use cortex_cli::ask::records::postgres::{Remote, Sql};
+    let tmp = tempfile::Builder::new()
+        .prefix("cortex-records-order")
+        .tempdir_in(
+            std::env::var_os("CARGO_TARGET_TMPDIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(std::env::temp_dir),
+        )
+        .unwrap();
+    let root = tmp.path();
+    executable(
+        &root.join("connectors"),
+        &format!(
+            r#"printf '{{"ready":{{"schema_version":{SCHEMA_VERSION}}}}}\n'
+while IFS= read -r line; do
+  case "$line" in
+    *'"op":"query"'*) sleep 0.3; printf '{{"rows":[[1]]}}\n' ;;
+  esac
+done
+"#
+        ),
+    );
+    let launch = Launch {
+        connectors: root.join("connectors"),
+        adapter: "postgres".into(),
+        connection: "records".into(),
+        url: "postgres://cortex@db.invalid/brain".into(),
+        schema: "cortex_ask".into(),
+        ca_file: None,
+        remove: Vec::new(),
+        deadline: DEADLINE,
+    };
+    let remote = Arc::new(Remote::start(launch).expect("the stand-in starts"));
+    let r = remote.clone();
+    let runner = std::thread::spawn(move || {
+        (0..8)
+            .map(|_| r.query("SELECT 1", &[]).is_ok())
+            .collect::<Vec<_>>()
+    });
+    std::thread::sleep(Duration::from_millis(100));
+    let r = remote.clone();
+    let (waiter, took) = timed("the waiting call", move || {
+        r.query("SELECT 1", &[]).map_err(|e| e.message)
+    });
+    let runs = runner.join().expect("the runner ends");
+    assert!(
+        waiter.is_ok(),
+        "the waiting call failed after {took:?} behind a caller making statements back to back: \
+         {waiter:?}"
+    );
+    assert!(
+        took < DEADLINE,
+        "the waiting call took {took:?}, served after more than the statement in progress"
+    );
+    assert!(
+        runs.iter().all(|ok| *ok),
+        "the caller's statements: {runs:?}"
+    );
+}
+
+/// A start that fails fails every call that waited through it, at once: the call queued behind
+/// it neither starts the records process again nor waits a start of its own. One outage costs
+/// one start, not one per caller queued behind it.
+///
+/// Launch 1 is ready at once and stalls on its statement; every later launch takes 2 s to start,
+/// past the deadline of 1 s. After the stall, call B starts launch 2, and call C arrives 0.1 s
+/// later.
+#[test]
+fn a_call_queued_behind_a_failed_start_fails_with_it_and_starts_nothing() {
+    use cortex_cli::ask::records::postgres::{Remote, Sql};
+    let tmp = tempfile::Builder::new()
+        .prefix("cortex-records-failed-start")
+        .tempdir_in(
+            std::env::var_os("CARGO_TARGET_TMPDIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(std::env::temp_dir),
+        )
+        .unwrap();
+    let root = tmp.path().to_path_buf();
+    let log = root.join("launches.log");
+    executable(
+        &root.join("connectors"),
+        &format!(
+            r#"printf 'launch\n' >> "{log}"
+n=$(wc -l < "{log}" | tr -d ' ')
+[ "$n" = 1 ] || sleep 2
+printf '{{"ready":{{"schema_version":{SCHEMA_VERSION}}}}}\n'
+while IFS= read -r line; do :; done
+"#,
+            log = log.display(),
+        ),
+    );
+    let launch = Launch {
+        connectors: root.join("connectors"),
+        adapter: "postgres".into(),
+        connection: "records".into(),
+        url: "postgres://cortex@db.invalid/brain".into(),
+        schema: "cortex_ask".into(),
+        ca_file: None,
+        remove: Vec::new(),
+        deadline: DEADLINE,
+    };
+    let remote = Arc::new(Remote::start(launch).expect("the stand-in starts"));
+    assert!(
+        remote.query("SELECT 1", &[]).is_err(),
+        "a stalled process answered"
+    );
+    let r = remote.clone();
+    let b = std::thread::spawn(move || r.query("SELECT 1", &[]).map_err(|e| e.message));
+    std::thread::sleep(Duration::from_millis(100));
+    let r = remote.clone();
+    let (c, took) = timed("the call queued behind the start", move || {
+        r.query("SELECT 1", &[]).map_err(|e| e.message)
+    });
+    let launches_after_c = std::fs::read_to_string(&log).unwrap().lines().count();
+    let b = b.join().expect("call B ends");
+    assert!(b.is_err(), "launch 2 started inside the deadline: {b:?}");
+    assert_eq!(
+        c, b,
+        "the queued call did not fail with the start it waited through"
+    );
+    assert!(
+        took < DEADLINE + Duration::from_millis(400),
+        "the queued call took {took:?}: it waited a start of its own"
+    );
+    assert_eq!(
+        launches_after_c, 2,
+        "the queued call started the records process again"
+    );
+}

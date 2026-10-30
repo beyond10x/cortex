@@ -110,11 +110,12 @@ types:
   # document on descriptor 3. Only that process reads it, to connect; the service itself, its log
   # and its files never see it. The records process creates the schema when it is missing and
   # migrates its tables to the schema version of this cortex when it starts; a schema at a newer
-  # version is refused. A record call waits at most 30 seconds for the calls before it, for a
-  # start of the records process and for the answer to its statement, and each statement has a
-  # `statement_timeout` of the same: a call past one of them fails with `store-failed`. A records
-  # process that did not start or answer in time is stopped and started again for the next call;
-  # one a call only queued behind is kept. No field carries a credential.
+  # version is refused. Record calls are served one at a time in the order they arrive. A call
+  # waits at most 30 seconds for the calls before it, for a start of the records process and for
+  # the answer to its statement, and each statement has a `statement_timeout` of the same: a call
+  # past one of them fails with `store-failed`. A records process that did not start or answer in
+  # time is stopped and started again for the next call; one a call only queued behind is kept. A
+  # start that fails fails every call that waited through it. No field carries a credential.
   # UNMAPPED: `schema` must be a lowercase PostgreSQL identifier (`[a-z_][a-z0-9_]*`, at most 63
   # bytes, not starting with `pg_`), `url` must carry no password and be a `postgres://` or
   # `postgresql://` URL, and `connection` names an id or a profile, not both: checks on Strings the

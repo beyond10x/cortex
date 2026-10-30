@@ -11,12 +11,13 @@
 //! [`PgRecords`] is the [`RecordStore`] over either: the records process, or a connection of this
 //! process ([`PgRecords::connect`], for tests).
 
+use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::str::FromStr;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use cortex_model::ask as ma;
@@ -522,14 +523,95 @@ impl Drop for Proc {
     }
 }
 
+/// The calls waiting for the records process, served one at a time in the order they arrived.
+/// A call takes a ticket and waits, at most until a deadline, until its ticket is first and no
+/// call is served; a call that gave up removes its ticket.
+#[derive(Default)]
+struct Queue {
+    line: Mutex<Line>,
+    turn: Condvar,
+}
+
+#[derive(Default)]
+struct Line {
+    next: u64,
+    waiting: VecDeque<u64>,
+    serving: bool,
+}
+
+/// A call's turn with the records process; the next call's starts when it is dropped.
+struct Turn<'q> {
+    queue: &'q Queue,
+    ticket: u64,
+}
+
+impl Drop for Turn<'_> {
+    fn drop(&mut self) {
+        self.queue.line().serving = false;
+        self.queue.turn.notify_all();
+    }
+}
+
+impl Queue {
+    fn line(&self) -> std::sync::MutexGuard<'_, Line> {
+        self.line
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// The ticket the next call to arrive takes: every call with a smaller one arrived before.
+    fn issued(&self) -> u64 {
+        self.line().next
+    }
+
+    /// The caller's turn, after every call that arrived before it; `None` when `until` came
+    /// first, its ticket removed.
+    fn wait(&self, until: Instant) -> Option<Turn<'_>> {
+        let mut line = self.line();
+        let ticket = line.next;
+        line.next += 1;
+        line.waiting.push_back(ticket);
+        loop {
+            if !line.serving && line.waiting.front() == Some(&ticket) {
+                line.waiting.pop_front();
+                line.serving = true;
+                return Some(Turn {
+                    queue: self,
+                    ticket,
+                });
+            }
+            let left = until.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                line.waiting.retain(|t| *t != ticket);
+                drop(line);
+                // The call behind this one may be first now.
+                self.turn.notify_all();
+                return None;
+            }
+            line = self
+                .turn
+                .wait_timeout(line, left)
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .0;
+        }
+    }
+}
+
 /// The records process, started through Connectors: one statement at a time, one JSON line each
-/// way. The launch's deadline bounds three waits of a call, each on its own: for earlier calls (a
-/// call past it fails and leaves the process alone), for a start of the process, and for the
-/// answer, timed from the statement's sending. A process that ended, answered no line or did not
-/// answer by then is stopped, and started again for the next statement.
+/// way, the calls served in the order they arrived. The launch's deadline bounds three waits of
+/// a call, each on its own: for earlier calls (a call past it fails and leaves the process
+/// alone), for a start of the process, and for the answer, timed from the statement's sending. A
+/// process that ended, answered no line or did not answer by then is stopped, and started again
+/// for the next statement. A start that fails fails every call that arrived before it failed, at
+/// once; only a call that arrived after it starts the process again.
 pub struct Remote {
     launch: Launch,
+    queue: Queue,
+    /// Taken only by the call whose [`Turn`] it is, so never waited for.
     process: Mutex<Option<Proc>>,
+    /// The last start that failed, while no start has succeeded since: the ticket the next call
+    /// to arrive took when it failed, and its refusal. Taken only by the call whose turn it is.
+    failed_start: Mutex<Option<(u64, String)>>,
 }
 
 impl Remote {
@@ -540,7 +622,9 @@ impl Remote {
         let process = Self::spawn(&launch, Instant::now() + launch.deadline)?;
         Ok(Self {
             launch,
+            queue: Queue::default(),
             process: Mutex::new(Some(process)),
+            failed_start: Mutex::new(None),
         })
     }
 
@@ -609,24 +693,42 @@ impl Remote {
 
     fn call(&self, request: Value) -> Result<Value, SqlError> {
         let deadline = self.launch.deadline;
-        let queued_until = Instant::now() + deadline;
-        // The lock is held by an earlier call for at most a start and one exchange.
-        let mut process = self
-            .process
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
         // A call that spent its deadline waiting for earlier ones fails without touching the
         // process: a queue is no stall, and the process and its statement in flight are kept.
-        if Instant::now() >= queued_until {
+        let Some(turn) = self.queue.wait(Instant::now() + deadline) else {
             return Err(format!(
                 "ask.records: the record call waited {deadline:?} behind earlier ones"
             )
             .into());
-        }
-        // A start has a deadline of its own, never what is left of the caller's: a start cut
-        // short would be paid again by the next caller. The process it starts is kept.
+        };
+        let mut process = self
+            .process
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if process.is_none() {
-            *process = Some(Self::spawn(&self.launch, Instant::now() + deadline)?);
+            let mut failed = self
+                .failed_start
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            // A call that waited through a failed start fails with it: one outage costs one
+            // start, not one per call queued behind it.
+            if let Some((before, why)) = failed.as_ref() {
+                if turn.ticket < *before {
+                    return Err(why.clone().into());
+                }
+            }
+            // A start has a deadline of its own, never what is left of the caller's: a start cut
+            // short would be paid again by the next caller. The process it starts is kept.
+            match Self::spawn(&self.launch, Instant::now() + deadline) {
+                Ok(started) => {
+                    *process = Some(started);
+                    *failed = None;
+                }
+                Err(why) => {
+                    *failed = Some((self.queue.issued(), why.clone()));
+                    return Err(why.into());
+                }
+            }
         }
         let p = process.as_mut().expect("started");
         // The exchange is timed from the statement's sending: only a process that takes longer
