@@ -372,3 +372,100 @@ fn a_reapplied_replacement_is_counted_and_a_later_one_supersedes_it() {
         "Bob supersedes Alice: {owners:?}"
     );
 }
+
+/// Adversary (`story:replacement-applied-as-assertion`): one batch, an empty store, two documents
+/// a day apart that each change the owner. EKR has nothing active to replace for either, so both
+/// are applied again as plain assertions. A one-cardinality property must still end with one
+/// active value, the newer one, as it does when the two documents arrive in two runs.
+#[test]
+#[ignore = "adversary: two re-applied replacements of one property in one batch both stay active"]
+fn adversary_two_replacements_with_nothing_to_replace_in_one_batch_leave_the_newer_active() {
+    let w = world();
+    let ran = run_with(
+        &w,
+        &[
+            r#"{"id":"a","time":"2026-01-02","text":"The owner is now Alice."}"#,
+            r#"{"id":"b","time":"2026-01-03","text":"The owner is now Bob."}"#,
+        ],
+    );
+    assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
+    let graph = snapshot(&w)["graph"]["graph"].clone();
+    let owners = owners(&graph);
+    let now: Vec<&Owner> = owners.iter().filter(|o| active(o)).collect();
+    assert!(
+        now.len() == 1 && now[0].value == "Bob",
+        "one active owner, Bob: {owners:?}; run: {ran}"
+    );
+}
+
+/// Adversary (`story:replacement-applied-as-assertion`): the first apply commits and rejects the
+/// replacement for having nothing to replace; the re-apply then fails once for a cause of the
+/// store's (here an `ekr` that fails on `reapply.yaml` the first time). EKR would not reject the
+/// fact again, so the value must not be lost: a later run stores it. Today the document is marked
+/// seen, the next run skips it, and the value never reaches the store.
+#[test]
+#[ignore = "adversary: a failed re-apply marks the document seen and its value is lost for good"]
+fn adversary_a_reapply_that_fails_once_does_not_lose_the_value() {
+    let w = World::new();
+    executable(&w.bin.join("claude"), CLAUDE);
+    std::fs::create_dir_all(w.root.join("chat")).unwrap();
+    let flaky = w.bin.join("ekr-flaky");
+    executable(
+        &flaky,
+        &format!(
+            r#"R="{root}"
+case "$*" in
+  *reapply.yaml*)
+    if [ ! -e "$R/flaked" ]; then
+      touch "$R/flaked"
+      echo "ekr: the store is unavailable: injected once" >&2
+      exit 1
+    fi ;;
+esac
+exec "{ekr}" "$@"
+"#,
+            root = w.root.display(),
+            ekr = ekr().display()
+        ),
+    );
+    let path = w.root.join("owned.yaml");
+    std::fs::write(
+        &path,
+        format!(
+            r#"format: cortex.instance/1
+name: owned
+description: Test brain.
+ekr: {{version: "0.0.32", bin: "{ekr}"}}
+seed: {{documents: []}}
+model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
+sources:
+  - name: chat
+    schedule: daily
+    settings:
+      kind: files
+      value:
+        paths: [chat]
+        glob: "*.jsonl"
+        records: {{format: JsonLines, id: id, time: time, text: ["{{text}}"], filters: []}}
+    policy: {{refresh_after_days: 7, change: ContentHash, max_documents_per_run: 50, max_chars_per_document: 5000}}
+serve: {{view_port: 18993}}
+"#,
+            ekr = flaky.display()
+        ),
+    )
+    .unwrap();
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+
+    let records = [r#"{"id":"a","time":"2026-01-02","text":"The owner is now Alice."}"#];
+    let first = run_with(&w, &records);
+    assert!(w.root.join("flaked").exists(), "the re-apply ran: {first}");
+    let second = run_with(&w, &records);
+    let graph = snapshot(&w)["graph"]["graph"].clone();
+    let owners = owners(&graph);
+    assert!(
+        owners.len() == 1 && active(&owners[0]) && owners[0].value == "Alice",
+        "Alice is stored after the failed re-apply and a later run: {owners:?}; \
+         first: {first}; second: {second}"
+    );
+}
