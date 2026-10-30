@@ -63,6 +63,29 @@ serve: {{view_port: 18997}}
     )
 }
 
+/// `cortex` with the world's variables, its exit status and its output, without the shared
+/// helper's assertion that the status is not 2: a spec refused when it is read exits 2.
+fn status(w: &World, args: &[&str]) -> (i32, String) {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_cortex"))
+        .args(args)
+        .env("CORTEX_HOME", &w.home)
+        .env("CORTEX_CONNECTORS", w.bin.join("connectors"))
+        .env("CORTEX_CLAUDE", w.bin.join("claude"))
+        .env("CORTEX_SYSTEMCTL", w.bin.join("systemctl"))
+        .env("CORTEX_UNIT_DIR", &w.units)
+        .env("ANTHROPIC_API_KEY", "must-not-reach-claude")
+        .output()
+        .unwrap();
+    (
+        out.status.code().unwrap_or(-1),
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
+    )
+}
+
 fn run(w: &World, name: &str) -> Value {
     let (code, ran) = w.cortex(&["run", &format!("{name}/chat")]);
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
@@ -86,13 +109,16 @@ fn adding_an_empty_key_to_a_source_with_seen_documents_is_refused() {
     assert_eq!(first["detail"]["documents_applied"], 2, "{first}");
 
     std::fs::write(&path, spec_text("empty", "        key: \"\"\n")).unwrap();
-    let (code, updated) = w.cortex(&[
-        "update",
-        "empty",
-        "--spec",
-        path.to_str().unwrap(),
-        "--no-units",
-    ]);
+    let (code, updated) = status(
+        &w,
+        &[
+            "update",
+            "empty",
+            "--spec",
+            path.to_str().unwrap(),
+            "--no-units",
+        ],
+    );
     let after = if code == 0 {
         w.cortex(&["run", "empty/chat"]).1
     } else {
@@ -101,6 +127,10 @@ fn adding_an_empty_key_to_a_source_with_seen_documents_is_refused() {
     assert_ne!(
         code, 0,
         "update accepted `key: \"\"` on a source with seen documents: {updated}\nthe next run: {after}"
+    );
+    assert!(
+        updated.contains(".key:"),
+        "the refusal names the key field: {updated}"
     );
 }
 
@@ -123,7 +153,10 @@ fn a_key_that_is_no_template_is_refused_when_the_spec_is_read() {
             spec_text(&name, &format!("        key: \"{key}\"\n")),
         )
         .unwrap();
-        let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+        let (code, created) = status(
+            &w,
+            &["create", "--spec", path.to_str().unwrap(), "--no-units"],
+        );
         let ran = if code == 0 {
             w.cortex(&["run", &format!("{name}/chat")]).1
         } else {
@@ -132,6 +165,10 @@ fn a_key_that_is_no_template_is_refused_when_the_spec_is_read() {
         assert_ne!(
             code, 0,
             "key {key:?} was accepted: {created}\nits first run: {ran}"
+        );
+        assert!(
+            created.contains(".key:"),
+            "the refusal of key {key:?} names the key field: {created}"
         );
     }
 }
