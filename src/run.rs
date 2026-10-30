@@ -1919,6 +1919,15 @@ fn undo(
             if let Some(e) = done.viewer_failed {
                 eprintln!("cortex: the viewer did not start again after the undo: {e}");
             }
+            if let Some(e) = done.state_failed {
+                return (
+                    Some(name.to_string()),
+                    format!(
+                        "the run was undone in the store, which is back at snapshot {name}; \
+                         state/ was not put back: {e}"
+                    ),
+                );
+            }
             return (
                 Some(name.to_string()),
                 format!("the run was undone: the store and state/ are back at snapshot {name}"),

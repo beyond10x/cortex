@@ -121,6 +121,40 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   stored key holds one of these shapes, or the rest of a credential an earlier version left after
   its `[masked:…]` token, is read again once under its masked key; the old key, and a
   child-failure count kept under it, is dropped from the source's state.
+- Two instances of one home could name one systemd unit, because a name may hold `-`: instance
+  `a` with source `b-c` and instance `a-b` with source `c` both wrote `cortex-a-b-c`, and a
+  source `b-view` of `a` wrote the viewer unit of `a-b`. The second install overwrote the first,
+  and `remove` could delete the other instance's unit. `create`, `adopt` and `update` now refuse,
+  before changing anything and with or without `--no-units`, a spec whose source or viewer unit is
+  another active instance's of the home, or a source named `view`, naming the unit and both
+  owners. Unit names do not change.
+- `cortex update` enabled and started the timer of every source, so a source two failures had
+  disabled ran again on its schedule while `cortex sources` still showed it disabled. `update`,
+  `create` and `adopt` now write a disabled source's units without enabling its timer;
+  `cortex source enable` turns it on again.
+- A spec number out of range was accepted and failed later: a large `refresh_after_days`
+  overflowed when a run counted its window, a hook `timeout_s` near the largest integer panicked
+  the run after its line was printed, and a `view_port` of 70000 or -1 wrapped to another port.
+  `create`, `update` and `adopt` now refuse, naming the field, a `refresh_after_days` above
+  36500, a `monitoring.hook.timeout_s` above 86400 and a `serve.view_port` outside 0 to 65535.
+  An instance created by 0.6.1 with such a value keeps running: its frozen copy
+  (`instances/<name>/instance.yaml`) is not held to the bounds, a run counts a larger refresh
+  window as reaching back as far as a time can, a larger hook `timeout_s` is capped at 86400
+  seconds, and the port is read only when an instance is made. An `update` to an out-of-range
+  value is refused naming the field, and one into range is made as before.
+- A home file cortex rewrote (`registry.json`, a source status, a state file) was renamed into
+  place without being synced, so a crash could leave it empty and every command then failed. Each
+  is now synced to disk before the rename, and its directory after it.
+- A source status file that could not be parsed was read as empty, and the next run rewrote it
+  with its counts started again. `cortex sources` now fails, naming the file, and a run leaves it
+  as it is and records why in `cortex.log`; other commands name it on standard error and go on.
+- A `create` or `adopt` that failed after recording the instance (its meta or a source could not
+  be saved) left it registered, so a retry answered `name-taken`. It now takes the instance and
+  its sources out of the registry again and removes the instance directory.
+- A `restore` whose store was put back but whose copy of `state/` could not be written failed as a
+  whole, though the store had changed, and a gated run's undo then said the store still held the
+  run. The restore now answers `restored` with `state_restored: false` and the reason in
+  `state_failed`, and the undo says the store is back and `state/` is not.
 
 ## 0.6.1 — 2026-10-17
 

@@ -8,7 +8,14 @@ description: Where instances live, what a run does, the systemd units, failures 
 
 ## Where things live
 
-Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
+Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`. cortex replaces
+each file it rewrites (the registry, a status, a state file) through a temporary file it syncs
+to disk, a rename, and a sync of the directory, so a crash leaves the old file or the new one.
+A `create` or `adopt` that fails after it recorded the instance takes it out of the registry
+again and removes its directory, so it can be retried. A source status file that cannot be read
+fails `cortex sources`, naming the file, and a run leaves it as it is (`cortex.log` says why);
+other commands list the source as if it had never run. To recover, delete that file: the next
+run of the source writes it again, with its counts starting from zero.
 
 | path | holds |
 |---|---|
@@ -41,6 +48,14 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
   `OnCalendar=<schedule>` and `Persistent=true`; the service runs
   `<home>/bin/cortex --home <home> run <instance>/<source> --record-failure`.
 - `cortex-<instance>-view.service`, which runs `ekr view` on the store at the instance's port.
+
+An instance and a source name may hold `-`, so two instances could name one unit: instance `a`
+with source `b-c` and instance `a-b` with source `c` would both be `cortex-a-b-c`, and source
+`b-view` of `a` would be the viewer of `a-b`. `create`, `adopt` and `update` refuse such a spec
+before changing anything, with or without `--no-units`, naming the unit and the instance or
+source that holds it in the home; a source named `view` is refused the same way. A source that
+is disabled keeps its timer off through `update`: its units are written again, its timer is not
+enabled until `cortex source enable`.
 
 ### Which process serves what
 
@@ -492,6 +507,9 @@ in `snapshots/`, without the extension. To undo the last run, restore the newest
 Because `state/` is put back, the next runs apply again what the undone runs applied, at the
 cost of their model calls. A snapshot with no copy of `state/` in `snapshots-state/` (one you
 copied without it) puts back the store only, and the restore reports `state_restored: false`.
+So does a copy of `state/` that cannot be written back once the store is restored: the restore
+still answers `restored`, with the store at the snapshot, `state/` as it was, and the reason in
+`state_failed`.
 
 To undo a restore, restore its `before_restore` snapshot.
 

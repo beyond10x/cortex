@@ -106,9 +106,10 @@ impl Window {
         pending_since_ms: Option<i64>,
         refresh_after_days: i64,
     ) -> Self {
-        let since = last_success_ms.map_or(start_ms - refresh_after_days * 86_400_000, |last| {
-            last - OVERLAP_MS
-        });
+        let since = last_success_ms.map_or(
+            start_ms.saturating_sub(refresh_after_days.saturating_mul(86_400_000)),
+            |last| last - OVERLAP_MS,
+        );
         Self {
             since_ms: [held_since_ms, pending_since_ms]
                 .into_iter()

@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 427380fdb0fd63ec80516983202c1bf3e63d3ab0984514104cfc2ab4ee1c4aa4
-// contract digest 19b1d7e629d64c70fa03c2817003c7027a2ab9b6e646533c2127d2a273409b83
+// model digest 7b241ba41c4c5c9b167cb3c615d4c4a19c82761ddb9cf5ed04d1dc15a4a8c732
+// contract digest 32bb9bc0fb8cf7902d67bda9b9d26c2e03a4a1bef7a11b1a84e91119b95f5ed8
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -2514,7 +2514,7 @@ pub enum RestoreSnapshotOutcome {
     },
     /// `restored` — otherwise.
     ///
-    /// The store and the instance state were snapshotted as `<ms>-before-restore`, then put back to the snapshot's copies: every source's seen state and the known entity names included, so the next runs apply again what the undone runs applied. A viewer that was running was stopped first and started again after.
+    /// The store and the instance state were snapshotted as `<ms>-before-restore`, then the store was put back to the snapshot's copy, and after it the instance state: every source's seen state and the known entity names included, so the next runs apply again what the undone runs applied. A state copy that could not be written back leaves the store restored and the state as it was, reported as `state_restored: false` with the reason in `state_failed`. A viewer that was running was stopped first and started again after.
     Restored {
         /// The `cortex.instance.SnapshotRestored` this outcome publishes.
         snapshot_restored: SnapshotRestored,

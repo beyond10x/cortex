@@ -620,6 +620,15 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
         },
         Command::Sources => match app.sources() {
             Ok(rows) => {
+                // A status file that cannot be read fails the listing, naming the file, instead of
+                // listing the source as never run.
+                for row in &rows {
+                    let (instance, source) = split(&row.source_id.0);
+                    let layout = Layout::new(ctx.home.instance_dir(instance));
+                    if let Err(e) = cortex_cli::status::read(&layout, source) {
+                        return fail(e);
+                    }
+                }
                 for row in rows {
                     println!(
                         "{}",
@@ -881,6 +890,49 @@ fn foreign_units(
     }
 }
 
+/// Why `spec`'s instance `name` cannot be held in this home: one of its unit names is the unit
+/// name of another active instance of the home, or a source's is the instance's own viewer's
+/// ([`schedule::unit_name_collision`]). Checked before a command changes anything, whether or not
+/// it writes units: a later `update` would write them.
+fn unit_collision(ctx: &Ctx, name: &str, spec: &m::InstanceSpec) -> Option<String> {
+    let shared = ctx.shared.borrow();
+    let others: Vec<(String, Vec<String>)> = shared
+        .registry
+        .instances
+        .values()
+        .filter(|i| i.state == m::InstanceState::Active && i.data.name.0 != name)
+        .map(|i| {
+            let other = i.data.name.0.clone();
+            let sources = shared
+                .registry
+                .sources
+                .values()
+                .filter(|s| s.data.instance_name.0 == other)
+                .map(|s| s.data.name.clone())
+                .collect();
+            (other, sources)
+        })
+        .collect();
+    let sources: Vec<String> = spec.sources.iter().map(|s| s.name.clone()).collect();
+    schedule::unit_name_collision(name, &sources, &others)
+}
+
+/// Fails a `create` or `adopt` that already recorded the instance `name` and its sources: takes
+/// them out of the registry again and removes the instance directory `layout`, so nothing is left
+/// half registered and a retry is not `name-taken`. Called before any unit is written.
+fn unregister(ctx: &Ctx, name: &str, layout: &Layout, reason: impl std::fmt::Display) -> ExitCode {
+    {
+        let mut shared = ctx.shared.borrow_mut();
+        shared.registry.instances.remove(name);
+        shared
+            .registry
+            .sources
+            .retain(|_, s| s.data.instance_name.0 != name);
+    }
+    let _ = std::fs::remove_dir_all(&layout.dir);
+    fail(reason)
+}
+
 /// Puts what installing the units did in `detail["units"]`: each unit taken over from a home that
 /// holds no instance of the name ([`Systemd::taken_over`]), and why the install failed, when it
 /// did.
@@ -914,9 +966,25 @@ fn install_sources(
     }
     detail["binary"] = placed.json();
     let token_env = spec.model.gateway.as_ref().map(|g| g.token_env.as_str());
-    spec.sources
-        .iter()
-        .try_for_each(|s| systemd.install_source(name, &s.name, &s.schedule, &ctx.tools, token_env))
+    // A source its failures disabled keeps its timer off: its units are written, not enabled.
+    let disabled = |source: &str| {
+        ctx.shared
+            .borrow()
+            .registry
+            .sources
+            .get(&format!("{name}/{source}"))
+            .is_some_and(|s| s.state == m::SourceState::Disabled)
+    };
+    spec.sources.iter().try_for_each(|s| {
+        systemd.install_source(
+            name,
+            &s.name,
+            &s.schedule,
+            &ctx.tools,
+            token_env,
+            !disabled(&s.name),
+        )
+    })
 }
 
 fn create(
@@ -937,6 +1005,9 @@ fn create(
     }
     let name = spec.name.0.clone();
     if let Some(reason) = foreign_units(ctx, &name, &spec, units, true) {
+        return fail(reason);
+    }
+    if let Some(reason) = unit_collision(ctx, &name, &spec) {
         return fail(reason);
     }
     let layout = Layout::new(ctx.home.instance_dir(&name));
@@ -1056,7 +1127,14 @@ fn create(
         m::CreateInstanceOutcome::Created { instance_created }
         | m::CreateInstanceOutcome::Partial { instance_created } => {
             let partial = seeded.as_ref().is_some_and(|ran| !seed_finished(ran));
-            let port = instance_created.view_port as u16;
+            let Ok(port) = u16::try_from(instance_created.view_port) else {
+                return unregister(
+                    ctx,
+                    &name,
+                    &layout,
+                    format!("serve.view_port {} is no port", instance_created.view_port),
+                );
+            };
             let meta = Meta {
                 format: "cortex.instance-meta/1".into(),
                 spec_dir: std::fs::canonicalize(&loaded.dir).unwrap_or(loaded.dir.clone()),
@@ -1065,7 +1143,7 @@ fn create(
                 adopted: false,
             };
             if let Err(e) = layout.save_meta(&meta) {
-                return fail(e);
+                return unregister(ctx, &name, &layout, e);
             }
             for source in &spec.sources {
                 let input = m::AddSource {
@@ -1076,7 +1154,7 @@ fn create(
                     schedule: source.schedule.clone(),
                 };
                 if let Err(e) = app.add_source(input) {
-                    return fail(e);
+                    return unregister(ctx, &name, &layout, e);
                 }
             }
             let mut detail = json!({
@@ -1332,6 +1410,9 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
     if let Some(reason) = foreign_units(ctx, &name, &spec, a.units, true) {
         return fail(reason);
     }
+    if let Some(reason) = unit_collision(ctx, &name, &spec) {
+        return fail(reason);
+    }
     let layout = Layout::new(ctx.home.instance_dir(&name));
 
     // `name-taken` is the generated behaviour's own lookup; a taken name skips the checks below.
@@ -1410,7 +1491,14 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
             let Some(found) = adopted else {
                 return fail("adopted without reading the store");
             };
-            let port = instance_adopted.view_port as u16;
+            let Ok(port) = u16::try_from(instance_adopted.view_port) else {
+                return unregister(
+                    ctx,
+                    &name,
+                    &layout,
+                    format!("serve.view_port {} is no port", instance_adopted.view_port),
+                );
+            };
             let meta = Meta {
                 format: "cortex.instance-meta/1".into(),
                 spec_dir: std::fs::canonicalize(&loaded.dir).unwrap_or(loaded.dir.clone()),
@@ -1419,7 +1507,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                 adopted: true,
             };
             if let Err(e) = layout.save_meta(&meta) {
-                return fail(e);
+                return unregister(ctx, &name, &layout, e);
             }
             for source in &spec.sources {
                 let input = m::AddSource {
@@ -1430,7 +1518,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                     schedule: source.schedule.clone(),
                 };
                 if let Err(e) = app.add_source(input) {
-                    return fail(e);
+                    return unregister(ctx, &name, &layout, e);
                 }
             }
             let mut detail = json!({
@@ -1507,6 +1595,9 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
             != layout.store_handle(&spec).launched_through()
     }) || viewer_resolves_anew(ctx, name, &layout.store_handle(&spec), units);
     if let Some(reason) = foreign_units(ctx, name, &spec, units, relaunch) {
+        return fail(reason);
+    }
+    if let Some(reason) = unit_collision(ctx, name, &spec) {
         return fail(reason);
     }
     // A store the spec cannot use, another store than the instance's (its history is in the store
@@ -1722,6 +1813,9 @@ fn restore(app: &mut App, ctx: &Ctx, name: &str, snapshot: &str) -> ExitCode {
             if let Some(restored) = finished {
                 detail["before_restore"] = json!(restored.before_restore);
                 detail["state_restored"] = json!(restored.state_restored);
+                if let Some(e) = restored.state_failed {
+                    detail["state_failed"] = json!(e);
+                }
                 if let Some(e) = restored.viewer_failed {
                     detail["units"] = json!({"failed": e});
                 }

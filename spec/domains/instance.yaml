@@ -86,6 +86,12 @@ types:
       sites: cortex.instance.SitesInput
       search: cortex.instance.SearchInput
 
+  # UNMAPPED: `refresh_after_days` is 0 to 36500 and the two maxima above 0; a spec outside these
+  # is refused (exit 2, naming the field). Below 0 (or 0 for a maximum) is refused wherever a spec
+  # is read (`spec::check`); above 36500 only where an operator gives one to `create`, `update` or
+  # `adopt` (`spec::load_given`), so an instance's frozen copy from before the bound keeps running
+  # and a run saturates its window. These are checks on Integer values the specification has no
+  # construct for; `tests/spec_forms.rs` tests them.
   - name: cortex.instance.FetchPolicy
     kind: struct
     fields:
@@ -664,6 +670,10 @@ types:
       - {name: version, type: String}
       - {name: bin, type: Optional<String>}
 
+  # UNMAPPED: `view_port` is a port from 0 to 65535; a spec outside it is refused (exit 2, naming
+  # the field, for `create`, `update` and `adopt`: `spec::load_given`). The port is read only when
+  # an instance is made, so an instance's frozen copy is not held to it. A check on an Integer the
+  # specification has no construct for; `tests/spec_forms.rs` tests it.
   - name: cortex.instance.ServeSpec
     kind: struct
     fields:
@@ -693,6 +703,11 @@ types:
   # `disabled` when the run's recorded failure disabled the source. It holds no secret: one the
   # hook needs it reads itself, outside cortex. The call lasts `timeout_s` seconds at most, absent
   # means 10; then the hook's process group is killed.
+  # UNMAPPED: `timeout_s` is 1 to 86400; a spec outside it is refused (exit 2, naming the field).
+  # Below 1 is refused wherever a spec is read (`spec::check`); above 86400 only where an operator
+  # gives one (`spec::load_given`), and a frozen copy from before the bound is capped at 86400 when
+  # the hook is called. A check on an Integer the specification has no construct for;
+  # `tests/spec_forms.rs` tests it.
   - name: cortex.instance.RunHook
     kind: struct
     fields:
@@ -2238,10 +2253,13 @@ commands:
             name: input.name
             snapshot: input.snapshot
         summary: >-
-          The store and the instance state were snapshotted as `<ms>-before-restore`, then put
-          back to the snapshot's copies: every source's seen state and the known entity names
-          included, so the next runs apply again what the undone runs applied. A viewer that was
-          running was stopped first and started again after.
+          The store and the instance state were snapshotted as `<ms>-before-restore`, then the
+          store was put back to the snapshot's copy, and after it the instance state: every
+          source's seen state and the known entity names included, so the next runs apply again
+          what the undone runs applied. A state copy that could not be written back leaves the
+          store restored and the state as it was, reported as `state_restored: false` with the
+          reason in `state_failed`. A viewer that was running was stopped first and started again
+          after.
 
       - name: no-such-instance
         unknown_instance: true
