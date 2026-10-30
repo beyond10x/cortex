@@ -128,7 +128,8 @@ stand; [Status](./status.mdx) lists what is planned.
   onto another type's node as that node only when the record is applied in the same run;
   otherwise it names it in the mapping's own type. cortex never merges two nodes that already
   hold the same alias.
-- **Text only.** A files source skips files that are not UTF-8 text; web sources read the text the
+- **Text only.** A files source skips files that are not UTF-8 text or are larger than 16 MiB,
+  naming each in the run's `skipped`; web sources read the text the
   websearch adapter returns.
 
 ## Instances

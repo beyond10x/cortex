@@ -588,6 +588,8 @@ fn process(
     undoable: bool,
     partial: &mut Report,
 ) -> Result<Report, Failure> {
+    // Before the run's own directory is named, so pruning measured from it never reaches it.
+    let begun = now_ms();
     // The run's one handle on its store: its stage, its session and the stage it settles here all
     // share whether a launched store's connection was found ready, so the run checks it once.
     let store = layout.store_handle(spec);
@@ -615,7 +617,47 @@ fn process(
         partial.documents_applied = 0;
         partial.undone = true;
     }
+    prune_runs(layout, spec, begun);
     settled
+}
+
+/// Removes the run directories under `runs/` that the spec's `runs.keep_days` no longer keeps:
+/// each directory named as cortex names a run, `<unix ms>-<source>` ([`run_started`]), whose
+/// time is more than `keep_days` days before `begun`, the start of the run that prunes. The
+/// current run's directory is named after `begun`, so it is never one. Without a `runs` section
+/// nothing is removed, and a name cortex did not give, or a file, never is. A directory that
+/// cannot be removed is left for the next run.
+fn prune_runs(layout: &Layout, spec: &m::InstanceSpec, begun: i64) {
+    let Some(keep_days) = spec.runs.as_ref().map(|r| r.keep_days) else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(layout.runs()) else {
+        return;
+    };
+    let before = begun.saturating_sub(keep_days.saturating_mul(86_400_000));
+    for entry in entries.flatten() {
+        let Some(at) = entry.file_name().to_str().and_then(run_started) else {
+            continue;
+        };
+        if at < before && entry.file_type().is_ok_and(|t| t.is_dir()) {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
+/// The start, in Unix milliseconds, of a run directory named as cortex names one:
+/// `<unix ms>-<source>`, the source name (or `seed`) being lowercase letters, digits and `-`.
+/// None for any other name.
+fn run_started(name: &str) -> Option<i64> {
+    let (ms, label) = name.split_once('-')?;
+    let label_ok = !label.is_empty()
+        && label
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+    if ms.is_empty() || !ms.bytes().all(|b| b.is_ascii_digit()) || !label_ok {
+        return None;
+    }
+    ms.parse().ok()
 }
 
 /// [`process`], with the run's snapshot and stage in `before`, which [`settle`] settles once the
@@ -1376,6 +1418,23 @@ fn process_in(
             report.unrestored += p.restore(&mut restored);
         }
         drop(pseudonyms);
+        // A tag with no name cannot be written as YAML; the answer is refused as one that is not
+        // a valid document is.
+        if let Some(at) = extract::bare_tag(&restored) {
+            let at = if at.is_empty() {
+                "the root".to_string()
+            } else {
+                mask(&at).0
+            };
+            let why = format!(
+                "the model's document holds an object key \"!\", a tag with no name, at {at}"
+            );
+            if report.documents_applied == 0 {
+                return Err(Failure::Extract(why));
+            }
+            report.stopped = Some(why);
+            break;
+        }
         let (doc, refused) = extract::merge(&restored, &batch);
         report.facts_refused += refused;
         let path = dir.join("extraction.yaml");

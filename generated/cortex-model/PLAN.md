@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 454ae2cdefe42498de39f694543a1a07725b9d4b16d1a2caf6ef6fa1a9fbb502
-  contract digest c75c17e5eb6aa81c48b081736bc63dd7442f26133a33121f93755de3becaa515
+  model digest 4ead3fc705103005794aad544e2bb37f40445fb03084d361af287304bc4b209a
+  contract digest 9cd692da290484e944ae10119f1a6432132d1064188f2778b8eab81ecc7e16b0
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-262 capabilities: **254 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+263 capabilities: **255 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -98,6 +98,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.RunGate` |
 | domain type | `cortex.instance.RunHook` |
 | domain type | `cortex.instance.RunOutcome` |
+| domain type | `cortex.instance.RunsPolicy` |
 | domain type | `cortex.instance.SchemaCardinality` |
 | domain type | `cortex.instance.SchemaChange` |
 | domain type | `cortex.instance.SchemaProperty` |

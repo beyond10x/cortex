@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.RunsPolicy",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "4ead3fc705103005794aad544e2bb37f40445fb03084d361af287304bc4b209a",
+    "contract_digest": "slice-sha256/2:94b6d46a9a208bb303187ca54ac4e40be035d673c287147dedafd58d3fd64eb9",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.RunsPolicy": {
+      "title": "RunsPolicy",
+      "x-ess-name": "cortex.instance.RunsPolicy",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "keep_days": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "keep_days"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

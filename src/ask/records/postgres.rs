@@ -478,7 +478,9 @@ impl Launch {
         .arg(Value::from(self.args()).to_string())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit());
+        // Read line by line into the service's masked log ([`crate::ask::serve::log`]): what
+        // Connectors or the records process writes there can carry a connection string.
+        .stderr(Stdio::piped());
         for key in &self.remove {
             cmd.env_remove(key);
         }
@@ -637,6 +639,17 @@ impl Remote {
         })?;
         let stdin = child.stdin.take().expect("piped");
         let stdout = child.stdout.take().expect("piped");
+        if let Some(stderr) = child.stderr.take() {
+            // Read to its end, a line that is not UTF-8 too, so the process never blocks on it.
+            std::thread::spawn(move || {
+                let mut stderr = BufReader::new(stderr);
+                let mut line = Vec::new();
+                while stderr.read_until(b'\n', &mut line).is_ok_and(|n| n > 0) {
+                    crate::ask::serve::log(String::from_utf8_lossy(&line).trim_end());
+                    line.clear();
+                }
+            });
+        }
         let (tx, lines) = mpsc::channel();
         std::thread::spawn(move || {
             for line in BufReader::new(stdout).lines() {

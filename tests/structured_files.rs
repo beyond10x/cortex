@@ -311,6 +311,55 @@ fn a_registry_file_that_is_not_json_fails_the_run_and_ends_nothing() {
     }
 }
 
+/// `story:connectors-call-deadline` acceptance 2, for a `structured` source: a registry file over
+/// the 16 MiB cap, or one that cannot be read, fails the fetch naming the file and the reason, and
+/// ends nothing. It is not skipped, since with `dropped: Supersede` a skipped file's records would
+/// read as no longer listed and be retracted.
+#[test]
+fn a_registry_file_over_the_cap_or_unreadable_fails_the_run_and_ends_nothing() {
+    use std::os::unix::fs::PermissionsExt;
+    let w = world();
+    before(&w);
+    create(&w, "c", Some("Supersede"));
+    run(&w, "c");
+    let first = teams(&w, "c");
+
+    let huge = w.root.join("registry/huge.json");
+    std::fs::File::create(&huge)
+        .unwrap()
+        .set_len(16 * 1024 * 1024 + 1)
+        .unwrap();
+    let (code, ran) = w.cortex(&["run", "c/registry"]);
+    assert_eq!(
+        (code, ran["outcome"].as_str()),
+        (1, Some("fetch-failed")),
+        "{ran}"
+    );
+    let reason = ran["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.contains("huge.json") && reason.contains("16 MiB"),
+        "{reason}"
+    );
+    std::fs::remove_file(&huge).unwrap();
+
+    let people = w.root.join("registry/people.json");
+    std::fs::set_permissions(&people, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let (code, ran) = w.cortex(&["run", "c/registry"]);
+    std::fs::set_permissions(&people, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(
+        (code, ran["outcome"].as_str()),
+        (1, Some("fetch-failed")),
+        "{ran}"
+    );
+    let reason = ran["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(reason.contains("people.json"), "{reason}");
+
+    let after = teams(&w, "c");
+    for who in [ADA, GRACE, LINUS] {
+        assert_eq!(active(&after[who]), active(&first[who]), "{who}");
+    }
+}
+
 /// The `MEMBER_OF` relations of the store: `(person, team, lifecycle)` per assertion, and
 /// `(person, team)` per edge.
 #[allow(clippy::type_complexity)]
@@ -686,4 +735,91 @@ esac
     std::fs::write(&path, keep).unwrap();
     let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
     assert_eq!(code, 0, "{created}");
+}
+
+/// One `structured` source, `name`, reading `input` (a `from: …` block's two lines), mapped to a
+/// `Person` and ending what it no longer lists when `dropped` says so.
+fn structured_source(name: &str, input: &str, dropped: &str) -> String {
+    format!(
+        r#"  - name: {name}
+    schedule: daily
+    settings:
+      kind: structured
+      value:
+        input:
+{input}
+        records: "$.people"
+        mapping:
+          node_type: Person
+          id: "$.id"
+          name: "$.name"
+          aliases: []
+          properties: []
+          relations: []
+        dropped: {dropped}
+    policy: {{refresh_after_days: 0, change: ContentHash, max_documents_per_run: 10, max_chars_per_document: 5000}}
+"#
+    )
+}
+
+/// `cortex create` of a spec with `sources`: its exit status and stderr.
+fn create_sources(w: &World, name: &str, sources: &str) -> (Option<i32>, String) {
+    let path = w.root.join(format!("{name}.yaml"));
+    std::fs::write(
+        &path,
+        format!(
+            "format: cortex.instance/1\nname: {name}\ndescription: Test brain.\nekr: {{version: \"0.0.32\", bin: \"{ekr}\"}}\nseed: {{documents: []}}\nmodel: {{model: claude-haiku-4-5-20251001, budget_usd: \"1\", timeout_s: 60}}\nsources:\n{sources}serve: {{view_port: 18992}}\n",
+            ekr = ekr().display()
+        ),
+    )
+    .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_cortex"))
+        .args(["create", "--spec", path.to_str().unwrap(), "--no-units"])
+        .env("CORTEX_HOME", &w.home)
+        .env("CORTEX_CONNECTORS", w.bin.join("connectors"))
+        .env("CORTEX_CLAUDE", w.bin.join("claude"))
+        .env("CORTEX_SYSTEMCTL", w.bin.join("systemctl"))
+        .env("CORTEX_UNIT_DIR", &w.units)
+        .output()
+        .unwrap();
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+/// `story:small-robustness` (R3-05): two `structured` sources whose records get one identity
+/// prefix (the same adapter and operation, or the same paths and glob) share identities, so with
+/// `dropped: Supersede` on either, one would end the values the other asserted. The spec check
+/// refuses the pair, naming both; with `dropped: Keep` on both the pair is accepted.
+#[test]
+fn two_structured_sources_sharing_identities_under_supersede_are_refused() {
+    let w = world();
+    executable(
+        &w.bin.join("connectors"),
+        r#"case "$*" in
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"directory","connector":"directory","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
+  *) echo '{"ok":false}'; exit 2 ;;
+esac
+"#,
+    );
+    let op = "          from: connectors\n          value: {adapter: directory, connection: conn_test, operation: people.list, inputs: [{}]}";
+    let files = "          from: files\n          value: {paths: [registry], glob: \"*.json\"}";
+    for (input, dropped, prefix) in [
+        (op, ["Keep", "Supersede"], "directory:people.list"),
+        (op, ["Supersede", "Supersede"], "directory:people.list"),
+        (files, ["Supersede", "Keep"], "files:registry:*.json"),
+    ] {
+        let sources = structured_source("first", input, dropped[0])
+            + &structured_source("second", input, dropped[1]);
+        let (code, stderr) = create_sources(&w, "pair", &sources);
+        assert_eq!(code, Some(2), "{dropped:?} {stderr}");
+        for part in ["\"first\"", "\"second\"", prefix, "dropped: Supersede"] {
+            assert!(stderr.contains(part), "{part} in {stderr}");
+        }
+        assert!(!instance(&w, "pair").exists(), "{stderr}");
+    }
+    let sources = structured_source("first", op, "Keep") + &structured_source("second", op, "Keep");
+    let (code, stderr) = create_sources(&w, "keep", &sources);
+    assert_eq!(code, Some(0), "{stderr}");
 }

@@ -46,6 +46,9 @@ pub enum Waited {
     Failed(String),
     /// The run was sent SIGTERM, and the child was ended.
     Terminated,
+    /// The child was still running at its deadline ([`wait_within`]): it was killed, with its
+    /// process group, and reaped.
+    TimedOut,
 }
 
 /// Sends `input`, when given, to `child`'s piped stdin and waits for it, reading its output on
@@ -55,8 +58,29 @@ pub enum Waited {
 /// closes the pipe; its exit status and stderr say why, so a broken pipe is not the error
 /// reported. `name` names the child in a failure.
 pub fn wait(child: &mut std::process::Child, input: Option<&[u8]>, name: &str) -> Waited {
-    wait_with(child, input, name, false, requested).0
+    wait_with(child, input, name, false, requested, None).0
 }
+
+/// [`wait`], at most `limit` from now for the whole call: a child still running then is sent
+/// SIGKILL, with its process group, reaped, and answered as [`Waited::TimedOut`]. A child that
+/// exited while something it started still holds its output is read until then: its process
+/// group is then sent SIGKILL, and what was read is its output ([`Waited::Done`]), or
+/// [`Waited::TimedOut`] when even that does not close the pipes. A `limit` past what an
+/// [`Instant`] can hold sets no deadline.
+pub fn wait_within(
+    child: &mut std::process::Child,
+    input: Option<&[u8]>,
+    name: &str,
+    limit: Duration,
+) -> Waited {
+    let deadline = Instant::now().checked_add(limit);
+    wait_with(child, input, name, false, requested, deadline).0
+}
+
+/// How long the readers of a child's output are waited for once its process group was killed at
+/// the deadline or the run's SIGTERM: the pipes close as the group dies, unless a process outside
+/// it holds them.
+const AFTER_KILL: Duration = Duration::from_secs(1);
 
 /// [`wait`], except that a child found already exited when the run's SIGTERM is seen is read,
 /// not dropped: what it started is ended ([`end`]), its output comes back as [`Waited::Done`],
@@ -67,16 +91,18 @@ pub fn wait_finished(
     input: Option<&[u8]>,
     name: &str,
 ) -> (Waited, bool) {
-    wait_with(child, input, name, true, requested)
+    wait_with(child, input, name, true, requested, None)
 }
 
-/// [`wait`] and [`wait_finished`], with `requested` read for the run's SIGTERM.
+/// [`wait`], [`wait_finished`] and [`wait_within`], with `requested` read for the run's SIGTERM
+/// and the child killed once it runs past `deadline`.
 fn wait_with(
     child: &mut std::process::Child,
     input: Option<&[u8]>,
     name: &str,
     keep_finished: bool,
     requested: impl Fn() -> bool,
+    deadline: Option<Instant>,
 ) -> (Waited, bool) {
     use std::io::{Read, Write};
     let mut seen = false;
@@ -124,6 +150,10 @@ fn wait_with(
                 end(child);
                 return (Waited::Terminated, false);
             }
+            Ok(None) if deadline.is_some_and(|d| Instant::now() >= d) => {
+                kill(child);
+                return (Waited::TimedOut, false);
+            }
             Ok(None) => std::thread::sleep(Duration::from_millis(20)),
             Err(e) => {
                 end(child);
@@ -131,6 +161,39 @@ fn wait_with(
             }
         }
     };
+    // What the child started may hold its pipes past its exit: the deadline bounds that wait too,
+    // and the run's SIGTERM ends it as it ends the wait for the child. Either kills the child's
+    // process group, so the pipes close.
+    {
+        let read = || {
+            stdout.is_finished()
+                && stderr.is_finished()
+                && writer.as_ref().is_none_or(|w| w.is_finished())
+        };
+        let until = |at: Option<Instant>, seen: bool| {
+            while !read() && at.is_none_or(|at| Instant::now() < at) && (seen || !requested()) {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            read()
+        };
+        if !until(deadline, seen) {
+            kill_group(child);
+            if !seen && requested() {
+                if !keep_finished {
+                    return (Waited::Terminated, false);
+                }
+                seen = true;
+            }
+            if !until(Some(Instant::now() + AFTER_KILL), true) {
+                let waited = if seen {
+                    Waited::Terminated
+                } else {
+                    Waited::TimedOut
+                };
+                return (waited, seen);
+            }
+        }
+    }
     if let Some(writer) = writer {
         match writer.join() {
             Ok(Err(e)) if e.kind() != std::io::ErrorKind::BrokenPipe => {
@@ -170,13 +233,32 @@ pub fn end(child: &mut std::process::Child) {
     let _ = child.wait();
 }
 
-/// Sleeps `pause`, or less when the run is sent SIGTERM: whether it was ([`requested`]).
+/// Kills a child and its process group at once (SIGKILL), and reaps it.
+fn kill(child: &mut std::process::Child) {
+    use rustix::process::{kill_process, kill_process_group, Pid, Signal};
+    let pid = Pid::from_child(child);
+    let _ = kill_process_group(pid, Signal::KILL);
+    let _ = kill_process(pid, Signal::KILL);
+    let _ = child.wait();
+}
+
+/// Kills the process group of a child already reaped (SIGKILL): what it started. The child's own
+/// pid is not signalled, as it may since have been given to another process.
+fn kill_group(child: &std::process::Child) {
+    use rustix::process::{kill_process_group, Pid, Signal};
+    let _ = kill_process_group(Pid::from_child(child), Signal::KILL);
+}
+
+/// Sleeps `pause`, or less when the run is sent SIGTERM: whether it was ([`requested`]). A pause
+/// past what an [`Instant`] can hold lasts until then.
 pub fn sleep(pause: Duration) -> bool {
-    let until = Instant::now() + pause;
-    while Instant::now() < until && !requested() {
+    let until = Instant::now().checked_add(pause);
+    while until.is_none_or(|until| Instant::now() < until) && !requested() {
         std::thread::sleep(
             until
-                .saturating_duration_since(Instant::now())
+                .map_or(pause, |until| {
+                    until.saturating_duration_since(Instant::now())
+                })
                 .min(Duration::from_millis(20)),
         );
     }
@@ -221,11 +303,11 @@ mod tests {
     #[test]
     fn a_child_that_exited_before_sigterm_was_seen_is_read_when_asked() {
         let mut child = exited(r#"{"total_cost_usd":0.4}"#);
-        let (waited, seen) = wait_with(&mut child, None, "sh", false, || true);
+        let (waited, seen) = wait_with(&mut child, None, "sh", false, || true, None);
         assert!(matches!(waited, Waited::Terminated) && !seen);
 
         let mut child = exited(r#"{"total_cost_usd":0.4}"#);
-        let (waited, seen) = wait_with(&mut child, None, "sh", true, || true);
+        let (waited, seen) = wait_with(&mut child, None, "sh", true, || true, None);
         let Waited::Done(out) = waited else {
             panic!("the finished child's output is read");
         };
@@ -233,7 +315,7 @@ mod tests {
         assert_eq!(out.stdout, br#"{"total_cost_usd":0.4}"#);
 
         let mut child = exited("ok");
-        let (waited, seen) = wait_with(&mut child, None, "sh", true, || false);
+        let (waited, seen) = wait_with(&mut child, None, "sh", true, || false, None);
         assert!(matches!(waited, Waited::Done(_)) && !seen);
     }
 }

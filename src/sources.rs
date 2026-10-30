@@ -146,8 +146,61 @@ pub fn rfc3339(ms: i64) -> String {
 
 /// `input` with the window placeholders in every string value replaced by the window's instants:
 /// `{since}` and `{until}` in RFC 3339, `{since_epoch}` and `{until_epoch}` as whole seconds since
-/// the Unix epoch, cut to the second as [`rfc3339`] cuts them, so both name the same instant.
+/// the Unix epoch, cut to the second as [`rfc3339`] cuts them, so both name the same instant, and
+/// `{since_minutes_ago}` as the whole minutes from the window's start to the run's start
+/// ([`minutes_ago`]). A call fills that one at its own time instead ([`window_for_call`]).
 fn with_window(input: &Value, window: &Window) -> Value {
+    since_minutes_ago(
+        &window_for_call(input, window),
+        window.since_ms,
+        window.until_ms,
+    )
+}
+
+/// The whole minutes from `since_ms` to `at_ms`, rounded up from the milliseconds, so a relative
+/// date of that many minutes before `at_ms` (`updated >= -{since_minutes_ago}m`) is no later than
+/// `since_ms`.
+fn minutes_ago(since_ms: i64, at_ms: i64) -> String {
+    at_ms
+        .saturating_sub(since_ms)
+        .saturating_add(59_999)
+        .div_euclid(60_000)
+        .to_string()
+}
+
+/// `input` with `{since_minutes_ago}` in every string value replaced by [`minutes_ago`] from
+/// `since_ms` to `at_ms`.
+fn since_minutes_ago(input: &Value, since_ms: i64, at_ms: i64) -> Value {
+    match input {
+        Value::String(t) => {
+            Value::String(t.replace("{since_minutes_ago}", &minutes_ago(since_ms, at_ms)))
+        }
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|v| since_minutes_ago(v, since_ms, at_ms))
+                .collect(),
+        ),
+        Value::Object(fields) => Value::Object(
+            fields
+                .iter()
+                .map(|(k, v)| (k.clone(), since_minutes_ago(v, since_ms, at_ms)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// `input`, its pages' too, as each call is made with it: `{since_minutes_ago}` filled from the
+/// window's start to the time of the call, so a call made after the run's start (a later input,
+/// a later page, a retry after a renewal: [`Connectors::invoke_filled`]) still asks from no later
+/// than `{since}`.
+fn at_call(input: &Value, since_ms: i64) -> Value {
+    since_minutes_ago(input, since_ms, crate::instance::now_ms())
+}
+
+/// [`with_window`] but `{since_minutes_ago}`, which is left for [`at_call`].
+fn window_for_call(input: &Value, window: &Window) -> Value {
     match input {
         Value::String(t) => Value::String(
             t.replace("{since}", &rfc3339(window.since_ms))
@@ -161,11 +214,13 @@ fn with_window(input: &Value, window: &Window) -> Value {
                     &window.until_ms.div_euclid(1000).to_string(),
                 ),
         ),
-        Value::Array(items) => Value::Array(items.iter().map(|v| with_window(v, window)).collect()),
+        Value::Array(items) => {
+            Value::Array(items.iter().map(|v| window_for_call(v, window)).collect())
+        }
         Value::Object(fields) => Value::Object(
             fields
                 .iter()
-                .map(|(k, v)| (k.clone(), with_window(v, window)))
+                .map(|(k, v)| (k.clone(), window_for_call(v, window)))
                 .collect(),
         ),
         other => other.clone(),
@@ -378,6 +433,48 @@ fn percent_decode(text: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
+/// The largest file a `files` or `structured` source reads, and a `records` lookup file: 16 MiB.
+pub const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+
+/// The bytes of the file at `path`, read up to [`MAX_FILE_BYTES`] and no further; why not, when it
+/// cannot be read (`cannot be read: <error>`), is no regular file once symlinks are followed (`not
+/// a regular file`: a FIFO would block the run in `open`), or is larger (`larger than the 16 MiB
+/// cap`). It is opened without blocking and checked again, so a FIFO put in its place after the
+/// first check is refused as well.
+fn read_capped(path: &Path) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    use std::os::unix::fs::OpenOptionsExt;
+    let regular = |meta: std::fs::Metadata| {
+        if meta.is_file() {
+            Ok(())
+        } else {
+            Err("not a regular file".to_string())
+        }
+    };
+    std::fs::metadata(path)
+        .map_err(|e| format!("cannot be read: {e}"))
+        .and_then(regular)?;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
+        .open(path)
+        .map_err(|e| format!("cannot be read: {e}"))?;
+    file.metadata()
+        .map_err(|e| format!("cannot be read: {e}"))
+        .and_then(regular)?;
+    let mut bytes = Vec::new();
+    file.take(MAX_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("cannot be read: {e}"))?;
+    if bytes.len() as u64 > MAX_FILE_BYTES {
+        return Err(format!(
+            "larger than the {} MiB cap",
+            MAX_FILE_BYTES / (1024 * 1024)
+        ));
+    }
+    Ok(bytes)
+}
+
 /// Adds `why` to `unread` unless it is there already.
 fn note(unread: &mut Vec<String>, why: String) {
     if !unread.contains(&why) {
@@ -581,8 +678,9 @@ fn mapped_records<'r>(
 /// The records of a `structured` source's `files` input: every file under `paths` (read against
 /// `base`, `~/` expanded) whose path below its root matches `glob`, in file name order, each a
 /// JSON document whose `records` path holds the list (a leading byte-order mark is ignored), read
-/// as [`structured_records`] reads a page. A root, a file or a list that cannot be read fails the
-/// fetch, naming the file, and so does a root under which no file matches `glob`: a source that
+/// as [`structured_records`] reads a page. A root, a file or a list that cannot be read, or a file
+/// over [`MAX_FILE_BYTES`], fails the fetch, naming the file, and so does a root under which no
+/// file matches `glob`: a source that
 /// leaves a record out of a run must not have it read as no longer listed (`dropped: Supersede`).
 fn fetch_structured_files(
     st: &m::StructuredSource,
@@ -610,8 +708,9 @@ fn fetch_structured_files(
             matched = true;
             let path = entry.path().display();
             stop_before(|| "the next file".into())?;
-            let bytes = std::fs::read(entry.path())
-                .map_err(|e| FetchError::Failed(format!("{path}: {e}")))?;
+            // Not skipped: a file left out would have its records read as no longer listed.
+            let bytes = read_capped(entry.path())
+                .map_err(|why| FetchError::Failed(format!("{path}: {why}")))?;
             let unmarked = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
             let answer: Value = serde_json::from_slice(unmarked)
                 .map_err(|e| FetchError::Failed(format!("{path}: not JSON: {e}")))?;
@@ -677,11 +776,15 @@ fn fetch_structured(
         let operation = operation.to_string();
         move |input: &Value| Ok(connectors.invoke(&c.adapter, connection, &operation, input)?)
     };
+    // An input's own calls fill `{since_minutes_ago}` as each attempt is made ([`at_call`]).
+    let fill = |input: &Value| at_call(input, window.since_ms);
     for input in &c.inputs {
         let records = walk(
-            &mut invoker(&c.operation),
+            &mut |input: &Value| {
+                Ok(connectors.invoke_filled(&c.adapter, connection, &c.operation, input, &fill)?)
+            },
             &format!("{}.{}", c.adapter, c.operation),
-            &with_window(&to_serde(input), window),
+            &window_for_call(&to_serde(input), window),
             &st.records,
             c.paging.as_ref(),
             &mut unread,
@@ -1117,16 +1220,21 @@ fn fetch_records(
     // Records left out for want of a key, counted by reason.
     let mut unkeyed: BTreeMap<String, usize> = BTreeMap::new();
     for input in &c.inputs {
-        let input = with_window(&to_serde(input), window);
+        // Each attempt of a call fills `{since_minutes_ago}` at its own time ([`at_call`]); a
+        // record's `{input.…}` reads the input as the run's start filled it.
+        let fill = |input: &Value| at_call(input, window.since_ms);
         let records = walk_until(
-            &mut invoker(connectors, c, connection, &c.operation),
+            &mut |input: &Value| {
+                Ok(connectors.invoke_filled(&c.adapter, connection, &c.operation, input, &fill)?)
+            },
             &what,
-            &input,
+            &window_for_call(&to_serde(input), window),
             &c.records,
             c.paging.as_ref(),
             stop,
             &mut unread,
         )?;
+        let input = with_window(&to_serde(input), window);
         for record in &records {
             let id = match record_id(c, record, &input) {
                 Ok(id) => id,
@@ -1265,11 +1373,11 @@ fn under(base: &Path, path: &str) -> std::path::PathBuf {
 
 /// The lookup file of a `records` spec, a JSON object of strings (an id to a name), read as a
 /// record file is: a leading byte-order mark is ignored, and a blank id or name is no value
-/// ([`scalar`]), so the id it would map is kept. A file that cannot be read, or holds anything
-/// else, fails the fetch with an error naming the file.
+/// ([`scalar`]), so the id it would map is kept. A file that cannot be read, is over
+/// [`MAX_FILE_BYTES`], or holds anything else, fails the fetch with an error naming the file.
 fn read_lookup(path: &Path) -> Result<BTreeMap<String, String>, FetchError> {
-    let bytes = std::fs::read(path)
-        .map_err(|e| FetchError::Failed(format!("lookup {}: {e}", path.display())))?;
+    let bytes = read_capped(path)
+        .map_err(|why| FetchError::Failed(format!("lookup {}: {why}", path.display())))?;
     let unmarked = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
     let lookup: BTreeMap<String, String> = serde_json::from_slice(unmarked).map_err(|e| {
         FetchError::Failed(format!(
@@ -1284,8 +1392,10 @@ fn read_lookup(path: &Path) -> Result<BTreeMap<String, String>, FetchError> {
 }
 
 /// The files of a `files` source: one document per file, or with `records`, one per record of
-/// each file ([`file_records`]), and what was left out as `skipped`. A record's thread context
-/// holds at most `max_context` characters. A `records` lookup file is read once, before any file.
+/// each file ([`file_records`]), and what was left out as `skipped`: a file that cannot be read,
+/// is over [`MAX_FILE_BYTES`] or is not UTF-8 text is named there with the reason. A record's
+/// thread context holds at most `max_context` characters. A `records` lookup file is read once,
+/// before any file.
 fn fetch_files(
     f: &m::FilesSource,
     base: &Path,
@@ -1313,10 +1423,14 @@ fn fetch_files(
                 continue;
             }
             stop_before(|| "the next file".into())?;
-            let Ok(bytes) = std::fs::read(entry.path()) else {
-                continue;
-            };
             let path = entry.path().display().to_string();
+            let bytes = match read_capped(entry.path()) {
+                Ok(bytes) => bytes,
+                Err(why) => {
+                    note(&mut skipped, format!("{path}: {why}; skipped"));
+                    continue;
+                }
+            };
             let title = entry.file_name().to_str();
             match &f.records {
                 Some(r) => docs.extend(file_records(
@@ -1328,16 +1442,25 @@ fn fetch_files(
                     &mut read,
                     &mut skipped,
                 )),
-                None => docs.extend(whole_file(path, title, bytes)),
+                None => docs.extend(whole_file(path, title, bytes, &mut skipped)),
             }
         }
     }
     Ok((docs, skipped))
 }
 
-/// A file as one document, keyed by its path; none when it is not UTF-8 text or is blank.
-fn whole_file(path: String, title: Option<&str>, bytes: Vec<u8>) -> Option<Document> {
-    let text = String::from_utf8(bytes).ok()?;
+/// A file as one document, keyed by its path; none when it is blank, or when it is not UTF-8
+/// text, which is named in `skipped`.
+fn whole_file(
+    path: String,
+    title: Option<&str>,
+    bytes: Vec<u8>,
+    skipped: &mut Vec<String>,
+) -> Option<Document> {
+    let Ok(text) = String::from_utf8(bytes) else {
+        note(skipped, format!("{path}: not UTF-8 text; skipped"));
+        return None;
+    };
     if text.trim().is_empty() {
         return None;
     }
@@ -1437,7 +1560,7 @@ fn file_records(
     let unmarked = content.strip_prefix(b"\xef\xbb\xbf").unwrap_or(content);
     let records = match r.format {
         m::RecordFormat::WholeFile => {
-            return whole_file(path.into(), title, content.to_vec())
+            return whole_file(path.into(), title, content.to_vec(), skipped)
                 .into_iter()
                 .collect();
         }
@@ -2063,6 +2186,57 @@ mod tests {
         assert_eq!(before_a_success.since_ms, 900_000_000);
         let held = Window::of_run(1_000_000, Some(400_000), Some(600_000), Some(700_000), 7);
         assert_eq!(held.since_ms, 600_000);
+    }
+
+    /// `story:window-relative-placeholders`: `{since_minutes_ago}` is the ceiling of (run start −
+    /// window start) in whole minutes, from the raw milliseconds, as the number alone.
+    #[test]
+    fn since_minutes_ago_is_the_window_rounded_up_to_whole_minutes() {
+        let jql = json!({"jql": "updated >= -{since_minutes_ago}m"});
+        let at = |since_ms, until_ms| with_window(&jql, &Window { since_ms, until_ms });
+        let start = 1_790_000_000_000;
+        assert_eq!(
+            at(start - 3 * 86_400_000, start),
+            json!({"jql": "updated >= -4320m"})
+        );
+        assert_eq!(at(start - 60_001, start), json!({"jql": "updated >= -2m"}));
+        assert_eq!(at(start - 60_000, start), json!({"jql": "updated >= -1m"}));
+        assert_eq!(at(start - 1, start), json!({"jql": "updated >= -1m"}));
+        assert_eq!(at(start, start), json!({"jql": "updated >= -0m"}));
+        // The window of a run five minutes after the last successful one: its overlap included.
+        let after = Window::of_run(start, Some(start - 300_000), None, None, 7);
+        assert_eq!(
+            with_window(&json!(["{since_minutes_ago}", "{since}"]), &after),
+            json!([
+                ((300_000 + OVERLAP_MS) / 60_000).to_string(),
+                rfc3339(after.since_ms)
+            ])
+        );
+    }
+
+    /// D36: a call fills `{since_minutes_ago}` from the window's start to its own time, so a call
+    /// made after the run's start asks from no later than `{since}`; the other placeholders are
+    /// the run's.
+    #[test]
+    fn a_call_fills_since_minutes_ago_at_its_own_time() {
+        let now = crate::instance::now_ms();
+        // A run that started an hour ago, its window two hours less 30 s long: three hours less
+        // 30 s before the call, which rounds up to 180 minutes.
+        let window = Window {
+            since_ms: now - 3 * 3_600_000 + 30_000,
+            until_ms: now - 3_600_000,
+        };
+        let input = json!({"jql": "updated >= -{since_minutes_ago}m", "since": "{since}"});
+        let left = window_for_call(&input, &window);
+        assert_eq!(
+            left,
+            json!({"jql": "updated >= -{since_minutes_ago}m", "since": rfc3339(window.since_ms)})
+        );
+        assert_eq!(
+            at_call(&left, window.since_ms)["jql"],
+            json!("updated >= -180m"),
+            "from since to the call, not to the run's start"
+        );
     }
 }
 

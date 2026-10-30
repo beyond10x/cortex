@@ -814,6 +814,10 @@ impl Model {
             Waited::Failed(_) if sigterm => return Err(Refused::terminated()),
             Waited::Failed(e) => return Err(Refused::uncosted(e)),
             Waited::Terminated => return Err(Refused::terminated()),
+            // `wait_finished` sets no deadline; the model call is bounded by `timeout`.
+            Waited::TimedOut => {
+                return Err(Refused::uncosted("claude ran past its deadline".into()))
+            }
         };
         let answer: Value = serde_json::from_slice(&out.stdout).map_err(|_| {
             let stderr = String::from_utf8_lossy(&out.stderr);
@@ -913,6 +917,32 @@ pub fn tagged(v: &Value) -> Yaml {
             }
             Yaml::Mapping(m)
         }
+    }
+}
+
+/// Where `document`, the model's answer, holds an object whose one key is `"!"`: a tag with no
+/// name, which [`tagged`] cannot write (an empty YAML tag panics). The path to it, such as
+/// `facts[0]`; none when there is none. Checked before [`merge`].
+pub fn bare_tag(document: &Value) -> Option<String> {
+    match document {
+        Value::Array(items) => items
+            .iter()
+            .enumerate()
+            .find_map(|(i, v)| bare_tag(v).map(|at| format!("[{i}]{}", dotted(&at)))),
+        Value::Object(o) if o.len() == 1 && o.contains_key("!") => Some(String::new()),
+        Value::Object(o) => o
+            .iter()
+            .find_map(|(k, v)| bare_tag(v).map(|at| format!("{k}{}", dotted(&at)))),
+        _ => None,
+    }
+}
+
+/// `at`, a path below a value, as it continues the value's own path.
+fn dotted(at: &str) -> String {
+    if at.is_empty() || at.starts_with('[') {
+        at.to_string()
+    } else {
+        format!(".{at}")
     }
 }
 

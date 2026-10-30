@@ -575,11 +575,18 @@ pub fn call_hook(
     let stderr = stderr
         .recv_timeout(left)
         .ok()
-        .map(|t| t.trim().chars().take(2000).collect::<String>())
+        // Masked before the cut, so the cut cannot leave a credential shape too short to match.
+        .map(|t| {
+            crate::mask::mask(t.trim())
+                .0
+                .chars()
+                .take(2000)
+                .collect::<String>()
+        })
         .filter(|t| !t.is_empty());
     HookResult::Failed {
         status: status.code(),
-        reason: stderr.map(|t| crate::mask::mask(&t).0),
+        reason: stderr,
     }
 }
 

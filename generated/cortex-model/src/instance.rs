@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 454ae2cdefe42498de39f694543a1a07725b9d4b16d1a2caf6ef6fa1a9fbb502
-// contract digest c75c17e5eb6aa81c48b081736bc63dd7442f26133a33121f93755de3becaa515
+// model digest 4ead3fc705103005794aad544e2bb37f40445fb03084d361af287304bc4b209a
+// contract digest 9cd692da290484e944ae10119f1a6432132d1064188f2778b8eab81ecc7e16b0
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -392,6 +392,8 @@ pub struct InstanceSpec {
     pub redaction: Option<RedactionPolicy>,
     /// `snapshots` — `Optional<cortex.instance.SnapshotPolicy>`.
     pub snapshots: Option<SnapshotPolicy>,
+    /// `runs` — `Optional<cortex.instance.RunsPolicy>`.
+    pub runs: Option<RunsPolicy>,
     /// `gate` — `Optional<cortex.instance.RunGate>`.
     pub gate: Option<RunGate>,
     /// `monitoring` — `Optional<cortex.instance.MonitoringSpec>`.
@@ -752,6 +754,13 @@ pub enum RunOutcome {
     ModelUnavailable,
     /// `disabled`.
     Disabled,
+}
+
+/// RunsPolicy — `cortex.instance.RunsPolicy`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunsPolicy {
+    /// `keep_days` — `Integer`.
+    pub keep_days: i64,
 }
 
 /// SchemaCardinality — `cortex.instance.SchemaCardinality`: one of a closed set of names.

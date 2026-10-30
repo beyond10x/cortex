@@ -31,7 +31,7 @@ run of the source writes it again, with its counts starting from zero.
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
 | `instances/<name>/state/entities.json` | entity names from earlier runs, offered to the model so it reuses them |
 | `instances/<name>/failures/<source>.json` | documents whose extraction failed (`cortex.failures/1`): each key's text hash, its consecutive runs failed with the document alone (`runs`, `0` when none), the failed batches of several it was in (`batches`, absent when none) and the last reason; outside `state/`, so undoing a run keeps it (see [What one run does](#what-one-run-does)) |
-| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report, or claude's error text (`claude/error.txt`) |
+| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report, or claude's error text (`claude/error.txt`); kept until a run removes it after the spec's [`runs.keep_days`](./spec-file.md#runs), and forever without one. `runs/` belongs to cortex: with `keep_days`, any directory in it named like a run directory (`<digits>-<lowercase letters, digits and dashes>`) is removed once that name is older than `keep_days`, whoever put it there |
 | `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
 | `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
@@ -371,6 +371,16 @@ naming the last error. Connectors failed, not the source: `--record-failure` cou
 and hook report it as any failed run's do, and the next scheduled run starts as usual. A
 revalidation that fails after the run fetched documents (a lapse renewed mid-run) is retried the
 same way and, if it still fails, fails the run as `fetch-failed`, counted.
+
+Every `connectors` call of a run (a list, a revalidation, a status read, an invocation) is waited
+for at most `CORTEX_CONNECTORS_TIMEOUT_S` seconds (default 120, at least 1). A call still running
+then is killed with what it started and fails as `timeout`
+(`<operation>: timeout after <n> s (CORTEX_CONNECTORS_TIMEOUT_S); the connectors call was killed`);
+it is not retried, and an invocation that fails so fails the run as `fetch-failed`, counted. The
+bound is the whole call's: a `connectors` that exited while a process it started still holds its
+output is read until the deadline, and then that process is killed with the call's process group.
+A value too large for the clock sets no bound. The long-lived `connectors connections launch` of a
+store's `ekr` is not bounded by it.
 
 A run that fails a check of the spec's `gate` fails as `apply-refused` and is counted the same
 way. Its `reason` names each failed check with its measure and value

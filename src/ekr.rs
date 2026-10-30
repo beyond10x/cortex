@@ -104,14 +104,21 @@ fn output(mut cmd: Command, what: &str) -> Result<std::process::Output, String> 
         .map_err(|e| format!("cannot run ekr for {what}: {e}"))
 }
 
-/// The stdout of `out`, or `ekr <what> failed: <its stderr>` when it exited other than 0.
+/// The stdout of `out`, or `ekr <what> failed: <its stderr>` when it exited other than 0, its
+/// stderr masked ([`said`]).
 fn finished(out: std::process::Output, what: &str) -> Result<Vec<u8>, String> {
     if out.status.success() {
         Ok(out.stdout)
     } else {
-        let err = String::from_utf8_lossy(&out.stderr);
-        Err(format!("ekr {what} failed: {}", err.trim()))
+        Err(format!("ekr {what} failed: {}", said(&out.stderr)))
     }
+}
+
+/// What an `ekr` wrote to stderr, trimmed and masked for credential shapes ([`crate::mask`]):
+/// an error built from it reaches the run's report, `cortex.log` and the source's status. Masking
+/// keeps prose, so [`OUTCOME_UNKNOWN`] still reads as written.
+pub(crate) fn said(stderr: &[u8]) -> String {
+    crate::mask::mask(String::from_utf8_lossy(stderr).trim()).0
 }
 
 /// What EKR prints when it cannot say whether a publication took effect (`StoreError::UnknownCommit`
@@ -139,10 +146,33 @@ impl Binary {
         let mut cmd = Command::new(&self.0);
         cmd.args(["example", "ekr.cli-host/1"]);
         let mut host = json(&run(cmd, "example ekr.cli-host/1")?, "example")?;
-        host["tenant"] = Value::String(tenant.to_string());
-        let profile = &mut host["authority"]["validation_profile"];
-        profile["application"] = Value::String("ekr.p2-apply/1".into());
-        profile["ruleset"] = Value::String("ekr.p2-deterministic/1".into());
+        // Each level is an object, an absent or null one made empty; anything else is an error,
+        // where indexing it would panic.
+        fn object<'v>(
+            v: &'v mut Value,
+            at: &str,
+        ) -> Result<&'v mut serde_json::Map<String, Value>, String> {
+            if v.is_null() {
+                *v = Value::Object(Default::default());
+            }
+            v.as_object_mut()
+                .ok_or_else(|| format!("ekr example ekr.cli-host/1: {at} is not an object"))
+        }
+        let host_fields = object(&mut host, "the host")?;
+        host_fields.insert("tenant".into(), Value::String(tenant.to_string()));
+        let authority = object(
+            host_fields.entry("authority").or_insert(Value::Null),
+            "authority",
+        )?;
+        let profile = object(
+            authority.entry("validation_profile").or_insert(Value::Null),
+            "authority.validation_profile",
+        )?;
+        profile.insert("application".into(), Value::String("ekr.p2-apply/1".into()));
+        profile.insert(
+            "ruleset".into(),
+            Value::String("ekr.p2-deterministic/1".into()),
+        );
         Ok(serde_json::to_string_pretty(&host).expect("plain JSON"))
     }
 
@@ -324,7 +354,8 @@ impl Launch {
 /// Removes from `cmd` every `EKR_*` variable of `inherited`, the names of the environment it would
 /// inherit. A launch hands its consumer every `EKR_*` variable it gets (`pass_env = ["EKR_"]`), so
 /// only the ones the caller sets afterwards reach the launched `ekr`, none this process inherited
-/// (such as `EKR_FULL_REPLAY` from the operator's shell).
+/// (such as `EKR_FULL_REPLAY` from the operator's shell). A store `ekr` cortex starts itself
+/// ([`Store::store_cmd`], [`Store::schema_cmd`]) is stripped the same way.
 fn remove_inherited_ekr(cmd: &mut Command, inherited: impl IntoIterator<Item = OsString>) {
     for key in inherited {
         if key.as_encoded_bytes().starts_with(b"EKR_") {
@@ -358,8 +389,10 @@ impl Store {
     fn store_cmd(&self, args: &[&OsStr]) -> Result<Command, String> {
         let mut cmd = match &self.launch {
             Some(launch) => launch.command(&launch.connection, args)?,
+            // As a launch does: only the `EKR_*` variables set below reach the store's `ekr`.
             None => {
                 let mut cmd = Command::new(&self.bin);
+                remove_inherited_ekr(&mut cmd, std::env::vars_os().map(|(key, _)| key));
                 cmd.args(args);
                 cmd
             }
@@ -502,6 +535,7 @@ impl Store {
             Some((launch, connection)) => launch.command(connection, &args)?,
             None => {
                 let mut cmd = Command::new(&self.bin);
+                remove_inherited_ekr(&mut cmd, std::env::vars_os().map(|(key, _)| key));
                 cmd.args(args);
                 cmd
             }
@@ -555,8 +589,9 @@ impl Store {
         let stdout = BufReader::new(Answers::of(child.stdout.take().expect("piped")));
         let mut from = child.stderr.take().expect("piped");
         // A request's own diagnostics travel in its answer; what the session itself writes to
-        // stderr (why it could not start, or ended) is read as it comes, its end kept.
-        let stderr = Arc::new(Mutex::new(Vec::new()));
+        // stderr (why it could not start, or ended) is read as it comes, its last whole lines
+        // kept raw ([`keep_read`]) and masked before they are cut to their window ([`window`]).
+        let stderr = Arc::new(Mutex::new(Kept::default()));
         let kept = Arc::clone(&stderr);
         let drain = std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
@@ -564,10 +599,7 @@ impl Store {
                 if n == 0 {
                     break;
                 }
-                let mut kept = kept.lock().expect("not poisoned");
-                kept.extend_from_slice(&buf[..n]);
-                let over = kept.len().saturating_sub(STDERR_KEPT);
-                kept.drain(..over);
+                keep_read(&mut kept.lock().expect("not poisoned"), &buf[..n]);
             }
         });
         Ok(Session {
@@ -590,11 +622,11 @@ impl Store {
         if out.status.success() {
             return Ok(true);
         }
-        let err = String::from_utf8_lossy(&out.stderr);
+        let err = said(&out.stderr);
         if err.contains("the lineage has no seed") {
             Ok(false)
         } else {
-            Err(format!("ekr head failed: {}", err.trim()))
+            Err(format!("ekr head failed: {err}"))
         }
     }
 
@@ -760,8 +792,103 @@ fn submit(
     }
 }
 
-/// How much of what an `ekr session` writes to its own stderr is kept, from its end.
+/// How much of what an `ekr session` writes to its own stderr is kept, from its end, once masked.
 const STDERR_KEPT: usize = 16 * 1024;
+
+/// How much of what an `ekr session` writes to its own stderr is held raw while it runs: its last
+/// whole lines, masked and cut to [`STDERR_KEPT`] when it ends ([`window`]).
+const STDERR_READ: usize = 1024 * 1024;
+
+/// How much of what [`keep_read`] dropped is held as the context the kept lines are masked in: a
+/// private key's `BEGIN` line, or a name whose value is on the next line, marks lines after it.
+const STDERR_CONTEXT: usize = 16 * 1024;
+
+/// What an `ekr session` wrote to its own stderr, as [`keep_read`] holds it.
+#[derive(Default)]
+struct Kept {
+    /// The last whole lines, and the line being written, raw: they start at a line's start.
+    bytes: Vec<u8>,
+    /// Lines before them were dropped.
+    cut: bool,
+    /// The line being written is dropped up to its end: its start was.
+    in_dropped_line: bool,
+    /// The end of what was dropped, raw, up to [`STDERR_CONTEXT`] bytes: masked with the kept
+    /// lines, never shown ([`window`]).
+    dropped: Vec<u8>,
+}
+
+/// Adds `gone` to what `dropped` holds, its front cut to [`STDERR_CONTEXT`] bytes.
+fn drop_into(dropped: &mut Vec<u8>, gone: &[u8]) {
+    dropped.extend_from_slice(gone);
+    let over = dropped.len().saturating_sub(STDERR_CONTEXT);
+    dropped.drain(..over);
+}
+
+/// Adds `read` to `kept`, dropping whole lines from the front past [`STDERR_READ`]. A line is
+/// dropped whole, never cut, and the end of what was dropped stays as context, so no credential
+/// shape loses the name or line that marks it before it is masked.
+fn keep_read(kept: &mut Kept, mut read: &[u8]) {
+    if kept.in_dropped_line {
+        match read.iter().position(|b| *b == b'\n') {
+            Some(end) => {
+                kept.in_dropped_line = false;
+                drop_into(&mut kept.dropped, &read[..=end]);
+                read = &read[end + 1..];
+            }
+            None => return drop_into(&mut kept.dropped, read),
+        }
+    }
+    kept.bytes.extend_from_slice(read);
+    let over = kept.bytes.len().saturating_sub(STDERR_READ);
+    if over > 0 {
+        kept.cut = true;
+        match kept.bytes[over..].iter().position(|b| *b == b'\n') {
+            Some(end) => {
+                drop_into(&mut kept.dropped, &kept.bytes[..=over + end]);
+                kept.bytes.drain(..=over + end);
+            }
+            None => {
+                drop_into(&mut kept.dropped, &kept.bytes);
+                kept.bytes.clear();
+                kept.in_dropped_line = true;
+            }
+        }
+    }
+}
+
+/// What `kept` holds, masked ([`said`]) and then cut to its last [`STDERR_KEPT`] bytes, at a line's
+/// start where the cut leaves one: masked first, so a cut cannot part a credential from the name
+/// that marks it. Lines kept after dropped ones are masked behind the dropped context, whose lines
+/// are then left out; where a mask joined lines across that seam, more is left out, never less.
+fn window(kept: &Kept) -> String {
+    let masked = if kept.dropped.is_empty() {
+        said(&kept.bytes)
+    } else {
+        // A line still being dropped (no newline yet) is one more line to leave out.
+        let lines = kept.dropped.iter().filter(|b| **b == b'\n').count()
+            + usize::from(!kept.dropped.ends_with(b"\n"));
+        let whole = said(&[kept.dropped.as_slice(), &kept.bytes].concat());
+        whole
+            .match_indices('\n')
+            .nth(lines.saturating_sub(1))
+            .map_or_else(String::new, |(at, _)| whole[at + 1..].to_string())
+    };
+    if masked.len() <= STDERR_KEPT && !kept.cut {
+        return masked;
+    }
+    let mut start = masked.len().saturating_sub(STDERR_KEPT);
+    while !masked.is_char_boundary(start) {
+        start += 1;
+    }
+    if start > 0 && masked.as_bytes()[start - 1] != b'\n' {
+        if let Some(end) = masked[start..].find('\n') {
+            if start + end + 1 < masked.len() {
+                start += end + 1;
+            }
+        }
+    }
+    format!("…{}", &masked[start..])
+}
 
 /// One `ekr session` on a store ([`Store::session`]): one process, opened once, that answers
 /// `ontology`, `snapshot`, `schema`, `head`, `mint`, `propose`, `validate`, `commit` and `quality`,
@@ -867,7 +994,7 @@ struct Pipe {
     stdin: ChildStdin,
     stdout: BufReader<Answers>,
     /// The end of what the session wrote to its own stderr ([`STDERR_KEPT`]).
-    stderr: Arc<Mutex<Vec<u8>>>,
+    stderr: Arc<Mutex<Kept>>,
     drain: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -902,9 +1029,7 @@ impl Pipe {
         if let Some(drain) = drain {
             let _ = drain.join();
         }
-        let said = String::from_utf8_lossy(&stderr.lock().expect("not poisoned"))
-            .trim()
-            .to_string();
+        let said = window(&stderr.lock().expect("not poisoned"));
         match status {
             Ok(status) if status.success() => (Some(status), Ok(())),
             Ok(status) => (
@@ -1038,7 +1163,10 @@ impl Session {
         }
         match answer {
             Ok(answer) if answer.exit == 0 => Ok(answer.stdout),
-            Ok(answer) => Err(format!("ekr {what} failed: {}", answer.stderr.trim())),
+            Ok(answer) => Err(format!(
+                "ekr {what} failed: {}",
+                said(answer.stderr.as_bytes())
+            )),
             Err(Unread::Malformed(e)) => Err(format!("ekr {what} printed no JSON: {e}")),
             // A session whose output ended (end of file, a failed read or write, or a process a
             // signal ended) while the run was sent SIGTERM ended because of it, a stop of the
@@ -1898,6 +2026,74 @@ mod tests {
                 ("EKR_STORE".into(), "/etc/brain/pg.json".into()),
             ]
         );
+    }
+
+    /// `story:small-robustness`: what EKR wrote to stderr is masked in the error a failed verb
+    /// answers, and the text that marks an unknown outcome survives the masking, so a run still
+    /// tells `store-outcome-unknown` apart.
+    #[test]
+    fn a_failed_verbs_stderr_is_masked_and_an_unknown_outcome_still_reads_as_one() {
+        use std::os::unix::process::ExitStatusExt;
+        let failed = |stderr: &str| std::process::Output {
+            status: std::process::ExitStatus::from_raw(256),
+            stdout: Vec::new(),
+            stderr: stderr.as_bytes().to_vec(),
+        };
+        let err = super::finished(
+            failed("ekr: publication outcome is unknown; dsn password=hunter2secret\n"),
+            "apply-extraction",
+        )
+        .unwrap_err();
+        assert!(!err.contains("hunter2secret"), "{err}");
+        assert!(err.contains("[masked:"), "{err}");
+        assert!(outcome_unknown(&err), "{err}");
+        assert!(err.starts_with("ekr apply-extraction failed: "), "{err}");
+    }
+
+    /// D34: a session's stderr is masked before it is cut to its window, the cut at a line's
+    /// start; lines dropped while it runs go whole, a line too long for what is held among them.
+    #[test]
+    fn a_sessions_stderr_is_masked_before_it_is_cut() {
+        use super::{keep_read, window, Kept, STDERR_KEPT, STDERR_READ};
+        // Assembled at runtime so no credential-shaped literal sits in the source.
+        let line = format!("ekr: pass{}=hunter2Qz7vX9wK\n", "word");
+        // Cut raw, the window of STDERR_KEPT bytes would start inside the credential line.
+        let pad = "x".repeat(STDERR_KEPT - 5);
+        let mut kept = Kept::default();
+        keep_read(&mut kept, line.as_bytes());
+        keep_read(&mut kept, pad.as_bytes());
+        let said = window(&kept);
+        assert!(!said.contains("hunter2"), "{}", &said[..80]);
+        assert_eq!(said, format!("…{pad}"), "cut at the padding line's start");
+
+        // Short and whole: masked, not cut.
+        let mut short = Kept::default();
+        keep_read(&mut short, line.as_bytes());
+        let said = window(&short);
+        assert!(
+            said.starts_with("ekr: pass") && said.contains("[masked:") && !said.contains("hunter2")
+        );
+
+        // A line longer than what is held while the session runs is dropped to its end, and the
+        // lines after it are kept.
+        let mut long = Kept::default();
+        keep_read(&mut long, line.as_bytes());
+        keep_read(&mut long, "y".repeat(STDERR_READ + 1).as_bytes());
+        keep_read(&mut long, b"yyy\nlast line\n");
+        assert!(long.cut && !long.in_dropped_line);
+        assert_eq!(window(&long), "…last line");
+
+        // D49: a private key whose `BEGIN` line was dropped for length is masked behind it.
+        let body = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo0123456789abcdefghijklmnopqrst";
+        let mut key = Kept::default();
+        keep_read(&mut key, "x".repeat(STDERR_READ).as_bytes());
+        keep_read(
+            &mut key,
+            format!(" -----BEGIN RSA PRIVATE {}-----\n", "KEY").as_bytes(),
+        );
+        keep_read(&mut key, format!("{body}\n{body}\n").as_bytes());
+        assert!(key.cut && key.bytes.starts_with(body.as_bytes()));
+        assert!(!window(&key).contains(body), "{}", window(&key));
     }
 
     #[test]

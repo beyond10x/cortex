@@ -43,6 +43,7 @@ serve: {}
 | `store` | optional: the store's backend, SQLite or PostgreSQL ([`store`](#store)) |
 | `redaction` | optional: what is kept from the model, and what refuses a run ([`redaction`](#redaction)) |
 | `snapshots` | optional: how many snapshots of a `sqlite` store are kept ([`snapshots`](#snapshots)) |
+| `runs` | optional: how many days each run's directory under `runs/` is kept ([`runs`](#runs)) |
 | `gate` | optional: the checks a run is held to ([`gate`](#gate)) |
 | `monitoring` | optional: what a run reports besides its printed line ([`monitoring`](#monitoring)) |
 | `ask` | optional: the ask service's settings ([Ask service](./ask-service.md#the-ask-section)) |
@@ -323,7 +324,7 @@ The records of any operation a Connectors adapter admits.
 | field | meaning |
 |---|---|
 | `adapter`, `connection` or `profile`, `operation` | what to invoke; the connection by id or by profile of `adapter` ([Naming a connection](#naming-a-connection)) |
-| `inputs` | a list of JSON inputs; the operation is invoked once per input. `{since}`, `{until}`, `{since_epoch}` and `{until_epoch}` in a string value are replaced by the run's window |
+| `inputs` | a list of JSON inputs; the operation is invoked once per input. `{since}`, `{until}`, `{since_epoch}`, `{until_epoch}` and `{since_minutes_ago}` in a string value are replaced by the run's window |
 | `records` | dotted path to the array of records in the answer, for example `issues` |
 | `id` | dotted path to a record's stable id |
 | `key` | optional: a template the document's key is rendered from instead of `id`: `{a.b}` is a field of the record, `{input.a.b}` one of the input it was read with, its window filled in. `{input.channel}:{ts}` keeps two messages with one `ts` in two channels two documents |
@@ -362,8 +363,18 @@ inputs:
   - {channel: "C1", oldest: "{since_epoch}"}
 ```
 
-The value stays a JSON string. Any other text in braces, such as `{since_ms}`, is passed to the
-operation as written.
+`{since_minutes_ago}` is the whole minutes from `{since}` to the moment each call is made (each
+input, each page, each retry after a renewal), rounded up from the milliseconds, so a call made
+after the run's start still asks from no later than `{since}` and the window is never narrowed. It
+is for a query language that takes a relative date, such as an issue tracker's:
+
+```yaml
+inputs:
+  - {jql: "project = OPS AND updated >= -{since_minutes_ago}m"}
+```
+
+It is the number alone; the unit is written after it. The value stays a JSON string. Any other
+text in braces, such as `{since_ms}`, is passed to the operation as written.
 
 With `refresh_after_days: 0` the first run's window is empty (`{since}` equals `{until}`), so
 records older than the 5 minutes before that run are never read. Set `refresh_after_days` to 1 or
@@ -474,6 +485,10 @@ earlier version holds the hash of the cut text, so every document longer than
 | `records` | optional: read each file as records, one document per record (below). Without it, each file is one document |
 
 Files that are not UTF-8 text, or are empty, are skipped. A document's key is the file's path.
+A file that cannot be read, is larger than 16 MiB or is not UTF-8 text is named in `skipped`, in
+the run's result and in `cortex.log` (`<path>: cannot be read: <why>; skipped`,
+`<path>: larger than the 16 MiB cap; skipped`, `<path>: not UTF-8 text; skipped`), with
+`records` too; an empty file is named nowhere.
 
 **`records`** has the fields:
 
@@ -487,7 +502,7 @@ Files that are not UTF-8 text, or are empty, are skipped. A document's key is th
 | `fallback_text` | optional templates tried in order only when every `text` template renders empty; the first non-empty result is the record's text |
 | `thread` | optional dotted path to the field that groups records into threads |
 | `filters` | a list, possibly empty, of `field` (a dotted path), `values` and `include`. With `include: true` only records whose field equals one of the values are read; with `include: false` those records are left out. A record is read only when it passes every filter |
-| `lookup` | optional path of a JSON file holding one object of strings, an id to a name; read against the spec file's directory as `paths` are. It maps the author and every `<@id>` in the text (below) |
+| `lookup` | optional path of a JSON file holding one object of strings, an id to a name; read against the spec file's directory as `paths` are. A lookup that is larger than 16 MiB, cannot be read or is not a regular file (a FIFO, say) fails the fetch. It maps the author and every `<@id>` in the text (below) |
 
 A record of a `MarkdownSections` file is one level-two section, with the fields `heading` (the
 heading's text) and `body` (the lines up to the next level-two heading, trimmed), so
@@ -557,8 +572,10 @@ a structured run costs 0.
 | `mapping` | how a record becomes an entity (below) |
 | `dropped` | optional: `Keep` (the default) leaves every value the source asserted earlier; `Supersede` ends each value the source no longer lists (below) |
 
-A file of a `from: files` input that cannot be read, is not JSON, or holds no array at `records`
-fails the run with `fetch-failed`, naming the file, and nothing is applied or ended. So does a
+A file of a `from: files` input that cannot be read, is larger than 16 MiB, is not JSON, or holds
+no array at `records` fails the run with `fetch-failed`, naming the file, and nothing is applied
+or ended. It is not skipped: with `dropped: Supersede`, a skipped file's records would read as no
+longer listed and their values be ended. So does a
 path under which no file matches `glob` (a file moved away, a mount not there yet), naming the
 path and the glob.
 
@@ -710,8 +727,9 @@ Values another source asserted are never ended. A `kind: connectors` source cite
 a structured source does, so `create` and `update` refuse a `dropped: Supersede` structured source
 that reads the adapter and operation a `connectors` source of the spec reads, naming both. Two
 structured sources whose identities share one prefix (the same adapter and operation, or the same
-paths and `glob`) are one source here, as they are one record set: a run of one ends the values of
-records only the other lists.
+paths and `glob`) are one record set, so a run of one would end the values of records only the
+other lists: `create` and `update` refuse such a pair when either has `dropped: Supersede`, naming
+both and the prefix. With `dropped: Keep` on both the pair is accepted.
 
 **Relations.** A relation target names a record of the same run by that record's identity (the
 target taken as an id) or, when exactly one record of the run has it, by its name or a mapped
@@ -892,6 +910,19 @@ snapshots: {keep: 3}
 | field | meaning |
 |---|---|
 | `keep` | the newest snapshots cortex named that are kept; a new snapshot removes the oldest beyond it. Files of other names in `snapshots/` are never removed. 0 takes none. Without a `snapshots` section, 3 |
+
+## `runs`
+
+Optional. How long each run's directory under `runs/` is kept (the prompts, answers and
+extraction documents of its batches; see [Operating](./operating.md#where-things-live)).
+
+```yaml
+runs: {keep_days: 14}
+```
+
+| field | meaning |
+|---|---|
+| `keep_days` | a whole number of days, at least 1; `create`, `update` and `adopt` refuse a smaller one. At the end of every run that fetched its documents (a seed run included), whatever its outcome, the run directories older than this are removed: those named as cortex names one, `<unix ms>-<source>`, timed by that name. The current run's directory is never removed, nor is any other name or a file. Without a `runs` section nothing is removed |
 
 ## `gate`
 

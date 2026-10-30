@@ -937,6 +937,9 @@
         "redaction": {
           "$ref": "#/$defs/cortex.instance.RedactionPolicy"
         },
+        "runs": {
+          "$ref": "#/$defs/cortex.instance.RunsPolicy"
+        },
         "seed": {
           "$ref": "#/$defs/cortex.instance.SeedSpec"
         },
@@ -1381,6 +1384,21 @@
       "type": "object",
       "x-ess-kind": "struct",
       "x-ess-name": "cortex.instance.RunHook"
+    },
+    "cortex.instance.RunsPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "keep_days": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "keep_days"
+      ],
+      "title": "RunsPolicy",
+      "type": "object",
+      "x-ess-kind": "struct",
+      "x-ess-name": "cortex.instance.RunsPolicy"
     },
     "cortex.instance.SchemaValueKind": {
       "enum": [
@@ -1995,8 +2013,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:355a18602cec697bba6ae17ef7fb4d07ad00ac9854d58acf4341f4c48d22897f",
-    "source_digest": "454ae2cdefe42498de39f694543a1a07725b9d4b16d1a2caf6ef6fa1a9fbb502",
+    "contract_digest": "slice-sha256/2:c436ef0e89f016470eb334c92d163301688173c3d076859071e4e8c7d63722a1",
+    "source_digest": "4ead3fc705103005794aad544e2bb37f40445fb03084d361af287304bc4b209a",
     "specification_version": "v1",
     "system": "cortex"
   }

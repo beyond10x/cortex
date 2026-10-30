@@ -160,7 +160,7 @@ impl ReaderCommand {
             ("EKR_BACKEND".into(), store.backend.name().to_string()),
             ("EKR_STORE".into(), store.store.display().to_string()),
         ];
-        // `mcp::Reader::start` also removes every ANTHROPIC_* and CLAUDE_* variable.
+        // `mcp::Reader::start` also removes each inherited ANTHROPIC_*, CLAUDE_* and EKR_* name.
         let mut remove = vec!["ANTHROPIC_API_KEY".to_string()];
         if let Some(g) = &spec.model.gateway {
             remove.push(g.token_env.clone());

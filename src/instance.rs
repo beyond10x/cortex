@@ -405,7 +405,7 @@ pub fn evidence_identities(
     if !out.status.success() {
         return Err(format!(
             "ekr snapshot failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
+            crate::ekr::said(&out.stderr)
         ));
     }
     let snapshot: serde_json::Value = serde_json::from_slice(&out.stdout)

@@ -478,7 +478,7 @@ fn sample(store: &Store, seed: i64, size: i64) -> Result<Value, String> {
     if !out.status.success() {
         return Err(format!(
             "ekr sample failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
+            crate::ekr::said(&out.stderr)
         ));
     }
     let doc: Value = serde_json::from_slice(&out.stdout)
@@ -510,7 +510,7 @@ fn fact_quality(bin: &Path, judgements: &Value) -> Result<Vec<u8>, String> {
     if !out.status.success() {
         return Err(format!(
             "ekr fact-quality failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
+            crate::ekr::said(&out.stderr)
         ));
     }
     Ok(out.stdout)
