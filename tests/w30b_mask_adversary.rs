@@ -286,7 +286,7 @@ fn a_stop_sequence_without_a_separator_is_masked_with_its_credential() {
 /// documents): no hex digit or letter of the credential before the separator is kept in clear.
 /// `%2%26` and `%a%26` keep `%2` and `%a` of the credential.
 #[test]
-#[ignore = "adversary: %2%26 keeps %2 of the credential in a key"]
+#[ignore = "story:ignored-adversary-limits: %2%26 keeps %2 of the credential in a key"]
 fn a_stop_sequence_before_an_encoded_ampersand_keeps_no_hex_digit_of_the_credential() {
     let (h, t) = (head(), tail());
     let base = "https://example.org/a?access_token=";
@@ -319,7 +319,7 @@ fn a_stop_sequence_before_an_encoded_ampersand_keeps_no_hex_digit_of_the_credent
 /// The same for a raw `&` or `#`: the key keeps nothing of the credential before it but a run of
 /// bare `%`s. `%a&` and `%2#` keep `%a` and `%2`.
 #[test]
-#[ignore = "adversary: %2& keeps %2 of the credential in a key (also at 7a94960c)"]
+#[ignore = "story:ignored-adversary-limits: %2& keeps %2 of the credential in a key (also at 7a94960c)"]
 fn a_stop_sequence_before_a_raw_separator_keeps_no_hex_digit_of_the_credential() {
     let (h, t) = (head(), tail());
     let base = "https://example.org/a?access_token=";
@@ -349,7 +349,7 @@ fn a_stop_sequence_before_a_raw_separator_keeps_no_hex_digit_of_the_credential()
 /// A user name with a raw `@` and a password holding `,` or `;`: the second `url-password` rule
 /// refuses the password, the first refuses the user name, and the password is kept in clear.
 #[test]
-#[ignore = "adversary: user@host:<pw with , or ;>@host keeps the password in clear"]
+#[ignore = "story:credential-key-spellings: user@host:<pw with , or ;>@host keeps the password in clear"]
 fn a_password_with_a_comma_after_a_user_name_with_an_at_sign_is_masked() {
     let (h, t) = (head(), tail());
     for sep in [",", ";"] {
@@ -370,7 +370,7 @@ fn a_password_with_a_comma_after_a_user_name_with_an_at_sign_is_masked() {
 /// A URL with a user name and a port, followed by a quote and a quoted address, as a list in code
 /// or an SQL row writes it. The second `url-password` rule reads `587','admin` as a password.
 #[test]
-#[ignore = "adversary: (smtp://ops@mail.example:587)admin@example.org masks 587)admin"]
+#[ignore = "story:ignored-adversary-limits: (smtp://ops@mail.example:587)admin@example.org masks 587)admin"]
 fn a_quoted_url_with_a_user_and_a_port_before_a_quoted_address_is_kept() {
     for kept in [
         "('smtp://ops@mail.example:587','admin@example.org')",
@@ -444,7 +444,7 @@ fn access_key_words_that_are_no_credential_are_kept() {
 /// framework's `SECRET_KEY`: `access_key` masks the key id, which is no secret, and the secret
 /// beside it is kept in clear, because `secret` must be the last word of a name.
 #[test]
-#[ignore = "adversary: secret_key = <secret> is kept in clear (also at 7a94960c)"]
+#[ignore = "story:credential-key-spellings: secret_key = <secret> is kept in clear (also at 7a94960c)"]
 fn the_secret_half_of_an_access_key_pair_is_masked() {
     let s = head() + &tail();
     for line in [
