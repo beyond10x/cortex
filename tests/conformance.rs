@@ -77,6 +77,7 @@ fn placeholder_spec() -> m::InstanceSpec {
         store: None,
         redaction: None,
         snapshots: None,
+        runs: None,
         gate: None,
         monitoring: None,
         ask: None,

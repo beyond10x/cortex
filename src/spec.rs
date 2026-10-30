@@ -339,6 +339,9 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
     if spec.model.timeout_s <= 0 {
         return Err("model.timeout_s must be above 0".into());
     }
+    if spec.runs.as_ref().is_some_and(|r| r.keep_days < 1) {
+        return Err("runs.keep_days must be at least 1".into());
+    }
     for (i, check) in spec.gate.iter().flat_map(|g| g.checks.iter()).enumerate() {
         for (bound, value) in [("min", &check.min), ("max", &check.max)] {
             if let Some(value) = value {

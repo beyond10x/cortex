@@ -40,8 +40,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "c62105bd24d5d4a0d650b895b9c576a8e7066038a9961c9f0fcba15ca1d8b9f3",
-    "contract_digest": "slice-sha256/2:0a63c0ea02bdbaca553d4061091c55a02c85ae4f8d4266c9f7038128fa4e1e09",
+    "source_digest": "bfb3801672012a0f1f19217433e6c4c63b43b048e9c28796164ca3be9419be2b",
+    "contract_digest": "slice-sha256/2:b05606b6d0d35989aabd4259c9b2e0a798f4b901fc66f751f69ea509cab81601",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -707,6 +707,9 @@
         "snapshots": {
           "$ref": "#/$defs/cortex.instance.SnapshotPolicy"
         },
+        "runs": {
+          "$ref": "#/$defs/cortex.instance.RunsPolicy"
+        },
         "gate": {
           "$ref": "#/$defs/cortex.instance.RunGate"
         },
@@ -1137,6 +1140,21 @@
       },
       "required": [
         "command"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.RunsPolicy": {
+      "title": "RunsPolicy",
+      "x-ess-name": "cortex.instance.RunsPolicy",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "keep_days": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "keep_days"
       ],
       "additionalProperties": false
     },

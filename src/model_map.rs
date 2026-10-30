@@ -137,6 +137,12 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
                 keep: int(&p.keep, "snapshots.keep")?,
             }),
         },
+        runs: match &spec.runs {
+            EssPresence::Absent => None,
+            EssPresence::Present(p) => Some(m::RunsPolicy {
+                keep_days: int(&p.keep_days, "runs.keep_days")?,
+            }),
+        },
         gate: opt(&spec.gate).map(|g| m::RunGate {
             checks: g
                 .checks

@@ -743,6 +743,18 @@ types:
     fields:
       - {name: keep, type: Integer}
 
+  # How long a run's directory under `runs/` is kept. UNMAPPED: at the end of every run that
+  # fetched its documents (a source run or a seed run, whatever its outcome), cortex removes each
+  # directory under `runs/` whose name is one cortex gives a run, `<unix ms>-<source>`, and whose
+  # time is more than `keep_days` days before that run's start; the current run's directory,
+  # named after it, is never one. A name cortex did not give, and a file, are never removed. Without a
+  # `runs` section nothing is removed. `create`, `update` and `adopt` refuse a `keep_days` below
+  # 1. ESS has no rule on files or ranges; tests/runs_retention.rs holds it.
+  - name: cortex.instance.RunsPolicy
+    kind: struct
+    fields:
+      - {name: keep_days, type: Integer}
+
   - name: cortex.instance.EkrPin
     kind: struct
     fields:
@@ -849,6 +861,7 @@ types:
       - {name: store, type: Optional<cortex.instance.StoreSpec>}
       - {name: redaction, type: Optional<cortex.instance.RedactionPolicy>}
       - {name: snapshots, type: Optional<cortex.instance.SnapshotPolicy>}
+      - {name: runs, type: Optional<cortex.instance.RunsPolicy>}
       - {name: gate, type: Optional<cortex.instance.RunGate>}
       - {name: monitoring, type: Optional<cortex.instance.MonitoringSpec>}
       - {name: ask, type: Optional<cortex.ask.AskSpec>}

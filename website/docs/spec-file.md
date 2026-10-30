@@ -43,6 +43,7 @@ serve: {}
 | `store` | optional: the store's backend, SQLite or PostgreSQL ([`store`](#store)) |
 | `redaction` | optional: what is kept from the model, and what refuses a run ([`redaction`](#redaction)) |
 | `snapshots` | optional: how many snapshots of a `sqlite` store are kept ([`snapshots`](#snapshots)) |
+| `runs` | optional: how many days each run's directory under `runs/` is kept ([`runs`](#runs)) |
 | `gate` | optional: the checks a run is held to ([`gate`](#gate)) |
 | `monitoring` | optional: what a run reports besides its printed line ([`monitoring`](#monitoring)) |
 | `ask` | optional: the ask service's settings ([Ask service](./ask-service.md#the-ask-section)) |
@@ -907,6 +908,19 @@ snapshots: {keep: 3}
 | field | meaning |
 |---|---|
 | `keep` | the newest snapshots cortex named that are kept; a new snapshot removes the oldest beyond it. Files of other names in `snapshots/` are never removed. 0 takes none. Without a `snapshots` section, 3 |
+
+## `runs`
+
+Optional. How long each run's directory under `runs/` is kept (the prompts, answers and
+extraction documents of its batches; see [Operating](./operating.md#where-things-live)).
+
+```yaml
+runs: {keep_days: 14}
+```
+
+| field | meaning |
+|---|---|
+| `keep_days` | a whole number of days, at least 1; `create`, `update` and `adopt` refuse a smaller one. At the end of every run that fetched its documents (a seed run included), whatever its outcome, the run directories older than this are removed: those named as cortex names one, `<unix ms>-<source>`, timed by that name. The current run's directory is never removed, nor is any other name or a file. Without a `runs` section nothing is removed |
 
 ## `gate`
 

@@ -1,12 +1,12 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "c62105bd24d5d4a0d650b895b9c576a8e7066038a9961c9f0fcba15ca1d8b9f3",
+  "source_digest": "bfb3801672012a0f1f19217433e6c4c63b43b048e9c28796164ca3be9419be2b",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:c9a7c95ea6f9e7d92df78390768479145c780efc69b2d61aca8bcb1da6deb7c7",
-    "projection_digest": "18ea34a13695f6f052b1ab9660fc4a525ab46aaeaf35abae09e397a1498a9008"
+    "contract_digest": "slice-sha256/2:8946c1878e79f2d0ca89127cb3f95b2421cd2699cabf43e436dcf25f3ab71ea4",
+    "projection_digest": "d548bf018362bd5a28a1f3bc519ba2ea7d69f943f1fa48b73b6a1b50da18789c"
   },
   "generator_version": "0.60.0",
   "target": "rust",
@@ -65,6 +65,7 @@
     "cortex.instance.RelationMapping": "CortexInstanceRelationMapping",
     "cortex.instance.RunGate": "CortexInstanceRunGate",
     "cortex.instance.RunHook": "CortexInstanceRunHook",
+    "cortex.instance.RunsPolicy": "CortexInstanceRunsPolicy",
     "cortex.instance.SchemaValueKind": "CortexInstanceSchemaValueKind",
     "cortex.instance.SearchInput": "CortexInstanceSearchInput",
     "cortex.instance.SearchPolicy": "CortexInstanceSearchPolicy",
@@ -851,6 +852,21 @@
     },
     {
       "pointer": "/$defs/cortex.instance.RunHook/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunsPolicy/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunsPolicy/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunsPolicy/x-ess-name",
       "rule": "x-ess-name",
       "detail": "model identity and wire mapping retained in source.schema.json"
     },
@@ -1723,6 +1739,16 @@
     },
     {
       "pointer": "/$defs/cortex.instance.RunHook/properties/timeout_s",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunsPolicy/properties/keep_days",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunsPolicy/properties/keep_days",
       "rule": "rust_exact_numbers",
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
     },

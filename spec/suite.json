@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "c62105bd24d5d4a0d650b895b9c576a8e7066038a9961c9f0fcba15ca1d8b9f3",
-    "contract_digest": "1ad5072384a73590b57279a68f9f5499ad318a5cce767e782321013bc5c8c638",
+    "spec_digest": "bfb3801672012a0f1f19217433e6c4c63b43b048e9c28796164ca3be9419be2b",
+    "contract_digest": "e8f990361d3a68de5ea0ace7aaf0aedb85ba3117e1562dbe7f36c7cb083fda88",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
@@ -2407,6 +2407,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -2962,6 +2965,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -4120,6 +4126,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -4542,6 +4551,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 2.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed-1",
@@ -4813,6 +4825,9 @@
                   "rare_limit": 3.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 3.0
                 },
                 "seed": {
                   "documents": [],
@@ -5547,6 +5562,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1048595.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed-1048594",
@@ -6168,6 +6186,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -6560,6 +6581,9 @@
                   "rare_limit": 2.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 2.0
                 },
                 "seed": {
                   "documents": [],
@@ -7290,6 +7314,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -7791,6 +7818,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -8213,6 +8243,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 2.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed-1",
@@ -8484,6 +8517,9 @@
                   "rare_limit": 3.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 3.0
                 },
                 "seed": {
                   "documents": [],
@@ -8954,6 +8990,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -11025,6 +11064,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -11518,6 +11560,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -11872,6 +11917,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.SchemaValueKind"
         },
         {
@@ -12187,6 +12236,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -12487,6 +12539,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunHook"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
         },
         {
           "kind": "type",
@@ -12794,6 +12850,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1048595.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed-1048594",
@@ -12997,6 +13056,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -13394,6 +13456,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -13694,6 +13759,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunHook"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
         },
         {
           "kind": "type",
@@ -14008,6 +14077,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -14308,6 +14380,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunHook"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
         },
         {
           "kind": "type",
@@ -14622,6 +14698,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -14922,6 +15001,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunHook"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
         },
         {
           "kind": "type",
@@ -15228,6 +15311,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -17242,6 +17328,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -18521,6 +18610,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -18817,6 +18909,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunHook"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
         },
         {
           "kind": "type",
@@ -19123,6 +19219,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -19470,6 +19569,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.SchemaValueKind"
         },
         {
@@ -19785,6 +19888,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1048595.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed-1048594",
@@ -19984,6 +20090,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -20233,6 +20342,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1048596.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed-1048595",
@@ -20432,6 +20544,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -20832,6 +20947,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -21178,6 +21296,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.SchemaValueKind"
         },
         {
@@ -21493,6 +21615,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -21789,6 +21914,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunHook"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
         },
         {
           "kind": "type",
@@ -22095,6 +22224,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -22973,6 +23105,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -23471,6 +23606,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -24178,6 +24316,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -25182,6 +25323,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -26210,6 +26354,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -26714,6 +26861,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -27746,6 +27896,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -28326,6 +28479,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -30016,6 +30172,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -30750,6 +30909,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -32225,6 +32387,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -32688,6 +32853,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -34009,6 +34177,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -34556,6 +34727,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -35105,6 +35279,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -35652,6 +35829,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -36337,6 +36517,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -36885,6 +37068,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -37432,6 +37618,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -38041,6 +38230,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -38748,6 +38940,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -39552,6 +39747,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -40185,6 +40383,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -40732,6 +40933,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -41281,6 +41485,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -41543,6 +41750,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -41957,6 +42167,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -42287,6 +42500,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -42676,6 +42892,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -43006,6 +43225,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -43338,6 +43560,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -43668,6 +43893,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -44128,6 +44356,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -44459,6 +44690,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -44789,6 +45023,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -45249,6 +45486,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -45579,6 +45819,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -45925,6 +46168,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -46256,6 +46502,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -46586,6 +46835,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -47283,6 +47535,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -47863,6 +48118,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -48502,6 +48760,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -49128,6 +49389,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -49490,6 +49754,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -49733,6 +50000,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -49919,6 +50189,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -50245,6 +50518,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunHook"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
         },
         {
           "kind": "type",
@@ -50578,6 +50855,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -50753,6 +51033,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -51050,6 +51333,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunHook"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
         },
         {
           "kind": "type",
@@ -51368,6 +51655,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -51611,6 +51901,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 1.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed",
@@ -51779,6 +52072,9 @@
                   "rare_limit": 2.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 2.0
                 },
                 "seed": {
                   "documents": [],
@@ -52104,6 +52400,10 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.SchemaValueKind"
         },
         {
@@ -52423,6 +52723,9 @@
                   "refuse_if_left": [],
                   "rules": []
                 },
+                "runs": {
+                  "keep_days": 2.0
+                },
                 "seed": {
                   "documents": [],
                   "ekr_seed": "spec.seed.ekr_seed-1",
@@ -52591,6 +52894,9 @@
                   "rare_limit": 1.0,
                   "refuse_if_left": [],
                   "rules": []
+                },
+                "runs": {
+                  "keep_days": 1.0
                 },
                 "seed": {
                   "documents": [],
@@ -52961,6 +53267,10 @@
         {
           "kind": "type",
           "name": "cortex.instance.RunHook"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
         },
         {
           "kind": "type",
