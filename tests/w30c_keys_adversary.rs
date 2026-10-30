@@ -485,3 +485,294 @@ fn runs_of_the_new_shapes_parts_take_linear_time() {
     }
     assert!(slow.is_empty(), "{slow:#?}");
 }
+
+// ---- pass 2: the fix at dc3e89db -------------------------------------------------------------
+
+/// `DB_PASS`, assembled.
+fn db_pass() -> String {
+    cat(&["DB_PA", "SS"])
+}
+
+/// Spellings 6aaa4800 masked, among them a bare `:`, an encoded `:` and a quoted name: the second
+/// rule's "no bare `:`" leaves each to the 0.7.1 rule, which still masks it as 0.7.1 did.
+#[test]
+fn every_spelling_6aaa4800_masked_is_masked_as_it_was() {
+    let p = pw();
+    let s = v();
+    let m = "[masked:secret-assignment]";
+    let mut lost = Vec::new();
+    for (input, want) in [
+        (format!("{p}:{s}"), format!("{p}:{m}")),
+        (format!("db_{p}:{s}"), format!("db_{p}:{m}")),
+        (format!("db-{p}:{s}"), format!("db-{p}:{m}")),
+        (format!("client-secret:{s}"), format!("client-secret:{m}")),
+        (format!("api_key:{s}"), format!("api_key:{m}")),
+        (format!("secret%3A{s}"), format!("secret%3A{m}")),
+        (
+            format!("q=%22client_secret%22%3A{s}"),
+            format!("q=%22client_secret%22%3A{m}"),
+        ),
+        (format!("\"{p}\":\"{s}\""), format!("\"{p}\":{m}\"")),
+        (format!("'{p}' => '{s}'"), format!("'{p}' => {m}'")),
+        (format!("{p} = {s}"), format!("{p} = {m}")),
+    ] {
+        if mask(&input) != (want.clone(), 1) {
+            lost.push(format!("{input} -> {:?}, want {want}", mask(&input)));
+        }
+    }
+    assert!(lost.is_empty(), "{lost:#?}");
+}
+
+/// Document keys and structured prefix parts with the new names and no value after them (a docs
+/// page, a search, a glob, an operation followed by `:` and an id's digest): masked as at
+/// 6aaa4800, that is not at all. The probe of this pass compared 4,352 such inputs with a copy of
+/// `mask.rs` at 6aaa4800 and found a difference only where a value follows `=`, `: ` or a flag.
+#[test]
+fn plausible_keys_and_prefix_parts_keep_their_6aaa4800_form() {
+    let p = pw();
+    let names = [
+        "secret_key".to_string(),
+        "SECRET_KEY".into(),
+        format!("PG{}", p.to_uppercase()),
+        db_pass(),
+        format!("one{p}"),
+        "get_secret_key".into(),
+        format!("_{p}"),
+        "render_pass".into(),
+        "secret-key".into(),
+    ];
+    let mut changed = Vec::new();
+    for n in &names {
+        for key in [
+            format!("https://example.org/docs/{n}.html"),
+            format!("https://example.org/search?q={n}&page=2"),
+            format!("https://example.org/wiki/{n}:Talk_page"),
+            format!("https://example.org/issues?q=label%3A{n}+is%3Aopen"),
+            format!("jira:OPS-1:{n}:comment-100"),
+            format!("docs/{n}/README.md"),
+        ] {
+            if mask_key(&key) != (key.clone(), 0) {
+                changed.push(format!("key {key} -> {:?}", mask_key(&key)));
+            }
+        }
+        for part in [
+            format!("{n}:0000000000000000"),
+            format!("vault.{n}:0000000000000000"),
+            format!("**/*{n}*:0000000000000000"),
+            format!("cloud:projects.list/{n}:P-1:k1"),
+        ] {
+            if mask(&part).1 != 0 {
+                changed.push(format!("part {part} -> {:?}", mask(&part)));
+            }
+        }
+    }
+    assert!(changed.is_empty(), "{changed:#?}");
+}
+
+/// `DB_PASS` with a `: ` or a quoted name, as a Compose `environment:` map and JSON write it:
+/// masked at e66d0af8, left in clear since `ENV_PASS` reads `=` only. Each holds a space or a
+/// quote after the `:`, so no record identity reads so.
+#[test]
+#[ignore = "adversary: DB_PASS in YAML, JSON and escaped JSON is left in clear since dc3e89db"]
+fn db_pass_in_yaml_and_json_is_masked() {
+    let n = db_pass();
+    let s = v();
+    let mut leaks = Vec::new();
+    for text in [
+        format!("    {n}: {s}"),
+        format!("    {n}: \"{s}\""),
+        format!("{{\"{n}\": \"{s}\"}}"),
+        format!("{{\"{n}\":\"{s}\"}}"),
+        format!("{{\\\"{n}\\\":\\\"{s}\\\"}}"),
+    ] {
+        let (out, _) = mask(&text);
+        if keeps_a_part(&out, &s) {
+            leaks.push(out);
+        }
+    }
+    assert!(leaks.is_empty(), "{leaks:#?}");
+}
+
+/// A metavar in brackets, as argparse writes usage (`[--password PASSWORD]`), and a type in
+/// parentheses, as a CLI reference writes it (`--secret-access-key (string)`): masked since
+/// e66d0af8, because `]` and `(` make the word neither a metavar nor prose.
+#[test]
+#[ignore = "adversary: argparse usage `[--password PASSWORD]` and `--api-key (string)` are masked"]
+fn bracketed_metavars_and_typed_flags_in_help_are_kept() {
+    let p = pw();
+    let up = p.to_uppercase();
+    let mut changed = Vec::new();
+    for text in [
+        format!("usage: prog [-h] [--{p} {up}] [--api-key API_KEY]"),
+        format!("usage: prog [--db-{p} DB_{up}]"),
+        "  --secret-access-key (string) The secret key.".to_string(),
+        "  --api-key (string) The API key to use.".to_string(),
+        format!("  --{p} [{p}]  prompt when empty"),
+    ] {
+        let (out, n) = mask(&text);
+        if n != 0 {
+            changed.push(format!("{text} -> {out}"));
+        }
+    }
+    assert!(changed.is_empty(), "{changed:#?}");
+}
+
+/// A capitalised word after a flag in a heading or a sentence (`### The --password Option`):
+/// neither lower-case prose nor an upper-case metavar, so it is masked.
+#[test]
+#[ignore = "adversary: a title-case word after a flag in a heading is masked"]
+fn a_title_case_word_after_a_flag_is_prose() {
+    let p = pw();
+    let mut changed = Vec::new();
+    for text in [
+        format!("### The --{p} Option"),
+        "## --api-key Parameter".to_string(),
+        format!("Pass --{p} Interactively to be prompted."),
+    ] {
+        let (out, n) = mask(&text);
+        if n != 0 {
+            changed.push(format!("{text} -> {out}"));
+        }
+    }
+    assert!(changed.is_empty(), "{changed:#?}");
+}
+
+/// A variable in double quotes after a flag, as a shell script writes it
+/// (`--password "$PGPASSWORD"`, `"${DB_PASSWORD}"`): `$X` and `${X}` are kept, the quoted form,
+/// the one shellcheck asks for, is masked because a quoted value is masked whole.
+#[test]
+#[ignore = "adversary: a quoted $VAR after a flag is masked"]
+fn a_quoted_variable_after_a_flag_is_kept() {
+    let p = pw();
+    let up = p.to_uppercase();
+    let mut changed = Vec::new();
+    for text in [
+        format!("psql --{p} \"$PG{up}\" -h db"),
+        format!("app --db-{p} \"${{DB_{up}}}\" --port 5432"),
+    ] {
+        let (out, n) = mask(&text);
+        if n != 0 {
+            changed.push(format!("{text} -> {out}"));
+        }
+    }
+    assert!(changed.is_empty(), "{changed:#?}");
+}
+
+/// A quoted flag value followed by `.`, `)` or more text: the quotes are masked with the value,
+/// so the token is left glued to what follows, which the next mask reads as a value not yet
+/// masked and masks again. `mask.rs` promises masking is idempotent, and `SeenState::load` drops
+/// a stored key whose `mask_key` count is not 0.
+#[test]
+#[ignore = "adversary: a quoted flag value before punctuation is masked again by a second mask"]
+fn masking_a_quoted_flag_value_before_punctuation_twice_changes_nothing_more() {
+    let p = pw();
+    let s = v();
+    let mut broken = Vec::new();
+    for text in [
+        format!("Run psql --db-{p} \"{s}\"."),
+        format!("run([\"--db-{p} '{s}'\"]),"),
+        format!("app --db-{p} \"{s}\"x"),
+    ] {
+        for (what, f) in [
+            ("mask", mask as fn(&str) -> (String, usize)),
+            ("mask_key", mask_key),
+        ] {
+            let (once, _) = f(&text);
+            let twice = f(&once);
+            if twice != (once.clone(), 0) {
+                broken.push(format!("{what} {text:?}: {once:?} -> {twice:?}"));
+            }
+        }
+    }
+    assert!(broken.is_empty(), "{broken:#?}");
+}
+
+/// A quoted flag value written inside a JSON string (`"psql --db-password \"…\""`, as a tool call
+/// or a CI log in JSON holds a command) and a quoted value after `--flag=`: the first is left in
+/// clear, the second keeps every word after the first. The fix masks `--db-password "…"` whole.
+#[test]
+#[ignore = "adversary: an escaped or `=`-joined quoted flag value is left (partly) in clear"]
+fn a_quoted_flag_value_escaped_or_after_equals_is_masked_whole() {
+    let p = pw();
+    let s = v();
+    let words = cat(&["Tr0ub4dor ", "horse9 ", "battery7"]);
+    let mut leaks = Vec::new();
+    for (text, value) in [
+        (
+            format!("{{\"cmd\": \"psql --db-{p} \\\"{s}\\\" -h db\"}}"),
+            s.clone(),
+        ),
+        (format!("psql --db-{p}=\"{words}\" -h db"), words.clone()),
+    ] {
+        let (out, _) = mask(&text);
+        if keeps_a_part(&out, &value) {
+            leaks.push(out);
+        }
+    }
+    assert!(leaks.is_empty(), "{leaks:#?}");
+}
+
+/// The two assignment rules over one value, and a flag, an element and an assignment nested: the
+/// value is masked once, the name and markup kept, and a second mask changes nothing.
+#[test]
+fn the_two_assignment_rules_mask_one_value_once() {
+    let p = pw();
+    let s = v();
+    let m = "[masked:secret-assignment]";
+    for (input, want) in [
+        (format!("{p}: {s}"), format!("{p}: {m}")),
+        (format!("\"{p}\": \"{s}\""), format!("\"{p}\": {m}\"")),
+        (format!("**{p}:** {s}"), format!("**{p}:** {m}")),
+        (format!("`{p}`: {s}"), format!("`{p}`: {m}")),
+        (format!("SECRET_KEY = {s}"), format!("SECRET_KEY = {m}")),
+    ] {
+        assert_eq!(mask(&input), (want.clone(), 1), "{input}");
+        assert_eq!(mask(&want), (want.clone(), 0), "{want}");
+    }
+    for input in [
+        format!("--{p} secret_key={s}"),
+        format!("<{p}>--{p} {s}</{p}>"),
+        format!("--{p} <{p}>{s}</{p}>"),
+    ] {
+        let (once, n) = mask(&input);
+        assert!(n >= 1 && !keeps_a_part(&once, &s), "{input} -> {once}");
+        assert_eq!(mask(&once), (once.clone(), 0), "{input}");
+    }
+}
+
+/// The fix's new parts at 256 KiB and 1 MiB: a CDATA section never closed, an element closed by
+/// another tag, a namespaced element with attributes, an unterminated quoted flag value, a name
+/// with a bare `:`, an upper-case `_PASS` chain. Masking and the policy take linear time.
+#[test]
+fn runs_of_the_fix_parts_take_linear_time() {
+    let p = pw();
+    let units: Vec<(&str, String)> = vec![
+        ("cdata-open", format!("<{p}><![CDATA[ab")),
+        ("other-close", format!("<{p}>abcdefgh</other>")),
+        ("ns-attr", format!("<ns:{p} a=\"b\" >x</ns:{p} >")),
+        ("quote-open", format!("--{p} \"abcdefgh ")),
+        ("single-quote", format!("--{p} 'ab ")),
+        ("bare-colon", "SECRET_KEY:x ".into()),
+        ("upper-chain", "A_".into()),
+        ("pass-env", format!("{} ", db_pass())),
+        ("title-word", format!("x --{p} Xabcdefgh.")),
+    ];
+    let r = policy();
+    let mut slow = Vec::new();
+    for (label, unit) in &units {
+        let small = unit.repeat((1 << 18) / unit.len());
+        let large = unit.repeat((1 << 20) / unit.len());
+        for (what, f) in [
+            ("mask", &(|t: &str| drop(mask(t))) as &dyn Fn(&str)),
+            ("mask_key", &|t: &str| drop(mask_key(t))),
+            ("policy", &|t: &str| drop(policy_only(&r, t))),
+        ] {
+            let t_small = fastest(|| f(&small));
+            let t_large = fastest(|| f(&large));
+            if t_large > t_small * 8 && t_large > Duration::from_millis(200) {
+                slow.push(format!("{what} {label}: {t_small:?} -> {t_large:?}"));
+            }
+        }
+    }
+    assert!(slow.is_empty(), "{slow:#?}");
+}
