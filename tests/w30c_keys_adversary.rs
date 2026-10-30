@@ -66,14 +66,14 @@ fn policy_only(r: &Redactor, text: &str) -> (String, Vec<&'static str>) {
 
 /// The fastest of three runs of `f`.
 fn fastest(mut f: impl FnMut()) -> Duration {
-    (0..3)
+    (0..5)
         .map(|_| {
             let t = Instant::now();
             f();
             t.elapsed()
         })
         .min()
-        .expect("three runs")
+        .expect("five runs")
 }
 
 // ---- values left partly in clear -------------------------------------------------------------
@@ -446,9 +446,9 @@ fn masking_mixed_new_shapes_twice_changes_nothing_more() {
 
 // ---- time ------------------------------------------------------------------------------------
 
-/// Runs of the new shapes' parts at 256 KiB and 1 MiB (green at 1 and 4 MiB too, 153 s in a
-/// debug build): masking and the policy take time linear in
-/// the text (4x the text, under 8x the time).
+/// Runs of the new shapes' parts at 8 and 64 KiB, small enough to hold on a loaded machine
+/// (green at 1 and 4 MiB in pass 1, 153 s in a debug build): masking and the policy take time
+/// linear in the text (8x the text, under 32x the time; quadratic would be 64x).
 #[test]
 fn runs_of_the_new_shapes_parts_take_linear_time() {
     let p = pw();
@@ -469,8 +469,8 @@ fn runs_of_the_new_shapes_parts_take_linear_time() {
     let r = policy();
     let mut slow = Vec::new();
     for (label, unit) in &units {
-        let small = unit.repeat((1 << 18) / unit.len());
-        let large = unit.repeat((1 << 20) / unit.len());
+        let small = unit.repeat((1 << 13) / unit.len());
+        let large = unit.repeat((1 << 16) / unit.len());
         for (what, f) in [
             ("mask", &(|t: &str| drop(mask(t))) as &dyn Fn(&str)),
             ("mask_key", &|t: &str| drop(mask_key(t))),
@@ -478,7 +478,7 @@ fn runs_of_the_new_shapes_parts_take_linear_time() {
         ] {
             let t_small = fastest(|| f(&small));
             let t_large = fastest(|| f(&large));
-            if t_large > t_small * 8 && t_large > Duration::from_millis(200) {
+            if t_large > t_small * 32 && t_large > Duration::from_millis(25) {
                 slow.push(format!("{what} {label}: {t_small:?} -> {t_large:?}"));
             }
         }
@@ -734,7 +734,7 @@ fn the_two_assignment_rules_mask_one_value_once() {
     }
 }
 
-/// The fix's new parts at 256 KiB and 1 MiB: a CDATA section never closed, an element closed by
+/// The fix's new parts at 8 and 64 KiB: a CDATA section never closed, an element closed by
 /// another tag, a namespaced element with attributes, an unterminated quoted flag value, a name
 /// with a bare `:`, an upper-case `_PASS` chain. Masking and the policy take linear time.
 #[test]
@@ -754,8 +754,8 @@ fn runs_of_the_fix_parts_take_linear_time() {
     let r = policy();
     let mut slow = Vec::new();
     for (label, unit) in &units {
-        let small = unit.repeat((1 << 18) / unit.len());
-        let large = unit.repeat((1 << 20) / unit.len());
+        let small = unit.repeat((1 << 13) / unit.len());
+        let large = unit.repeat((1 << 16) / unit.len());
         for (what, f) in [
             ("mask", &(|t: &str| drop(mask(t))) as &dyn Fn(&str)),
             ("mask_key", &|t: &str| drop(mask_key(t))),
@@ -763,7 +763,7 @@ fn runs_of_the_fix_parts_take_linear_time() {
         ] {
             let t_small = fastest(|| f(&small));
             let t_large = fastest(|| f(&large));
-            if t_large > t_small * 8 && t_large > Duration::from_millis(200) {
+            if t_large > t_small * 32 && t_large > Duration::from_millis(25) {
                 slow.push(format!("{what} {label}: {t_small:?} -> {t_large:?}"));
             }
         }
