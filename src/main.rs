@@ -2471,6 +2471,7 @@ fn run_source(
                 "cost_usd": source_ran.cost_usd.map(|c| c.0),
                 "facts_refused": report.facts_refused,
                 "parts_rejected": report.parts_rejected,
+                "facts_reapplied": report.facts_reapplied,
                 "masked": report.masked,
                 "stopped": report.stopped,
             });

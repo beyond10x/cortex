@@ -54,6 +54,22 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   on standard input, so no record field or cursor is in the process list, and each call is one
   `invoke`, without a description read before it. A `result` that is not a JSON object fails the
   call naming its JSON type.
+- A model call that failed or was cut off at the output limit counted in the day's spend but not
+  against the run's `budget_usd` or in the run's `cost_usd`, so a split batch was given more budget
+  than remained and the run reported, and a gate's `cost_usd` check read, less than it spent. Every
+  costed answer now counts in all three. A run with a failed call that carried no cost now reports
+  `cost_usd` null, as `cortex quality`, `cortex schema` and `cortex eval` do.
+- A model call that had already finished when the run was sent SIGTERM was dropped as ended, and
+  what it cost counted nowhere. Its answer is now read: its cost and tokens count in the day's
+  spend and the run's, and the run still ends `terminated`.
+- A fact the model marked `replaces: true` with no current value to replace was rejected by EKR
+  (`replacement-without-active-assertion`) and its value lost, its document marked seen. cortex now
+  applies such a fact again in the same batch without `replaces`, so the value is stored as a plain
+  assertion; it is not counted in `parts_rejected` or listed in `rejected`, and the run reports it
+  in `facts_reapplied` (in the `ran` detail, and in the `cortex.log` line when not 0). Several
+  such facts of one entity and property are applied in their documents' time order, the later
+  ones still replacing, so one value stays current. A re-apply the store fails stops the run and
+  leaves the documents it carried unseen, so a later run extracts them again.
 
 ## 0.6.1 — 2026-10-17
 

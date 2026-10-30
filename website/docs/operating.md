@@ -186,10 +186,16 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    that fact `replaces: true`, and EKR supersedes every active value of the same entity and
    property from the new one's time on, so one value stays current and the older one is kept,
    superseded by it. EKR rejects such a fact when there is no current value to replace
-   (`replacement-without-active-assertion`), and the value is then not stored; and when the
-   current value is dated later than the replacement (`invalid-supersession`), as when an older
-   document is read after a newer one, and the newer value then stays current. Either rejection is
-   listed in the run's `rejected` and the rest of the document applies.
+   (`replacement-without-active-assertion`); cortex then applies that fact again in the same batch
+   without `replaces`, so its value is stored as a plain assertion, and counts it in the run's
+   `facts_reapplied` instead of `rejected`. When the batch holds several such facts for one entity
+   and property, the earliest (by its document's time) is stored that way and each later one is
+   applied after it, still replacing, so one value stays current here too. If that second apply
+   fails in the store, the run stops after the batch and the documents whose values it carried
+   are not marked seen, so a later run extracts them again. EKR also rejects it when the current value is dated
+   later than the replacement (`invalid-supersession`), as when an older document is read after a
+   newer one, and the newer value then stays current; that rejection is listed in the run's
+   `rejected` and the rest of the document applies.
 6. **Merge.** A fact citing an evidence id cortex did not issue for that batch is refused; cortex
    adds the evidence items itself and records each web page as a `WebPage` node.
 7. **Apply** the document with `ekr apply-extraction`, then record the batch's documents as seen.

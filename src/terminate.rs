@@ -55,7 +55,31 @@ pub enum Waited {
 /// closes the pipe; its exit status and stderr say why, so a broken pipe is not the error
 /// reported. `name` names the child in a failure.
 pub fn wait(child: &mut std::process::Child, input: Option<&[u8]>, name: &str) -> Waited {
+    wait_with(child, input, name, false, requested).0
+}
+
+/// [`wait`], except that a child found already exited when the run's SIGTERM is seen is read,
+/// not dropped: what it started is ended ([`end`]), its output comes back as [`Waited::Done`],
+/// and `true` says the run was sent SIGTERM as it finished, so the caller stops. A model call
+/// that had finished keeps what its answer says it cost.
+pub fn wait_finished(
+    child: &mut std::process::Child,
+    input: Option<&[u8]>,
+    name: &str,
+) -> (Waited, bool) {
+    wait_with(child, input, name, true, requested)
+}
+
+/// [`wait`] and [`wait_finished`], with `requested` read for the run's SIGTERM.
+fn wait_with(
+    child: &mut std::process::Child,
+    input: Option<&[u8]>,
+    name: &str,
+    keep_finished: bool,
+    requested: impl Fn() -> bool,
+) -> (Waited, bool) {
     use std::io::{Read, Write};
+    let mut seen = false;
     let writer = input.map(|input| {
         let mut stdin = child.stdin.take().expect("piped stdin");
         let bytes = input.to_vec();
@@ -85,36 +109,45 @@ pub fn wait(child: &mut std::process::Child, input: Option<&[u8]>, name: &str) -
     let status = loop {
         match child.try_wait() {
             // A stop of the whole unit signals the child too: one that ended after the run was
-            // sent SIGTERM ended because of it, whatever its status says.
-            Ok(Some(_)) if requested() => {
+            // sent SIGTERM ended because of it, whatever its status says. Unless `keep_finished`:
+            // then what it wrote is read, and the caller told the run was sent SIGTERM.
+            Ok(Some(status)) if requested() => {
                 end(child);
-                return Waited::Terminated;
+                if !keep_finished {
+                    return (Waited::Terminated, false);
+                }
+                seen = true;
+                break status;
             }
             Ok(Some(status)) => break status,
             Ok(None) if requested() => {
                 end(child);
-                return Waited::Terminated;
+                return (Waited::Terminated, false);
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(20)),
             Err(e) => {
                 end(child);
-                return Waited::Failed(format!("{name} did not finish: {e}"));
+                return (Waited::Failed(format!("{name} did not finish: {e}")), false);
             }
         }
     };
     if let Some(writer) = writer {
         match writer.join() {
             Ok(Err(e)) if e.kind() != std::io::ErrorKind::BrokenPipe => {
-                return Waited::Failed(format!("cannot send the input of {name}: {e}"));
+                return (
+                    Waited::Failed(format!("cannot send the input of {name}: {e}")),
+                    seen,
+                );
             }
             _ => {}
         }
     }
-    Waited::Done(std::process::Output {
+    let out = std::process::Output {
         status,
         stdout: stdout.join().unwrap_or_default(),
         stderr: stderr.join().unwrap_or_default(),
-    })
+    };
+    (Waited::Done(out), seen)
 }
 
 /// Ends a child and its process group: SIGTERM, then SIGKILL after [`GRACE`].
@@ -148,4 +181,59 @@ pub fn sleep(pause: Duration) -> bool {
         );
     }
     requested()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    use super::{wait_with, Waited};
+
+    /// A child that printed `out` and exited, not yet reaped: what a run sent SIGTERM finds when
+    /// its model call had finished first. Left unreaped on purpose: the test's `wait_with` reaps it.
+    #[allow(clippy::zombie_processes)]
+    fn exited(out: &str) -> std::process::Child {
+        let child = Command::new("sh")
+            .args(["-c", &format!("printf '%s' '{out}'")])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let until = Instant::now() + Duration::from_secs(10);
+        loop {
+            let stat = std::fs::read_to_string(format!("/proc/{}/stat", child.id())).unwrap();
+            let state = stat
+                .rsplit_once(") ")
+                .and_then(|(_, rest)| rest.chars().next());
+            if state == Some('Z') {
+                return child;
+            }
+            assert!(Instant::now() < until, "the child never exited");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /// `story:run-cost-counted-on-refusal`: a child found exited once the run was sent SIGTERM is
+    /// ended as terminated by [`super::wait`], but read by [`super::wait_finished`], which says
+    /// that SIGTERM was seen, so a model call that had finished keeps what it cost.
+    #[test]
+    fn a_child_that_exited_before_sigterm_was_seen_is_read_when_asked() {
+        let mut child = exited(r#"{"total_cost_usd":0.4}"#);
+        let (waited, seen) = wait_with(&mut child, None, "sh", false, || true);
+        assert!(matches!(waited, Waited::Terminated) && !seen);
+
+        let mut child = exited(r#"{"total_cost_usd":0.4}"#);
+        let (waited, seen) = wait_with(&mut child, None, "sh", true, || true);
+        let Waited::Done(out) = waited else {
+            panic!("the finished child's output is read");
+        };
+        assert!(seen);
+        assert_eq!(out.stdout, br#"{"total_cost_usd":0.4}"#);
+
+        let mut child = exited("ok");
+        let (waited, seen) = wait_with(&mut child, None, "sh", true, || false);
+        assert!(matches!(waited, Waited::Done(_)) && !seen);
+    }
 }

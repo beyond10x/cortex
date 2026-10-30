@@ -70,8 +70,13 @@ pub struct Report {
     /// gateway, where it is what `claude` reported and bounded nothing (`spend::counts_dollars`).
     pub cost_counted: bool,
     pub facts_refused: usize,
-    /// Parts of applied documents EKR rejected (`rejected` in its report).
+    /// Parts of applied documents EKR rejected (`rejected` in its report). A fact applied again
+    /// ([`extract::reapply_rounds`]) is not one of them.
     pub parts_rejected: usize,
+    /// Facts marked `replaces: true` that EKR rejected because nothing active was there to
+    /// replace ([`extract::NOTHING_TO_REPLACE`]), applied again and stored: the earliest of a
+    /// subject and property as a plain assertion, each later one replacing the one before it.
+    pub facts_reapplied: usize,
     pub masked: usize,
     /// Values replaced by a placeholder in the prompts sent, per class or rule of the instance's
     /// `redaction` policy, every one it names counted from `0`; `None` when the policy names
@@ -183,6 +188,7 @@ impl Default for Report {
             cost_counted: true,
             facts_refused: 0,
             parts_rejected: 0,
+            facts_reapplied: 0,
             masked: 0,
             redacted: None,
             unrestored: 0,
@@ -1066,15 +1072,15 @@ fn process_in(
             Ok(answer) => (answer.calls, answer.usage),
             Err(refused) => (refused.calls, refused.usage),
         };
-        // Every costed answer and every answer's tokens, a failed one included, add to the spend
-        // of the day and the tokens to the run's.
-        daily.add_answer(
-            match &asked {
-                Ok(answer) => answer.cost_usd,
-                Err(refused) => refused.cost_usd,
-            },
-            &usage,
-        );
+        let cost_usd = match &asked {
+            Ok(answer) => answer.cost_usd,
+            Err(refused) => refused.cost_usd,
+        };
+        // Every answer's cost, a failed or cut-off one's included, adds to the spend of the day,
+        // to what the run spent of its budget and to the run's cost; its tokens to the run's.
+        daily.add_answer(cost_usd, &usage);
+        spent += cost_usd.unwrap_or(0.0);
+        report.cost_usd = add_cost(report.cost_usd, cost_usd);
         tokens.add(&usage);
         // Every model call counts, a failed one included.
         report.add_calls(calls, usage, fixed_bytes, prompt.len() - fixed);
@@ -1152,9 +1158,7 @@ fn process_in(
                 break;
             }
         };
-        spent += answer.cost_usd.unwrap_or(0.0);
         report.truncated += batch.iter().filter(|i| cut.contains(&i.doc.key)).count();
-        report.cost_usd = add_cost(report.cost_usd, answer.cost_usd);
         let mut restored = answer.document.clone();
         // With a policy, the batch directory keeps only the restored `extraction.yaml`: the
         // prompt and the raw answer carry placeholders, and beside it they would give the mapping.
@@ -1192,20 +1196,84 @@ fn process_in(
                 serde_json::to_string_pretty(&applied).unwrap_or_default(),
             );
         }
+        // A replacement with nothing active to replace is applied again in the same batch, so its
+        // value is stored instead of lost: per subject and property the earliest as a plain
+        // assertion, each later one in a round of its own, still replacing, so EKR supersedes the
+        // value before it and one stays current ([`extract::reapply_rounds`]). A round EKR fails
+        // as a whole stops the run after this batch, and the documents whose values it and the
+        // rounds after it carried are not marked seen, so a later run extracts them again.
+        let mut applied = applied;
+        let mut stop_after: Option<String> = None;
+        let mut rejected_again: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        let mut unstored: BTreeSet<String> = BTreeSet::new();
+        if let Some(reapply) = extract::reapply_rounds(&doc, &applied) {
+            applied = reapply.rest;
+            for (k, round) in reapply.rounds.iter().enumerate() {
+                if stop_after.is_some() {
+                    unstored.extend(round.cited.iter().cloned());
+                    continue;
+                }
+                let name = match k {
+                    0 => "reapply".to_string(),
+                    k => format!("reapply-{k}"),
+                };
+                let again_path = dir.join(format!("{name}.yaml"));
+                let text = serde_yaml_ng::to_string(&round.doc).expect("YAML");
+                std::fs::write(&again_path, text).map_err(|e| Failure::Apply(e.to_string()))?;
+                let reapplied = store.apply(&again_path);
+                // The batch directory keeps only `extraction.yaml` under a redaction policy.
+                if pseudonymised {
+                    let _ = std::fs::remove_file(&again_path);
+                }
+                match reapplied {
+                    Ok(second) => {
+                        before.committed();
+                        if !pseudonymised {
+                            let _ = std::fs::write(
+                                dir.join(format!("{name}-report.json")),
+                                serde_json::to_string_pretty(&second).unwrap_or_default(),
+                            );
+                        }
+                        let still = crate::ekr::applied(&second).rejected;
+                        report.facts_reapplied += round.facts.saturating_sub(still);
+                        report.parts_rejected += still;
+                        for (id, refusals) in extract::cited_by_rejected(&round.doc, &second) {
+                            rejected_again.entry(id).or_default().extend(refusals);
+                        }
+                    }
+                    Err(e) if crate::ekr::outcome_unknown(&e) => {
+                        return Err(unknown_write(e, before))
+                    }
+                    Err(e) => {
+                        stop_after = Some(format!(
+                            "{e}; the documents whose values it was to store are not marked \
+                             seen, so a later run extracts them again"
+                        ));
+                        unstored.extend(round.cited.iter().cloned());
+                    }
+                }
+            }
+        }
         report.parts_rejected += crate::ekr::applied(&applied).rejected;
         // A document a rejected fact cites is seen all the same: EKR would reject the fact again
         // on the same text, and a retry would cost a model call and a slot of the run on every
         // run. The report names it with EKR's refusal.
-        let rejected = extract::cited_by_rejected(&doc, &applied);
+        let mut rejected = extract::cited_by_rejected(&doc, &applied);
+        for (id, refusals) in rejected_again {
+            rejected.entry(id).or_default().extend(refusals);
+        }
         for issued in &batch {
             if let Some(refusals) = rejected.get(&issued.id) {
                 report
                     .rejected
                     .push(Rejected::new(&issued.doc.key, refusals));
             }
+            if unstored.contains(&issued.id) {
+                continue;
+            }
             seen.record(&issued.doc, applied_at);
+            report.documents_applied += 1;
         }
-        report.documents_applied += batch.len() as i64;
         for (ty, name) in extract::entity_names(&restored) {
             let names = entities.entry(ty).or_default();
             if !names.contains(&name) && names.len() < KNOWN_PER_TYPE {
@@ -1219,6 +1287,10 @@ fn process_in(
                 .unwrap_or_default()
                 .as_bytes(),
         );
+        if let Some(why) = stop_after {
+            report.stopped = Some(why);
+            break;
+        }
     }
     if let Some(why) = &too_large {
         if report.documents_applied == 0 {
@@ -2285,6 +2357,10 @@ fn log_line(label: &str, report: &Report, started: i64) -> serde_json::Value {
         "stopped": report.stopped,
         "batch_chars": report.batch_chars,
     });
+    // Present only when a replacement was applied again: other runs log as before.
+    if report.facts_reapplied > 0 {
+        line["facts_reapplied"] = json!(report.facts_reapplied);
+    }
     // Present only when a batch was split: a run that split none logs what it did before.
     if report.splits > 0 {
         line["splits"] = json!(report.splits);

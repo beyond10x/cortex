@@ -252,6 +252,20 @@ impl Refused {
         }
     }
 
+    /// A call that had finished when the run was sent SIGTERM: [`Refused::terminated`], with the
+    /// cost and tokens its answer `stdout` reports, so they count against the run and the day.
+    /// An answer that is not JSON leaves the call uncosted.
+    fn finished_at_sigterm(stdout: &[u8]) -> Self {
+        match serde_json::from_slice::<Value>(stdout) {
+            Ok(answer) => Self {
+                cost_usd: answer["total_cost_usd"].as_f64(),
+                usage: Usage::read(&answer),
+                ..Self::terminated()
+            },
+            Err(_) => Self::terminated(),
+        }
+    }
+
     /// An error answer that cost zero: the shape of an answer given before any model was asked
     /// (a sign-in or a usage limit), worth asking once more. A missing cost is not zero.
     fn free_error_answer(&self) -> bool {
@@ -777,9 +791,14 @@ impl Model {
                 ..Refused::free(format!("cannot run claude: {e}"))
             })?;
         // The prompt is written, and the answer read, on threads of their own, so a run sent
-        // SIGTERM ends the call however far it got ([`crate::terminate`]).
-        let out = match crate::terminate::wait(&mut child, Some(prompt.as_bytes()), "claude") {
+        // SIGTERM ends the call however far it got ([`crate::terminate`]). A call that had
+        // finished when the run was sent SIGTERM is read for what it cost, and the run stops.
+        let (waited, sigterm) =
+            crate::terminate::wait_finished(&mut child, Some(prompt.as_bytes()), "claude");
+        let out = match waited {
+            Waited::Done(out) if sigterm => return Err(Refused::finished_at_sigterm(&out.stdout)),
             Waited::Done(out) => out,
+            Waited::Failed(_) if sigterm => return Err(Refused::terminated()),
             Waited::Failed(e) => return Err(Refused::uncosted(e)),
             Waited::Terminated => return Err(Refused::terminated()),
         };
@@ -1040,6 +1059,179 @@ pub fn cited_by_rejected(doc: &Yaml, report: &Value) -> BTreeMap<String, Vec<Str
     out
 }
 
+/// EKR's refusal of a fact marked `replaces: true` when the store holds no active value of that
+/// subject and property to replace.
+pub const NOTHING_TO_REPLACE: &str = "replacement-without-active-assertion";
+
+/// Whether EKR rejected `part` (one `rejected` part of an extraction report) for
+/// [`NOTHING_TO_REPLACE`] and nothing else.
+fn nothing_to_replace(part: &Value) -> bool {
+    match &part["refusal"] {
+        Value::String(t) => {
+            t == NOTHING_TO_REPLACE
+                || t.strip_prefix(NOTHING_TO_REPLACE)
+                    .is_some_and(|rest| rest.starts_with(':'))
+        }
+        Value::Null => {
+            let codes: Vec<&str> = part["issues"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|i| i["code"].as_str())
+                .collect();
+            !codes.is_empty() && codes.iter().all(|c| *c == NOTHING_TO_REPLACE)
+        }
+        _ => false,
+    }
+}
+
+/// The facts of a merged document EKR rejected for [`NOTHING_TO_REPLACE`] alone, to be applied
+/// again in order, one [`Round`] per apply ([`reapply_rounds`]).
+pub struct Reapply {
+    pub rounds: Vec<Round>,
+    /// The first apply's report with every re-applied part taken out of its `rejected`.
+    pub rest: Value,
+}
+
+/// One apply of a [`Reapply`].
+pub struct Round {
+    /// The document to apply: `doc`'s format, ontology and entities, the round's facts and the
+    /// evidence items they cite.
+    pub doc: Yaml,
+    /// How many facts it holds.
+    pub facts: usize,
+    /// The evidence ids its facts cite: the documents whose value it carries.
+    pub cited: BTreeSet<String>,
+}
+
+/// What a fact states a value of, for [`reapply_rounds`]: its kind, subject and property (or
+/// relation), as YAML text. Two facts of one key replace each other.
+fn replaced_key(fact: &TaggedValue) -> String {
+    let body = &fact.value;
+    let part = |key: &str| serde_yaml_ng::to_string(&body[key]).unwrap_or_default();
+    format!(
+        "{}\n{}\n{}\n{}",
+        fact.tag,
+        part("subject"),
+        part("property"),
+        part("relation")
+    )
+}
+
+/// The facts of `doc` (a merged document) that `report` (its `ekr.integrate.ExtractionReport`)
+/// rejected for [`NOTHING_TO_REPLACE`] alone, as documents to apply again in turn; `None` when
+/// there are none. The facts of one subject and property are ordered by the latest
+/// `observed_at` of the evidence each cites (then by their place in `doc`): the earliest goes in
+/// the first round without `replaces`, so EKR stores it as a plain assertion, and each later one
+/// goes, still marked `replaces: true`, in the round after the one before it, so EKR supersedes
+/// the value before it and one value stays current.
+pub fn reapply_rounds(doc: &Yaml, report: &Value) -> Option<Reapply> {
+    let facts = doc["facts"].as_sequence().map_or(&[][..], Vec::as_slice);
+    let items = doc["evidence"].as_sequence().map_or(&[][..], Vec::as_slice);
+    let observed: BTreeMap<&str, i64> = items
+        .iter()
+        .filter_map(|item| {
+            let e = &item["evidence"];
+            Some((e["id"].as_str()?, e["observed_at"].as_i64().unwrap_or(0)))
+        })
+        .collect();
+    let cites = |fact: &TaggedValue| -> Vec<String> {
+        fact.value["evidence"]
+            .as_sequence()
+            .into_iter()
+            .flatten()
+            .filter_map(Yaml::as_str)
+            .map(str::to_string)
+            .collect()
+    };
+    // Per key, (time, place in `doc`, fact).
+    let mut groups: BTreeMap<String, Vec<(i64, usize, TaggedValue)>> = BTreeMap::new();
+    let mut rest: Vec<Value> = Vec::new();
+    for part in report["rejected"].as_array().into_iter().flatten() {
+        let at = part["item"]
+            .as_str()
+            .and_then(|item| item.strip_prefix("facts["))
+            .and_then(|rest| rest.split(']').next())
+            .and_then(|n| n.parse::<usize>().ok());
+        match at.and_then(|i| Some((i, facts.get(i)?))) {
+            Some((i, Yaml::Tagged(fact))) if nothing_to_replace(part) => {
+                let time = cites(fact)
+                    .iter()
+                    .filter_map(|id| observed.get(id.as_str()).copied())
+                    .max()
+                    .unwrap_or(0);
+                groups
+                    .entry(replaced_key(fact))
+                    .or_default()
+                    .push((time, i, (**fact).clone()));
+            }
+            _ => rest.push(part.clone()),
+        }
+    }
+    if groups.is_empty() {
+        return None;
+    }
+    let mut rounds: Vec<Vec<TaggedValue>> = Vec::new();
+    for group in groups.values_mut() {
+        group.sort_by_key(|(time, i, _)| (*time, *i));
+        for (n, (_, _, fact)) in group.drain(..).enumerate() {
+            let mut fact = fact;
+            if n == 0 {
+                if let Yaml::Mapping(body) = &mut fact.value {
+                    body.remove("replaces");
+                }
+            }
+            if rounds.len() <= n {
+                rounds.push(Vec::new());
+            }
+            rounds[n].push(fact);
+        }
+    }
+    let rounds = rounds
+        .into_iter()
+        .map(|round| {
+            let cited: BTreeSet<String> = round.iter().flat_map(cites).collect();
+            let evidence: Vec<Yaml> = items
+                .iter()
+                .filter(|item| {
+                    item["evidence"]["id"]
+                        .as_str()
+                        .is_some_and(|id| cited.contains(id))
+                })
+                .cloned()
+                .collect();
+            let mut out = Mapping::new();
+            for key in ["format", "ontology", "entities"] {
+                if let Some(value) = doc.get(key) {
+                    out.insert(Yaml::String(key.into()), value.clone());
+                }
+            }
+            let facts = round.len();
+            out.insert(
+                Yaml::String("facts".into()),
+                Yaml::Sequence(
+                    round
+                        .into_iter()
+                        .map(|f| Yaml::Tagged(Box::new(f)))
+                        .collect(),
+                ),
+            );
+            out.insert(Yaml::String("evidence".into()), Yaml::Sequence(evidence));
+            Round {
+                doc: Yaml::Mapping(out),
+                facts,
+                cited,
+            }
+        })
+        .collect();
+    let mut report = report.clone();
+    report["rejected"] = Value::Array(rest);
+    Some(Reapply {
+        rounds,
+        rest: report,
+    })
+}
+
 /// Entity names per node type in a merged document, for the next run's prompt.
 pub fn entity_names(model: &Value) -> Vec<(String, String)> {
     model["entities"]
@@ -1117,6 +1309,154 @@ mod tests {
             BTreeMap::from([("e2".to_string(), limit.clone()), ("e3".to_string(), limit)])
         );
         assert!(cited_by_rejected(&doc, &json!({"rejected": []})).is_empty());
+    }
+
+    /// `story:run-cost-counted-on-refusal`: a call that had finished when the run was sent
+    /// SIGTERM is refused as terminated with the cost and tokens its answer reports; one that
+    /// left no answer is terminated and uncosted.
+    #[test]
+    fn a_call_finished_at_sigterm_is_terminated_and_keeps_its_cost() {
+        let answer = br#"{"type":"result","is_error":false,"total_cost_usd":0.4,
+            "usage":{"input_tokens":7,"output_tokens":3,"cache_read_input_tokens":0,
+            "cache_creation_input_tokens":0}}"#;
+        let refused = Refused::finished_at_sigterm(answer);
+        assert_eq!(refused.terminated, Some(Stopped::Call));
+        assert_eq!(refused.cost_usd, Some(0.4));
+        assert_eq!((refused.calls, refused.usage.output_tokens), (1, Some(3)));
+
+        let refused = Refused::finished_at_sigterm(b"");
+        assert_eq!(refused.terminated, Some(Stopped::Call));
+        assert_eq!(refused.cost_usd, None);
+    }
+
+    /// `story:replacement-applied-as-assertion`: only a fact rejected for having nothing active
+    /// to replace is applied again, without `replaces`, with the evidence it cites; every other
+    /// rejected part stays in the report.
+    #[test]
+    fn a_replacement_with_nothing_to_replace_is_applied_again_without_replaces() {
+        let doc = tagged(&json!({
+            "format": "ekr.extraction-document/1",
+            "ontology": {"node_types": [], "edge_types": []},
+            "entities": [{"node_type": "Product", "aliases": ["W"]}],
+            "facts": [
+                {"!Relation": {"relation": "R", "evidence": ["e1"]}},
+                {"!Property": {"property": "p", "replaces": true, "evidence": ["e2"]}},
+                {"!Property": {"property": "q", "replaces": true, "evidence": ["e3"]}},
+                {"!Property": {"property": "r", "replaces": true, "evidence": ["e1"]}},
+            ],
+            "evidence": [
+                {"evidence": {"id": "e1"}, "payload": []},
+                {"evidence": {"id": "e2"}, "payload": []},
+                {"evidence": {"id": "e3"}, "payload": []},
+            ],
+        }));
+        let report = json!({"rejected": [
+            {"item": "facts[1]", "refusal": "replacement-without-active-assertion: facts[1]: none"},
+            {"item": "facts[2]", "refusal": null, "issues": [{"code": "invalid-supersession"}]},
+            {"item": "facts[3]", "refusal": null,
+                "issues": [{"code": "replacement-without-active-assertion"}]},
+            {"item": "entities[0]", "refusal": "replacement-without-active-assertion"},
+        ]});
+        let Reapply { rounds, rest } = reapply_rounds(&doc, &report).expect("two to apply again");
+        assert_eq!(rounds.len(), 1, "two properties, one round");
+        let again = &rounds[0].doc;
+        assert_eq!(rounds[0].facts, 2);
+        assert_eq!(
+            rounds[0].cited,
+            BTreeSet::from(["e1".to_string(), "e2".to_string()])
+        );
+        let facts = again["facts"].as_sequence().unwrap();
+        let mut props: Vec<&str> = facts
+            .iter()
+            .map(|f| match f {
+                Yaml::Tagged(f) => {
+                    assert!(f.value.get("replaces").is_none(), "{f:?}");
+                    f.value["property"].as_str().unwrap()
+                }
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        props.sort();
+        assert_eq!(props, ["p", "r"]);
+        let ids: Vec<&str> = again["evidence"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .map(|e| e["evidence"]["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, ["e1", "e2"]);
+        assert_eq!(again["entities"], doc["entities"]);
+        assert_eq!(again["format"], doc["format"]);
+        let items: Vec<&str> = rest["rejected"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["item"].as_str().unwrap())
+            .collect();
+        assert_eq!(items, ["facts[2]", "entities[0]"]);
+        assert!(reapply_rounds(&doc, &rest).is_none());
+    }
+
+    /// Adversary finding on `story:replacement-applied-as-assertion`: two replacements of one
+    /// subject and property, nothing active for either, go in two rounds by the time of their
+    /// evidence: the earlier first without `replaces`, the later after it still replacing, so
+    /// EKR supersedes the earlier and one value stays current. Another property goes in round 1.
+    #[test]
+    fn two_replacements_of_one_property_are_applied_again_in_time_order() {
+        let subject = json!({"node_type": "Product", "aliases": ["W"]});
+        let doc = tagged(&json!({
+            "format": "ekr.extraction-document/1",
+            "facts": [
+                {"!Property": {"subject": subject, "property": "owner", "replaces": true,
+                    "value": "Bob", "evidence": ["late"]}},
+                {"!Property": {"subject": subject, "property": "owner", "replaces": true,
+                    "value": "Alice", "evidence": ["early"]}},
+                {"!Property": {"subject": subject, "property": "status", "replaces": true,
+                    "value": "open", "evidence": ["late"]}},
+            ],
+            "evidence": [
+                {"evidence": {"id": "late", "observed_at": 2000}, "payload": []},
+                {"evidence": {"id": "early", "observed_at": 1000}, "payload": []},
+            ],
+        }));
+        let refused = |i: usize| {
+            json!({"item": format!("facts[{i}]"),
+                "refusal": format!("replacement-without-active-assertion: facts[{i}]: none")})
+        };
+        let report = json!({"rejected": [refused(0), refused(1), refused(2)]});
+        let Reapply { rounds, rest } = reapply_rounds(&doc, &report).expect("three to apply");
+        assert!(rest["rejected"].as_array().unwrap().is_empty());
+        let shown = |round: &Round| -> Vec<(String, String, bool)> {
+            let mut out: Vec<(String, String, bool)> = round.doc["facts"]
+                .as_sequence()
+                .unwrap()
+                .iter()
+                .map(|f| match f {
+                    Yaml::Tagged(f) => (
+                        f.value["property"].as_str().unwrap().to_string(),
+                        f.value["value"].as_str().unwrap().to_string(),
+                        f.value.get("replaces").is_some(),
+                    ),
+                    other => panic!("{other:?}"),
+                })
+                .collect();
+            out.sort();
+            out
+        };
+        assert_eq!(rounds.len(), 2);
+        assert_eq!(
+            shown(&rounds[0]),
+            [
+                ("owner".to_string(), "Alice".to_string(), false),
+                ("status".to_string(), "open".to_string(), false),
+            ]
+        );
+        assert_eq!(
+            shown(&rounds[1]),
+            [("owner".to_string(), "Bob".to_string(), true)]
+        );
+        assert_eq!(rounds[1].cited, BTreeSet::from(["late".to_string()]));
+        assert_eq!(rounds[1].doc["evidence"].as_sequence().unwrap().len(), 1);
     }
 
     #[test]
