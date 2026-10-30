@@ -22,6 +22,7 @@ pub mod serve;
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use cortex_model::ask as ma;
@@ -30,7 +31,7 @@ use serde_json::{json, Value};
 
 use crate::home::Home;
 use crate::instance::Layout;
-use crate::redact::Batch;
+use crate::redact::{Batch, Redactor};
 
 /// The event contract `cortex.ask.AskStatus.format` names.
 pub const EVENTS_FORMAT: &str = "cortex.ask-events/1";
@@ -110,8 +111,10 @@ pub fn check(spec: &m::InstanceSpec) -> Result<&ma::AskSpec, String> {
         }
     }
     for (field, value) in [
+        ("ask.limits.max_tool_calls", limits.max_tool_calls),
         ("ask.retention_days", ask.retention_days),
         ("ask.slow_after_ms", ask.slow_after_ms),
+        ("ask.max_in_flight", ask.max_in_flight),
     ] {
         if let Some(value) = value.filter(|v| *v <= 0) {
             return Err(format!("{field}: {value} is not above 0"));
@@ -192,23 +195,59 @@ impl ReaderCommand {
     }
 }
 
+/// The most tool calls one step makes when the spec names no `ask.limits.max_tool_calls`.
+pub const DEFAULT_MAX_TOOL_CALLS: i64 = 16;
+
+/// The most answers in flight when the spec names no `ask.max_in_flight`.
+pub const DEFAULT_MAX_IN_FLIGHT: i64 = 8;
+
 /// Everything one answer needs, fixed when the service starts.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Settings {
     pub ask: ma::AskSpec,
     pub model: model::Route,
     pub reader: ReaderCommand,
     /// The system prompt: how to use the tools and cite, then the spec's `guidance`.
     pub system: String,
-    /// The instance's `redaction` policy, which [`Settings::of`] checked compiles.
-    pub redaction: Option<m::RedactionPolicy>,
+    /// The instance's `redaction` policy, compiled once by [`Settings::of`]; every answer and
+    /// every question check takes its batch from it.
+    pub redactor: Option<Arc<Redactor>>,
+}
+
+impl std::fmt::Debug for Settings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Settings")
+            .field("ask", &self.ask)
+            .field("model", &self.model)
+            .field("reader", &self.reader)
+            .field("system", &self.system)
+            .field("redactor", &self.redactor.as_ref().map(|_| "compiled"))
+            .finish()
+    }
 }
 
 impl Settings {
+    /// The most tool calls one step makes.
+    pub fn max_tool_calls(&self) -> usize {
+        self.ask
+            .limits
+            .max_tool_calls
+            .unwrap_or(DEFAULT_MAX_TOOL_CALLS)
+            .max(1) as usize
+    }
+
+    /// The most answers in flight at once.
+    pub fn max_in_flight(&self) -> usize {
+        self.ask
+            .max_in_flight
+            .unwrap_or(DEFAULT_MAX_IN_FLIGHT)
+            .clamp(1, tokio::sync::Semaphore::MAX_PERMITS as i64) as usize
+    }
+
     /// The settings of a spec [`check`] accepted.
     pub fn of(home: &Home, spec: &m::InstanceSpec) -> Result<Self, String> {
         let ask = check(spec)?.clone();
-        crate::redact::compile(spec.redaction.as_ref())?;
+        let redactor = crate::redact::compile(spec.redaction.as_ref())?.map(Arc::new);
         let gateway = spec.model.gateway.as_ref().expect("checked");
         let mut system = format!(
             "You answer questions over the knowledge brain `{name}`: {description}\n\
@@ -231,7 +270,7 @@ impl Settings {
             reader: ReaderCommand::of(home, spec)?,
             system,
             ask,
-            redaction: spec.redaction.clone(),
+            redactor,
         })
     }
 }
@@ -304,8 +343,7 @@ pub fn refused(left: &BTreeSet<&str>) -> String {
 /// The reason `question` is refused under the settings' redaction policy, when a class its
 /// `refuse_if_left` names is still detected in it as the model would be shown it.
 pub fn question_refused(settings: &Settings, question: &str) -> Option<String> {
-    let redactor = crate::redact::compile(settings.redaction.as_ref()).ok()??;
-    let mut batch = redactor.batch();
+    let mut batch = settings.redactor.as_ref()?.batch();
     batch.reserve(question);
     let shown = batch.replace(question);
     let left = batch.left(&shown);
@@ -375,6 +413,14 @@ pub fn final_event(outcome: &ma::AskOutcome) -> ma::AskEvent {
             ),
             Some(e.retry_after),
         ),
+        ma::AskOutcome::Busy { error: e } => error(
+            "busy",
+            format!(
+                "the service is working on its most answers at once ({}); ask again later",
+                e.max_in_flight
+            ),
+            None,
+        ),
         ma::AskOutcome::LimitReached { error: e } => error(
             &e.limit,
             match e.limit.as_str() {
@@ -383,8 +429,41 @@ pub fn final_event(outcome: &ma::AskOutcome) -> ma::AskEvent {
             },
             None,
         ),
-        ma::AskOutcome::ModelFailed { error: e } => error("model-failed", e.reason.clone(), None),
-        ma::AskOutcome::ReaderFailed { error: e } => error("reader-failed", e.reason.clone(), None),
+        ma::AskOutcome::CutOff { error: e } => error(
+            "cut-off",
+            format!(
+                "the model's reply was cut off ({}); it is no answer",
+                e.finish_reason
+            ),
+            None,
+        ),
+        ma::AskOutcome::ClientClosed { .. } => error(
+            "client-closed",
+            "the reader closed the stream before the answer".into(),
+            None,
+        ),
+        // The reason of a model or reader failure can carry a gateway's body or a program path:
+        // it is [`detail`], for the log only.
+        ma::AskOutcome::ModelFailed { .. } => error(
+            "model-failed",
+            "the model gateway could not be reached or gave no usable answer".into(),
+            None,
+        ),
+        ma::AskOutcome::ReaderFailed { .. } => error(
+            "reader-failed",
+            "the store's reader could not be started or stopped answering".into(),
+            None,
+        ),
+    }
+}
+
+/// The detail of an outcome that is for the service's log and never for the client: the reason
+/// of a model or reader failure.
+pub fn detail(outcome: &ma::AskOutcome) -> Option<&str> {
+    match outcome {
+        ma::AskOutcome::ModelFailed { error } => Some(&error.reason),
+        ma::AskOutcome::ReaderFailed { error } => Some(&error.reason),
+        _ => None,
     }
 }
 
@@ -408,22 +487,113 @@ fn model_failed(reason: String) -> ma::AskOutcome {
     }
 }
 
-/// Answers `question` for `identity`, under `answer_id`: the tool loop. Each event before the last is handed to
-/// `emit` as it happens; `emit` answers false once nobody reads the stream, which ends the loop.
-/// The outcome is the answer or why there is none; [`final_event`] makes it the last event.
+/// What the model calls of an answer spent so far: how many were made, their `usage` added up,
+/// and the prompt tokens of the last one.
+#[derive(Clone, Copy, Debug, Default)]
+struct Spent {
+    steps: i64,
+    usage: model::Usage,
+    context: i64,
+}
+
+impl Spent {
+    fn add(&mut self, usage: &model::Usage) {
+        self.steps += 1;
+        self.usage.add(usage);
+        self.context = usage.input;
+    }
+}
+
+/// The reader closed the stream: the answer stops, with what it spent.
+fn client_closed(spent: &Spent) -> ma::AskOutcome {
+    ma::AskOutcome::ClientClosed {
+        error: ma::ClientClosed {
+            steps: spent.steps,
+            input_tokens: spent.usage.input,
+            output_tokens: spent.usage.output,
+            cached_tokens: spent.usage.cached,
+            context_tokens: spent.context,
+        },
+    }
+}
+
+/// The model's reply was cut off for `finish_reason`: no answer, with what it spent.
+fn cut_off(finish_reason: &str, spent: &Spent) -> ma::AskOutcome {
+    ma::AskOutcome::CutOff {
+        error: ma::CutOff {
+            finish_reason: finish_reason.into(),
+            steps: spent.steps,
+            input_tokens: spent.usage.input,
+            output_tokens: spent.usage.output,
+            cached_tokens: spent.usage.cached,
+            context_tokens: spent.context,
+        },
+    }
+}
+
+/// Where an answer's events go, and whether anyone still reads them.
+pub trait Stream {
+    /// Hands `event` to the reader; false once nobody reads the stream, which ends the loop.
+    fn emit(&mut self, event: ma::AskEvent) -> bool;
+    /// Whether the reader has closed the stream, without sending anything.
+    fn gone(&self) -> bool;
+    /// The reader closed the stream while the loop waits on the model: whatever the answer holds
+    /// that keeps other questions out (its `max_in_flight` slot) is given back now.
+    fn left(&mut self);
+}
+
+/// How often a wait on the model looks whether the reader has gone.
+const GONE_POLL: Duration = Duration::from_millis(25);
+
+/// Runs `work` (a model call) on its own thread and waits for it, looking whether the reader of
+/// `stream` has gone; when it has, [`Stream::left`] is called at once. The call itself is not cut:
+/// what it spent is still counted, and it ends by its reply or the answer's deadline. The second
+/// value says whether the reader went.
+fn while_read<T: Send>(stream: &mut dyn Stream, work: impl FnOnce() -> T + Send) -> (T, bool) {
+    std::thread::scope(|scope| {
+        let (done, result) = std::sync::mpsc::channel();
+        let worker = scope.spawn(move || {
+            let _ = done.send(work());
+        });
+        let mut gone = false;
+        loop {
+            match result.recv_timeout(GONE_POLL) {
+                Ok(value) => return (value, gone),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    if !gone && stream.gone() {
+                        gone = true;
+                        stream.left();
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    // The work panicked before it sent: its panic is this thread's.
+                    match worker.join() {
+                        Err(panic) => std::panic::resume_unwind(panic),
+                        Ok(()) => unreachable!("the model call ended without a result"),
+                    }
+                }
+            }
+        }
+    })
+}
+
+/// Answers `question` for `identity`, under `answer_id`: the tool loop. Each event before the
+/// last is handed to `stream` as it happens; once nobody reads it the loop ends, also while it
+/// waits on the model, and no tool call is made for a reader who has gone. The outcome is the
+/// answer or why there is none; [`final_event`] makes it the last event.
 pub fn answer(
     settings: &Settings,
     answer_id: &str,
     identity: &str,
     question: &str,
-    emit: &mut dyn FnMut(ma::AskEvent) -> bool,
+    stream: &mut dyn Stream,
 ) -> ma::AskOutcome {
     let limits = &settings.ask.limits;
     // A limit past ten years is no limit in practice; the clamp keeps the sum from overflowing.
     let seconds = (limits.max_seconds as u64).min(10 * 365 * 24 * 3600);
     let deadline = Instant::now() + Duration::from_secs(seconds);
     let max_bytes = limits.max_result_bytes as usize;
-    let gone = || model_failed("the request was closed before the answer".into());
+    let mut spent = Spent::default();
     let status = |step: i64, message: &str| {
         ma::AskEvent::Status(ma::AskStatus {
             format: EVENTS_FORMAT.into(),
@@ -432,11 +602,7 @@ pub fn answer(
         })
     };
     // One question is one redaction batch: one placeholder mapping, in memory, for this answer.
-    let redactor = match crate::redact::compile(settings.redaction.as_ref()) {
-        Ok(r) => r,
-        Err(reason) => return model_failed(reason),
-    };
-    let mut batch = redactor.as_ref().map(|r| r.batch());
+    let mut batch = settings.redactor.as_ref().map(|r| r.batch());
     let question = match batch.as_mut() {
         Some(batch) => {
             batch.reserve(question);
@@ -444,8 +610,8 @@ pub fn answer(
         }
         None => question.to_string(),
     };
-    if !emit(status(0, "starting the reader")) {
-        return gone();
+    if !stream.emit(status(0, "starting the reader")) {
+        return client_closed(&spent);
     }
     let mut reader = match mcp::Reader::start(&settings.reader, deadline) {
         Ok(r) => r,
@@ -478,21 +644,34 @@ pub fn answer(
         json!({"role": "system", "content": settings.system}),
         json!({"role": "user", "content": question}),
     ];
-    let mut usage = model::Usage::default();
     for step in 1..=limits.max_steps {
         if Instant::now() >= deadline {
             return limit("time-limit");
         }
-        if !emit(status(step, "asking the model")) {
-            return gone();
+        if !stream.emit(status(step, "asking the model")) {
+            return client_closed(&spent);
         }
-        let reply = match gateway.chat(&messages, &tools, deadline) {
+        // A reader who leaves during the model call gives back the answer's slot at once; the
+        // call's reply still counts what it spent, and nothing of it is streamed or run.
+        let (reply, gone) = while_read(stream, || gateway.chat(&messages, &tools, deadline));
+        if gone {
+            if let Ok(reply) = &reply {
+                spent.add(&reply.usage);
+            }
+            return client_closed(&spent);
+        }
+        let reply = match reply {
             Ok(r) => r,
             Err(CallError::Timeout) => return limit("time-limit"),
             Err(CallError::Failed(reason)) => return model_failed(reason),
         };
-        usage.add(&reply.usage);
-        let context = reply.usage.input;
+        spent.add(&reply.usage);
+        let (usage, context) = (spent.usage, spent.context);
+        // A reply cut off by the token limit or a filter is no answer, and its tool calls may
+        // be cut too: nothing of it is streamed or run.
+        if let Some(finish_reason) = reply.cut_off() {
+            return cut_off(finish_reason, &spent);
+        }
         if reply.tool_calls.is_empty() {
             let text = reply.content.unwrap_or_default();
             let cited = cite::cite(&text, settings.ask.link_templates.as_ref());
@@ -516,8 +695,8 @@ pub fn answer(
             let mut answer = String::new();
             for piece in pieces.into_iter().filter(|p| !p.is_empty()) {
                 answer.push_str(&piece);
-                if !emit(ma::AskEvent::Delta(ma::AskDelta { text: piece })) {
-                    return gone();
+                if !stream.emit(ma::AskEvent::Delta(ma::AskDelta { text: piece })) {
+                    return client_closed(&spent);
                 }
             }
             return ma::AskOutcome::Answered {
@@ -541,17 +720,37 @@ pub fn answer(
         // Text before a tool call is the model thinking aloud, not the answer.
         if let Some(text) = reply.content.as_deref().filter(|t| !t.trim().is_empty()) {
             let text = restored(batch.as_ref(), text);
-            if !emit(ma::AskEvent::Delta(ma::AskDelta { text }))
-                || !emit(ma::AskEvent::Discard(ma::AskDiscard { step }))
+            if !stream.emit(ma::AskEvent::Delta(ma::AskDelta { text }))
+                || !stream.emit(ma::AskEvent::Discard(ma::AskDiscard { step }))
             {
-                return gone();
+                return client_closed(&spent);
             }
         }
         if step == limits.max_steps {
             return limit("step-limit");
         }
         messages.push(reply.message.clone());
-        for call in &reply.tool_calls {
+        // At most `max_tool_calls` calls of a step are made. Every call the model asked for still
+        // gets its tool message, so the conversation stays well formed; those past the cap say
+        // they were not made.
+        let cap = settings.max_tool_calls();
+        let (made, over) = reply.tool_calls.split_at(reply.tool_calls.len().min(cap));
+        if !over.is_empty() {
+            let message = format!(
+                "the model asked for {} tool calls; {} were not made (max_tool_calls {cap})",
+                reply.tool_calls.len(),
+                over.len()
+            );
+            if !stream.emit(status(step, &message)) {
+                return client_closed(&spent);
+            }
+        }
+        for call in made {
+            // No tool call is made for a reader who has gone: a reply without thinking text
+            // reaches here with nothing sent since the model was asked.
+            if stream.gone() {
+                return client_closed(&spent);
+            }
             let (text, failed) = match serde_json::from_str::<Value>(&call.arguments) {
                 Ok(arguments) => match reader.call(&call.name, arguments, deadline) {
                     Ok(result) => compact(&result),
@@ -561,7 +760,7 @@ pub fn answer(
                 Err(e) => (format!("the arguments are not JSON: {e}"), true),
             };
             let (shown, truncated, withheld) = shown(batch.as_mut(), &text, max_bytes);
-            if !emit(ma::AskEvent::Tool(ma::AskTool {
+            if !stream.emit(ma::AskEvent::Tool(ma::AskTool {
                 step,
                 name: call.name.clone(),
                 arguments: call.arguments.clone(),
@@ -570,9 +769,19 @@ pub fn answer(
                 failed,
                 withheld,
             })) {
-                return gone();
+                return client_closed(&spent);
             }
             messages.push(json!({"role": "tool", "tool_call_id": call.id, "content": shown}));
+        }
+        for call in over {
+            messages.push(json!({
+                "role": "tool",
+                "tool_call_id": call.id,
+                "content": format!(
+                    "This tool call was not made: a step makes at most {cap} tool calls \
+                     (max_tool_calls). Ask for fewer at once."
+                ),
+            }));
         }
     }
     limit("step-limit")

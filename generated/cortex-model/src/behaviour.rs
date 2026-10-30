@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 5a29cefca25e2266b019b8b5b6031137a2e3440abb9403edfa5363b3e1284768
-// contract digest 813e9e892f7c25641e646e3a1ef94f827001f7769520922c88de4f5af1cb5113
+// model digest 427380fdb0fd63ec80516983202c1bf3e63d3ab0984514104cfc2ab4ee1c4aa4
+// contract digest 19b1d7e629d64c70fa03c2817003c7027a2ab9b6e646533c2127d2a273409b83
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -278,6 +278,10 @@ where
         if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "rate-limited")? {
             return Ok(crate::ask::AskOutcome::RateLimited { error: crate::ask::RateLimited { identity: input.identity.clone(), retry_after: self.ports.try_generate_integer()? } });
         }
+        // `busy`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "busy")? {
+            return Ok(crate::ask::AskOutcome::Busy { error: crate::ask::Busy { max_in_flight: self.ports.try_generate_integer()? } });
+        }
         // `limit-reached`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "limit-reached")? {
             return Ok(crate::ask::AskOutcome::LimitReached { error: crate::ask::LimitReached { limit: self.ports.try_generate_string()? } });
@@ -289,6 +293,14 @@ where
         // `reader-failed`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "reader-failed")? {
             return Ok(crate::ask::AskOutcome::ReaderFailed { error: crate::ask::ReaderFailed { reason: self.ports.try_generate_string()? } });
+        }
+        // `cut-off`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "cut-off")? {
+            return Ok(crate::ask::AskOutcome::CutOff { error: crate::ask::CutOff { finish_reason: self.ports.try_generate_string()?, steps: self.ports.try_generate_integer()?, input_tokens: self.ports.try_generate_integer()?, output_tokens: self.ports.try_generate_integer()?, cached_tokens: self.ports.try_generate_integer()?, context_tokens: self.ports.try_generate_integer()? } });
+        }
+        // `client-closed`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "client-closed")? {
+            return Ok(crate::ask::AskOutcome::ClientClosed { error: crate::ask::ClientClosed { steps: self.ports.try_generate_integer()?, input_tokens: self.ports.try_generate_integer()?, output_tokens: self.ports.try_generate_integer()?, cached_tokens: self.ports.try_generate_integer()?, context_tokens: self.ports.try_generate_integer()? } });
         }
         // `answered`: the default.
         return Ok(crate::ask::AskOutcome::Answered { answered: crate::ask::Answered { identity: input.identity.clone(), done: self.ports.try_generate_cortex_ask_ask_done()? } });

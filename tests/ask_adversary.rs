@@ -16,6 +16,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use common::executable;
+use cortex_cli::ask::records::{self, Records};
+use cortex_model::ask as ma;
 use serde_json::{json, Value};
 
 const TOKEN_ENV: &str = "ASK_ADV_GATEWAY_TOKEN";
@@ -217,6 +219,8 @@ struct Setup<'a> {
     tool_result: &'a str,
     reader: Reader,
     env: Vec<(&'a str, &'a str)>,
+    /// Lines added under `ask:`, each indented by two spaces.
+    ask_extra: &'a str,
 }
 
 impl Default for Setup<'_> {
@@ -226,6 +230,7 @@ impl Default for Setup<'_> {
             tool_result: "a result",
             reader: Reader::default(),
             env: vec![],
+            ask_extra: "",
         }
     }
 }
@@ -267,10 +272,12 @@ ask:
   listen: "127.0.0.1:0"
   identity_header: {HEADER}
   limits: {limits}
+{extra}
 "#,
             ekr = ekr.display(),
             url = gateway.url,
             limits = setup.limits,
+            extra = setup.ask_extra,
         ),
     )
     .unwrap();
@@ -693,6 +700,136 @@ fn a_closed_request_stops_the_loop_and_its_reader() {
     }
 }
 
+/// The answer records `service` kept, read with the service's own store once it holds `n`
+/// (`story:ask-outcome-truthful`).
+fn kept(service: &Service, n: usize) -> (Records, Vec<ma::AnswerRecordData>) {
+    let file = service.root.join("home/instances/asker/ask.sqlite");
+    let started = Instant::now();
+    loop {
+        if file.exists() {
+            let records = Records::open(&file).expect("ask.sqlite opens");
+            let answers = records.answers().unwrap();
+            if answers.len() >= n || started.elapsed() > Duration::from_secs(20) {
+                assert_eq!(answers.len(), n, "{answers:?}");
+                return (records, answers);
+            }
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "no ask.sqlite after 20 s"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// A reader who closes the stream mid-answer is recorded as `client-closed`, never as the
+/// gateway failing (`model-failed`), with the tokens and steps of the model calls already made,
+/// and opens no review item (`story:ask-outcome-truthful`, R1-01).
+#[test]
+fn a_reader_who_leaves_mid_answer_is_recorded_as_client_closed_with_its_tokens() {
+    let gateway = Gateway::start(vec![tool_reply(1, SEARCH)], Duration::from_millis(300));
+    let service = serve(
+        &gateway,
+        Setup {
+            limits: "{max_steps: 50, max_result_bytes: 4096, max_seconds: 60, \
+                     per_identity_per_minute: 10}",
+            ..Setup::default()
+        },
+    );
+    let body = json!({"question": "Leave?"}).to_string();
+    let mut stream = TcpStream::connect(&service.addr).unwrap();
+    write!(
+        stream,
+        "POST /ask HTTP/1.1\r\nhost: x\r\n{HEADER}: dana\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{body}",
+        body.len()
+    )
+    .unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    let mut seen = Vec::new();
+    let mut buf = [0; 4096];
+    // One whole step: its model call, then its `tool` event.
+    while !String::from_utf8_lossy(&seen).contains("event: tool") {
+        let n = stream.read(&mut buf).unwrap();
+        assert!(n > 0, "the stream ended before its first tool event");
+        seen.extend_from_slice(&buf[..n]);
+    }
+    drop(stream);
+    let (store, answers) = kept(&service, 1);
+    let record = &answers[0];
+    assert_eq!(
+        records::outcome_name(record.outcome),
+        "client-closed",
+        "{record:?}"
+    );
+    assert_eq!(record.reason.as_deref(), Some("client-closed"));
+    assert_eq!(record.answer, None);
+    assert!(record.steps >= 1, "{record:?}");
+    assert_eq!(record.input_tokens, 10 * record.steps, "{record:?}");
+    assert_eq!(record.output_tokens, record.steps, "{record:?}");
+    assert_eq!(record.context_tokens, 10, "{record:?}");
+    let reviews = store.reviews(&record.answer_id.0).unwrap();
+    assert!(
+        reviews.is_empty(),
+        "a reader leaving is no review: {reviews:?}"
+    );
+}
+
+/// A model reply cut off by its token limit (`finish_reason: "length"`) or by a content filter
+/// (`"content_filter"`) is no answer: the stream ends with `error` `cut-off`, the record's outcome
+/// is `cut-off` with the tokens spent, and each opens a review item (`story:ask-outcome-truthful`,
+/// R1-02).
+#[test]
+fn a_cut_off_model_reply_is_recorded_as_cut_off_and_opens_a_review() {
+    let finished = |text: &str, finish_reason: &str| {
+        let mut reply = text_reply(text);
+        reply["choices"][0]["finish_reason"] = json!(finish_reason);
+        reply
+    };
+    let gateway = Gateway::start(
+        vec![
+            finished("The widget is made by", "length"),
+            finished("", "content_filter"),
+        ],
+        Duration::ZERO,
+    );
+    let service = serve(&gateway, Setup::default());
+    for question in ["Who makes it?", "And now?"] {
+        let answer = ask(&service, "alice", question);
+        assert_eq!(answer.status, 200);
+        let (name, error) = answer.terminal();
+        assert_eq!(name, "error", "{:?}", answer.events);
+        assert_eq!(error["reason"], "cut-off", "{error}");
+        assert!(
+            !answer.names().contains(&"delta"),
+            "a cut-off reply is not streamed as the answer: {:?}",
+            answer.events
+        );
+    }
+    let (store, answers) = kept(&service, 2);
+    for record in &answers {
+        assert_eq!(
+            records::outcome_name(record.outcome),
+            "cut-off",
+            "{record:?}"
+        );
+        assert_eq!(record.reason.as_deref(), Some("cut-off"));
+        assert_eq!(record.answer, None);
+        assert_eq!(
+            (record.input_tokens, record.output_tokens, record.steps),
+            (10, 1, 1)
+        );
+        let causes: Vec<_> = store
+            .reviews(&record.answer_id.0)
+            .unwrap()
+            .into_iter()
+            .map(|r| records::cause_name(r.data.cause))
+            .collect();
+        assert_eq!(causes, ["failed"], "{record:?}");
+    }
+}
+
 /// A cut inside a multi-byte character drops it whole: the model is shown valid UTF-8 of at most
 /// `max_result_bytes`, and `result_bytes` is what it is shown.
 #[test]
@@ -856,5 +993,287 @@ fn a_body_above_the_body_limit_is_refused_inside_the_event_contract() {
         } else {
             "error"
         }
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Bounds of the service (`story:ask-service-bounds`)
+
+/// With `ask.max_in_flight: 2`, a third question while two answers are in flight is refused at
+/// once with 429 `busy`, asks no model and spends no question of the minute; once an answer
+/// ends, a question is admitted again (R1-03).
+#[test]
+fn a_question_past_max_in_flight_is_refused_busy_at_once() {
+    let gateway = Gateway::start(vec![text_reply("Yes [node:n-1].")], Duration::from_secs(2));
+    let service = Arc::new(serve(
+        &gateway,
+        Setup {
+            limits: "{max_steps: 4, max_result_bytes: 4096, max_seconds: 30, \
+                     per_identity_per_minute: 1}",
+            ask_extra: "  max_in_flight: 2",
+            ..Setup::default()
+        },
+    ));
+    let running: Vec<_> = ["ann", "ben"]
+        .into_iter()
+        .map(|identity| {
+            let service = service.clone();
+            std::thread::spawn(move || {
+                let answer = ask(&service, identity, "Busy?");
+                (answer.status, answer.terminal().clone())
+            })
+        })
+        .collect();
+    let started = Instant::now();
+    while gateway.asked() < 2 {
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "two answers did not start"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let asked = Instant::now();
+    let third = ask(&service, "cid", "Me too?");
+    assert!(
+        asked.elapsed() < Duration::from_millis(1500),
+        "the refusal waited {:?}",
+        asked.elapsed()
+    );
+    assert_eq!(third.status, 429, "{:?}", third.events);
+    assert_eq!(third.terminal().1["reason"], "busy", "{:?}", third.events);
+    assert_eq!(gateway.asked(), 2, "a busy question asked the model");
+    for handle in running {
+        let (status, (name, _)) = handle.join().unwrap();
+        assert_eq!((status, name.as_str()), (200, "done"));
+    }
+    // The busy refusal spent no question of `cid`'s minute (its limit is 1).
+    let again = ask(&service, "cid", "Now?");
+    assert_eq!(again.status, 200, "{:?}", again.events);
+    assert_eq!(again.terminal().0, "done");
+}
+
+/// A chat completion that asks for `n` tool calls at once.
+fn many_tool_reply(n: usize) -> Value {
+    let calls: Vec<Value> = (1..=n)
+        .map(|i| {
+            json!({
+                "id": format!("call-{i}"),
+                "type": "function",
+                "function": {"name": "search", "arguments": format!("{{\"query\":\"q{i}\"}}")}
+            })
+        })
+        .collect();
+    json!({
+        "choices": [{"index": 0, "finish_reason": "tool_calls",
+            "message": {"role": "assistant", "content": null, "tool_calls": calls}}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 1}
+    })
+}
+
+/// A step asking for more tool calls than `limits.max_tool_calls` makes only that many: the
+/// reader is called that often, the stream says how many were not made, and the model is told
+/// each one it asked for past the cap was not made (R1-06).
+#[test]
+fn a_step_past_max_tool_calls_is_cut_to_the_cap_and_says_so() {
+    let gateway = Gateway::start(
+        vec![many_tool_reply(5), text_reply("Done [node:n-1].")],
+        Duration::ZERO,
+    );
+    let service = serve(
+        &gateway,
+        Setup {
+            limits: "{max_steps: 4, max_result_bytes: 4096, max_seconds: 30, \
+                     per_identity_per_minute: 10, max_tool_calls: 2}",
+            ..Setup::default()
+        },
+    );
+    let answer = ask(&service, "alice", "Many?");
+    assert_eq!(answer.terminal().0, "done", "{:?}", answer.events);
+    let tools = answer.events.iter().filter(|(n, _)| n == "tool").count();
+    assert_eq!(tools, 2, "{:?}", answer.events);
+    let calls = std::fs::read_to_string(service.root.join("mcp-calls.log")).unwrap_or_default();
+    assert_eq!(calls.lines().count(), 2, "{calls}");
+    let said = answer.events.iter().any(|(n, v)| {
+        n == "status"
+            && v["step"] == 1
+            && v["message"]
+                .as_str()
+                .is_some_and(|m| m.contains("max_tool_calls") && m.contains('3'))
+    });
+    assert!(said, "no status says calls were cut: {:?}", answer.events);
+    let requests = gateway.requests.lock().unwrap().clone();
+    let results: Vec<String> = requests[1]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|m| m["role"] == "tool")
+        .map(|m| m["content"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        results.len(),
+        5,
+        "every call the model asked for is answered"
+    );
+    assert_eq!(
+        results
+            .iter()
+            .filter(|r| r.contains("not made") && r.contains("max_tool_calls"))
+            .count(),
+        3,
+        "{results:?}"
+    );
+}
+
+/// A gateway answering a body above 4 MiB fails the answer with `model-failed`; the body is not
+/// read past the cap (R1-06).
+#[test]
+fn a_gateway_body_above_four_mib_fails_the_answer() {
+    let gateway = Gateway::start(
+        vec![text_reply(&"x".repeat(5 * 1024 * 1024))],
+        Duration::ZERO,
+    );
+    let service = serve(&gateway, Setup::default());
+    let answer = ask(&service, "alice", "Huge?");
+    let (name, error) = answer.terminal();
+    assert_eq!(name, "error", "{}", answer.names().len());
+    assert_eq!(error["reason"], "model-failed", "{error}");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Adversary, wave 20261030a, unit `ask`
+
+/// Posts a question as `identity` on a raw connection, reads the stream until `marker` is in it,
+/// and closes the connection.
+fn leave_after(service: &Service, identity: &str, marker: &str) {
+    let body = json!({"question": "Leave?"}).to_string();
+    let mut stream = TcpStream::connect(&service.addr).unwrap();
+    write!(
+        stream,
+        "POST /ask HTTP/1.1\r\nhost: x\r\n{HEADER}: {identity}\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{body}",
+        body.len()
+    )
+    .unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    let mut seen = Vec::new();
+    let mut buf = [0; 4096];
+    while !String::from_utf8_lossy(&seen).contains(marker) {
+        let n = stream.read(&mut buf).unwrap();
+        assert!(n > 0, "the stream ended before {marker:?}");
+        seen.extend_from_slice(&buf[..n]);
+    }
+    drop(stream);
+}
+
+/// The review causes of `answer_id`, read after the keeper had a second to open them.
+fn causes_after_a_second(store: &Records, answer_id: &str) -> Vec<&'static str> {
+    std::thread::sleep(Duration::from_secs(1));
+    store
+        .reviews(answer_id)
+        .unwrap()
+        .into_iter()
+        .map(|r| records::cause_name(r.data.cause))
+        .collect()
+}
+
+/// The story's decision: "A `client-closed` answer records its tokens and steps and opens no
+/// review item"; the spec's `cortex.ask.ClientClosed`, the CHANGELOG and the site say the same.
+/// With `slow_after_ms` set, a reader who leaves after it still opens a `slow` item.
+#[test]
+fn adversary_a_client_closed_answer_past_slow_after_ms_opens_no_review_item() {
+    let gateway = Gateway::start(vec![tool_reply(1, SEARCH)], Duration::from_millis(300));
+    let service = serve(
+        &gateway,
+        Setup {
+            limits: "{max_steps: 50, max_result_bytes: 4096, max_seconds: 60, \
+                     per_identity_per_minute: 10}",
+            ask_extra: "  slow_after_ms: 1",
+            ..Setup::default()
+        },
+    );
+    leave_after(&service, "dana", "event: tool");
+    let (store, answers) = kept(&service, 1);
+    let record = &answers[0];
+    assert_eq!(
+        records::outcome_name(record.outcome),
+        "client-closed",
+        "{record:?}"
+    );
+    let causes = causes_after_a_second(&store, &record.answer_id.0);
+    assert!(
+        causes.is_empty(),
+        "a client-closed answer opened review items {causes:?}"
+    );
+}
+
+/// A reader who leaves while a model call is in flight holds its `max_in_flight` slot until the
+/// gateway answers, though the spec (`cortex.ask.ClientClosed`: "the answer stops at once") and
+/// the site ("stops the answer at once") say the answer stops at once: with `max_in_flight: 1`,
+/// the next asker is refused `busy` by an answer nobody reads.
+#[test]
+fn adversary_a_departed_reader_frees_its_in_flight_slot_at_once() {
+    let gateway = Gateway::start(vec![text_reply("Yes [node:n-1].")], Duration::from_secs(5));
+    let service = serve(
+        &gateway,
+        Setup {
+            limits: "{max_steps: 4, max_result_bytes: 4096, max_seconds: 30, \
+                     per_identity_per_minute: 10}",
+            ask_extra: "  max_in_flight: 1",
+            ..Setup::default()
+        },
+    );
+    leave_after(&service, "ann", "asking the model");
+    let started = Instant::now();
+    while gateway.asked() < 1 {
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "ann's answer asked no model"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    std::thread::sleep(Duration::from_millis(300));
+    let next = ask(&service, "ben", "My turn?");
+    assert_ne!(
+        next.status, 429,
+        "ann left; her abandoned answer still holds the only slot: {:?}",
+        next.events
+    );
+}
+
+/// A reader who leaves while the model is asked: the reply's tool call is still made against the
+/// store before the loop notices, though no one reads the answer and the site says a closed
+/// stream "stops the answer at once".
+#[test]
+fn adversary_a_reader_gone_during_a_model_call_makes_no_tool_call() {
+    let reply = json!({
+        "choices": [{"index": 0, "finish_reason": "tool_calls",
+            "message": {"role": "assistant", "content": null, "tool_calls": [{
+                "id": "call-1", "type": "function",
+                "function": {"name": "search", "arguments": SEARCH}}]}}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 1}
+    });
+    let gateway = Gateway::start(vec![reply], Duration::from_secs(2));
+    let service = serve(
+        &gateway,
+        Setup {
+            limits: "{max_steps: 50, max_result_bytes: 4096, max_seconds: 60, \
+                     per_identity_per_minute: 10}",
+            ..Setup::default()
+        },
+    );
+    leave_after(&service, "dana", "asking the model");
+    let (_, answers) = kept(&service, 1);
+    let record = &answers[0];
+    assert_eq!(
+        records::outcome_name(record.outcome),
+        "client-closed",
+        "{record:?}"
+    );
+    assert_eq!((record.steps, record.input_tokens), (1, 10), "{record:?}");
+    let calls = std::fs::read_to_string(service.root.join("mcp-calls.log")).unwrap_or_default();
+    assert!(
+        calls.is_empty(),
+        "a tool call was made for a reader who had left: {calls}"
     );
 }

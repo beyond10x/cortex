@@ -235,13 +235,18 @@ fn run_bounded(command: &mut Command) -> (Option<i32>, String) {
 }
 
 fn serve(world: &World, spec: &Path) -> Service {
+    serve_to(world, spec, Stdio::inherit())
+}
+
+/// Starts the service with its standard error written to `stderr`.
+fn serve_to(world: &World, spec: &Path, stderr: Stdio) -> Service {
     let mut child = Command::new(env!("CARGO_BIN_EXE_cortex"))
         .args(["ask", "serve", "--spec"])
         .arg(spec)
         .env("CORTEX_HOME", world.home())
         .env(TOKEN_ENV, "stand-in-token")
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(stderr)
         .spawn()
         .unwrap();
     let stdout = child.stdout.take().unwrap();
@@ -778,4 +783,133 @@ fn a_close_keeps_the_reviewers_expected_facts_and_nodes() {
         ),
         (Some(&[][..]), Some(&[][..]))
     );
+}
+
+/// A vote or a close whose body is above 64 KiB is refused with 413 and a JSON refusal, and
+/// nothing is cast or closed; a body under it still is (`story:ask-service-bounds`, R1-05).
+#[test]
+fn a_vote_or_close_body_above_64_kib_is_refused_with_413() {
+    let world = World::new();
+    let url = gateway(vec![(0, broken_reply())]);
+    let spec = world.spec(&url, "", "");
+    let service = serve(&world, &spec);
+    let (name, _) = service.ask("alice", "Fails?");
+    assert_eq!(name, "error");
+    let id = world.records().answers().unwrap()[0].answer_id.0.clone();
+    let big = "c".repeat(64 * 1024 + 1);
+    let (status, body) = service.call(
+        "POST",
+        &format!("/ask/{id}/vote"),
+        Some("alice"),
+        Some(json!({"value": "down", "comment": big})),
+    );
+    assert_eq!(status, 413, "{body}");
+    assert_eq!(body["error"], "bad-request", "{body}");
+    let review = format!("{id}:failed");
+    let (status, body) = service.call(
+        "POST",
+        &format!("/review/{review}/close"),
+        Some("reviewer"),
+        Some(json!({"reason": big})),
+    );
+    assert_eq!(status, 413, "{body}");
+    assert_eq!(body["error"], "bad-request", "{body}");
+    assert_eq!(
+        causes_of(&service.reviews(), &id),
+        ["failed"],
+        "the refused vote opened nothing and the refused close closed nothing"
+    );
+    let (status, body) = service.vote(&id, "alice", "up");
+    assert_eq!(status, 200, "{body}");
+    let (status, body) = service.call(
+        "POST",
+        &format!("/review/{review}/close"),
+        Some("reviewer"),
+        Some(json!({"reason": "c".repeat(1000)})),
+    );
+    assert_eq!(status, 200, "{body}");
+}
+
+/// The line of `log` that names `request`, once the service wrote it.
+fn logged_line(log: &Path, request: &str) -> String {
+    let started = std::time::Instant::now();
+    loop {
+        let text = std::fs::read_to_string(log).unwrap_or_default();
+        if let Some(line) = text.lines().find(|l| l.contains(request)) {
+            return line.to_string();
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "no log line names request {request}: {text}"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// A store failure on a vote answers 500 `store-failed` with a `request_id` and no path or SQL
+/// text, and the log line with that id carries the detail; a reader that cannot start ends an
+/// answer with an `error` whose message names its request and no program path, logged likewise
+/// (`story:ask-error-text`, R1-10).
+#[test]
+fn a_failure_answers_a_request_id_and_no_internal_text_and_logs_the_detail() {
+    let world = World::new();
+    let url = gateway(vec![(0, text_reply("Yes [node:n-1].", (10, 2, 0)))]);
+    let spec = world.spec(&url, "", "");
+    let log = world.root.join("serve.log");
+    let service = serve_to(
+        &world,
+        &spec,
+        Stdio::from(std::fs::File::create(&log).unwrap()),
+    );
+    let root = world.root.display().to_string();
+    let (id, _) = service.answered("alice", "Who makes the widget?");
+    rusqlite::Connection::open(world.records_file())
+        .unwrap()
+        .execute_batch("DROP TABLE votes")
+        .unwrap();
+    let (status, body) = service.vote(&id, "alice", "up");
+    assert_eq!(status, 500, "{body}");
+    assert_eq!(body["error"], "store-failed", "{body}");
+    let request = body["request_id"]
+        .as_str()
+        .filter(|r| !r.is_empty())
+        .unwrap_or_else(|| panic!("no request_id: {body}"))
+        .to_string();
+    let text = body.to_string();
+    for internal in [root.as_str(), "ask.sqlite", "no such table"] {
+        assert!(
+            !text.contains(internal),
+            "{internal:?} reached the client: {text}"
+        );
+    }
+    let line = logged_line(&log, &request);
+    assert!(line.contains("no such table"), "{line}");
+
+    std::fs::remove_file(world.root.join("bin/ekr")).unwrap();
+    let (name, error) = service.ask("alice", "And now?");
+    assert_eq!(name, "error", "{error}");
+    assert_eq!(error["reason"], "reader-failed", "{error}");
+    let message = error["message"].as_str().unwrap();
+    for internal in [root.as_str(), "bin/ekr"] {
+        assert!(
+            !message.contains(internal),
+            "{internal:?} reached the client: {message}"
+        );
+    }
+    let request = message
+        .rsplit_once("(request ")
+        .and_then(|(_, rest)| rest.strip_suffix(')'))
+        .unwrap_or_else(|| panic!("no request id in {message:?}"))
+        .to_string();
+    assert!(
+        world
+            .records()
+            .answers()
+            .unwrap()
+            .iter()
+            .any(|r| r.answer_id.0 == request),
+        "the request id is the answer's record id"
+    );
+    let line = logged_line(&log, &request);
+    assert!(line.contains("bin/ekr"), "{line}");
 }

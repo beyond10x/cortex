@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClientClosed payload",
+  "description": "The reader closed the stream before its last event; the answer stops at once and opens no review item. `steps` counts the model calls made, and the token counts add up their `usage` as `cortex.ask.AskDone` does; `context_tokens` is the prompt tokens of the last one.",
+  "x-ess-name": "cortex.ask.ClientClosed",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "steps": {
+      "type": "integer"
+    },
+    "input_tokens": {
+      "type": "integer"
+    },
+    "output_tokens": {
+      "type": "integer"
+    },
+    "cached_tokens": {
+      "type": "integer"
+    },
+    "context_tokens": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "steps",
+    "input_tokens",
+    "output_tokens",
+    "cached_tokens",
+    "context_tokens"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "427380fdb0fd63ec80516983202c1bf3e63d3ab0984514104cfc2ab4ee1c4aa4",
+    "contract_digest": "slice-sha256/2:523b166f5cde09aae75e5c587c588f7a7e573612d2cc40a53f9a8c6b9185dcf8",
+    "regenerate": "ess generate"
+  }
+}

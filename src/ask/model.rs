@@ -50,6 +50,18 @@ pub struct Reply {
     pub content: Option<String>,
     pub tool_calls: Vec<ToolCall>,
     pub usage: Usage,
+    /// Why the model stopped (`/choices/0/finish_reason`), when the gateway says.
+    pub finish_reason: Option<String>,
+}
+
+impl Reply {
+    /// The finish reason when the reply was cut off: by the model's token limit (`length`) or a
+    /// content filter (`content_filter`). Its text is then no answer.
+    pub fn cut_off(&self) -> Option<&str> {
+        self.finish_reason
+            .as_deref()
+            .filter(|r| matches!(*r, "length" | "content_filter"))
+    }
 }
 
 pub struct Gateway {
@@ -114,7 +126,7 @@ impl Gateway {
             .send()
             .map_err(|e| failure(&e))?;
         let status = response.status();
-        let text = response.text().map_err(|e| failure(&e))?;
+        let text = bounded_text(response)?;
         if !status.is_success() {
             let (shown, _) = super::cut(text.trim(), 300);
             return Err(CallError::Failed(format!(
@@ -123,6 +135,36 @@ impl Gateway {
         }
         parse(&text).map_err(CallError::Failed)
     }
+}
+
+/// The most bytes of a gateway's answer that are read; a longer one fails the call.
+pub const BODY_MAX_BYTES: u64 = 4 * 1024 * 1024;
+
+/// The body of `response` as text, read to at most [`BODY_MAX_BYTES`].
+fn bounded_text(response: reqwest::blocking::Response) -> Result<String, CallError> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    response
+        .take(BODY_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| {
+            let timed_out = e
+                .get_ref()
+                .and_then(|inner| inner.downcast_ref::<reqwest::Error>())
+                .is_some_and(reqwest::Error::is_timeout)
+                || e.kind() == std::io::ErrorKind::TimedOut;
+            if timed_out {
+                CallError::Timeout
+            } else {
+                CallError::Failed(format!("cannot read the gateway's answer: {e}"))
+            }
+        })?;
+    if bytes.len() as u64 > BODY_MAX_BYTES {
+        return Err(CallError::Failed(format!(
+            "the gateway answered more than {BODY_MAX_BYTES} bytes"
+        )));
+    }
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 fn failure(e: &reqwest::Error) -> CallError {
@@ -179,6 +221,10 @@ pub fn parse(text: &str) -> Result<Reply, String> {
             output: count(&usage["completion_tokens"]),
             cached: count(&usage["prompt_tokens_details"]["cached_tokens"]),
         },
+        finish_reason: value
+            .pointer("/choices/0/finish_reason")
+            .and_then(Value::as_str)
+            .map(str::to_string),
         message,
     })
 }

@@ -552,6 +552,16 @@ fn a_spec_without_ask_or_with_a_zero_limit_does_not_serve() {
             text.replace("max_steps: 4", "max_steps: 0"),
             "ask.limits.max_steps",
         ),
+        (
+            "zero-tool-calls.yaml",
+            text.replace("max_steps: 4", "max_steps: 4, max_tool_calls: 0"),
+            "ask.limits.max_tool_calls",
+        ),
+        (
+            "zero-in-flight.yaml",
+            text.replace("  limits: ", "  max_in_flight: 0\n  limits: "),
+            "ask.max_in_flight",
+        ),
     ] {
         let path = service.root.join(name);
         std::fs::write(&path, body).unwrap();

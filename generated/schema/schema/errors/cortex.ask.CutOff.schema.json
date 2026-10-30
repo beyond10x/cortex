@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CutOff payload",
+  "description": "The model's reply ended because of its token limit (`finish_reason` `length`) or a content filter (`content_filter`), so its text is no answer and is not streamed. `finish_reason` is the one the gateway gave; `steps` and the token counts are those of the model calls made, as for `cortex.ask.ClientClosed`.",
+  "x-ess-name": "cortex.ask.CutOff",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "finish_reason": {
+      "type": "string"
+    },
+    "steps": {
+      "type": "integer"
+    },
+    "input_tokens": {
+      "type": "integer"
+    },
+    "output_tokens": {
+      "type": "integer"
+    },
+    "cached_tokens": {
+      "type": "integer"
+    },
+    "context_tokens": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "finish_reason",
+    "steps",
+    "input_tokens",
+    "output_tokens",
+    "cached_tokens",
+    "context_tokens"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "427380fdb0fd63ec80516983202c1bf3e63d3ab0984514104cfc2ab4ee1c4aa4",
+    "contract_digest": "slice-sha256/2:20dcfd55da9431b661f67574a78e8842447254f5bba2f92015d208d650a822e1",
+    "regenerate": "ess generate"
+  }
+}
