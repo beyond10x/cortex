@@ -88,6 +88,13 @@ Kept `#[ignore]`d under `story:credential-key-spellings`, for the next release:
 - A URL password holding `,` or `;` after a user name with a raw `@` is kept in clear
   (`tests/w30b_mask_adversary.rs`).
 
+Kept `#[ignore]`d under `story:name-redaction-boundaries`, since 0.6.1
+(`tests/redaction_beside_marks_adv.rs`):
+
+- A known name glued to CJK text or an underscore, a name followed by a footnote digit, a name in
+  a lower-case-prefixed file name and a name starting with a titlecase digraph are shown to the
+  model unreplaced.
+
 ## 0.7.0 — 2026-10-30
 
 0.7.0 needs Connectors 0.60.0 or newer: a Connectors source refuses an older one, naming the version.
