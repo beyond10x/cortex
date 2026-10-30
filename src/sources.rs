@@ -453,6 +453,12 @@ pub const CHILD_FAILURE_LIMIT: u32 = 3;
 /// (`crate::state::Failures`).
 pub const DOCUMENT_FAILURE_LIMIT: u32 = 3;
 
+/// Batches of several documents a document may be in that the model answered it failed on, with
+/// no failure alone, and still be asked in a batch: a batch that failed once is asked whole once
+/// more, and from this many failures on each of its documents is asked alone
+/// (`crate::state::Failures::alone`).
+pub const BATCH_FAILURE_LIMIT: u32 = 2;
+
 /// The documents of one source. `window` fills `{since}` and `{until}` in a `connectors`
 /// source's inputs, and `child_failures` counts the consecutive runs each parent's child call
 /// failed in; the other kinds use neither. `max_context` caps the characters of thread context a

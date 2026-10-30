@@ -1066,14 +1066,16 @@ fn process_in(
     // Why the run ended `model-unavailable`, when the model could not be reached.
     let mut unreachable: Option<(extract::Unavailable, String)> = None;
     while let Some((batch, depth)) = queue.pop_front() {
-        // A batch that holds a document of a batch that failed before is not asked whole again:
-        // its other documents are asked together first, then each such document alone, those
-        // that failed alone on fewer runs first. So a document that fails every time is counted
-        // and stops no other, and a failing call that spends the run's budget still leaves the
-        // next run one document further.
-        if batch.len() > 1 && batch.iter().any(|i| failures.marked(&i.doc)) {
+        // A batch that holds a document asked alone ([`Failures::alone`]: it failed alone
+        // before, or was in `BATCH_FAILURE_LIMIT` failed batches) is not asked whole: its other
+        // documents are asked together first, then each such document alone, those that failed
+        // alone on fewer runs first. So a document that fails every time is counted and stops no
+        // other, and a failing call that spends the run's budget still leaves the next run one
+        // document further. A document whose batch failed once is asked in a batch once more, so
+        // one failed answer costs no call per document.
+        if batch.len() > 1 && batch.iter().any(|i| failures.alone(&i.doc)) {
             let (mut marked, rest): (Vec<_>, Vec<_>) =
-                batch.into_iter().partition(|i| failures.marked(&i.doc));
+                batch.into_iter().partition(|i| failures.alone(&i.doc));
             marked.sort_by_key(|i| failures.runs(&i.doc));
             for issued in marked.into_iter().rev() {
                 queue.push_front((vec![issued], depth));
@@ -1269,17 +1271,24 @@ fn process_in(
                 break;
             }
             // The model answered that it failed on a batch of several documents, none of which
-            // failed before: its documents are marked, so a later run asks each alone, and the
-            // run stops at it as at any failed batch. Only an answer marks or counts: an error
-            // answer that cost nothing came before any model was asked (a sign-in or a usage
-            // limit), and a call that timed out, crashed or left no JSON says nothing of the
-            // documents, as an unreachable model does not.
+            // is asked alone: each counts one more failed batch. A document at its
+            // `BATCH_FAILURE_LIMIT`th is asked alone, in this run, before the batches after it;
+            // when none is, the run stops at the batch as at any failed batch, and a later run
+            // asks it whole once more. Only an answer marks or counts: an error answer that cost
+            // nothing came before any model was asked (a sign-in or a usage limit), and a call
+            // that timed out, crashed or left no JSON says nothing of the documents, as an
+            // unreachable model does not.
             Err(refused) if refused.model_failed_on_request() && batch.len() > 1 => {
                 let reason = masked_key(redactor.as_ref(), &refused.message);
+                let mut alone = false;
                 for issued in &batch {
-                    failures.failed_in_batch(&issued.doc, &reason);
+                    alone |= failures.failed_in_batch(&issued.doc, &reason);
                 }
                 failures.save(&failures_path).map_err(Failure::Apply)?;
+                if alone {
+                    queue.push_front((batch, depth));
+                    continue;
+                }
                 if report.documents_applied == 0 {
                     return Err(Failure::Extract(refused.message));
                 }
@@ -1399,6 +1408,8 @@ fn process_in(
                 match reapplied {
                     Ok(second) => {
                         before.committed();
+                        // A node only a re-applied fact names is created by this round.
+                        lookup.applied(&round.doc, &second);
                         if !pseudonymised {
                             let _ = std::fs::write(
                                 dir.join(format!("{name}-report.json")),

@@ -1140,6 +1140,13 @@ fn replaced_key(fact: &TaggedValue) -> String {
 /// the first round without `replaces`, so EKR stores it as a plain assertion, and each later one
 /// goes, still marked `replaces: true`, in the round after the one before it, so EKR supersedes
 /// the value before it and one value stays current.
+///
+/// A fact of `doc` with the same subject and property that `report` does not reject was stored by
+/// the apply, as a value now current, and takes its place in that order. A rejected fact ordered
+/// before the latest such stored fact is not applied again (a newer value of the batch is
+/// current) and stays in `rest`'s `rejected`; each one after it goes in turn as above, the first
+/// still replacing, so EKR supersedes the stored value. Stripping `replaces` there would leave two
+/// values current.
 pub fn reapply_rounds(doc: &Yaml, report: &Value) -> Option<Reapply> {
     let facts = doc["facts"].as_sequence().map_or(&[][..], Vec::as_slice);
     let items = doc["evidence"].as_sequence().map_or(&[][..], Vec::as_slice);
@@ -1159,26 +1166,40 @@ pub fn reapply_rounds(doc: &Yaml, report: &Value) -> Option<Reapply> {
             .map(str::to_string)
             .collect()
     };
-    // Per key, (time, place in `doc`, fact).
-    let mut groups: BTreeMap<String, Vec<(i64, usize, TaggedValue)>> = BTreeMap::new();
-    let mut rest: Vec<Value> = Vec::new();
-    for part in report["rejected"].as_array().into_iter().flatten() {
-        let at = part["item"]
+    let time_of = |fact: &TaggedValue| -> i64 {
+        cites(fact)
+            .iter()
+            .filter_map(|id| observed.get(id.as_str()).copied())
+            .max()
+            .unwrap_or(0)
+    };
+    let fact_at = |part: &Value| -> Option<usize> {
+        part["item"]
             .as_str()
             .and_then(|item| item.strip_prefix("facts["))
             .and_then(|rest| rest.split(']').next())
-            .and_then(|n| n.parse::<usize>().ok());
-        match at.and_then(|i| Some((i, facts.get(i)?))) {
+            .and_then(|n| n.parse::<usize>().ok())
+    };
+    // Every fact a rejected part names (the fact, or its subject or object): not stored.
+    let unstored: BTreeSet<usize> = report["rejected"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(fact_at)
+        .collect();
+    // Per key, (time, place in `doc`, fact, the rejected part).
+    type Entry = (i64, usize, TaggedValue, Value);
+    let mut groups: BTreeMap<String, Vec<Entry>> = BTreeMap::new();
+    let mut rest: Vec<Value> = Vec::new();
+    for part in report["rejected"].as_array().into_iter().flatten() {
+        match fact_at(part).and_then(|i| Some((i, facts.get(i)?))) {
             Some((i, Yaml::Tagged(fact))) if nothing_to_replace(part) => {
-                let time = cites(fact)
-                    .iter()
-                    .filter_map(|id| observed.get(id.as_str()).copied())
-                    .max()
-                    .unwrap_or(0);
-                groups
-                    .entry(replaced_key(fact))
-                    .or_default()
-                    .push((time, i, (**fact).clone()));
+                groups.entry(replaced_key(fact)).or_default().push((
+                    time_of(fact),
+                    i,
+                    (**fact).clone(),
+                    part.clone(),
+                ));
             }
             _ => rest.push(part.clone()),
         }
@@ -1186,12 +1207,31 @@ pub fn reapply_rounds(doc: &Yaml, report: &Value) -> Option<Reapply> {
     if groups.is_empty() {
         return None;
     }
+    // Per key, the latest (time, place) of a fact of `doc` the apply stored.
+    let mut stored: BTreeMap<String, (i64, usize)> = BTreeMap::new();
+    for (i, fact) in facts.iter().enumerate() {
+        let Yaml::Tagged(fact) = fact else { continue };
+        if unstored.contains(&i) {
+            continue;
+        }
+        let key = replaced_key(fact);
+        if groups.contains_key(&key) {
+            let at = (time_of(fact), i);
+            let latest = stored.entry(key).or_insert(at);
+            *latest = (*latest).max(at);
+        }
+    }
     let mut rounds: Vec<Vec<TaggedValue>> = Vec::new();
-    for group in groups.values_mut() {
-        group.sort_by_key(|(time, i, _)| (*time, *i));
-        for (n, (_, _, fact)) in group.drain(..).enumerate() {
+    for (key, group) in groups.iter_mut() {
+        group.sort_by_key(|(time, i, _, _)| (*time, *i));
+        let current = stored.get(key).copied();
+        if let Some(latest) = current {
+            let newer = group.partition_point(|(time, i, _, _)| (*time, *i) < latest);
+            rest.extend(group.drain(..newer).map(|(_, _, _, part)| part));
+        }
+        for (n, (_, _, fact, _)) in group.drain(..).enumerate() {
             let mut fact = fact;
-            if n == 0 {
+            if n == 0 && current.is_none() {
                 if let Yaml::Mapping(body) = &mut fact.value {
                     body.remove("replaces");
                 }
@@ -1472,6 +1512,79 @@ mod tests {
         );
         assert_eq!(rounds[1].cited, BTreeSet::from(["late".to_string()]));
         assert_eq!(rounds[1].doc["evidence"].as_sequence().unwrap().len(), 1);
+    }
+
+    /// Adversary pass 2 on `story:replacement-applied-as-assertion`: a plain value of the same
+    /// subject and property that the apply stored takes its place in the time order. A rejected
+    /// replacement older than it is not applied again and stays rejected; one newer than it is
+    /// applied again still replacing, so EKR supersedes the stored value. Either way one value
+    /// stays current.
+    #[test]
+    fn a_stored_plain_value_of_the_same_property_takes_its_place_in_the_time_order() {
+        let subject = json!({"node_type": "Product", "aliases": ["W"]});
+        let doc = tagged(&json!({
+            "format": "ekr.extraction-document/1",
+            "facts": [
+                {"!Property": {"subject": subject, "property": "owner", "replaces": true,
+                    "value": "Alice", "evidence": ["early"]}},
+                {"!Property": {"subject": subject, "property": "owner",
+                    "value": "Bob", "evidence": ["mid"]}},
+                {"!Property": {"subject": subject, "property": "owner", "replaces": true,
+                    "value": "Carol", "evidence": ["late"]}},
+                {"!Property": {"subject": subject, "property": "owner",
+                    "value": "Dan", "evidence": ["latest"]}},
+            ],
+            "evidence": [
+                {"evidence": {"id": "early", "observed_at": 1000}, "payload": []},
+                {"evidence": {"id": "mid", "observed_at": 2000}, "payload": []},
+                {"evidence": {"id": "late", "observed_at": 3000}, "payload": []},
+                {"evidence": {"id": "latest", "observed_at": 4000}, "payload": []},
+            ],
+        }));
+        let refused = |i: usize| {
+            json!({"item": format!("facts[{i}]"),
+                "refusal": format!("replacement-without-active-assertion: facts[{i}]: none")})
+        };
+        let values = |round: &Round| -> Vec<(String, bool)> {
+            round.doc["facts"]
+                .as_sequence()
+                .unwrap()
+                .iter()
+                .map(|f| match f {
+                    Yaml::Tagged(f) => (
+                        f.value["value"].as_str().unwrap().to_string(),
+                        f.value.get("replaces").is_some(),
+                    ),
+                    other => panic!("{other:?}"),
+                })
+                .collect()
+        };
+        let items = |rest: &Value| -> Vec<String> {
+            rest["rejected"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| p["item"].as_str().unwrap().to_string())
+                .collect()
+        };
+
+        // Bob (stored) is newer than Alice and older than Carol; Dan is rejected for another
+        // reason, so it was not stored and does not count.
+        let report = json!({"rejected": [refused(0), refused(2),
+            {"item": "facts[3].subject", "refusal": "unknown-node-type"}]});
+        let Reapply { rounds, rest } = reapply_rounds(&doc, &report).expect("Carol");
+        assert_eq!(rounds.len(), 1);
+        assert_eq!(values(&rounds[0]), [("Carol".to_string(), true)]);
+        assert_eq!(rounds[0].cited, BTreeSet::from(["late".to_string()]));
+        assert_eq!(items(&rest), ["facts[3].subject", "facts[0]"]);
+
+        // Dan (stored) is the newest: no rejected replacement is applied again.
+        let report = json!({"rejected": [refused(0), refused(2)]});
+        assert!(
+            reapply_rounds(&doc, &report)
+                .is_some_and(|r| r.rounds.is_empty() && items(&r.rest) == ["facts[0]", "facts[2]"]),
+            "both stay rejected"
+        );
     }
 
     #[test]

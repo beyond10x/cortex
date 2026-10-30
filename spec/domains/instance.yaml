@@ -1782,10 +1782,12 @@ commands:
       # that cost more than zero and is not unfit for its window, or an answer with no structured
       # output; not `model-unavailable`, not a timeout, crash or call that left no JSON answer,
       # and not an error answer that cost zero, which came before any model was asked) ends the
-      # run as any failed batch does and marks its documents, kept per key in
-      # `failures/<source>.json` beside `state/`, so a run that is undone keeps them. A later run
-      # does not ask a batch that holds a marked document whole: its other documents together
-      # first, then each marked document alone, those with the lowest count first. A document the
+      # run as any failed batch does and counts one failed batch for each of its documents, kept
+      # per key in `failures/<source>.json` beside `state/`, so a run that is undone keeps them.
+      # A later run asks such a batch whole once more; when it fails again, its documents are
+      # asked alone in that run. A batch that holds a document in 2 failed batches, or one that
+      # failed alone, is not asked whole: its other documents together first, then each such
+      # document alone, those with the lowest count first. A document the
       # model answers it failed on alone adds one to its count of consecutive failed runs, kept
       # per key with the hash of the text and the last reason; an applied document drops its
       # count, and a run that read the source's whole listing (no window, nothing unread) drops

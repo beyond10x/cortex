@@ -1,10 +1,11 @@
 //! `story:poison-document-skipped`: a document whose extraction fails the same way on consecutive
 //! runs stops blocking the source. A batch of several documents that the model answers it failed
-//! on for the first time marks them and fails as before; a later run asks each marked document
-//! alone, those that failed alone on fewer runs first; a document is counted only when it fails
-//! alone. Its count lives in `failures/<source>.json` beside `state/`, so a run that is undone
-//! does not reset it; from the [`DOCUMENT_FAILURE_LIMIT`]th consecutive failure on, the document
-//! is left out, named in `skipped` with its count and reason, and the batches after it run. A
+//! on marks them and fails as before; a later run asks that batch whole once more, and when it
+//! fails again each of its documents alone, those that failed alone on fewer runs first; a
+//! document is counted only when it fails alone. Its count lives in `failures/<source>.json`
+//! beside `state/`, so a run that is undone does not reset it; from the
+//! [`DOCUMENT_FAILURE_LIMIT`]th consecutive failure on, the document is left out, named in
+//! `skipped` with its count and reason, and the batches after it run. A
 //! changed text is asked once more alone and keeps the count.
 
 mod common;
@@ -150,8 +151,9 @@ fn a_document_failing_alone_on_consecutive_runs_is_skipped_and_later_batches_run
         assert_eq!(runs_of(&w, i), 0, "{}", failures(&w));
     }
 
-    // Run 2: the batch holds marked documents, so it is not asked whole again: each is asked
-    // alone. d0 is applied, and the run stops at d1, its first failure alone, counted.
+    // Run 2: the batch failed once, so it is asked whole once more (the pass-2 rule: one failed
+    // answer costs no call per document). It fails again, so each document is asked alone in
+    // this run: d0 is applied, and the run stops at d1, its first failure alone, counted.
     let (code, ran) = run(&w);
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
     assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
@@ -160,13 +162,17 @@ fn a_document_failing_alone_on_consecutive_runs_is_skipped_and_later_batches_run
         stopped.contains("The model could not answer this batch.") && stopped.contains(&key(1)),
         "{ran}"
     );
-    assert_eq!(w.lines("wrapped-calls.log").len(), 1 + 2, "[0-3], [0], [1]");
+    assert_eq!(
+        w.lines("wrapped-calls.log").len(),
+        1 + 3,
+        "[0-3], [0-3], [0], [1]"
+    );
     assert_eq!(runs_of(&w, 1), 1, "{}", failures(&w));
     assert!(runs_of(&w, 0).is_null(), "applied: {}", failures(&w));
     assert_eq!(seen_keys(&w), [key(0)]);
 
-    // Run 3: d2 and d3, marked with no count, are asked alone before d1 and applied; d1 fails
-    // alone again, counted, and the run stops at it.
+    // Run 3: d2 and d3, in two failed batches and with no count, are asked alone before d1 and
+    // applied; d1 fails alone again, counted, and the run stops at it.
     let (code, ran) = run(&w);
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
     assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
@@ -176,7 +182,7 @@ fn a_document_failing_alone_on_consecutive_runs_is_skipped_and_later_batches_run
             .is_some_and(|s| s.contains(&key(1))),
         "{ran}"
     );
-    assert_eq!(w.lines("wrapped-calls.log").len(), 3 + 3, "[2], [3], [1]");
+    assert_eq!(w.lines("wrapped-calls.log").len(), 4 + 3, "[2], [3], [1]");
     assert_eq!(runs_of(&w, 1), 2, "{}", failures(&w));
     assert_eq!(seen_keys(&w), [key(0), key(2), key(3)]);
 
@@ -335,8 +341,8 @@ fn a_run_its_gate_refuses_keeps_the_failure_count() {
 }
 
 /// An answer with no structured output is the model failing on the request, as an error answer
-/// is: the batch's documents are marked, the next run asks each alone and counts the one it fails
-/// on, and the others are applied.
+/// is: the batch asked whole once more fails again, each document is then asked alone, the one
+/// it fails on is counted, and the others are applied.
 #[test]
 fn an_answer_with_no_structured_output_marks_and_counts_as_an_error_answer_does() {
     let w = world(&[CLEAN, POISONED], "");
@@ -358,7 +364,11 @@ fn an_answer_with_no_structured_output_marks_and_counts_as_an_error_answer_does(
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
     assert_eq!(seen_keys(&w), [key(0)]);
     assert_eq!(runs_of(&w, 1), 1, "{}", failures(&w));
-    assert_eq!(w.lines("wrapped-calls.log").len(), 1 + 2, "[0-1], [0], [1]");
+    assert_eq!(
+        w.lines("wrapped-calls.log").len(),
+        1 + 3,
+        "[0-1], [0-1], [0], [1]"
+    );
 }
 
 /// An error answer that cost nothing came before any model was asked: the batch is not split and

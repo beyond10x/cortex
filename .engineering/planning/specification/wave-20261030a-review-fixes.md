@@ -33,7 +33,7 @@ relations:
 - specifies: story:window-relative-placeholders
 - specifies: story:runs-retention
 - specifies: story:small-robustness
-revision: 13
+revision: 14
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 3}
@@ -73,12 +73,12 @@ its stage opens, so it starts from every unit merged before it.
 | cost | `run-cost-counted-on-refusal`, `replacement-applied-as-assertion` | w18a | merged |
 | ask | `ask-outcome-truthful`, `ask-service-bounds`, `ask-error-text` | w18a | merged |
 | redact | `redaction-patterns-hold`, `mask-quoted-credentials` | w18a | merged |
-| outcome | `update-refuses-rekey`, `schema-apply-outcome-unknown` | w18a | implementing |
+| outcome | `update-refuses-rekey`, `schema-apply-outcome-unknown` | w18a | merged (03b9bf9d) |
 | cli | `unit-names-unique`, `spec-integer-bounds`, `durable-home-writes` | w18a | merged |
-| askio | `ask-records-deadline`, `eval-proxy-bounds` | ask | fixing adversary findings (pass 1) |
+| askio | `ask-records-deadline`, `eval-proxy-bounds` | ask | merged (36e6b989) |
 | fail | `poison-document-skipped`, `window-advances-past-applied` | cost | merged (3ac47068) |
-| shapes | `structured-children-follow-rule`, `record-key-template`, `child-text-and-filter` | conn, outcome | planned |
-| session | `ekr-session-per-run` | read, fail | adversary |
+| shapes | `structured-children-follow-rule`, `record-key-template`, `child-text-and-filter` | conn, outcome | implementing |
+| session | `ekr-session-per-run` | read, fail | fixing adversary findings (pass 1) |
 | tail | `connectors-call-deadline`, `window-relative-placeholders`, `runs-retention`, `small-robustness` | conn, shapes | planned |
 | ess | move the `ess` pin in `spec/ess-inputs.yaml` from 0.60.0 to the newest ESS release and regenerate | every unit above | planned |
 
@@ -164,6 +164,8 @@ directory `w30a/<unit>/`.
 | session | `unit/w30a-session` | 3ac47068 | `cortex-w30a-session` | `<tree>/target` | `w30a/session` |
 | sec | `unit/w30a-sec` | 3ac47068 | `cortex-w30a-sec` | `<tree>/target` | `w30a/sec` |
 | p2 | `unit/w30a-p2` | d63686d1 | `cortex-w30a-p2` | `<tree>/target` | `w30a/p2` |
+| p2b | `unit/w30a-p2b` | cb5c03fd | `cortex-w30a-p2b` | `<tree>/target` | `w30a/p2b` |
+| shapes | `unit/w30a-shapes` | 36e6b989 | `cortex-w30a-shapes` | `<tree>/target` | `w30a/shapes` |
 
 Unit rows are added as each tree is created.
 

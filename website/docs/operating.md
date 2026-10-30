@@ -30,7 +30,7 @@ run of the source writes it again, with its counts starting from zero.
 | `instances/<name>/meta.json` | the viewer's port and the directory the spec was created from |
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
 | `instances/<name>/state/entities.json` | entity names from earlier runs, offered to the model so it reuses them |
-| `instances/<name>/failures/<source>.json` | documents whose extraction failed (`cortex.failures/1`): each key's text hash, its consecutive runs failed with the document alone (`0` for one marked by a failed batch of several) and the last reason; outside `state/`, so undoing a run keeps it (see [What one run does](#what-one-run-does)) |
+| `instances/<name>/failures/<source>.json` | documents whose extraction failed (`cortex.failures/1`): each key's text hash, its consecutive runs failed with the document alone (`runs`, `0` when none), the failed batches of several it was in (`batches`, absent when none) and the last reason; outside `state/`, so undoing a run keeps it (see [What one run does](#what-one-run-does)) |
 | `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report, or claude's error text (`claude/error.txt`) |
 | `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
@@ -208,7 +208,11 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    without `replaces`, so its value is stored as a plain assertion, and counts it in the run's
    `facts_reapplied` instead of `rejected`. When the batch holds several such facts for one entity
    and property, the earliest (by its document's time) is stored that way and each later one is
-   applied after it, still replacing, so one value stays current here too. If that second apply
+   applied after it, still replacing, so one value stays current here too. When the batch also
+   states a plain value of that entity and property, which EKR stored, that value takes its place
+   in the same time order: a rejected replacement older than it is not applied again (the batch's
+   newer value stays current, and the replacement is listed in `rejected`), and the newer ones are
+   applied after it still replacing, so EKR supersedes it. If that second apply
    fails in the store, the run stops after the batch and the documents whose values it carried
    are not marked seen, so a later run extracts them again. EKR also rejects it when the current value is dated
    later than the replacement (`invalid-supersession`), as when an older document is read after a
@@ -282,10 +286,13 @@ batch, keeps the batches before it applied, and names the limit in `stopped`.
 
 When the model answers that it failed on a batch of several documents (an error answer, or an
 answer with no structured output), the run stops there as at any failed batch (after one call),
-and the batch's documents are marked. A later run does not ask that batch whole again: it asks
-its unmarked documents together, then each marked document alone, those that failed alone fewer
-times first, so one document that fails every time does not stop the others, and a failing call
-that spends the run's `budget_usd` still leaves the next run a document further. Only an answer
+and each of the batch's documents counts one failed batch. A later run asks such a batch whole
+once more, so one failed answer costs no call per document. When it fails again, its documents
+are asked alone in that run, and from then on a batch that holds a document in two failed
+batches, or one that failed alone, asks its other documents together, then each such document
+alone, those that failed alone fewer times first. So one document that fails every time does not
+stop the others, and a failing call that spends the run's `budget_usd` still leaves the next run
+a document further. Only an answer
 marks or counts a document: an error answer that cost nothing came before any model was asked (a
 sign-in or a usage limit), and a call that timed out, crashed or left no JSON answer says nothing
 about the documents; neither marks nor counts one. A document that fails alone is counted in

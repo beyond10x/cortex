@@ -13,7 +13,9 @@ use cortex_model::instance as m;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::sources::{Document, Origin, Window, DOCUMENT_FAILURE_LIMIT, OVERLAP_MS};
+use crate::sources::{
+    Document, Origin, Window, BATCH_FAILURE_LIMIT, DOCUMENT_FAILURE_LIMIT, OVERLAP_MS,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Seen {
@@ -368,8 +370,10 @@ pub fn failures_path(instance_dir: &Path, source: &str) -> PathBuf {
 
 /// Consecutive runs whose extraction of a document failed with the document alone in its
 /// request, per key: the hash of the text that last failed, the count, and the last reason. A
-/// document of a batch of several that failed is marked with a count of `0`
-/// ([`Failures::failed_in_batch`]), so a later run asks it alone ([`Failures::marked`]). The count
+/// document of a batch of several that failed is kept with a count of `0` and one more failed
+/// batch ([`Failures::failed_in_batch`]): a batch that failed once is asked whole once more, and
+/// from its [`BATCH_FAILURE_LIMIT`]th failed batch, or its first failure alone, the document is
+/// asked alone ([`Failures::alone`]). The count
 /// is kept per key across text changes; an applied document drops its entry. From
 /// [`DOCUMENT_FAILURE_LIMIT`] on, a run leaves the document out while its text is the one that
 /// last failed ([`Failures::skips`]): a changed text is asked once more alone, and a failure
@@ -386,6 +390,13 @@ pub struct Failed {
     pub hash: String,
     pub runs: u32,
     pub reason: String,
+    /// Failed batches of several documents it was in; absent when none.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub batches: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 impl Failures {
@@ -426,40 +437,48 @@ impl Failures {
     /// count: one more than before, whatever text failed before.
     pub fn failed(&mut self, doc: &Document, reason: &str) -> u32 {
         let hash = doc_hash(doc);
-        let runs = self
+        let (runs, batches) = self
             .documents
             .get(&doc.key)
-            .map_or(1, |f| f.runs.saturating_add(1));
+            .map_or((1, 0), |f| (f.runs.saturating_add(1), f.batches));
         self.documents.insert(
             doc.key.clone(),
             Failed {
                 hash,
                 runs,
                 reason: reason.to_string(),
+                batches,
             },
         );
         runs
     }
 
-    /// Marks `doc`, of a batch of several documents that failed, for `reason`: a count of `0`,
-    /// unless it already has one.
-    pub fn failed_in_batch(&mut self, doc: &Document, reason: &str) {
-        if self.documents.contains_key(&doc.key) {
-            return;
-        }
-        self.documents.insert(
-            doc.key.clone(),
-            Failed {
+    /// Counts one more failed batch of several documents for `doc`, for `reason`: a count of `0`
+    /// when it has none, a count it has kept. Answers whether `doc` is now asked alone.
+    pub fn failed_in_batch(&mut self, doc: &Document, reason: &str) -> bool {
+        let entry = self
+            .documents
+            .entry(doc.key.clone())
+            .or_insert_with(|| Failed {
                 hash: doc_hash(doc),
                 runs: 0,
                 reason: reason.to_string(),
-            },
-        );
+                batches: 0,
+            });
+        entry.batches = entry.batches.saturating_add(1);
+        if entry.runs == 0 {
+            entry.reason = reason.to_string();
+        }
+        self.alone(doc)
     }
 
-    /// Whether `doc` failed before, alone or in a batch, with any text: a run asks it alone.
-    pub fn marked(&self, doc: &Document) -> bool {
-        self.documents.contains_key(&doc.key)
+    /// Whether a run asks `doc` alone, with any text: it failed alone before, or was in
+    /// [`BATCH_FAILURE_LIMIT`] failed batches of several. A document whose batch failed once is
+    /// asked in a batch once more.
+    pub fn alone(&self, doc: &Document) -> bool {
+        self.documents
+            .get(&doc.key)
+            .is_some_and(|f| f.runs > 0 || f.batches >= BATCH_FAILURE_LIMIT)
     }
 
     /// How many consecutive runs `doc` failed alone: `0` when it did not.
@@ -949,7 +968,7 @@ mod tests {
             failures.skips(&changed).is_none(),
             "a changed text is asked"
         );
-        assert!(failures.marked(&changed), "alone");
+        assert!(failures.alone(&changed), "alone");
         assert_eq!(
             failures.failed(&changed, "refused"),
             DOCUMENT_FAILURE_LIMIT + 1
@@ -964,26 +983,55 @@ mod tests {
         assert!(failures.documents.is_empty());
     }
 
-    /// A document of a failed batch of several is marked with no count; a mark keeps a count the
+    /// A document of a failed batch of several is kept with no count and is asked in a batch once
+    /// more; from its second failed batch it is asked alone. A failed batch keeps a count the
     /// document already has, whatever its text, and the next failure alone counts one.
     #[test]
-    fn a_document_of_a_failed_batch_is_marked_and_keeps_its_count() {
+    fn a_document_of_a_failed_batch_is_asked_alone_from_its_second_failed_batch() {
+        assert_eq!(BATCH_FAILURE_LIMIT, 2);
         let x = doc("https://example.org/x", "poison");
         let mut failures = Failures::default();
-        assert!(!failures.marked(&x));
-        failures.failed_in_batch(&x, "batch refused");
-        assert!(failures.marked(&x));
+        assert!(!failures.alone(&x));
+        assert!(!failures.failed_in_batch(&x, "batch refused"), "once more");
+        assert!(!failures.alone(&x));
+        assert_eq!(failures.documents[&x.key].runs, 0);
+        assert!(failures.failed_in_batch(&x, "batch refused"), "then alone");
+        assert!(failures.alone(&x));
         assert_eq!(failures.documents[&x.key].runs, 0);
         assert_eq!(failures.failed(&x, "refused"), 1);
         assert_eq!(failures.failed(&x, "refused"), 2);
-        failures.failed_in_batch(&x, "batch refused");
+        assert!(failures.failed_in_batch(&x, "batch refused"));
         assert_eq!(failures.documents[&x.key].runs, 2);
+        assert_eq!(failures.documents[&x.key].reason, "refused");
         let changed = doc("https://example.org/x", "poison, edited");
         failures.failed_in_batch(&changed, "batch refused");
         assert_eq!(failures.documents[&x.key].runs, 2);
-        assert!(failures.marked(&changed) && failures.marked(&x));
+        assert!(failures.alone(&changed) && failures.alone(&x));
         assert_eq!(failures.runs(&changed), 2);
         assert_eq!(failures.runs(&doc("https://example.org/y", "fine")), 0);
+
+        // One failure alone is enough to be asked alone.
+        let z = doc("https://example.org/z", "poison");
+        failures.failed(&z, "refused");
+        assert!(failures.alone(&z));
+    }
+
+    /// A failures file written before `batches` existed reads with none, and an entry with none
+    /// is written without it.
+    #[test]
+    fn a_failures_entry_without_batches_reads_as_none_and_is_written_without_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("news.json");
+        std::fs::write(
+            &path,
+            r#"{"format": "cortex.failures/1", "documents": {"https://example.org/x":
+                {"hash": "h", "runs": 0, "reason": "batch refused"}}}"#,
+        )
+        .unwrap();
+        let failures = Failures::load(&path).unwrap();
+        assert_eq!(failures.documents["https://example.org/x"].batches, 0);
+        failures.save(&path).unwrap();
+        assert!(!std::fs::read_to_string(&path).unwrap().contains("batches"));
     }
 
     /// With the source's full listing, the entries of documents it no longer lists are dropped.
