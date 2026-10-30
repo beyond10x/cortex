@@ -118,11 +118,13 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A spec number out of range was accepted and failed later: a large `refresh_after_days`
   overflowed when a run counted its window, a hook `timeout_s` near the largest integer panicked
   the run after its line was printed, and a `view_port` of 70000 or -1 wrapped to another port.
-  The spec check now refuses, naming the field, a `refresh_after_days` above 36500, a
-  `monitoring.hook.timeout_s` above 86400 and a `serve.view_port` outside 0 to 65535. The same
-  check reads an instance's frozen copy (`instances/<name>/instance.yaml`), so an instance created
-  with such a value is refused, naming the field, by every command that reads that copy, `update`
-  included, until the value in that file is brought into range.
+  `create`, `update` and `adopt` now refuse, naming the field, a `refresh_after_days` above
+  36500, a `monitoring.hook.timeout_s` above 86400 and a `serve.view_port` outside 0 to 65535.
+  An instance created by 0.6.1 with such a value keeps running: its frozen copy
+  (`instances/<name>/instance.yaml`) is not held to the bounds, a run counts a larger refresh
+  window as reaching back as far as a time can, a larger hook `timeout_s` is capped at 86400
+  seconds, and the port is read only when an instance is made. An `update` to an out-of-range
+  value is refused naming the field, and one into range is made as before.
 - A home file cortex rewrote (`registry.json`, a source status, a state file) was renamed into
   place without being synced, so a crash could leave it empty and every command then failed. Each
   is now synced to disk before the rename, and its directory after it.

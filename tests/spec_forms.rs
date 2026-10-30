@@ -393,7 +393,12 @@ fn an_out_of_range_number_is_refused_by_create_naming_the_field() {
     })
     .collect();
     for (text, field) in cases {
-        assert!(spec::parse(&text).is_err(), "{field} accepted:\n{text}");
+        // A negative or zero value fails the check every spec is read with; one above the range
+        // fails only where an operator gives the spec (`spec::bounds_refusal`).
+        assert!(
+            spec::parse(&text).map_or(true, |s| spec::bounds_refusal(&s).is_some()),
+            "{field} accepted:\n{text}"
+        );
         let w = World::new();
         let path = write(&w, "n.yaml", &text);
         let (code, _, stderr) = cortex_raw(
@@ -416,6 +421,88 @@ fn an_out_of_range_number_is_refused_by_create_naming_the_field() {
             "a refused create left its instance directory ({field})"
         );
     }
+}
+
+#[test]
+fn a_frozen_copy_above_a_bound_keeps_running_and_updates_only_into_range() {
+    // cortex 0.6.1 accepted any `refresh_after_days` of 0 or more, any hook `timeout_s` above 0
+    // and any `view_port`. Its frozen copy keeps loading: a run saturates the refresh window and
+    // caps the hook at a day. An `update` is held to the bounds and names the field.
+    let max = i64::MAX.to_string();
+    let frozen = spec_with_numbers("f", &max, "70000", Some(("/bin/true", max.as_str())));
+    let parsed = spec::parse(&frozen).expect("the frozen copy parses");
+    assert!(spec::bounds_refusal(&parsed).is_some());
+
+    let w = World::new();
+    let hook = w.root.join("hook");
+    common::executable(
+        &hook,
+        &format!("echo \"$@\" >> \"{}/hook.log\"\n", w.root.display()),
+    );
+    let given = spec_with_numbers("f", "0", "18997", Some((hook.to_str().unwrap(), "10")));
+    let path = write(&w, "f.yaml", &given);
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    let copy = w.home.join("instances/f/instance.yaml");
+    let text = std::fs::read_to_string(&copy).unwrap();
+    for from in ["refresh_after_days: 0", "timeout_s: 10"] {
+        assert!(
+            text.contains(from),
+            "{from} not in the frozen copy:\n{text}"
+        );
+    }
+    std::fs::write(
+        &copy,
+        text.replace(
+            "refresh_after_days: 0",
+            &format!("refresh_after_days: {max}"),
+        )
+        .replace("timeout_s: 10", &format!("timeout_s: {max}")),
+    )
+    .unwrap();
+    for _ in 0..2 {
+        let (code, ran) = w.cortex(&["run", "f/news"]);
+        assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    }
+    std::fs::write(w.root.join("fail"), "").unwrap();
+    let (code, _, stderr) = cortex_raw(&w, &["run", "f/news"]);
+    assert!(code.is_some_and(|c| c != 0 && c != 2), "{code:?}: {stderr}");
+    assert!(!stderr.contains("panicked"), "{stderr}");
+    assert_eq!(w.lines("hook.log"), ["f/news fetch-failed"]);
+    std::fs::remove_file(w.root.join("fail")).unwrap();
+
+    let above = write(
+        &w,
+        "above.yaml",
+        &spec_with_numbers("f", "40000", "18997", None),
+    );
+    let (code, _, stderr) = cortex_raw(
+        &w,
+        &[
+            "update",
+            "f",
+            "--spec",
+            above.to_str().unwrap(),
+            "--no-units",
+        ],
+    );
+    assert_eq!(code, Some(2), "{stderr}");
+    assert!(
+        stderr.contains("sources.news.policy.refresh_after_days"),
+        "{stderr}"
+    );
+    let (code, updated) = w.cortex(&[
+        "update",
+        "f",
+        "--spec",
+        path.to_str().unwrap(),
+        "--no-units",
+    ]);
+    assert_eq!(
+        (code, updated["outcome"].as_str()),
+        (0, Some("updated")),
+        "{updated}"
+    );
 }
 
 #[test]

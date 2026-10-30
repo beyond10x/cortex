@@ -191,7 +191,8 @@ impl SeenState {
             None => true,
             Some(seen) => seen.hash.as_ref().is_some_and(|hash| {
                 (!waits(doc)
-                    || now_ms - seen.applied_at >= refresh_after_days * DAY_MS
+                    || now_ms.saturating_sub(seen.applied_at)
+                        >= refresh_after_days.saturating_mul(DAY_MS)
                     || self.relinked(doc, seen))
                     && *hash != doc_hash(doc)
             }),
@@ -205,7 +206,8 @@ impl SeenState {
         waits(doc)
             && self.documents.get(&doc.key).is_some_and(|seen| {
                 seen.hash.as_ref().is_some_and(|hash| {
-                    now_ms - seen.applied_at < refresh_after_days * DAY_MS
+                    now_ms.saturating_sub(seen.applied_at)
+                        < refresh_after_days.saturating_mul(DAY_MS)
                         && *hash != doc_hash(doc)
                         && !self.relinked(doc, seen)
                 })

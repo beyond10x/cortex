@@ -508,11 +508,13 @@ pub fn call_hook(
     };
     let timeout = Duration::from_secs(
         hook.timeout_s
+            .map(|t| t.min(crate::spec::MAX_HOOK_TIMEOUT_S))
             .and_then(|t| u64::try_from(t).ok())
             .unwrap_or(HOOK_TIMEOUT_S),
     );
     let started = Instant::now();
-    // The spec check bounds `timeout_s` to a day; an `Instant` past its range is never waited for.
+    // A given spec is refused above a day (`spec::bounds_refusal`); a frozen copy from before the
+    // rule is capped at a day here, and an `Instant` past its range is never waited for.
     let deadline = started
         .checked_add(timeout)
         .unwrap_or_else(|| started + Duration::from_secs(HOOK_TIMEOUT_S));

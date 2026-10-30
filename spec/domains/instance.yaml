@@ -87,9 +87,11 @@ types:
       search: cortex.instance.SearchInput
 
   # UNMAPPED: `refresh_after_days` is 0 to 36500 and the two maxima above 0; a spec outside these
-  # is refused (exit 2, naming the field, for `create`, `update`, `adopt` and an instance's frozen
-  # copy). These are checks on Integer values the specification has no construct for;
-  # `spec::check` holds them and `tests/spec_forms.rs` tests them.
+  # is refused (exit 2, naming the field). Below 0 (or 0 for a maximum) is refused wherever a spec
+  # is read (`spec::check`); above 36500 only where an operator gives one to `create`, `update` or
+  # `adopt` (`spec::load_given`), so an instance's frozen copy from before the bound keeps running
+  # and a run saturates its window. These are checks on Integer values the specification has no
+  # construct for; `tests/spec_forms.rs` tests them.
   - name: cortex.instance.FetchPolicy
     kind: struct
     fields:
@@ -669,8 +671,9 @@ types:
       - {name: bin, type: Optional<String>}
 
   # UNMAPPED: `view_port` is a port from 0 to 65535; a spec outside it is refused (exit 2, naming
-  # the field). A check on an Integer the specification has no construct for; `spec::check` holds
-  # it and `tests/spec_forms.rs` tests it.
+  # the field, for `create`, `update` and `adopt`: `spec::load_given`). The port is read only when
+  # an instance is made, so an instance's frozen copy is not held to it. A check on an Integer the
+  # specification has no construct for; `tests/spec_forms.rs` tests it.
   - name: cortex.instance.ServeSpec
     kind: struct
     fields:
@@ -701,7 +704,9 @@ types:
   # hook needs it reads itself, outside cortex. The call lasts `timeout_s` seconds at most, absent
   # means 10; then the hook's process group is killed.
   # UNMAPPED: `timeout_s` is 1 to 86400; a spec outside it is refused (exit 2, naming the field).
-  # A check on an Integer the specification has no construct for; `spec::check` holds it and
+  # Below 1 is refused wherever a spec is read (`spec::check`); above 86400 only where an operator
+  # gives one (`spec::load_given`), and a frozen copy from before the bound is capped at 86400 when
+  # the hook is called. A check on an Integer the specification has no construct for;
   # `tests/spec_forms.rs` tests it.
   - name: cortex.instance.RunHook
     kind: struct

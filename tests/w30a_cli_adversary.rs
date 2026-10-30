@@ -1,7 +1,6 @@
 //! Adversary cases for unit `cli` of wave 20261030a (`story:unit-names-unique`,
-//! `story:spec-integer-bounds`, `story:durable-home-writes`). Each case is ignored with the finding
-//! it shows, so the branch stays green; `cargo test --test w30a_cli_adversary -- --ignored` runs
-//! them.
+//! `story:spec-integer-bounds`, `story:durable-home-writes`). A case still ignored names the finding
+//! it shows, so the branch stays green; `cargo test --test w30a_cli_adversary -- --ignored` runs it.
 
 mod common;
 
@@ -88,13 +87,10 @@ fn source_state(w: &World, id: &str) -> Value {
 }
 
 /// A `refresh_after_days` of 40000 never overflowed (`40000 * 86_400_000` is far inside `i64`),
-/// and cortex 0.6.1 created and ran such an instance. The bound now sits in `spec::check`, which
-/// reads the frozen copy, so after the upgrade every run of that instance fails. The repository's
-/// rule for a new spec refusal (`spec::load_given`, `a_frozen_spec_with_a_reserved_source_name_
-/// still_parses`) is that a frozen copy keeps loading.
+/// and cortex 0.6.1 created and ran such an instance. The bounds are held where an operator gives
+/// a spec (`spec::load_given`), as the repository's rule for a new spec refusal is, so the frozen
+/// copy keeps loading and the instance keeps running after the upgrade.
 #[test]
-#[ignore = "adversary: an instance whose frozen copy holds refresh_after_days 40000 (accepted and \
-            run by 0.6.1, no overflow) stops running after the upgrade"]
 fn adv_w30a_an_instance_frozen_with_a_large_refresh_window_still_runs_after_the_upgrade() {
     let w = World::new();
     let spec = w.spec("t", "conn_test");
@@ -113,12 +109,10 @@ fn adv_w30a_an_instance_frozen_with_a_large_refresh_window_still_runs_after_the_
 }
 
 /// The failure hook is "called once for each run that fails" (`spec-file.md`, `monitoring.hook`).
-/// A timer run of an instance whose frozen copy the new bound refuses fails, and two such runs
-/// disable the source, but the hook reads `monitoring` from that same refused copy and is never
-/// called: the operator's alerting is silent while the source is switched off.
+/// A timer run of an instance whose frozen copy holds a value above the new bound reads
+/// `monitoring` from that copy: when its fetch fails the hook is called, and the second failure,
+/// which disables the source, says so.
 #[test]
-#[ignore = "adversary: a timer run that fails on a frozen copy the new bound refuses calls no \
-            failure hook, and two of them disable the source silently"]
 fn adv_w30a_a_timer_run_failing_on_a_refused_frozen_copy_calls_the_failure_hook() {
     let w = World::new();
     let spec = spec_with_hook(&w);
@@ -128,25 +122,25 @@ fn adv_w30a_a_timer_run_failing_on_a_refused_frozen_copy_calls_the_failure_hook(
         &["create", "--spec", spec.to_str().unwrap(), "--no-units"],
     ));
     refreeze(&w, "refresh_after_days: 0,", "refresh_after_days: 40000,");
+    std::fs::write(w.root.join("fail"), "").unwrap();
     let mut runs = Vec::new();
     for _ in 0..2 {
         let (code, out, err) = at(&w, &w.home, &["run", "t/news", "--record-failure"]);
         runs.push(format!("{code:?} {out} {err}"));
     }
     let state = source_state(&w, "t/news");
-    assert!(
-        !w.lines("hook.log").is_empty(),
-        "no hook call; source state {state}; runs: {runs:#?}"
+    assert_eq!(
+        w.lines("hook.log"),
+        ["t/news fetch-failed", "t/news disabled"],
+        "source state {state}; runs: {runs:#?}"
     );
 }
 
-/// The CHANGELOG says such an instance is refused "until the value in that file is brought into
-/// range". After the timer's two failing runs the source is disabled, so bringing the value into
-/// range does not put the instance back on its schedule; the entry names no `cortex source
-/// enable`.
+/// The CHANGELOG says an instance whose frozen copy holds such a value keeps running, and an
+/// `update` to an out-of-range value is refused naming the field. Its timer runs leave the source
+/// on its schedule, the refused update leaves the frozen copy as it was, and an update into range
+/// is made.
 #[test]
-#[ignore = "adversary: the CHANGELOG's hand fix (bring the frozen value into range) leaves the \
-            source the refused runs disabled; it does not run on its timer again"]
 fn adv_w30a_the_changelog_hand_fix_puts_the_instance_back_on_its_schedule() {
     let w = World::new();
     let spec = w.spec("t", "conn_test");
@@ -157,15 +151,47 @@ fn adv_w30a_the_changelog_hand_fix_puts_the_instance_back_on_its_schedule() {
     ));
     refreeze(&w, "refresh_after_days: 0,", "refresh_after_days: 40000,");
     for _ in 0..2 {
-        at(&w, &w.home, &["run", "t/news", "--record-failure"]);
+        let (code, out, err) = at(&w, &w.home, &["run", "t/news", "--record-failure"]);
+        assert_eq!(code, Some(0), "{out} {err}");
     }
-    // The fix the CHANGELOG gives.
-    refreeze(&w, "refresh_after_days: 40000,", "refresh_after_days: 0,");
-    assert_eq!(
-        source_state(&w, "t/news"),
-        Value::from("Enabled"),
-        "after the hand fix the source stays off its timer"
+    assert_eq!(source_state(&w, "t/news"), Value::from("Enabled"));
+
+    let frozen = std::fs::read_to_string(w.home.join("instances/t/instance.yaml")).unwrap();
+    let above = w.root.join("above.yaml");
+    std::fs::write(
+        &above,
+        std::fs::read_to_string(&spec)
+            .unwrap()
+            .replace("refresh_after_days: 0,", "refresh_after_days: 40000,"),
+    )
+    .unwrap();
+    let (code, out, err) = at(
+        &w,
+        &w.home,
+        &["update", "t", "--spec", above.to_str().unwrap()],
     );
+    assert_eq!(code, Some(2), "{out} {err}");
+    assert!(
+        err.contains("sources.news.policy.refresh_after_days"),
+        "{err}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(w.home.join("instances/t/instance.yaml")).unwrap(),
+        frozen,
+        "a refused update changed the frozen copy"
+    );
+
+    let (code, out, err) = at(
+        &w,
+        &w.home,
+        &["update", "t", "--spec", spec.to_str().unwrap()],
+    );
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (Some(0), Some("updated")),
+        "{out} {err}"
+    );
+    assert_eq!(source_state(&w, "t/news"), Value::from("Enabled"));
 }
 
 /// The world's spec of instance `instance` with its one source named `source`, at a file of its
@@ -245,12 +271,10 @@ fn texts(dir: &Path) -> BTreeMap<String, String> {
 
 /// The `restored` summary the unit wrote (`spec/domains/instance.yaml`, `operating.md`): a state
 /// copy that cannot be written back "leaves the store restored and the state as it was". The copy
-/// is written back one file at a time, so a write that fails on a later file (here a non-text
-/// entry, standing in for a disk that fills on the second file) leaves `state/` half put back:
-/// `news.json` at the snapshot, while the restore says `state_restored: false`.
+/// is checked whole and every file it touches read before the first write, and a write that fails
+/// part-way (here a non-text entry, standing in for a disk that fills on the second file) puts back
+/// what it wrote: `state/` is as it was, and the restore says `state_restored: false`.
 #[test]
-#[ignore = "adversary: a state copy that fails part-way leaves state/ half restored, though \
-            restore reports state_restored false and the docs say state/ is as it was"]
 fn adv_w30a_a_state_copy_that_fails_part_way_leaves_state_as_it_was() {
     let w = World::new();
     let spec = w.spec("t", "conn_test");

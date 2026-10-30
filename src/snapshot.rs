@@ -244,7 +244,9 @@ fn read_state(state: &Path) -> Result<String, String> {
 }
 
 /// Puts `state/` back to the copy at `from`: each file it holds is written, and every other file
-/// of `state/` removed.
+/// of `state/` removed. All or nothing: every entry is checked and every file it touches read
+/// before the first write, and a write or removal that fails puts back what was done, so `state/`
+/// is either the copy or as it was.
 fn write_state(layout: &Layout, from: &Path) -> Result<(), String> {
     let text = std::fs::read_to_string(from)
         .map_err(|e| format!("cannot read {}: {e}", from.display()))?;
@@ -253,6 +255,7 @@ fn write_state(layout: &Layout, from: &Path) -> Result<(), String> {
         .as_object()
         .ok_or_else(|| format!("{} holds no files", from.display()))?;
     let state = live_state(layout);
+    let mut writes = Vec::with_capacity(files.len());
     for (name, text) in files {
         let text = text
             .as_str()
@@ -260,8 +263,10 @@ fn write_state(layout: &Layout, from: &Path) -> Result<(), String> {
         if name.contains('/') || name.starts_with('.') {
             return Err(format!("{}: {name:?} is not a state file", from.display()));
         }
-        crate::home::write_atomic(&state.join(name), text.as_bytes())?;
+        let path = state.join(name);
+        writes.push((prior(&path)?, path, text.as_bytes()));
     }
+    let mut removals = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&state) {
         for entry in entries.flatten() {
             let Ok(name) = entry.file_name().into_string() else {
@@ -269,12 +274,68 @@ fn write_state(layout: &Layout, from: &Path) -> Result<(), String> {
             };
             let regular = entry.file_type().is_ok_and(|t| t.is_file());
             if regular && !name.starts_with('.') && !files.contains_key(&name) {
-                std::fs::remove_file(entry.path())
-                    .map_err(|e| format!("cannot remove {}: {e}", entry.path().display()))?;
+                let path = entry.path();
+                if let Some(bytes) = prior(&path)? {
+                    removals.push((path, bytes));
+                }
             }
         }
     }
-    Ok(())
+    // What was done, in order, with the bytes each path held before (`None`: it did not exist).
+    let mut done: Vec<(&Path, Option<&[u8]>)> = Vec::new();
+    let mut failed = None;
+    for (before, path, bytes) in &writes {
+        match crate::home::write_atomic(path, bytes) {
+            Ok(()) => done.push((path, before.as_deref())),
+            Err(e) => {
+                failed = Some(e);
+                break;
+            }
+        }
+    }
+    if failed.is_none() {
+        for (path, before) in &removals {
+            match std::fs::remove_file(path) {
+                Ok(()) => done.push((path, Some(before))),
+                Err(e) => {
+                    failed = Some(format!("cannot remove {}: {e}", path.display()));
+                    break;
+                }
+            }
+        }
+    }
+    let Some(failed) = failed else {
+        return Ok(());
+    };
+    let unput: Vec<String> = done
+        .into_iter()
+        .rev()
+        .filter_map(|(path, before)| {
+            let put = match before {
+                Some(bytes) => crate::home::write_atomic(path, bytes),
+                None => std::fs::remove_file(path)
+                    .map_err(|e| format!("cannot remove {}: {e}", path.display())),
+            };
+            put.err()
+        })
+        .collect();
+    Err(if unput.is_empty() {
+        failed
+    } else {
+        format!(
+            "{failed}; putting state back also failed: {}",
+            unput.join("; ")
+        )
+    })
+}
+
+/// The bytes at `path`, or `None` when there is no file.
+fn prior(path: &Path) -> Result<Option<Vec<u8>>, String> {
+    match std::fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("cannot read {}: {e}", path.display())),
+    }
 }
 
 /// The one snapshot a run takes: copied before its first `apply-extraction`
@@ -1073,5 +1134,36 @@ mod tests {
                 "{bad:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_state_copy_that_fails_part_way_puts_back_what_it_wrote() {
+        let tmp = tempfile::tempdir().unwrap();
+        let layout = Layout::new(tmp.path().to_path_buf());
+        let state = live_state(&layout);
+        std::fs::create_dir_all(&state).unwrap();
+        std::fs::write(state.join("a.json"), "a live").unwrap();
+        std::fs::write(state.join("c.json"), "c live").unwrap();
+        // `b.json`'s temporary file cannot be made: the copy writes `a.json`, then fails.
+        let blocker = state.join(format!(".b.json.{}.tmp", std::process::id()));
+        std::fs::create_dir(&blocker).unwrap();
+        let copy = tmp.path().join("copy.json");
+        std::fs::write(
+            &copy,
+            r#"{"format": "cortex.state-snapshot/1", "files": {"a.json": "a copy", "b.json": "b copy"}}"#,
+        )
+        .unwrap();
+        let failed = write_state(&layout, &copy).unwrap_err();
+        assert!(failed.contains("b.json"), "{failed}");
+        let text = |n: &str| std::fs::read_to_string(state.join(n)).ok();
+        assert_eq!(text("a.json").as_deref(), Some("a live"));
+        assert_eq!(text("b.json"), None);
+        assert_eq!(text("c.json").as_deref(), Some("c live"));
+
+        std::fs::remove_dir(&blocker).unwrap();
+        write_state(&layout, &copy).unwrap();
+        assert_eq!(text("a.json").as_deref(), Some("a copy"));
+        assert_eq!(text("b.json").as_deref(), Some("b copy"));
+        assert_eq!(text("c.json"), None);
     }
 }

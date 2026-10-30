@@ -14,7 +14,8 @@ to disk, a rename, and a sync of the directory, so a crash leaves the old file o
 A `create` or `adopt` that fails after it recorded the instance takes it out of the registry
 again and removes its directory, so it can be retried. A source status file that cannot be read
 fails `cortex sources`, naming the file, and a run leaves it as it is (`cortex.log` says why);
-other commands list the source as if it had never run.
+other commands list the source as if it had never run. To recover, delete that file: the next
+run of the source writes it again, with its counts starting from zero.
 
 | path | holds |
 |---|---|

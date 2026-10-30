@@ -64,6 +64,7 @@ pub fn load_given(path: &Path) -> Result<Loaded, String> {
     if let Some(reason) = reserved_refusal(&loaded.model)
         .or_else(|| infinite_refusal(&loaded.model))
         .or_else(|| gateway_refusal(&loaded.model))
+        .or_else(|| bounds_refusal(&loaded.model))
     {
         return Err(format!("{}: {reason}", path.display()));
     }
@@ -213,13 +214,6 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
             if value < 0 || (field != "refresh_after_days" && value == 0) {
                 return Err(format!("sources.{}.policy.{field}: {value}", source.name));
             }
-        }
-        // A run counts the window in milliseconds; the bound keeps that product far inside i64.
-        if p.refresh_after_days > MAX_REFRESH_AFTER_DAYS {
-            return Err(format!(
-                "sources.{}.policy.refresh_after_days: {}: use 0 to {MAX_REFRESH_AFTER_DAYS} days",
-                source.name, p.refresh_after_days
-            ));
         }
     }
     if let Some(reason) = reference_refusal(spec) {
@@ -383,20 +377,41 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
         if hook.timeout_s.is_some_and(|t| t <= 0) {
             return Err("monitoring.hook.timeout_s must be above 0".into());
         }
-        if let Some(t) = hook.timeout_s.filter(|t| *t > MAX_HOOK_TIMEOUT_S) {
-            return Err(format!(
-                "monitoring.hook.timeout_s: {t}: use 1 to {MAX_HOOK_TIMEOUT_S} seconds"
-            ));
-        }
-    }
-    // A port is 16 bits; 0 lets the viewer take a free one.
-    if let Some(port) = spec.serve.view_port.filter(|p| u16::try_from(*p).is_err()) {
-        return Err(format!(
-            "serve.view_port: {port}: use a port from 0 to {}",
-            u16::MAX
-        ));
     }
     Ok(())
+}
+
+/// Why a number of `spec` is out of range: a `refresh_after_days` above
+/// [`MAX_REFRESH_AFTER_DAYS`], a `monitoring.hook.timeout_s` above [`MAX_HOOK_TIMEOUT_S`] or a
+/// `serve.view_port` that is no port (0 lets the viewer take a free one). Held for `create`,
+/// `update` and `adopt` ([`load_given`]); an instance's frozen copy, read with [`load`], is not
+/// held to it, so one created before the rule keeps running: a run saturates the refresh window
+/// and caps the hook's time ([`crate::status`]), and the port is read only when an instance is
+/// made.
+pub fn bounds_refusal(spec: &m::InstanceSpec) -> Option<String> {
+    if let Some(source) = spec
+        .sources
+        .iter()
+        .find(|s| s.policy.refresh_after_days > MAX_REFRESH_AFTER_DAYS)
+    {
+        return Some(format!(
+            "sources.{}.policy.refresh_after_days: {}: use 0 to {MAX_REFRESH_AFTER_DAYS} days",
+            source.name, source.policy.refresh_after_days
+        ));
+    }
+    let timeout = spec
+        .monitoring
+        .as_ref()
+        .and_then(|o| o.hook.as_ref())
+        .and_then(|h| h.timeout_s);
+    if let Some(t) = timeout.filter(|t| *t > MAX_HOOK_TIMEOUT_S) {
+        return Some(format!(
+            "monitoring.hook.timeout_s: {t}: use 1 to {MAX_HOOK_TIMEOUT_S} seconds"
+        ));
+    }
+    let port = spec.serve.view_port;
+    port.filter(|p| u16::try_from(*p).is_err())
+        .map(|port| format!("serve.view_port: {port}: use a port from 0 to {}", u16::MAX))
 }
 
 /// Why an alias template of a structured mapping (`alias_templates`, the source's own mapping or a
