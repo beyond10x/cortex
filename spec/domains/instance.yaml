@@ -2855,6 +2855,9 @@ events:
   # (the system prompt, the answer's schema, and the prompt up to the documents: the instance's
   # description and instructions, the ontology and the known entity names) and the documents.
   # The two add up to `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`.
+  # `cost_usd` adds up what those calls cost, a failed or cut-off call included, as the run's
+  # dollar budget counts them: `0` for a run with no model call, absent as soon as one answer
+  # carried no cost.
   # `cost_counted` is false when the instance's model is behind a gateway: `cost_usd` is then what
   # `claude` reported, counted against no dollar limit (`cortex.instance.ModelSpec`).
   # `batch_chars` is the most characters of document text, counted as UTF-8 bytes, the run put in

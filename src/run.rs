@@ -1066,15 +1066,15 @@ fn process_in(
             Ok(answer) => (answer.calls, answer.usage),
             Err(refused) => (refused.calls, refused.usage),
         };
-        // Every costed answer and every answer's tokens, a failed one included, add to the spend
-        // of the day and the tokens to the run's.
-        daily.add_answer(
-            match &asked {
-                Ok(answer) => answer.cost_usd,
-                Err(refused) => refused.cost_usd,
-            },
-            &usage,
-        );
+        let cost_usd = match &asked {
+            Ok(answer) => answer.cost_usd,
+            Err(refused) => refused.cost_usd,
+        };
+        // Every answer's cost, a failed or cut-off one's included, adds to the spend of the day,
+        // to what the run spent of its budget and to the run's cost; its tokens to the run's.
+        daily.add_answer(cost_usd, &usage);
+        spent += cost_usd.unwrap_or(0.0);
+        report.cost_usd = add_cost(report.cost_usd, cost_usd);
         tokens.add(&usage);
         // Every model call counts, a failed one included.
         report.add_calls(calls, usage, fixed_bytes, prompt.len() - fixed);
@@ -1152,9 +1152,7 @@ fn process_in(
                 break;
             }
         };
-        spent += answer.cost_usd.unwrap_or(0.0);
         report.truncated += batch.iter().filter(|i| cut.contains(&i.doc.key)).count();
-        report.cost_usd = add_cost(report.cost_usd, answer.cost_usd);
         let mut restored = answer.document.clone();
         // With a policy, the batch directory keeps only the restored `extraction.yaml`: the
         // prompt and the raw answer carry placeholders, and beside it they would give the mapping.

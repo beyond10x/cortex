@@ -43,6 +43,11 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   seconds), a paged or `files` read stops between pages and files, and the run ends `terminated`,
   exit 8, with nothing marked seen and its window kept. A run stopped in the wait before a model
   call is asked again says so in its reason, instead of saying a call was ended.
+- A model call that failed or was cut off at the output limit counted in the day's spend but not
+  against the run's `budget_usd` or in the run's `cost_usd`, so a split batch was given more budget
+  than remained and the run reported, and a gate's `cost_usd` check read, less than it spent. Every
+  costed answer now counts in all three. A run with a failed call that carried no cost now reports
+  `cost_usd` null, as `cortex quality`, `cortex schema` and `cortex eval` do.
 
 ## 0.6.1 — 2026-10-17
 
