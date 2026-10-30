@@ -123,11 +123,16 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   each batch, each snapshot and the gate's quality check, and on a store reached through Connectors
   each was one `connections launch` with a `connections list` readiness check before it. A run now
   opens one `ekr session` after it begins its stage and closes it before it publishes or abandons
-  the stage, and every read goes through it, so the store's connection is checked and launched once
-  for them. `ekr apply-extraction` and the stage verbs stay one process each, as EKR refuses them
-  in a session; the session sees each batch's apply at its next read. The snapshot is read from the
+  the stage, and every read goes through it. `ekr apply-extraction` and the stage verbs stay one
+  process each, as EKR refuses them in a session; the session sees each batch's apply at its next
+  read. A launched store's connection is checked (`connections list`) once per run instead of
+  before every launch, and again only when a launch is refused because the connection's validation
+  evidence lapsed during the run, which is then made once more. The snapshot is read from the
   session's output into the fields cortex uses, skipping the rest as it is read, instead of being
-  held whole as a JSON document.
+  held whole as a JSON document. A run sent SIGTERM while it waits for its session to answer a read
+  ends the session and stops `terminated`, undone when gated; a write in flight is waited for. A
+  store that does not open when a run starts still fails it as `apply-refused`, not
+  `extraction-failed`.
 - A `dropped: Supersede` source whose run selects nothing, and whose listing, held-back records
   and failed child calls are those of the last run that ended its dropped values, no longer
   begins an EKR stage or reads the store (`ekr snapshot`): such a run read the whole store to

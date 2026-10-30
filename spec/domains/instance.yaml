@@ -1296,10 +1296,10 @@ errors:
   - name: cortex.instance.RunTerminated
     summary: >-
       The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended,
-      and stopped at the next safe point: a fetch or a model call in flight was ended. A gated run
-      is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the
-      batches it applied, and a later run extracts the rest. Nothing about the source was wrong:
-      the failure is not counted against it.
+      and stopped at the next safe point: a fetch, a model call or a read of the store in flight
+      was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an
+      ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about
+      the source was wrong: the failure is not counted against it.
     fields:
       - {name: reason, type: String}
 
@@ -2031,11 +2031,15 @@ commands:
       # paged read, before each file of a `files` read and in a wait between Connectors attempts,
       # with nothing marked seen and the window's `since` unchanged; before a fetch result is
       # used; before each batch; in the wait before a model call is asked again; or by ending the
-      # model call in flight as a fetch's call is ended. A structured source stops before each
+      # model call in flight as a fetch's call is ended; or, while it waits for its `ekr session` to
+      # answer a read (`ontology`, `snapshot`, `schema`, `quality`, `head`), by ending the session
+      # and what it started the same way; a write the session was asked (`mint`, `propose`,
+      # `validate`, `commit`) is waited for. A structured source stops before each
       # record batch. The reason names the point: `stopped while it fetched`, `stopped before it
       # used the documents it fetched`, `stopped before batch <n>`, `stopped before record batch
-      # <n>`, `while it waited to ask the model again for batch <n>; no call was in flight`, or
-      # `while the model was asked for batch <n>; the call was ended`. A gated run is undone as a run
+      # <n>`, `while it waited to ask the model again for batch <n>; no call was in flight`,
+      # `while the model was asked for batch <n>; the call was ended`, or `while it waited for its
+      # ekr session to answer <verb>; the session was ended`. A gated run is undone as a run
       # its gate refuses is: its stage abandoned and `state/` put back, or its kept snapshot
       # restored; an ungated run keeps the batches it applied, each marked seen, and its window
       # is kept pending, as a failed run's is. A second SIGTERM ends the process at once, exit

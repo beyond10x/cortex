@@ -94,10 +94,18 @@ pub fn install(version: &str) -> Result<PathBuf, String> {
     Ok(bin)
 }
 
-fn run(mut cmd: Command, what: &str) -> Result<Vec<u8>, String> {
-    let out = cmd
-        .output()
-        .map_err(|e| format!("cannot run ekr for {what}: {e}"))?;
+fn run(cmd: Command, what: &str) -> Result<Vec<u8>, String> {
+    finished(output(cmd, what)?, what)
+}
+
+/// What `cmd` exited with, printed and wrote to stderr.
+fn output(mut cmd: Command, what: &str) -> Result<std::process::Output, String> {
+    cmd.output()
+        .map_err(|e| format!("cannot run ekr for {what}: {e}"))
+}
+
+/// The stdout of `out`, or `ekr <what> failed: <its stderr>` when it exited other than 0.
+fn finished(out: std::process::Output, what: &str) -> Result<Vec<u8>, String> {
     if out.status.success() {
         Ok(out.stdout)
     } else {
@@ -227,6 +235,40 @@ pub struct Store {
     /// reads see the run's own commits and its writes reach the store only when the stage is
     /// published. None outside a staged run.
     pub stage: Option<String>,
+    /// Whether a launched store's connection was found ready, shared by the handle's clones (its
+    /// stage's and its session's), so a run checks it once ([`Store::command`]).
+    pub ready: Readiness,
+}
+
+/// Whether a launched store's connection was found ready ([`Store::ready`]): checked before the
+/// first `ekr` a store handle launches, and again only after a launch was refused because the
+/// connection's validation evidence lapsed meanwhile ([`lapsed`]).
+#[derive(Debug, Clone, Default)]
+pub struct Readiness(Arc<std::sync::atomic::AtomicBool>);
+
+impl Readiness {
+    fn held(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    fn set(&self, ready: bool) {
+        self.0.store(ready, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Whether `stderr`, what a `connectors connections launch` wrote when it failed, is its refusal
+/// of a connection whose validation evidence lapsed: `unavailable` at `readiness` (Connectors
+/// `crates/connectors-host/src/local/runtime/launch/tests.rs`, "Lapsed evidence"). The consumer
+/// was not started, so the launch can be made again once the connection is ready.
+fn lapsed(stderr: &[u8]) -> bool {
+    let refusal = |v: Value| {
+        let data = &v["error"]["data"];
+        data["code"] == "unavailable" && data["stage"] == "readiness"
+    };
+    serde_json::from_slice::<Value>(stderr).is_ok_and(refusal)
+        || stderr
+            .split(|b| *b == b'\n')
+            .any(|line| serde_json::from_slice::<Value>(line).is_ok_and(refusal))
 }
 
 impl Launch {
@@ -331,10 +373,43 @@ impl Store {
 
     /// [`Store::cmd`], after a launched store's connection is ready.
     pub fn command(&self, args: &[&OsStr]) -> Result<Command, String> {
-        if let Some(launch) = &self.launch {
-            launch.ready(&launch.connection)?;
-        }
+        self.ensure_ready()?;
         self.cmd(args)
+    }
+
+    /// Makes a launched store's connection ready, unless this handle (or a clone of it) already
+    /// did: one `connections list` per run, not one per `ekr` it launches.
+    fn ensure_ready(&self) -> Result<(), String> {
+        if let Some(launch) = self.launch.as_ref().filter(|_| !self.ready.held()) {
+            launch.ready(&launch.connection)?;
+            self.ready.set(true);
+        }
+        Ok(())
+    }
+
+    /// What the `ekr` `build` makes exited with, printed and wrote to stderr. A launch refused
+    /// because the connection's validation evidence lapsed since it was checked ([`lapsed`]) is
+    /// made again once, after the connection is made ready again.
+    fn launched_output(
+        &self,
+        build: impl Fn() -> Result<Command, String>,
+        what: &str,
+    ) -> Result<std::process::Output, String> {
+        let out = output(build()?, what)?;
+        if out.status.success() || self.launch.is_none() || !lapsed(&out.stderr) {
+            return Ok(out);
+        }
+        self.ready.set(false);
+        output(build()?, what)
+    }
+
+    /// [`Store::launched_output`], answering the stdout of an `ekr` that exited 0.
+    fn run_verb(
+        &self,
+        build: impl Fn() -> Result<Command, String>,
+        what: &str,
+    ) -> Result<Vec<u8>, String> {
+        finished(self.launched_output(build, what)?, what)
     }
 
     /// `ekr stage <args>` on the store, built and not run.
@@ -348,20 +423,20 @@ impl Store {
 
     /// [`Store::stage_cmd`], after a launched store's connection is ready.
     fn stage_command(&self, args: &[&str]) -> Result<Command, String> {
-        if let Some(launch) = &self.launch {
-            launch.ready(&launch.connection)?;
-        }
+        self.ensure_ready()?;
         self.stage_cmd(args)
+    }
+
+    /// `ekr stage <args>`, answering its stdout ([`Store::run_verb`]).
+    fn stage_verb(&self, args: &[&str], what: &str) -> Result<Vec<u8>, String> {
+        self.run_verb(|| self.stage_command(args), what)
     }
 
     /// `ekr stage begin`: a stage forked from the store at its head, answered by its id and its
     /// base, the head it was forked at (what `ekr stage publish --expect-head` names). The store's
     /// head and history do not move.
     pub fn begin_stage(&self) -> Result<(String, i64), String> {
-        let begun = json(
-            &run(self.stage_command(&["begin"])?, "stage begin")?,
-            "stage begin",
-        )?;
+        let begun = json(&self.stage_verb(&["begin"], "stage begin")?, "stage begin")?;
         match (begun["stage_id"].as_str(), begun["base"].as_i64()) {
             (Some(stage), Some(base)) => Ok((stage.to_string(), base)),
             _ => Err(format!(
@@ -380,10 +455,7 @@ impl Store {
         let tenant = host["tenant"]
             .as_str()
             .ok_or_else(|| "host.json names no tenant".to_string())?;
-        let listed = json(
-            &run(self.stage_command(&["list"])?, "stage list")?,
-            "stage list",
-        )?;
+        let listed = json(&self.stage_verb(&["list"], "stage list")?, "stage list")?;
         let listed = listed
             .as_array()
             .ok_or_else(|| format!("ekr stage list answered no list: {listed}"))?;
@@ -399,14 +471,15 @@ impl Store {
     /// none does and the answer is the refusal.
     pub fn publish_stage(&self, stage: &str, head: i64) -> Result<(), String> {
         let head = head.to_string();
-        let cmd = self.stage_command(&["publish", stage, "--expect-head", &head])?;
-        run(cmd, "stage publish").map(drop)
+        self.stage_verb(&["publish", stage, "--expect-head", &head], "stage publish")
+            .map(drop)
     }
 
     /// `ekr stage abandon <stage>`: the stage is forgotten; the store's head and history do not
     /// move. A stage already published is refused (`stage-already-published`).
     pub fn abandon_stage(&self, stage: &str) -> Result<(), String> {
-        run(self.stage_command(&["abandon", stage])?, "stage abandon").map(drop)
+        self.stage_verb(&["abandon", stage], "stage abandon")
+            .map(drop)
     }
 
     /// The connection [`Store::provision`] launches through: the schema connection, when the
@@ -465,17 +538,21 @@ impl Store {
 
     /// One `ekr session` on this store, in its stage when it is in one: started as every verb of
     /// the store is ([`Store::command`]), so a launched store's connection is made ready once, for
-    /// the session, and not again for its requests.
+    /// the session, and not again for its requests. It runs in a process group of its own, so a
+    /// run sent SIGTERM while it waits for an answer ends it with what it started
+    /// ([`crate::terminate::end`]).
     pub fn session(&self) -> Result<Session, String> {
+        use std::os::unix::process::CommandExt;
         let mut cmd = self.command(&[OsStr::new("session")])?;
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stderr(Stdio::piped())
+            .process_group(0);
         let mut child = cmd
             .spawn()
             .map_err(|e| format!("cannot run ekr session: {e}"))?;
         let stdin = child.stdin.take().expect("piped");
-        let stdout = BufReader::new(child.stdout.take().expect("piped"));
+        let stdout = BufReader::new(Answers::of(child.stdout.take().expect("piped")));
         let mut from = child.stderr.take().expect("piped");
         // A request's own diagnostics travel in its answer; what the session itself writes to
         // stderr (why it could not start, or ended) is read as it comes, its end kept.
@@ -495,6 +572,7 @@ impl Store {
         });
         Ok(Session {
             store: self.clone(),
+            terminated: std::cell::Cell::new(false),
             pipe: RefCell::new(Some(Pipe {
                 child,
                 stdin,
@@ -508,10 +586,7 @@ impl Store {
     /// Whether the store's lineage holds a seed: `ekr head` answers a head, or says "the lineage
     /// has no seed" (EKR 0.0.30, measured on PostgreSQL). Any other answer is an error.
     pub fn seeded(&self) -> Result<bool, String> {
-        let out = self
-            .command(&[OsStr::new("head")])?
-            .output()
-            .map_err(|e| format!("cannot run ekr for head: {e}"))?;
+        let out = self.launched_output(|| self.command(&[OsStr::new("head")]), "head")?;
         if out.status.success() {
             return Ok(true);
         }
@@ -527,8 +602,8 @@ impl Store {
     /// `ekr.seed-result/1`. Seeding an identical seed again exits 0 with the first seed's result,
     /// so a `committed_at` from before this call means another caller wrote the seed.
     pub fn seed(&self, seed: &Path) -> Result<i64, String> {
-        let cmd = self.command(&[OsStr::new("seed"), seed.as_os_str()])?;
-        let result = json(&run(cmd, "seed")?, "seed")?;
+        let args = [OsStr::new("seed"), seed.as_os_str()];
+        let result = json(&self.run_verb(|| self.command(&args), "seed")?, "seed")?;
         result["committed_at"]
             .as_i64()
             .ok_or_else(|| "ekr seed answered no committed_at".to_string())
@@ -536,8 +611,11 @@ impl Store {
 
     /// The `ekr.integrate.ExtractionReport` of applying `doc`.
     pub fn apply(&self, doc: &Path) -> Result<Value, String> {
-        let cmd = self.command(&[OsStr::new("apply-extraction"), doc.as_os_str()])?;
-        json(&run(cmd, "apply-extraction")?, "apply-extraction")
+        let args = [OsStr::new("apply-extraction"), doc.as_os_str()];
+        json(
+            &self.run_verb(|| self.command(&args), "apply-extraction")?,
+            "apply-extraction",
+        )
     }
 
     pub fn ontology(&self) -> Result<Value, String> {
@@ -589,11 +667,11 @@ trait Verbs {
 
 impl Verbs for Store {
     fn json(&self, args: &[&OsStr], what: &str) -> Result<Value, String> {
-        json(&run(self.command(args)?, what)?, what)
+        json(&self.run_verb(|| self.command(args), what)?, what)
     }
 
     fn ok(&self, args: &[&OsStr], what: &str) -> Result<(), String> {
-        run(self.command(args)?, what).map(drop)
+        self.run_verb(|| self.command(args), what).map(drop)
     }
 }
 
@@ -699,18 +777,111 @@ pub struct Session {
     store: Store,
     /// The running process; none once it was closed or ended.
     pipe: RefCell<Option<Pipe>>,
+    /// Whether it was ended because the run was sent SIGTERM while it waited for an answer.
+    terminated: std::cell::Cell<bool>,
+}
+
+/// The start of what a session request that the run's SIGTERM ended fails with
+/// ([`is_terminated`]).
+pub const SESSION_TERMINATED: &str = "the run was sent SIGTERM while it waited for its ekr session";
+
+/// Whether `error`, what a [`Session`] verb failed with, says the run's SIGTERM ended the wait.
+pub fn is_terminated(error: &str) -> bool {
+    error.contains(SESSION_TERMINATED)
+}
+
+/// The verbs a session answers by reading: a wait for one of them ends on the run's SIGTERM. A
+/// `mint`, `propose`, `validate` or `commit` in flight is waited for, as a one-shot
+/// `apply-extraction` is, so the run never stops not knowing whether a write took effect.
+const READS: [&str; 5] = ["ontology", "snapshot", "schema", "quality", "head"];
+
+/// How long a wait for a session's output sleeps between looks at the run's SIGTERM.
+const LOOK: std::time::Duration = std::time::Duration::from_millis(20);
+
+/// A session's stdout, read on a thread of its own into a short queue of chunks, so a wait for an
+/// answer can end on the run's SIGTERM ([`crate::terminate::requested`]) while the answer is still
+/// read from the pipe as it comes, a few chunks at a time.
+struct Answers {
+    chunks: std::sync::mpsc::Receiver<Vec<u8>>,
+    chunk: Vec<u8>,
+    at: usize,
+    /// Whether the run's SIGTERM ends the current wait ([`READS`]).
+    interruptible: bool,
+    /// Whether it did.
+    stopped: bool,
+}
+
+impl Answers {
+    /// The chunks of what the session writes to `out`, at most 4 of 64 KiB held unread.
+    fn of(mut out: ChildStdout) -> Self {
+        let (tx, chunks) = std::sync::mpsc::sync_channel(4);
+        std::thread::spawn(move || loop {
+            let mut chunk = vec![0u8; 64 * 1024];
+            match out.read(&mut chunk) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    chunk.truncate(n);
+                    if tx.send(chunk).is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+        Answers {
+            chunks,
+            chunk: Vec::new(),
+            at: 0,
+            interruptible: false,
+            stopped: false,
+        }
+    }
+}
+
+impl Read for Answers {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        use std::sync::mpsc::RecvTimeoutError;
+        while self.at == self.chunk.len() {
+            match self.chunks.recv_timeout(LOOK) {
+                Ok(chunk) => {
+                    self.chunk = chunk;
+                    self.at = 0;
+                }
+                Err(RecvTimeoutError::Timeout) => {
+                    if self.interruptible && crate::terminate::requested() {
+                        self.stopped = true;
+                        return Err(std::io::Error::other(SESSION_TERMINATED));
+                    }
+                }
+                Err(RecvTimeoutError::Disconnected) => return Ok(0),
+            }
+        }
+        let n = buf.len().min(self.chunk.len() - self.at);
+        buf[..n].copy_from_slice(&self.chunk[self.at..self.at + n]);
+        self.at += n;
+        Ok(n)
+    }
 }
 
 struct Pipe {
     child: Child,
     stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    stdout: BufReader<Answers>,
     /// The end of what the session wrote to its own stderr ([`STDERR_KEPT`]).
     stderr: Arc<Mutex<Vec<u8>>>,
     drain: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Pipe {
+    /// Ends the session and what it started at once, its input first: SIGTERM to its process
+    /// group, then SIGKILL after [`crate::terminate::GRACE`]. Its output is not waited for.
+    fn kill(self) {
+        let Pipe {
+            mut child, stdin, ..
+        } = self;
+        drop(stdin);
+        crate::terminate::end(&mut child);
+    }
+
     /// Ends the input, so the session writes its replay checkpoint and exits, and waits for it.
     fn end(self) -> Result<(), String> {
         let Pipe {
@@ -809,6 +980,7 @@ impl Session {
                 "ekr {what} failed: the run's ekr session has ended"
             ));
         };
+        pipe.stdout.get_mut().interruptible = argv.first().is_some_and(|verb| READS.contains(verb));
         let answer = match pipe
             .stdin
             .write_all(&line)
@@ -817,6 +989,13 @@ impl Session {
             Ok(()) => read_answer::<T>(&mut pipe.stdout),
             Err(e) => Err(Unread::Ended(e.to_string())),
         };
+        if pipe.stdout.get_ref().stopped {
+            slot.take().expect("matched above").kill();
+            self.terminated.set(true);
+            return Err(format!(
+                "{SESSION_TERMINATED} to answer `{what}`; the session was ended"
+            ));
+        }
         match answer {
             Ok(answer) if answer.exit == 0 => Ok(answer.stdout),
             Ok(answer) => Err(format!("ekr {what} failed: {}", answer.stderr.trim())),
@@ -829,6 +1008,17 @@ impl Session {
                 ))
             }
         }
+    }
+
+    /// Whether the session is gone: it ended, was closed, or was ended on the run's SIGTERM. A
+    /// request that failed on a session that is not gone was refused by the verb itself.
+    pub fn ended(&self) -> bool {
+        self.pipe.borrow().is_none()
+    }
+
+    /// Whether the run's SIGTERM ended a wait for its answer, and the session with it.
+    pub fn terminated(&self) -> bool {
+        self.terminated.get()
     }
 
     /// Ends the session: its input is closed, so it writes its replay checkpoint and exits. A
@@ -1587,6 +1777,7 @@ mod tests {
             store: PathBuf::from(store),
             launch: None,
             stage: None,
+            ready: Default::default(),
         }
     }
 

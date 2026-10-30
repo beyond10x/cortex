@@ -2246,6 +2246,7 @@ fn review_the_direct_viewer_exec_start_quotes_the_ekr_path() {
         store: w.root.join("pg/app.json"),
         launch: None,
         stage: None,
+        ready: Default::default(),
     };
     world_systemd(&w).install_view("q", &store, 18996).unwrap();
     let unit = std::fs::read_to_string(w.units.join("cortex-q-view.service")).unwrap();
@@ -2276,6 +2277,7 @@ fn review_the_launched_viewer_exec_start_quotes_every_word() {
             schema_connection: None,
         }),
         stage: None,
+        ready: Default::default(),
     };
     world_systemd(&w).install_view("q", &store, 18996).unwrap();
     let unit = std::fs::read_to_string(w.units.join("cortex-q-view.service")).unwrap();

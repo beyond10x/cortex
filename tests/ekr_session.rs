@@ -43,13 +43,21 @@ exec "$EKR" "$@"
 /// `connectors-argv.log`; `connections list` answers connection `app` as ready;
 /// `connections launch --consumer ekr --args '<JSON>'` runs the stand-in `ekr` with the array's
 /// elements as its arguments and only the `EKR_*` variables (`pass_env`), the password document on
-/// descriptor 3.
+/// descriptor 3. While the file `lapse-at-apply` exists, the first launch of an `apply-extraction`
+/// removes it and is refused as a connection whose validation evidence lapsed.
 const CONNECTORS: &str = r#"R="@ROOT@"; EKR="@EKR@"
 printf '%s\n' "$*" >> "$R/connectors-argv.log"
 case "$1 $2" in
   "connections list")
     printf '{"ok":true,"result":{"connections":[{"adapter":"postgres","connection":"app","state":"ready","revision":"r1"}]}}' ;;
   "connections launch")
+    case "$*" in *apply-extraction*)
+      if [ -e "$R/lapse-at-apply" ]; then
+        rm -f "$R/lapse-at-apply"
+        printf '{"ok":false,"error":{"code":-32000,"message":"unavailable","data":{"code":"unavailable","stage":"readiness"}}}\n' >&2
+        exit 1
+      fi ;;
+    esac
     shift 2; ARGS="[]"
     while [ $# -gt 0 ]; do
       case "$1" in
@@ -220,7 +228,7 @@ fn requests(w: &World) -> Vec<String> {
 /// Acceptance 1, on a launched `postgres` store held to a gate on a measure of `ekr quality`: the
 /// run runs in a stage, its one session is launched once and joins the stage, `ekr quality` is a
 /// request to it, and every other launch is an `apply-extraction` or a stage verb. `connections
-/// list`, the readiness check, precedes each launch of its own: the session's requests add none.
+/// list`, the readiness check, runs once for the run, before its first launch.
 #[test]
 fn a_launched_staged_run_launches_one_session_in_its_stage_and_checks_readiness_once_for_it() {
     let w = world(
@@ -277,12 +285,44 @@ fn a_launched_staged_run_launches_one_session_in_its_stage_and_checks_readiness_
         .iter()
         .filter(|l| l.starts_with("connections list"))
         .count();
-    let one_shot = launches.len() - session_launches;
-    assert!(
-        lists <= one_shot + 1,
-        "{lists} readiness checks for {one_shot} one-shot launches and one session: \
-         {connectors:#?}"
+    assert_eq!(
+        lists,
+        1,
+        "one readiness check for the run's {} launches: {connectors:#?}",
+        launches.len()
     );
+}
+
+/// A launch refused because the connection's validation evidence lapsed during the run
+/// (Connectors: `unavailable` at `readiness`, the consumer not started) is made again once after
+/// the connection is checked again: the readiness held for the run is renewed, not trusted for good,
+/// and the run applies every batch.
+#[test]
+fn a_launch_refused_for_lapsed_readiness_is_checked_again_and_made_once_more() {
+    let w = world(launched_store, "");
+    std::fs::write(w.root.join("lapse-at-apply"), "").unwrap();
+    let (code, ran) = w.cortex(&["run", "s/repos"]);
+    assert_eq!(code, 0, "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 3, "{ran}");
+    assert!(
+        !w.root.join("lapse-at-apply").exists(),
+        "the lapse was seen"
+    );
+
+    let connectors = w.lines("connectors-argv.log");
+    let lists = connectors
+        .iter()
+        .filter(|l| l.starts_with("connections list"))
+        .count();
+    assert_eq!(
+        lists, 2,
+        "the run's check, and one after the lapse: {connectors:#?}"
+    );
+    let applies = ekrs(&w)
+        .iter()
+        .filter(|(_, v, _)| v == "apply-extraction")
+        .count();
+    assert_eq!(applies, 3, "the refused launch started no ekr");
 }
 
 /// Adversary: acceptance 1 of `story:ekr-session-per-run` as the story states it, "`connections
@@ -334,6 +374,7 @@ fn a_session_in_a_stage_sees_what_a_one_shot_apply_committed_to_it() {
         store: dir.join("store.sqlite"),
         launch: None,
         stage: None,
+        ready: Default::default(),
     };
     let (stage, base) = store.begin_stage().expect("a stage");
     store.stage = Some(stage.clone());

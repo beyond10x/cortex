@@ -766,6 +766,7 @@ fn seed_instance(
         store: layout.dir.join("seed-check.sqlite"),
         launch: None,
         stage: None,
+        ready: Default::default(),
     };
     let checked = seed_and_apply(&scratch, &seed_path, schema.as_deref())
         .and_then(|()| kind_refusal(spec, &scratch));
