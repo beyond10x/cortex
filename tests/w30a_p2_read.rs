@@ -2,7 +2,8 @@
 //! 2bf0426a), at the merged head where unit cost re-applies replacements with nothing to replace
 //! (`extract::reapply_rounds`). The story's safety condition: the run's grown index gives batch
 //! k+1 the same `Store` hits a fresh `ekr snapshot` would. A node created by a re-apply round is in
-//! the store, so the next batch must be offered it as in the store.
+//! the store, so the next batch that names it must be offered it as in the store, and one that
+//! does not name it must not (D22).
 
 mod common;
 
@@ -102,11 +103,13 @@ fn store_nodes(w: &World) -> Vec<String> {
 
 /// Batch 1 (record alpha) names `widget` only in a replacement with nothing to replace; the
 /// re-apply round stores it, so `widget` is a node of the store when batch 2 (record beta) is
-/// built. Batch 2 must be offered `widget (in the store)`, as an index read from a fresh snapshot
-/// would offer it. The run grows its index from the first apply's document and report only
-/// (`src/run.rs`, `lookup.applied`), never from a re-apply round's.
+/// built. Batch 2 names only `beta` (its key and record id, `known::terms`), and store hits are
+/// filtered by those terms, so a fresh snapshot offers it no `widget`; the run's grown index must
+/// not either. Coordinator decision D22 retargeted this case; the positive direction, a batch
+/// that names `widget`, is
+/// [`a_node_created_by_a_reapply_round_is_a_store_hit_of_the_next_batch_that_names_it`].
 #[test]
-fn a_node_created_by_a_reapply_round_is_offered_to_the_next_batch_as_in_the_store() {
+fn a_node_created_by_a_reapply_round_is_not_offered_to_a_batch_that_does_not_name_it() {
     let w = world();
     let (code, ran) = w.cortex(&["run", "r/repos"]);
     assert_eq!(code, 0, "{ran}");
@@ -120,8 +123,8 @@ fn a_node_created_by_a_reapply_round_is_offered_to_the_next_batch_as_in_the_stor
     assert_eq!(prompts.len(), 2, "two batches: {ran}");
     let second = &prompts[1];
     assert!(
-        second.contains("widget (in the store"),
-        "batch 2 is not offered widget, which the store holds:\n{}",
+        !second.contains("widget (in the store"),
+        "batch 2 names only beta and is offered widget from the store:\n{}",
         second
             .split("Known entities:\n")
             .nth(1)
