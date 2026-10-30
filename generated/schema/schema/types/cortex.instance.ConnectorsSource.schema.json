@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "5d5d5055c688f814fb48969a2e304e66644af56f839f0683ba20370250fe2024",
-    "contract_digest": "slice-sha256/2:51d2924ebf2d742790f8343bb075da91ff744f2678bf36128b47e01932448999",
+    "source_digest": "7b76845a8e7a52bdbfce7dbaa6417117e262641754c49abc27558a2908af0362",
+    "contract_digest": "slice-sha256/2:c43af3cbf4e49b325b96c3cf04921111afec3731cde7de9da1aa7ba5e11f4bc9",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -24,6 +24,15 @@
         },
         "paging": {
           "$ref": "#/$defs/cortex.instance.Paging"
+        },
+        "text": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "follow": {
+          "$ref": "#/$defs/cortex.instance.FollowRule"
         }
       },
       "required": [
@@ -95,6 +104,131 @@
       "x-ess-invariants": [
         "(paging.stop_older_than_since != true or defined(time))",
         "(defined(connection) or defined(profile))"
+      ]
+    },
+    "cortex.instance.FollowAtLeast": {
+      "title": "FollowAtLeast",
+      "x-ess-name": "cortex.instance.FollowAtLeast",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "field",
+        "number"
+      ],
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "number > 0"
+      ]
+    },
+    "cortex.instance.FollowEquals": {
+      "title": "FollowEquals",
+      "x-ess-name": "cortex.instance.FollowEquals",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "value": {}
+      },
+      "required": [
+        "field",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.FollowRule": {
+      "title": "FollowRule",
+      "x-ess-name": "cortex.instance.FollowRule",
+      "x-ess-kind": "union",
+      "oneOf": [
+        {
+          "title": "at_least",
+          "type": "object",
+          "properties": {
+            "rule": {
+              "type": "string",
+              "const": "at_least"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.FollowAtLeast"
+            }
+          },
+          "required": [
+            "rule",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "equals",
+          "type": "object",
+          "properties": {
+            "rule": {
+              "type": "string",
+              "const": "equals"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.FollowEquals"
+            }
+          },
+          "required": [
+            "rule",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "within_days",
+          "type": "object",
+          "properties": {
+            "rule": {
+              "type": "string",
+              "const": "within_days"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.FollowWithinDays"
+            }
+          },
+          "required": [
+            "rule",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "x-ess-union-tag": "rule"
+    },
+    "cortex.instance.FollowWithinDays": {
+      "title": "FollowWithinDays",
+      "x-ess-name": "cortex.instance.FollowWithinDays",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "field",
+        "days"
+      ],
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "days > 0"
       ]
     },
     "cortex.instance.PageStyle": {

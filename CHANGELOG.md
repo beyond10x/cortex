@@ -48,6 +48,12 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   is rendered from instead of `id`, with `{input.…}` naming the input the record was read with, so
   two records with one id in two inputs are both applied; before, the second was dropped.
   `cortex update` refuses a change of `key` while the source has seen documents (`rekey-refused`).
+- A `connectors` source's `child` may give `text` templates, and each child record is then added
+  to the parent's text as its rendered lines instead of raw JSON, so more children fit under
+  `max_chars_per_document`. It may also carry a `follow` rule, the one `structured` children take
+  (`{rule: at_least, value: {field: reply_count, number: 1}}`), and is then called only for the
+  parents it matches; another parent's text is its own. A `child` without either behaves as
+  before. Adopting `text` changes every parent's text, so each is extracted once more.
 
 ### Fixed
 

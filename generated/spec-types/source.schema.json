@@ -411,6 +411,9 @@
     "cortex.instance.ChildCall": {
       "additionalProperties": false,
       "properties": {
+        "follow": {
+          "$ref": "#/$defs/cortex.instance.FollowRule"
+        },
         "input": {},
         "operation": {
           "type": "string"
@@ -420,6 +423,12 @@
         },
         "records": {
           "type": "string"
+        },
+        "text": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -1986,8 +1995,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:1120be52780c06d2d85e4ca200c15fca6eeae43c3a99eba3e0ececc98e5d1cce",
-    "source_digest": "5d5d5055c688f814fb48969a2e304e66644af56f839f0683ba20370250fe2024",
+    "contract_digest": "slice-sha256/2:c9a7c95ea6f9e7d92df78390768479145c780efc69b2d61aca8bcb1da6deb7c7",
+    "source_digest": "7b76845a8e7a52bdbfce7dbaa6417117e262641754c49abc27558a2908af0362",
     "specification_version": "v1",
     "system": "cortex"
   }

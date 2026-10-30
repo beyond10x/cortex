@@ -1078,8 +1078,9 @@ fn invoker<'a>(
 /// The records of a `connectors` source, one document per record. Each input, with the run's
 /// window filled in, is walked page by page, ended with `stop_older_than_since` at the first
 /// record older than the window's start ([`StopAt`]); with a `child`, the child operation is invoked once
-/// per record, its input filled from the record, its pages walked the same way, and each of its
-/// records appended to the parent's text as one JSON paragraph. A parent whose child call fails
+/// per record its `follow` rule matches ([`follows`]), its input filled from the record, its pages
+/// walked the same way, and each of its records appended to the parent's text as one paragraph:
+/// its `text` templates rendered, or its JSON without them. A parent whose child call fails
 /// is left out of this fetch and named in `unread`; from its [`CHILD_FAILURE_LIMIT`]th consecutive
 /// failed run on, in `skipped` instead. A successful call clears the parent's count. A record's key
 /// is `<adapter>:<operation>:<id>` ([`record_id`]); a record with none is left out and counted in
@@ -1142,7 +1143,11 @@ fn fetch_records(
             if !keys.insert(key.clone()) {
                 continue;
             }
-            if let Some(child) = &c.child {
+            let child = c
+                .child
+                .as_ref()
+                .filter(|child| follows(child.follow.as_ref(), record, window.until_ms));
+            if let Some(child) = child {
                 let children = match walk(
                     &mut invoker(connectors, c, connection, &child.operation),
                     &format!("{}.{}", c.adapter, child.operation),
@@ -1173,9 +1178,20 @@ fn fetch_records(
                         continue;
                     }
                 };
-                for child in &children {
-                    text.push_str("\n\n");
-                    text.push_str(&child.to_string());
+                for record in &children {
+                    let paragraph = match &child.text {
+                        Some(templates) => templates
+                            .iter()
+                            .map(|t| render(t, record))
+                            .filter(|t| !t.trim().is_empty())
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                        None => record.to_string(),
+                    };
+                    if !paragraph.trim().is_empty() {
+                        text.push_str("\n\n");
+                        text.push_str(&paragraph);
+                    }
                 }
             }
             docs.push(Document {

@@ -330,7 +330,7 @@ The records of any operation a Connectors adapter admits.
 | `time` | optional dotted path to the record's publication time, which dates its evidence and the facts drawn from it ([how](./operating.md#what-one-run-does)) |
 | `text` | templates whose `{a.b}` placeholders are filled from the record; the non-empty results, joined, are the document's text |
 | `paging` | optional: how to read every page of the answer (below) |
-| `child` | optional: an operation invoked once per record, whose records are added to that record's text (below) |
+| `child` | optional: an operation invoked once per record (or per record its `follow` rule matches), whose records are added to that record's text (below) |
 
 A document's key is `<adapter>:<operation>:<id>`, or `<adapter>:<operation>:<rendered key>` with
 `key`; a key read twice in one run counts once. A record whose id is missing or null, or one of
@@ -431,9 +431,19 @@ provider for a sort that writes do not reorder, such as by creation time or id.
 
 **`child`** has the fields `operation` (on the same adapter and connection), `input` (JSON whose
 `{a.b}` placeholders are filled from the parent record), `records` (the dotted path to the array
-of records in its answer) and an optional `paging`, walked the same way. Each child record is
-added to the parent's text as one paragraph of JSON. The change hash covers the whole text,
-children included, so a child field that changes on every call (a duration, a signed URL) makes
+of records in its answer), an optional `paging`, walked the same way, and two optional fields:
+
+- `text`: templates rendered from each child record as a source's `text` is from its record; the
+  non-empty results, joined by a line break, are that record's paragraph, and a record that
+  renders to nothing adds none. `text: ["{author.displayName} {created}: {body}"]` adds one line
+  per comment. Without `text`, each child record is added as one paragraph of JSON.
+- `follow`: the child is called only for a parent record the rule matches, one of the rules a
+  `structured` source's [children](#kind-structured) take; `{rule: at_least, value: {field:
+  reply_count, number: 1}}` reads the replies of threads that have any. Another parent makes no
+  call, and its text is its own alone.
+
+Each child record is added to the parent's text as one paragraph. The change hash covers the
+whole text, children included, so a child field that changes on every call (a duration, a signed URL) makes
 the parent extracted again after each `refresh_after_days`.
 
 Child records count toward the document's `max_chars_per_document`. Text past it, child records

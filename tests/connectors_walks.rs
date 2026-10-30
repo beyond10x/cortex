@@ -1603,3 +1603,94 @@ fn an_update_that_changes_the_key_template_is_refused_as_a_rekey() {
     );
     assert_eq!(out["detail"]["field"], "key", "{out}");
 }
+
+/// `issues.list` answers I-1 with no replies, I-2 with three and I-3 with no `reply_count`;
+/// `comments.list` answers two comments by their author, time and body for the `issue` it is
+/// given.
+const REPLIES: &str = r#"  "invoke "*" issues.list "*)
+    echo "$A" >> "$R/issues.log"
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"issues":[{"key":"I-1","summary":"Quiet issue","reply_count":0},{"key":"I-2","summary":"Busy issue","reply_count":3},{"key":"I-3","summary":"Unknown issue"}]}}}\n' ;;
+  "invoke "*" comments.list "*)
+    echo "$A" >> "$R/comments.log"
+    I=$(printf '%s' "$A" | sed -n 's/.*"issue":"\([^"]*\)".*/\1/p')
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"comments.list","revision":"r","result":{"comments":[{"author":{"displayName":"Ana"},"created":"2026-10-01","body":"first on %s"},{"author":{"displayName":"Ben"},"created":"2026-10-02","body":"second on %s"}]}}}\n' "$I" "$I" ;;
+"#;
+
+/// Creates instance `name` reading [`REPLIES`] with a `comments.list` child whose further fields
+/// are `child` (YAML flow mapping entries).
+fn create_replies(w: &World, name: &str, child: &str) {
+    let rest = format!(
+        r#"inputs: [{{}}]
+        records: issues
+        id: key
+        text: ["{{key}}: {{summary}}"]
+        child: {{operation: comments.list, input: {{issue: "{{key}}"}}, records: comments{child}}}"#
+    );
+    create_source(w, name, &rest, 3, 5000, 50);
+}
+
+/// The document a run showed the model for issue `key`.
+fn prompted_issue(w: &World, name: &str, key: &str) -> String {
+    let source = format!("Source: record:tracker:issues.list:{key}\n");
+    prompted(w, name)
+        .into_iter()
+        .find(|d| d.contains(&source))
+        .unwrap_or_else(|| panic!("no document for {key}"))
+}
+
+/// `story:child-text-and-filter`, acceptance 1: with `follow: at_least reply_count 1`, a parent
+/// with no replies, or without the field, makes no child call and its text is its own alone; one
+/// with replies makes one.
+#[test]
+fn a_child_follow_rule_calls_the_child_only_for_parents_with_replies() {
+    let w = world_with(REPLIES);
+    create_replies(
+        &w,
+        "replies",
+        ", follow: {rule: at_least, value: {field: reply_count, number: 1}}",
+    );
+    let ran = run(&w, "replies");
+    assert_eq!(ran["detail"]["documents_applied"], 3, "{ran}");
+    let calls = w.lines("comments.log");
+    assert_eq!(calls.len(), 1, "{calls:#?}");
+    assert!(calls[0].contains("\"issue\":\"I-2\""), "{}", calls[0]);
+    assert!(prompted_issue(&w, "replies", "I-2").contains("first on I-2"));
+    for quiet in ["I-1", "I-3"] {
+        let doc = prompted_issue(&w, "replies", quiet);
+        assert!(!doc.contains(" on I-"), "{doc}");
+    }
+}
+
+/// `story:child-text-and-filter`, acceptance 2: with `child.text`, each child record is one
+/// rendered line in the parent's text, and no raw JSON object.
+#[test]
+fn child_records_are_rendered_by_the_childs_text_template() {
+    let w = world_with(REPLIES);
+    create_replies(
+        &w,
+        "rendered",
+        r#", text: ["{author.displayName} {created}: {body}"]"#,
+    );
+    run(&w, "rendered");
+    let doc = prompted_issue(&w, "rendered", "I-2");
+    assert!(
+        doc.contains(
+            "I-2: Busy issue\n\nAna 2026-10-01: first on I-2\n\nBen 2026-10-02: second on I-2"
+        ),
+        "{doc}"
+    );
+    assert!(!doc.contains("{\""), "{doc}");
+    assert!(!doc.contains("displayName"), "{doc}");
+}
+
+/// `story:child-text-and-filter`, acceptance 3: a child without `text` or `follow` is called for
+/// every parent and appends each record's JSON, as before.
+#[test]
+fn a_child_without_text_or_follow_appends_json_for_every_parent() {
+    let w = world_with(REPLIES);
+    create_replies(&w, "asbefore", "");
+    run(&w, "asbefore");
+    assert_eq!(w.lines("comments.log").len(), 3);
+    let doc = prompted_issue(&w, "asbefore", "I-1");
+    assert!(doc.contains("\"displayName\":\"Ana\""), "{doc}");
+}

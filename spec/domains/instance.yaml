@@ -178,6 +178,13 @@ types:
     invariants:
       - number > 0
 
+  # `text`, as a source's own `text`: each template is rendered from one child record (`{a.b}`
+  # placeholders, a missing or non-scalar value rendering empty), the blank ones dropped and the
+  # rest joined by a line break, and each child record that renders to text is one paragraph
+  # after the parent's text. Absent means each child record's JSON is that paragraph.
+  # `follow`: the child operation is called only for a parent the rule matches
+  # (`cortex.instance.FollowRule`, measured from the run's start); for another, no call is made
+  # and the document's text is the parent's alone. Absent means every parent.
   - name: cortex.instance.ChildCall
     kind: struct
     fields:
@@ -185,6 +192,8 @@ types:
       - {name: input, type: Json}
       - {name: records, type: String}
       - {name: paging, type: Optional<cortex.instance.Paging>}
+      - {name: text, type: Optional<List<String>>}
+      - {name: follow, type: Optional<cortex.instance.FollowRule>}
     invariants:
       - paging.stop_older_than_since != true
 

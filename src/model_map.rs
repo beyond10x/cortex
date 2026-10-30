@@ -594,6 +594,8 @@ fn settings(
                             &format!("{at}.child"),
                             Some(STOP_ONLY_ON_SOURCE),
                         )?,
+                        text: opt(&child.text),
+                        follow: follow(&child.follow, &format!("{at}.child.follow"))?,
                     }),
                 },
             })
