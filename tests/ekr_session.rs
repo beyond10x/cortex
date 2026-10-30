@@ -285,6 +285,32 @@ fn a_launched_staged_run_launches_one_session_in_its_stage_and_checks_readiness_
     );
 }
 
+/// Adversary: acceptance 1 of `story:ekr-session-per-run` as the story states it, "`connections
+/// list` runs at most once per run", and its summary, "readiness is checked once per run". The
+/// case above lets the readiness check run once for every one-shot launch (`lists <= one_shot +
+/// 1`), which is what `Store::command` and `Store::stage_command` still do before each
+/// `apply-extraction` and stage verb (`src/ekr.rs`, `launch.ready`).
+#[test]
+fn adversary_a_launched_staged_run_checks_its_connections_readiness_once() {
+    let w = world(
+        launched_store,
+        "gate:\n  checks:\n    - {measure: assertions.active, min: \"0\"}\n",
+    );
+    let (code, ran) = w.cortex(&["run", "s/repos"]);
+    assert_eq!(code, 0, "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 3, "{ran}");
+
+    let connectors = w.lines("connectors-argv.log");
+    let lists = connectors
+        .iter()
+        .filter(|l| l.starts_with("connections list"))
+        .count();
+    assert!(
+        lists <= 1,
+        "{lists} `connections list` readiness checks in one run: {connectors:#?}"
+    );
+}
+
 /// Acceptance 2, against the pinned `ekr`: a session joined to an open stage reads the stage as
 /// it stands when each request is read, so what a one-shot `apply-extraction` in that stage applied
 /// after the session's first `snapshot` is in its second.

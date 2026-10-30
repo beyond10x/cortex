@@ -886,6 +886,57 @@ echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"total_co
     );
 }
 
+/// Adversary, `story:ekr-session-per-run` acceptance 2 on PostgreSQL: the gate's `ekr quality`,
+/// asked through the run's session joined to its stage, reads what the run's one-shot
+/// `apply-extraction`s committed in that stage. A gate of `assertions.active max 0` on a store the
+/// run fills refuses it, naming a count above 0, and the head stays where it was.
+#[test]
+fn adversary_a_postgres_runs_session_quality_reads_the_applies_of_its_stage() {
+    if !container_runtime("the PostgreSQL session visibility case") {
+        return;
+    }
+    let w = World::new();
+    let pg = Postgres::start(&w.root);
+    let state = w.root.join("connectors-state");
+    let (app, owner) = pg.launched(&state);
+    let staged_ekr = stage_logging_ekr(&w);
+    launching_connectors(&w, &state, &staged_ekr);
+    let spec = spec_with_ekr(&w, "pg", &launched_store(&app), &staged_ekr);
+    let mut text = std::fs::read_to_string(&spec).unwrap();
+    text.push_str("gate:\n  checks:\n    - {measure: assertions.active, max: \"0\"}\n");
+    std::fs::write(&spec, text).unwrap();
+    let (code, out, err) = cortex(
+        &w,
+        &[
+            "create",
+            "--spec",
+            spec.to_str().unwrap(),
+            "--postgres-schema-config",
+            owner.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(0), "{out}{err}");
+    let dir = w.home.join("instances/pg");
+    let head = postgres_head(&dir, &pg.app)["revision"].as_i64();
+
+    let (code, out, err) = cortex(&w, &["run", "pg/docs"]);
+    let refused = last_json(&out);
+    assert_ne!(code, Some(0), "{out}{err}");
+    assert_eq!(refused["outcome"], "apply-refused", "{out}{err}");
+    let reason = refused["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(reason.contains("assertions.active = "), "{reason}");
+    assert!(
+        !reason.contains("assertions.active = 0 "),
+        "the session's quality did not see the stage's applies: {reason}"
+    );
+    assert_eq!(postgres_head(&dir, &pg.app)["revision"].as_i64(), head);
+    let log = std::fs::read_to_string(w.root.join("ekr-stage.log")).unwrap();
+    assert!(
+        !log.lines().any(|l| l.ends_with("|quality")),
+        "the gate's quality was a request, not a process: {log}"
+    );
+}
+
 /// `story:schema-proposals-on-approval`: `cortex schema apply` on a `postgres` store runs the
 /// approved changes in an EKR stage. With a gate that fails it publishes nothing and abandons the
 /// stage: the store's head and ontology are unchanged and the approved proposal stays `approved`.
