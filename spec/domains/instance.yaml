@@ -1422,7 +1422,8 @@ errors:
       taken before was restored, and every approved proposal is still `approved`. Or, after the
       changes were published, EKR could not read the store's head or `proposals.jsonl` could not
       be written: the changes stay in the store, and the reason says so and names the revision
-      (on `postgres`, the head the stage was published at; on `sqlite`, the last committed one).
+      (on `postgres`, the head the stage was published at; on `sqlite`, the last committed one),
+      or, when no proposal was applied, says no change was committed.
     fields:
       - {name: reason, type: String}
 
@@ -1623,8 +1624,12 @@ commands:
         external: >-
           A source the frozen spec and the new one both name, whose `state/<source>.json` holds a
           seen document, changes a field its documents are keyed by: its `kind`; a `connectors`
-          source's `adapter`, `operation` or `id`; a `structured` source's `connectors` input's
-          `adapter` or `operation`
+          source's `adapter`, `operation` or `id`; a `files` source's `paths`, whether it reads
+          `records`, and their `records.id`; a `structured` source's `input`, its `connectors`
+          input's `adapter` or `operation`, its `files` input's `paths` or `glob`, or its
+          `mapping.id`.
+          A path is compared as written, and a record path as it is read (`key` and `$.key` are
+          one path)
         error: cortex.instance.RekeyRefused
         payload:
           cortex.instance.RekeyRefused:
@@ -2834,9 +2839,10 @@ commands:
             reason: {generated: true}
         summary: >-
           Before the publish, nothing was published and every approved proposal is still
-          `approved`. After it, the changes are in the store and the reason says so, naming the
-          revision: the head the stage was published at (`postgres`) or the last committed one
-          (`sqlite`). When only the head could not be read, every decision is written to
+          `approved`. After it, when a proposal was applied, the changes are in the store and the
+          reason says so, naming the revision: the head the stage was published at (`postgres`) or
+          the last committed one (`sqlite`); when none was, the reason says no change was
+          committed. When only the head could not be read, every decision is written to
           `proposals.jsonl`; when `proposals.jsonl` could not be written, it still lists every
           approved proposal `approved`.
 

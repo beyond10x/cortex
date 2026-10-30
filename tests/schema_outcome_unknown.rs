@@ -378,7 +378,6 @@ fn a_postgres_apply_whose_head_cannot_be_read_after_the_publish_names_the_stage_
 /// approved proposal is planned `invalid` and its stage commits nothing. When the head then cannot
 /// be read after the (empty) publish, `apply-failed` must not say the changes are in the store.
 #[test]
-#[ignore = "adversary: apply-failed after an empty postgres publish says the changes are in the store although nothing was committed"]
 fn a_postgres_apply_that_committed_nothing_does_not_say_changes_are_in_the_store() {
     let (w, db) = pg_instance();
     std::fs::write(

@@ -1476,16 +1476,20 @@ pub fn apply_run(layout: &Layout, stamp: &str) -> Result<AppliedRun, Refusal> {
     })?;
     store.stage = None;
     // From here the changes are in the store: the decisions are written whether or not the head
-    // can be read, and a failure says what was published, at which revision.
+    // can be read, and a failure says what was published, at which revision. A run that applied
+    // no proposal published a stage with no change in it: nothing of it is in the store.
+    let applied = approved
+        .iter()
+        .any(|&i| proposals[i].status == m::SchemaProposalStatus::Applied);
     let committed = approved.iter().filter_map(|&i| proposals[i].revision).max();
-    let published = match (stage_head, committed) {
-        (Some(head), _) => {
+    let published = match (applied, stage_head, committed) {
+        (false, _, _) | (true, None, None) => "no change was committed".to_string(),
+        (true, Some(head), _) => {
             format!("the changes are in the store: its stage was published at head {head}")
         }
-        (None, Some(revision)) => {
+        (true, None, Some(revision)) => {
             format!("the changes are in the store: committed up to revision {revision}")
         }
-        (None, None) => "no change was committed".to_string(),
     };
     let published = match &snapshot {
         Some(name) => format!("{published}, and snapshot {name} holds the store from before"),

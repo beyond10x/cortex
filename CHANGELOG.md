@@ -40,11 +40,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 - `cortex update` accepted a spec that changed how a source keys its documents, so the source's
   seen state matched nothing and its next run extracted every document again. An update that
-  changes a source's `kind`, a `connectors` source's `adapter`, `operation` or `id`, or a
-  `structured` source's input or its `adapter` or `operation`, while `state/<source>.json` holds a
-  seen document, is now refused as `rekey-refused`, exit 1, naming the source and the field;
-  nothing is written. A source with no seen document is updated as before. To re-key on purpose,
-  remove the source's state file first.
+  changes a source's `kind`, a `connectors` source's `adapter`, `operation` or `id`, a `files`
+  source's `paths`, whether it reads `records` or their `records.id`, or a `structured` source's
+  `input`, `adapter`, `operation`, files `paths` or `glob`, or `mapping.id`, while
+  `state/<source>.json` holds a seen document, is now refused as `rekey-refused`, exit 1, naming
+  the source and the field; nothing is written. Paths are compared as written (`docs` and
+  `./docs` key a file two ways); record paths as they are read, so `key` and `$.key` are one. A
+  source with no seen document is updated as before. To re-key on purpose, remove the source's
+  state file first.
 - `cortex schema` recorded a proposal whose schema transaction EKR could not say took effect
   (`publication outcome is unknown`) as `refused` and went on to apply the next ones against an
   ontology that might hold it. The round now stops there as the new `store-outcome-unknown`
@@ -55,8 +58,9 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   when the store's head could not be read after the stage was published, and did not write the
   decisions. It now writes them, and the reason says the changes are in the store and names the
   revision: the head the stage was published at on `postgres`, the last committed one on
-  `sqlite`. When `proposals.jsonl` cannot be rewritten after the publish, the reason says the file
-  still lists the proposals `approved`.
+  `sqlite`; when no proposal was applied, it says no change was committed. When
+  `proposals.jsonl` cannot be rewritten after the publish, the reason says the file still lists
+  the proposals `approved`.
 - `cortex schema` answered `propose-failed`, whose summary said nothing was applied, when a line of
   `proposals.jsonl` could not be written after earlier proposals were applied. Its reason now
   names the proposal, how many proposals are applied and how many lines are written, and the

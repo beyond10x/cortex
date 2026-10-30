@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 2f040bb5060f32906e99d11e2a3ec476ededcfa3a0da182b45a69fdec615acfa
-// contract digest ccaeb32dc8dee9993944ab1021ee7f606771faf2aa6ea94ac2d8a597b0999b12
+// model digest abc5c6e0927c4e8bbce623bf863c93367dcd0bc76d512ed81965526d1550fc73
+// contract digest be55a8cb0ee20c3ffc61a3eb86ea98b04b86867b3cbc66aae8b9dc2b006b8b8a
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -2036,7 +2036,7 @@ pub enum ApplySchemaProposalsOutcome {
     },
     /// `apply-failed` — externally decided (EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction, or, after the publish, read the store's head, or `proposals.jsonl` cannot be written).
     ///
-    /// Before the publish, nothing was published and every approved proposal is still `approved`. After it, the changes are in the store and the reason says so, naming the revision: the head the stage was published at (`postgres`) or the last committed one (`sqlite`). When only the head could not be read, every decision is written to `proposals.jsonl`; when `proposals.jsonl` could not be written, it still lists every approved proposal `approved`.
+    /// Before the publish, nothing was published and every approved proposal is still `approved`. After it, when a proposal was applied, the changes are in the store and the reason says so, naming the revision: the head the stage was published at (`postgres`) or the last committed one (`sqlite`); when none was, the reason says no change was committed. When only the head could not be read, every decision is written to `proposals.jsonl`; when `proposals.jsonl` could not be written, it still lists every approved proposal `approved`.
     ApplyFailed {
         /// Why it was refused: `cortex.instance.SchemaApplyFailed`.
         error: SchemaApplyFailed,
@@ -2736,7 +2736,7 @@ pub enum UpdateInstanceOutcome {
         /// Why it was refused: `cortex.instance.InstanceNotActive`.
         error: InstanceNotActive,
     },
-    /// `rekey-refused` — externally decided (A source the frozen spec and the new one both name, whose `state/<source>.json` holds a seen document, changes a field its documents are keyed by: its `kind`; a `connectors` source's `adapter`, `operation` or `id`; a `structured` source's `connectors` input's `adapter` or `operation`).
+    /// `rekey-refused` — externally decided (A source the frozen spec and the new one both name, whose `state/<source>.json` holds a seen document, changes a field its documents are keyed by: its `kind`; a `connectors` source's `adapter`, `operation` or `id`; a `files` source's `paths`, whether it reads `records`, and their `records.id`; a `structured` source's `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths` or `glob`, or its `mapping.id`. A path is compared as written, and a record path as it is read (`key` and `$.key` are one path)).
     ///
     /// Nothing changed; the frozen spec and every source's seen state are as they were.
     RekeyRefused {
@@ -3261,7 +3261,7 @@ pub struct SampleFailed {
 
 /// The declared error `cortex.instance.SchemaApplyFailed`.
 ///
-/// EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction: nothing was published, the stage was abandoned, or on `sqlite` the snapshot taken before was restored, and every approved proposal is still `approved`. Or, after the changes were published, EKR could not read the store's head or `proposals.jsonl` could not be written: the changes stay in the store, and the reason says so and names the revision (on `postgres`, the head the stage was published at; on `sqlite`, the last committed one).
+/// EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction: nothing was published, the stage was abandoned, or on `sqlite` the snapshot taken before was restored, and every approved proposal is still `approved`. Or, after the changes were published, EKR could not read the store's head or `proposals.jsonl` could not be written: the changes stay in the store, and the reason says so and names the revision (on `postgres`, the head the stage was published at; on `sqlite`, the last committed one), or, when no proposal was applied, says no change was committed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SchemaApplyFailed {
     /// `reason` — `String`.

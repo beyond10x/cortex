@@ -128,7 +128,6 @@ fn rerun_evidence(w: &World, name: &str, source: &str) -> String {
 /// `connectors` source's `id` does (`<prefix>:<raw id>`, `src/sources.rs` `structured_records`),
 /// the change C-04 is about. Changing it while the source has seen records must be refused.
 #[test]
-#[ignore = "adversary: keyed_by misses a structured source's mapping.id; the update is accepted and every record is re-extracted under new keys"]
 fn a_structured_mapping_id_change_with_seen_records_is_refused() {
     let w = World::new();
     executable(&w.bin.join("claude"), CLAUDE);
@@ -160,7 +159,6 @@ fn a_structured_mapping_id_change_with_seen_records_is_refused() {
 /// a structured source's input is a re-key field. Moving the files while the source has seen
 /// records must be refused.
 #[test]
-#[ignore = "adversary: keyed_by compares only the structured input's kind; a files input's paths or glob re-key every record and the update is accepted"]
 fn a_structured_files_paths_change_with_seen_records_is_refused() {
     let w = World::new();
     executable(&w.bin.join("claude"), CLAUDE);
@@ -218,7 +216,6 @@ fn connectors_spec(w: &World, id: &str) -> PathBuf {
 /// `id: key` and `id: "$.key"` read the same value (`src/sources.rs` `at` strips `$.`), so the
 /// keys are the same and nothing is re-extracted; the update is harmless and should be accepted.
 #[test]
-#[ignore = "adversary: keyed_by compares the id path as text; an equivalent spelling ($.key for key) is refused as a re-key"]
 fn an_equivalent_id_path_spelling_is_not_a_rekey() {
     let w = World::new();
     let spec = connectors_spec(&w, "key");
@@ -274,7 +271,6 @@ serve: {{view_port: 18992}}
 /// A `files` source keys each document by its path as `paths` reach it (`src/sources.rs`
 /// `whole_file`), so `paths: [docs]` and `paths: [./docs]` name the same files under other keys.
 #[test]
-#[ignore = "adversary: a files source's paths key its documents and are not compared; the update is accepted and every file is extracted again"]
 fn a_files_source_paths_change_with_seen_documents_is_refused() {
     let w = World::new();
     std::fs::create_dir_all(w.root.join("docs")).unwrap();

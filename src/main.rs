@@ -1486,32 +1486,66 @@ fn viewer_resolves_anew(ctx: &Ctx, name: &str, store: &ekr::Store, units: Units)
         .is_ok_and(|id| id != written)
 }
 
-/// The fields a source's document keys are derived from, by name: its kind, then, for a
-/// `connectors` source, its `adapter`, `operation` and `id` path, and for a `structured` source,
-/// where its records come from and, from Connectors, its `adapter` and `operation`.
-fn keyed_by(settings: &m::SourceSettings) -> Vec<(&'static str, &str)> {
+/// A record path as `sources::at` reads it: `$` is the record, and a leading `$.` is dropped, so
+/// `key` and `$.key` are one path.
+fn record_path(path: &str) -> String {
+    match path {
+        "$" => path.to_string(),
+        _ => path.strip_prefix("$.").unwrap_or(path).to_string(),
+    }
+}
+
+/// The fields a source's document keys are derived from, by name: its kind, then
+/// - for a `connectors` source, its `adapter`, `operation` and `id` path;
+/// - for a `files` source, its `paths` (a document's key is the file's path as they reach it, so
+///   `docs` and `./docs` key the same file two ways), whether it reads `records`, and with them
+///   their `id` path;
+/// - for a `structured` source, where its records come from (`input`), from Connectors its
+///   `adapter` and `operation`, from files its `paths` and `glob` (both in every record's key),
+///   and its `mapping.id` path.
+///
+/// A path read from a record is compared as `sources::at` reads it. The glob of a `files` source
+/// only picks files and is not in their keys, so it is not compared.
+fn keyed_by(settings: &m::SourceSettings) -> Vec<(&'static str, String)> {
     let kind = match settings {
         m::SourceSettings::Web(_) => "web",
         m::SourceSettings::Connectors(_) => "connectors",
         m::SourceSettings::Files(_) => "files",
         m::SourceSettings::Structured(_) => "structured",
     };
-    let mut fields = vec![("kind", kind)];
+    let mut fields = vec![("kind", kind.to_string())];
     match settings {
         m::SourceSettings::Connectors(c) => fields.extend([
-            ("adapter", c.adapter.as_str()),
-            ("operation", c.operation.as_str()),
-            ("id", c.id.as_str()),
+            ("adapter", c.adapter.clone()),
+            ("operation", c.operation.clone()),
+            ("id", record_path(&c.id)),
         ]),
-        m::SourceSettings::Structured(s) => match &s.input {
-            m::StructuredInput::Connectors(c) => fields.extend([
-                ("input", "connectors"),
-                ("adapter", c.adapter.as_str()),
-                ("operation", c.operation.as_str()),
-            ]),
-            m::StructuredInput::Files(_) => fields.push(("input", "files")),
-        },
-        m::SourceSettings::Web(_) | m::SourceSettings::Files(_) => {}
+        m::SourceSettings::Files(f) => {
+            fields.push(("paths", format!("{:?}", f.paths)));
+            match &f.records {
+                Some(r) => fields.extend([
+                    ("records", "records".to_string()),
+                    ("records.id", record_path(&r.id)),
+                ]),
+                None => fields.push(("records", "whole files".to_string())),
+            }
+        }
+        m::SourceSettings::Structured(s) => {
+            match &s.input {
+                m::StructuredInput::Connectors(c) => fields.extend([
+                    ("input", "connectors".to_string()),
+                    ("adapter", c.adapter.clone()),
+                    ("operation", c.operation.clone()),
+                ]),
+                m::StructuredInput::Files(f) => fields.extend([
+                    ("input", "files".to_string()),
+                    ("paths", format!("{:?}", f.paths)),
+                    ("glob", f.glob.clone()),
+                ]),
+            }
+            fields.push(("mapping.id", record_path(&s.mapping.id)));
+        }
+        m::SourceSettings::Web(_) => {}
     }
     fields
 }
