@@ -516,3 +516,191 @@ fn an_install_from_an_earlier_cortex_is_updated_and_removed_by_its_own_home() {
     }
     removes_all_its_units(&w, &w.home);
 }
+
+/// The world's spec of instance `instance` with its one source named `source`, at a file of its
+/// own.
+fn spec_of(w: &World, instance: &str, source: &str) -> PathBuf {
+    let text = std::fs::read_to_string(w.spec(instance, "conn_test"))
+        .unwrap()
+        .replace("  - name: news\n", &format!("  - name: {source}\n"));
+    let path = w.root.join(format!("{instance}--{source}.yaml"));
+    std::fs::write(&path, text).unwrap();
+    path
+}
+
+fn create_spec(w: &World, spec: &Path) -> (Option<i32>, Value, String) {
+    at(
+        w,
+        &w.home,
+        &["create", "--spec", spec.to_str().unwrap(), "--no-extract"],
+    )
+}
+
+/// The `ExecStart=` line of the unit file `unit`, or `None` when there is none.
+fn exec_of(w: &World, unit: &str) -> Option<String> {
+    std::fs::read_to_string(w.units.join(unit))
+        .ok()?
+        .lines()
+        .find(|l| l.starts_with("ExecStart="))
+        .map(str::to_string)
+}
+
+/// Asserts `r` is a refusal that names `unit` and created no instance `instance`.
+fn assert_unit_refused(w: &World, r: &(Option<i32>, Value, String), unit: &str, instance: &str) {
+    assert_eq!(r.0, Some(2), "{} {}", r.1, r.2);
+    assert!(r.2.contains(unit), "the refusal names no {unit}: {}", r.2);
+    assert!(
+        !w.home.join("instances").join(instance).exists(),
+        "a refused create left instances/{instance}"
+    );
+}
+
+/// Instance `a` with source `b-c` and instance `a-b` with source `c` both name the unit
+/// `cortex-a-b-c`: the second create is refused before it writes anything, in either order, and
+/// the first instance keeps its unit; `remove` of the first removes only its own.
+#[test]
+fn two_instances_whose_source_units_share_a_name_are_refused_in_one_home() {
+    let w = World::new();
+    let first = create_spec(&w, &spec_of(&w, "a", "b-c"));
+    assert_created(&first);
+    let before = exec_of(&w, "cortex-a-b-c.service").expect("the unit of a/b-c");
+    assert!(before.contains(" run a/b-c "), "{before}");
+
+    let second = create_spec(&w, &spec_of(&w, "a-b", "c"));
+    assert_unit_refused(&w, &second, "cortex-a-b-c", "a-b");
+    assert_eq!(exec_of(&w, "cortex-a-b-c.service"), Some(before));
+    assert!(!w.units.join("cortex-a-b-view.service").exists());
+
+    // The other order: `x-y/z` first, then `x/y-z`.
+    assert_created(&create_spec(&w, &spec_of(&w, "x-y", "z")));
+    let second = create_spec(&w, &spec_of(&w, "x", "y-z"));
+    assert_unit_refused(&w, &second, "cortex-x-y-z", "x");
+    let exec = exec_of(&w, "cortex-x-y-z.service").unwrap();
+    assert!(exec.contains(" run x-y/z "), "{exec}");
+}
+
+/// A source unit that would be another instance's viewer, or the instance's own, is refused:
+/// instance `a` with source `b-view` beside instance `a-b`, either way round, and a source named
+/// `view`.
+#[test]
+fn a_source_unit_never_overwrites_a_viewer_unit() {
+    let w = World::new();
+    assert_created(&create_spec(&w, &spec_of(&w, "a-b", "news")));
+    let viewer = exec_of(&w, "cortex-a-b-view.service").expect("the viewer of a-b");
+    let r = create_spec(&w, &spec_of(&w, "a", "b-view"));
+    assert_unit_refused(&w, &r, "cortex-a-b-view", "a");
+    assert_eq!(exec_of(&w, "cortex-a-b-view.service"), Some(viewer));
+
+    // The viewer of the second instance would be the first instance's source unit.
+    assert_created(&create_spec(&w, &spec_of(&w, "p", "q-view")));
+    let source = exec_of(&w, "cortex-p-q-view.service").unwrap();
+    let r = create_spec(&w, &spec_of(&w, "p-q", "news"));
+    assert_unit_refused(&w, &r, "cortex-p-q-view", "p-q");
+    assert_eq!(exec_of(&w, "cortex-p-q-view.service"), Some(source));
+
+    // A source named `view` is the instance's own viewer.
+    let r = create_spec(&w, &spec_of(&w, "v", "view"));
+    assert_unit_refused(&w, &r, "cortex-v-view", "v");
+    assert!(!w.units.join("cortex-v-view.service").exists());
+    assert!(!w.units.join("cortex-v-view.timer").exists());
+}
+
+/// The refusal holds for `update` as well: an instance cannot gain a source whose unit another
+/// instance of the home owns, and its own units are left as they were.
+#[test]
+fn an_update_that_adds_a_colliding_source_is_refused() {
+    let w = World::new();
+    assert_created(&create_spec(&w, &spec_of(&w, "a-b", "c")));
+    assert_created(&create_spec(&w, &spec_of(&w, "a", "news")));
+    let before = exec_of(&w, "cortex-a-b-c.service").unwrap();
+    let r = at(
+        &w,
+        &w.home,
+        &[
+            "update",
+            "a",
+            "--spec",
+            spec_of(&w, "a", "b-c").to_str().unwrap(),
+        ],
+    );
+    assert_eq!(r.0, Some(2), "{} {}", r.1, r.2);
+    assert!(r.2.contains("cortex-a-b-c"), "{}", r.2);
+    assert_eq!(exec_of(&w, "cortex-a-b-c.service"), Some(before));
+    let frozen = std::fs::read_to_string(w.home.join("instances/a/instance.yaml")).unwrap();
+    assert!(frozen.contains("- name: news"), "{frozen}");
+    assert!(!frozen.contains("- name: b-c"), "{frozen}");
+}
+
+/// A source its failures disabled stays disabled through `update`: its timer is written again but
+/// not enabled, and `cortex sources` still lists it as disabled. Another source of the instance
+/// is enabled as before.
+#[test]
+fn an_update_leaves_a_disabled_source_s_timer_off() {
+    let w = World::new();
+    assert_created(&create(&w, &w.home));
+    for _ in 0..2 {
+        let (code, out, stderr) = at(
+            &w,
+            &w.home,
+            &["source", "record-failure", "t/news", "--reason", "r"],
+        );
+        assert_eq!(code, Some(0), "{out} {stderr}");
+    }
+    let calls = w.lines("systemctl.log").len();
+    // The same spec, with a second source beside the disabled one.
+    let spec = w.spec("t", "conn_test");
+    let text = std::fs::read_to_string(&spec).unwrap();
+    let news = text
+        .split_once("sources:\n")
+        .unwrap()
+        .1
+        .split_once("serve:")
+        .unwrap()
+        .0
+        .to_string();
+    let more = text.replace(
+        "serve:",
+        &format!("{}serve:", news.replace("- name: news", "- name: more")),
+    );
+    std::fs::write(&spec, more).unwrap();
+    let (code, out, stderr) = at(
+        &w,
+        &w.home,
+        &["update", "t", "--spec", spec.to_str().unwrap()],
+    );
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (Some(0), Some("updated")),
+        "{out} {stderr}"
+    );
+    assert!(out["detail"].get("units").is_none(), "{out}");
+    let since: Vec<String> = w.lines("systemctl.log").into_iter().skip(calls).collect();
+    assert!(
+        !since.iter().any(|c| c.contains("cortex-t-news.timer")),
+        "update touched the disabled source's timer: {since:?}"
+    );
+    assert!(
+        since
+            .iter()
+            .any(|c| c.contains("enable --now cortex-t-more.timer")),
+        "update did not enable the new source's timer: {since:?}"
+    );
+    assert!(w.units.join("cortex-t-news.timer").is_file());
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_cortex"))
+        .args(["--home", w.home.to_str().unwrap(), "sources"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let rows: Vec<Value> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let state = |id: &str| {
+        rows.iter()
+            .find(|r| r["source_id"] == id)
+            .map(|r| r["state"].clone())
+    };
+    assert_eq!(state("t/news"), Some(Value::from("Disabled")), "{rows:?}");
+    assert_eq!(state("t/more"), Some(Value::from("Enabled")), "{rows:?}");
+}

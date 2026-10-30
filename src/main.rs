@@ -881,6 +881,33 @@ fn foreign_units(
     }
 }
 
+/// Why `spec`'s instance `name` cannot be held in this home: one of its unit names is the unit
+/// name of another active instance of the home, or a source's is the instance's own viewer's
+/// ([`schedule::unit_name_collision`]). Checked before a command changes anything, whether or not
+/// it writes units: a later `update` would write them.
+fn unit_collision(ctx: &Ctx, name: &str, spec: &m::InstanceSpec) -> Option<String> {
+    let shared = ctx.shared.borrow();
+    let others: Vec<(String, Vec<String>)> = shared
+        .registry
+        .instances
+        .values()
+        .filter(|i| i.state == m::InstanceState::Active && i.data.name.0 != name)
+        .map(|i| {
+            let other = i.data.name.0.clone();
+            let sources = shared
+                .registry
+                .sources
+                .values()
+                .filter(|s| s.data.instance_name.0 == other)
+                .map(|s| s.data.name.clone())
+                .collect();
+            (other, sources)
+        })
+        .collect();
+    let sources: Vec<String> = spec.sources.iter().map(|s| s.name.clone()).collect();
+    schedule::unit_name_collision(name, &sources, &others)
+}
+
 /// Puts what installing the units did in `detail["units"]`: each unit taken over from a home that
 /// holds no instance of the name ([`Systemd::taken_over`]), and why the install failed, when it
 /// did.
@@ -914,9 +941,25 @@ fn install_sources(
     }
     detail["binary"] = placed.json();
     let token_env = spec.model.gateway.as_ref().map(|g| g.token_env.as_str());
-    spec.sources
-        .iter()
-        .try_for_each(|s| systemd.install_source(name, &s.name, &s.schedule, &ctx.tools, token_env))
+    // A source its failures disabled keeps its timer off: its units are written, not enabled.
+    let disabled = |source: &str| {
+        ctx.shared
+            .borrow()
+            .registry
+            .sources
+            .get(&format!("{name}/{source}"))
+            .is_some_and(|s| s.state == m::SourceState::Disabled)
+    };
+    spec.sources.iter().try_for_each(|s| {
+        systemd.install_source(
+            name,
+            &s.name,
+            &s.schedule,
+            &ctx.tools,
+            token_env,
+            !disabled(&s.name),
+        )
+    })
 }
 
 fn create(
@@ -937,6 +980,9 @@ fn create(
     }
     let name = spec.name.0.clone();
     if let Some(reason) = foreign_units(ctx, &name, &spec, units, true) {
+        return fail(reason);
+    }
+    if let Some(reason) = unit_collision(ctx, &name, &spec) {
         return fail(reason);
     }
     let layout = Layout::new(ctx.home.instance_dir(&name));
@@ -1332,6 +1378,9 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
     if let Some(reason) = foreign_units(ctx, &name, &spec, a.units, true) {
         return fail(reason);
     }
+    if let Some(reason) = unit_collision(ctx, &name, &spec) {
+        return fail(reason);
+    }
     let layout = Layout::new(ctx.home.instance_dir(&name));
 
     // `name-taken` is the generated behaviour's own lookup; a taken name skips the checks below.
@@ -1507,6 +1556,9 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
             != layout.store_handle(&spec).launched_through()
     }) || viewer_resolves_anew(ctx, name, &layout.store_handle(&spec), units);
     if let Some(reason) = foreign_units(ctx, name, &spec, units, relaunch) {
+        return fail(reason);
+    }
+    if let Some(reason) = unit_collision(ctx, name, &spec) {
         return fail(reason);
     }
     // A store the spec cannot use, another store than the instance's (its history is in the store

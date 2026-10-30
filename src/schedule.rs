@@ -90,6 +90,52 @@ pub fn view_unit(instance: &str) -> String {
     format!("cortex-{instance}-view")
 }
 
+/// Why the units of `instance` with `sources` cannot be written in a home whose other instances
+/// are `others` (each with its sources): a unit name of `instance` is also a unit name of another
+/// instance, or of its own viewer. A unit is named `cortex-<instance>-<source>` and a viewer
+/// `cortex-<instance>-view`, and a name may hold `-`, so instance `a` with source `b-c` and
+/// instance `a-b` with source `c` name one unit; a source `view` names its own viewer. `None`
+/// when every name is the instance's own. An entry of `others` named `instance` is skipped.
+pub fn unit_name_collision(
+    instance: &str,
+    sources: &[String],
+    others: &[(String, Vec<String>)],
+) -> Option<String> {
+    let viewer = view_unit(instance);
+    let rename = "a unit is named cortex-<instance>-<source>; rename the source or the instance";
+    if let Some(source) = sources.iter().find(|s| source_unit(instance, s) == viewer) {
+        return Some(format!(
+            "source {instance}/{source}: its unit {viewer} is the viewer unit of instance \
+             {instance}; {rename}"
+        ));
+    }
+    let mut owned = std::collections::BTreeMap::new();
+    for (other, their) in others.iter().filter(|(o, _)| o != instance) {
+        owned.insert(view_unit(other), format!("the viewer of instance {other}"));
+        for source in their {
+            owned.insert(
+                source_unit(other, source),
+                format!("source {other}/{source}"),
+            );
+        }
+    }
+    let ours = sources
+        .iter()
+        .map(|s| (source_unit(instance, s), format!("source {instance}/{s}")))
+        .chain(std::iter::once((
+            viewer.clone(),
+            format!("the viewer of instance {instance}"),
+        )));
+    for (unit, what) in ours {
+        if let Some(owner) = owned.get(&unit) {
+            return Some(format!(
+                "{unit}: the unit of {what} is the unit of {owner} in this home; {rename}"
+            ));
+        }
+    }
+    None
+}
+
 /// The `[Unit]` key a unit names the home that wrote it with. systemd ignores a key that starts
 /// with `X-`.
 const HOME_KEY: &str = "X-CortexHome=";
@@ -498,7 +544,8 @@ impl Systemd {
     /// `<home>/bin/cortex`, which [`Systemd::place_binary`] places. With a gateway token
     /// variable `token_env` (`model.gateway.token_env`), the service names it with
     /// `PassEnvironment=`, so a run reads it from the user manager's environment; the unit never
-    /// holds its value.
+    /// holds its value. The timer is enabled and started when `enable`; otherwise (a disabled
+    /// source) its units are written and left as they are.
     pub fn install_source(
         &self,
         instance: &str,
@@ -506,6 +553,7 @@ impl Systemd {
         schedule: &str,
         tools: &crate::run::Tools,
         token_env: Option<&str>,
+        enable: bool,
     ) -> Result<(), String> {
         let unit = source_unit(instance, source);
         let exe = binary_path(&self.home_root);
@@ -556,6 +604,9 @@ impl Systemd {
             ],
         )?;
         self.systemctl(&["daemon-reload"])?;
+        if !enable {
+            return Ok(());
+        }
         self.systemctl(&["enable", "--now", &format!("{unit}.timer")])
     }
 
@@ -742,6 +793,39 @@ mod tests {
 
     use super::{compare, exec_quote, Systemd};
 
+    /// Unit names collide across `-` and with viewers; an instance's own entry, distinct names and
+    /// an instance's own other sources do not.
+    #[test]
+    fn unit_names_collide_across_dashes_and_viewers() {
+        use super::unit_name_collision as clash;
+        let s = |names: &[&str]| names.iter().map(|n| n.to_string()).collect::<Vec<_>>();
+        let home = |pairs: &[(&str, &[&str])]| {
+            pairs
+                .iter()
+                .map(|(i, srcs)| (i.to_string(), s(srcs)))
+                .collect::<Vec<_>>()
+        };
+        let why = clash("a-b", &s(&["c"]), &home(&[("a", &["b-c"])])).unwrap();
+        assert!(
+            why.contains("cortex-a-b-c") && why.contains("source a/b-c"),
+            "{why}"
+        );
+        let why = clash("a", &s(&["b-view"]), &home(&[("a-b", &["x"])])).unwrap();
+        assert!(why.contains("the viewer of instance a-b"), "{why}");
+        let why = clash("a-b", &s(&["x"]), &home(&[("a", &["b-view"])])).unwrap();
+        assert!(why.contains("the viewer of instance a-b"), "{why}");
+        let why = clash("v", &s(&["view"]), &[]).unwrap();
+        assert!(why.contains("cortex-v-view"), "{why}");
+        assert_eq!(
+            clash(
+                "a",
+                &s(&["news", "b"]),
+                &home(&[("a", &["news"]), ("c", &["b"])])
+            ),
+            None
+        );
+    }
+
     /// Every value cortex writes into a unit is read back by systemd as written: `ExecStart=` words
     /// are unquoted with `\\` and `\"` and expand `%` and `$`; `Environment=` values are unquoted
     /// the same way and expand `%`.
@@ -762,7 +846,7 @@ mod tests {
             codex: "codex".into(),
         };
         systemd
-            .install_source("q", "news", "daily", &tools, None)
+            .install_source("q", "news", "daily", &tools, None, true)
             .unwrap();
         let unit = std::fs::read_to_string(units.join("cortex-q-news.service")).unwrap();
         let exec = format!(

@@ -42,6 +42,14 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
   `<home>/bin/cortex --home <home> run <instance>/<source> --record-failure`.
 - `cortex-<instance>-view.service`, which runs `ekr view` on the store at the instance's port.
 
+An instance and a source name may hold `-`, so two instances could name one unit: instance `a`
+with source `b-c` and instance `a-b` with source `c` would both be `cortex-a-b-c`, and source
+`b-view` of `a` would be the viewer of `a-b`. `create`, `adopt` and `update` refuse such a spec
+before changing anything, with or without `--no-units`, naming the unit and the instance or
+source that holds it in the home; a source named `view` is refused the same way. A source that
+is disabled keeps its timer off through `update`: its units are written again, its timer is not
+enabled until `cortex source enable`.
+
 ### Which process serves what
 
 | process | serves |

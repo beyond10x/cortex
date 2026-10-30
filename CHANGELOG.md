@@ -104,6 +104,17 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   begins an EKR stage or reads the store (`ekr snapshot`): such a run read the whole store to
   end nothing. The state file remembers that listing's fingerprint (`ended_listing`). Comparing
   the store with a listing no longer scans every assertion of the source for each value it ends.
+- Two instances of one home could name one systemd unit, because a name may hold `-`: instance
+  `a` with source `b-c` and instance `a-b` with source `c` both wrote `cortex-a-b-c`, and a
+  source `b-view` of `a` wrote the viewer unit of `a-b`. The second install overwrote the first,
+  and `remove` could delete the other instance's unit. `create`, `adopt` and `update` now refuse,
+  before changing anything and with or without `--no-units`, a spec whose source or viewer unit is
+  another active instance's of the home, or a source named `view`, naming the unit and both
+  owners. Unit names do not change.
+- `cortex update` enabled and started the timer of every source, so a source two failures had
+  disabled ran again on its schedule while `cortex sources` still showed it disabled. `update`,
+  `create` and `adopt` now write a disabled source's units without enabling its timer;
+  `cortex source enable` turns it on again.
 
 ## 0.6.1 — 2026-10-17
 
