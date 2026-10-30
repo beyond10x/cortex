@@ -38,6 +38,9 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 ### Added
 
+- An input of a `connectors` or `structured` source may use `{since_minutes_ago}`: the run's
+  window as whole minutes before the run's start, rounded up (`updated >= -{since_minutes_ago}m`),
+  for a query language that takes relative dates rather than RFC 3339.
 - A `structured` source's child may carry a `follow` rule (`equals`, `within_days` or
   `at_least` on a field of the parent record), and the run calls that child only for the parents
   the rule matches. A parent it does not match is still applied as a node; its children of that

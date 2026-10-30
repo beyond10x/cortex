@@ -146,20 +146,29 @@ pub fn rfc3339(ms: i64) -> String {
 
 /// `input` with the window placeholders in every string value replaced by the window's instants:
 /// `{since}` and `{until}` in RFC 3339, `{since_epoch}` and `{until_epoch}` as whole seconds since
-/// the Unix epoch, cut to the second as [`rfc3339`] cuts them, so both name the same instant.
+/// the Unix epoch, cut to the second as [`rfc3339`] cuts them, so both name the same instant, and
+/// `{since_minutes_ago}` as the whole minutes from the window's start to the run's start, rounded
+/// up from the milliseconds (`updated >= -{since_minutes_ago}m`), so the window is never narrowed.
 fn with_window(input: &Value, window: &Window) -> Value {
     match input {
         Value::String(t) => Value::String(
-            t.replace("{since}", &rfc3339(window.since_ms))
-                .replace("{until}", &rfc3339(window.until_ms))
-                .replace(
-                    "{since_epoch}",
-                    &window.since_ms.div_euclid(1000).to_string(),
-                )
-                .replace(
-                    "{until_epoch}",
-                    &window.until_ms.div_euclid(1000).to_string(),
-                ),
+            t.replace(
+                "{since_minutes_ago}",
+                &(window.until_ms.saturating_sub(window.since_ms))
+                    .saturating_add(59_999)
+                    .div_euclid(60_000)
+                    .to_string(),
+            )
+            .replace("{since}", &rfc3339(window.since_ms))
+            .replace("{until}", &rfc3339(window.until_ms))
+            .replace(
+                "{since_epoch}",
+                &window.since_ms.div_euclid(1000).to_string(),
+            )
+            .replace(
+                "{until_epoch}",
+                &window.until_ms.div_euclid(1000).to_string(),
+            ),
         ),
         Value::Array(items) => Value::Array(items.iter().map(|v| with_window(v, window)).collect()),
         Value::Object(fields) => Value::Object(
@@ -2100,6 +2109,32 @@ mod tests {
         assert_eq!(before_a_success.since_ms, 900_000_000);
         let held = Window::of_run(1_000_000, Some(400_000), Some(600_000), Some(700_000), 7);
         assert_eq!(held.since_ms, 600_000);
+    }
+
+    /// `story:window-relative-placeholders`: `{since_minutes_ago}` is the ceiling of (run start −
+    /// window start) in whole minutes, from the raw milliseconds, as the number alone.
+    #[test]
+    fn since_minutes_ago_is_the_window_rounded_up_to_whole_minutes() {
+        let jql = json!({"jql": "updated >= -{since_minutes_ago}m"});
+        let at = |since_ms, until_ms| with_window(&jql, &Window { since_ms, until_ms });
+        let start = 1_790_000_000_000;
+        assert_eq!(
+            at(start - 3 * 86_400_000, start),
+            json!({"jql": "updated >= -4320m"})
+        );
+        assert_eq!(at(start - 60_001, start), json!({"jql": "updated >= -2m"}));
+        assert_eq!(at(start - 60_000, start), json!({"jql": "updated >= -1m"}));
+        assert_eq!(at(start - 1, start), json!({"jql": "updated >= -1m"}));
+        assert_eq!(at(start, start), json!({"jql": "updated >= -0m"}));
+        // The window of a run five minutes after the last successful one: its overlap included.
+        let after = Window::of_run(start, Some(start - 300_000), None, None, 7);
+        assert_eq!(
+            with_window(&json!(["{since_minutes_ago}", "{since}"]), &after),
+            json!([
+                ((300_000 + OVERLAP_MS) / 60_000).to_string(),
+                rfc3339(after.since_ms)
+            ])
+        );
     }
 }
 

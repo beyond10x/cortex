@@ -208,9 +208,11 @@ types:
       # UNMAPPED: in every string value of an input, a run replaces the window placeholders by its
       # window, each end cut to the second: `{since}` and `{until}` by RFC 3339 in UTC
       # (`2026-10-05T12:34:56Z`), `{since_epoch}` and `{until_epoch}` by the same instants as
-      # whole seconds since the Unix epoch, a decimal string (`1790000000`). Any other text,
-      # another `{...}` included, reaches Connectors unchanged. ESS states no rule on the text
-      # of a Json value; src/sources.rs and tests/connectors_walks.rs hold it.
+      # whole seconds since the Unix epoch, a decimal string (`1790000000`), and
+      # `{since_minutes_ago}` by the whole minutes from the window's start to the run's start,
+      # rounded up from the milliseconds, the number alone (`updated >= -{since_minutes_ago}m`).
+      # Any other text, another `{...}` included, reaches Connectors unchanged. ESS states no
+      # rule on the text of a Json value; src/sources.rs and tests/connectors_walks.rs hold it.
       - {name: inputs, type: List<Json>}
       - {name: records, type: String}
       - {name: id, type: String}
@@ -418,7 +420,8 @@ types:
       - {name: operation, type: String}
       # UNMAPPED: the window placeholders of `cortex.instance.ConnectorsSource.inputs` hold here
       # alike: `{since}`, `{until}` (RFC 3339), `{since_epoch}`, `{until_epoch}` (whole epoch
-      # seconds). The inputs of `children` and `links` are filled from records, not the window.
+      # seconds), `{since_minutes_ago}` (whole minutes before the run's start, rounded up). The
+      # inputs of `children` and `links` are filled from records, not the window.
       - {name: inputs, type: List<Json>}
       - {name: paging, type: Optional<cortex.instance.Paging>}
       - {name: children, type: Optional<List<cortex.instance.StructuredChild>>}

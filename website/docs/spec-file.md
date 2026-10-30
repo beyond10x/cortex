@@ -323,7 +323,7 @@ The records of any operation a Connectors adapter admits.
 | field | meaning |
 |---|---|
 | `adapter`, `connection` or `profile`, `operation` | what to invoke; the connection by id or by profile of `adapter` ([Naming a connection](#naming-a-connection)) |
-| `inputs` | a list of JSON inputs; the operation is invoked once per input. `{since}`, `{until}`, `{since_epoch}` and `{until_epoch}` in a string value are replaced by the run's window |
+| `inputs` | a list of JSON inputs; the operation is invoked once per input. `{since}`, `{until}`, `{since_epoch}`, `{until_epoch}` and `{since_minutes_ago}` in a string value are replaced by the run's window |
 | `records` | dotted path to the array of records in the answer, for example `issues` |
 | `id` | dotted path to a record's stable id |
 | `key` | optional: a template the document's key is rendered from instead of `id`: `{a.b}` is a field of the record, `{input.a.b}` one of the input it was read with, its window filled in. `{input.channel}:{ts}` keeps two messages with one `ts` in two channels two documents |
@@ -362,8 +362,17 @@ inputs:
   - {channel: "C1", oldest: "{since_epoch}"}
 ```
 
-The value stays a JSON string. Any other text in braces, such as `{since_ms}`, is passed to the
-operation as written.
+`{since_minutes_ago}` is the window's length in whole minutes, from `{since}` to the start of
+this run, rounded up from the milliseconds so the window is never narrowed, for a query language
+that takes a relative date, such as an issue tracker's:
+
+```yaml
+inputs:
+  - {jql: "project = OPS AND updated >= -{since_minutes_ago}m"}
+```
+
+It is the number alone; the unit is written after it. The value stays a JSON string. Any other
+text in braces, such as `{since_ms}`, is passed to the operation as written.
 
 With `refresh_after_days: 0` the first run's window is empty (`{since}` equals `{until}`), so
 records older than the 5 minutes before that run are never read. Set `refresh_after_days` to 1 or
