@@ -76,10 +76,11 @@ pub struct Status {
     /// How long the last run took, in milliseconds, to the moment it recorded its outcome.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_duration_ms: Option<i64>,
-    /// The last run's documents by kind (`read`, `applied`): present only when it ended `ran`.
+    /// The last run's documents by kind (`read`, `applied`): present only when it ended `ran`, or
+    /// applied a batch and then failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_documents: Option<BTreeMap<String, u64>>,
-    /// The documents of every run that ended `ran`, by kind (`read`, `applied`).
+    /// The documents of every run that reported them, by kind (`read`, `applied`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub documents: BTreeMap<String, u64>,
     /// The model tokens those runs reported, by kind (`input`, `cached`, `output`).
@@ -87,9 +88,10 @@ pub struct Status {
     pub tokens: BTreeMap<String, u64>,
 }
 
-/// What a run that ended `ran` did, as `metrics.prom` reports it: the documents it read (the new
-/// or changed ones it selected, `SourceRan.documents_new`) and applied, and the model tokens its
-/// answers reported, each `None` when an answer did not report it.
+/// What a run that ended `ran`, or applied a batch and then failed, did, as `metrics.prom` reports
+/// it: the documents it read (the new or changed ones it selected, `SourceRan.documents_new`) and
+/// applied (`0` for a run that was undone), as counts, and the model tokens its answers reported,
+/// each `None` when an answer did not report it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Figures {
     pub read: u64,
@@ -107,8 +109,8 @@ const DOCUMENT_KINDS: [&str; 2] = ["read", "applied"];
 const TOKEN_KINDS: [&str; 3] = ["input", "cached", "output"];
 
 impl Status {
-    /// Sets the last run's duration and figures, and adds the figures to the totals. A run that
-    /// did not end `ran` (no `figures`) reports no documents.
+    /// Sets the last run's duration and figures, and adds the figures to the totals, whatever the
+    /// outcome. A run that failed before it applied a batch (no `figures`) reports no documents.
     fn add(&mut self, duration_ms: Option<i64>, figures: Option<&Figures>) {
         self.last_duration_ms = duration_ms;
         self.last_documents = figures.map(|f| {
@@ -137,12 +139,26 @@ fn path(layout: &Layout, source: &str) -> PathBuf {
     layout.dir.join("status").join(format!("{source}.json"))
 }
 
-/// The status of `source` (its name within the instance); empty when none was written.
+/// The status of `source` (its name within the instance); empty when none was written. A file
+/// that cannot be read or parsed is an error naming it.
+pub fn read(layout: &Layout, source: &str) -> Result<Status, String> {
+    let file = path(layout, source);
+    let bytes = match std::fs::read(&file) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Status::default()),
+        Err(e) => return Err(format!("cannot read {}: {e}", file.display())),
+    };
+    serde_json::from_slice(&bytes)
+        .map_err(|e| format!("{} is no source status: {e}", file.display()))
+}
+
+/// [`read`], with a file that cannot be read or parsed answered as an empty status and named on
+/// stderr: what a listing or the metric file shows, never what a run records on.
 pub fn load(layout: &Layout, source: &str) -> Status {
-    std::fs::read(path(layout, source))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default()
+    read(layout, source).unwrap_or_else(|e| {
+        eprintln!("cortex: {e}");
+        Status::default()
+    })
 }
 
 /// Sets the last run fields of `data` from its status file.
@@ -178,7 +194,8 @@ pub fn record_run(
     duration_ms: Option<i64>,
     figures: Option<&Figures>,
 ) -> Result<(), String> {
-    let mut status = load(layout, source);
+    // A status that cannot be read is left as it is: rewriting it would start its counts again.
+    let mut status = read(layout, source)?;
     status.add(duration_ms, figures);
     status.format = "cortex.source-status/1".into();
     status.last_outcome = Some(outcome_name(outcome).into());
@@ -362,7 +379,7 @@ pub fn metrics_text(layout: &Layout, sources: &[String]) -> String {
     }
     text.push_str(
         "# HELP cortex_source_last_run_documents The documents the source's last run read and \
-         applied, when it ended ran.\n\
+         applied, when it ended ran or applied a batch before it failed.\n\
          # TYPE cortex_source_last_run_documents gauge\n",
     );
     for (id, status) in &statuses {
@@ -491,11 +508,16 @@ pub fn call_hook(
     };
     let timeout = Duration::from_secs(
         hook.timeout_s
+            .map(|t| t.min(crate::spec::MAX_HOOK_TIMEOUT_S))
             .and_then(|t| u64::try_from(t).ok())
             .unwrap_or(HOOK_TIMEOUT_S),
     );
     let started = Instant::now();
-    let deadline = started + timeout;
+    // A given spec is refused above a day (`spec::bounds_refusal`); a frozen copy from before the
+    // rule is capped at a day here, and an `Instant` past its range is never waited for.
+    let deadline = started
+        .checked_add(timeout)
+        .unwrap_or_else(|| started + Duration::from_secs(HOOK_TIMEOUT_S));
     let spawned = Command::new(hook_program(layout, program))
         .args(args)
         .arg(source_id)
@@ -553,11 +575,18 @@ pub fn call_hook(
     let stderr = stderr
         .recv_timeout(left)
         .ok()
-        .map(|t| t.trim().chars().take(2000).collect::<String>())
+        // Masked before the cut, so the cut cannot leave a credential shape too short to match.
+        .map(|t| {
+            crate::mask::mask(t.trim())
+                .0
+                .chars()
+                .take(2000)
+                .collect::<String>()
+        })
         .filter(|t| !t.is_empty());
     HookResult::Failed {
         status: status.code(),
-        reason: stderr.map(|t| crate::mask::mask(&t).0),
+        reason: stderr,
     }
 }
 
@@ -670,6 +699,49 @@ mod tests {
         );
     }
 
+    /// `story:partial-run-counts`: a run that applied a batch and then failed reports its figures
+    /// as a run that ended `ran` does: the last run's documents, and its documents and tokens
+    /// added to the totals.
+    #[test]
+    fn a_failed_run_with_figures_reports_and_adds_them() {
+        let tmp = tempfile::tempdir().unwrap();
+        let layout = Layout::new(tmp.path().to_path_buf());
+        let figures = Figures {
+            read: 4,
+            applied: 1,
+            input_tokens: Some(100),
+            cached_tokens: Some(7),
+            output_tokens: Some(40),
+        };
+        for outcome in [
+            m::RunOutcome::ModelUnavailable,
+            m::RunOutcome::BatchTooLarge,
+        ] {
+            record_run(
+                &layout,
+                "news",
+                outcome,
+                1_000,
+                Some("stopped"),
+                Some(500),
+                Some(&figures),
+            )
+            .unwrap();
+        }
+        let text = metrics_text(&layout, &["t/news".into()]);
+        for line in [
+            "cortex_source_last_run_documents{source=\"t/news\",kind=\"read\"} 4\n",
+            "cortex_source_last_run_documents{source=\"t/news\",kind=\"applied\"} 1\n",
+            "cortex_source_documents_total{source=\"t/news\",kind=\"read\"} 8\n",
+            "cortex_source_documents_total{source=\"t/news\",kind=\"applied\"} 2\n",
+            "cortex_source_model_tokens_total{source=\"t/news\",kind=\"input\"} 200\n",
+            "cortex_source_model_tokens_total{source=\"t/news\",kind=\"cached\"} 14\n",
+            "cortex_source_model_tokens_total{source=\"t/news\",kind=\"output\"} 80\n",
+        ] {
+            assert!(text.contains(line), "{line}{text}");
+        }
+    }
+
     /// `story:store-outcome-unknown-not-counted`: the hook is called for an unknown store outcome,
     /// and the metric file counts it, though the scheduler records no failure for it.
     #[test]
@@ -696,5 +768,22 @@ mod tests {
         assert!(text.contains(
             "cortex_source_runs_total{source=\"t/news\",outcome=\"store-outcome-unknown\"} 1\n"
         ));
+    }
+
+    /// A status file that cannot be parsed is an error naming it, and a run's record leaves it as
+    /// it is instead of starting the counts again; a missing one is an empty status.
+    #[test]
+    fn a_corrupt_status_file_is_an_error_and_is_not_rewritten() {
+        let tmp = tempfile::tempdir().unwrap();
+        let layout = Layout::new(tmp.path().to_path_buf());
+        assert_eq!(read(&layout, "news").unwrap().runs.len(), 0);
+        let file = path(&layout, "news");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, b"").unwrap();
+        let e = read(&layout, "news").unwrap_err();
+        assert!(e.contains(&file.display().to_string()), "{e}");
+        let e = record(&layout, "news", m::RunOutcome::Ran, 1, None).unwrap_err();
+        assert!(e.contains(&file.display().to_string()), "{e}");
+        assert_eq!(std::fs::read(&file).unwrap(), b"");
     }
 }

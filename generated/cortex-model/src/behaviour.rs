@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d
-// contract digest 45be6012d6ca07f5842ea4b833a0421e5880da4b6a06706d61c0d0abe43f7aab
+// model digest dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7
+// contract digest 857182a81f324b2743cfc95ae1fab53d1e8a5a7f0c41dbd9fcda27ed70b7ed9d
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -107,6 +107,8 @@ pub enum ExternalCommand<'a> {
     CortexAskAsk(&'a crate::ask::Ask),
     /// The executing `cortex.ask.CastVote` input.
     CortexAskCastVote(&'a crate::ask::CastVote),
+    /// The executing `cortex.ask.CloseReview` input.
+    CortexAskCloseReview(&'a crate::ask::CloseReview),
     /// The executing `cortex.instance.AddEvalCase` input.
     CortexInstanceAddEvalCase(&'a crate::instance::AddEvalCase),
     /// The executing `cortex.instance.AdoptInstance` input.
@@ -127,6 +129,8 @@ pub enum ExternalCommand<'a> {
     CortexInstanceRestoreSnapshot(&'a crate::instance::RestoreSnapshot),
     /// The executing `cortex.instance.RunEval` input.
     CortexInstanceRunEval(&'a crate::instance::RunEval),
+    /// The executing `cortex.instance.UpdateInstance` input.
+    CortexInstanceUpdateInstance(&'a crate::instance::UpdateInstance),
 }
 
 impl ExternalCommand<'_> {
@@ -135,6 +139,7 @@ impl ExternalCommand<'_> {
         match self {
             Self::CortexAskAsk(_) => "cortex.ask.Ask",
             Self::CortexAskCastVote(_) => "cortex.ask.CastVote",
+            Self::CortexAskCloseReview(_) => "cortex.ask.CloseReview",
             Self::CortexInstanceAddEvalCase(_) => "cortex.instance.AddEvalCase",
             Self::CortexInstanceAdoptInstance(_) => "cortex.instance.AdoptInstance",
             Self::CortexInstanceApplySchemaProposals(_) => "cortex.instance.ApplySchemaProposals",
@@ -145,6 +150,7 @@ impl ExternalCommand<'_> {
             Self::CortexInstanceRejectSchemaProposals(_) => "cortex.instance.RejectSchemaProposals",
             Self::CortexInstanceRestoreSnapshot(_) => "cortex.instance.RestoreSnapshot",
             Self::CortexInstanceRunEval(_) => "cortex.instance.RunEval",
+            Self::CortexInstanceUpdateInstance(_) => "cortex.instance.UpdateInstance",
         }
     }
 }
@@ -278,6 +284,10 @@ where
         if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "rate-limited")? {
             return Ok(crate::ask::AskOutcome::RateLimited { error: crate::ask::RateLimited { identity: input.identity.clone(), retry_after: self.ports.try_generate_integer()? } });
         }
+        // `busy`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "busy")? {
+            return Ok(crate::ask::AskOutcome::Busy { error: crate::ask::Busy { max_in_flight: self.ports.try_generate_integer()? } });
+        }
         // `limit-reached`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "limit-reached")? {
             return Ok(crate::ask::AskOutcome::LimitReached { error: crate::ask::LimitReached { limit: self.ports.try_generate_string()? } });
@@ -289,6 +299,14 @@ where
         // `reader-failed`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "reader-failed")? {
             return Ok(crate::ask::AskOutcome::ReaderFailed { error: crate::ask::ReaderFailed { reason: self.ports.try_generate_string()? } });
+        }
+        // `cut-off`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "cut-off")? {
+            return Ok(crate::ask::AskOutcome::CutOff { error: crate::ask::CutOff { finish_reason: self.ports.try_generate_string()?, steps: self.ports.try_generate_integer()?, input_tokens: self.ports.try_generate_integer()?, output_tokens: self.ports.try_generate_integer()?, cached_tokens: self.ports.try_generate_integer()?, context_tokens: self.ports.try_generate_integer()? } });
+        }
+        // `client-closed`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "client-closed")? {
+            return Ok(crate::ask::AskOutcome::ClientClosed { error: crate::ask::ClientClosed { steps: self.ports.try_generate_integer()?, input_tokens: self.ports.try_generate_integer()?, output_tokens: self.ports.try_generate_integer()?, cached_tokens: self.ports.try_generate_integer()?, context_tokens: self.ports.try_generate_integer()? } });
         }
         // `answered`: the default.
         return Ok(crate::ask::AskOutcome::Answered { answered: crate::ask::Answered { identity: input.identity.clone(), done: self.ports.try_generate_cortex_ask_ask_done()? } });
@@ -305,6 +323,14 @@ where
         // `unidentified`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexAskCastVote(&input), "unidentified")? {
             return Ok(crate::ask::CastVoteOutcome::Unidentified { error: crate::ask::Unidentified { header: self.ports.try_generate_string()? } });
+        }
+        // `bad-request`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskCastVote(&input), "bad-request")? {
+            return Ok(crate::ask::CastVoteOutcome::BadRequest { error: crate::ask::BadRequest { message: self.ports.try_generate_string()? } });
+        }
+        // `store-failed`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskCastVote(&input), "store-failed")? {
+            return Ok(crate::ask::CastVoteOutcome::StoreFailed { error: crate::ask::StoreFailed { request_id: self.ports.try_generate_string()? } });
         }
         // `no-such-answer`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexAskCastVote(&input), "no-such-answer")? {
@@ -343,6 +369,14 @@ where
 {
     fn close_review(&mut self, input: crate::ask::CloseReview) -> Result<crate::ask::CloseReviewOutcome, UnmetObligation> {
         let _ = &input;
+        // `bad-request`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskCloseReview(&input), "bad-request")? {
+            return Ok(crate::ask::CloseReviewOutcome::BadRequest { error: crate::ask::BadRequest { message: self.ports.try_generate_string()? } });
+        }
+        // `store-failed`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskCloseReview(&input), "store-failed")? {
+            return Ok(crate::ask::CloseReviewOutcome::StoreFailed { error: crate::ask::StoreFailed { request_id: self.ports.try_generate_string()? } });
+        }
         // `closed`: the default.
         let Some(held) = ReviewItemStorage::get(&self.ports, &input.review_id) else {
             return Ok(crate::ask::CloseReviewOutcome::NoSuchReview { error: crate::ask::ReviewNotFound { review_id: input.review_id.clone() } });
@@ -736,6 +770,10 @@ where
         if self.ports.try_external(ExternalCommand::CortexInstanceProposeSchemaChanges(&input), "propose-failed")? {
             return Ok(crate::instance::ProposeSchemaChangesOutcome::ProposeFailed { error: crate::instance::ProposeFailed { reason: self.ports.try_generate_string()? } });
         }
+        // `store-outcome-unknown`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceProposeSchemaChanges(&input), "store-outcome-unknown")? {
+            return Ok(crate::instance::ProposeSchemaChangesOutcome::StoreOutcomeUnknown { error: crate::instance::StoreOutcomeUnknown { reason: self.ports.try_generate_string()? } });
+        }
         // `proposed`: an accepting branch, in declaration order.
         if decided(Some(&input.dry_run).map(|value| *value), "cortex.instance.ProposeSchemaChanges")? {
             let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
@@ -909,6 +947,10 @@ where
         // `not-active`: selected by the addressed row.
         if decided(equal(Some(&held.state).map(|value| match value { crate::instance::InstanceState::Active => "Active", crate::instance::InstanceState::Removed => "Removed" }.to_owned()), Some("Removed".to_owned())), "cortex.instance.UpdateInstance")? {
             return Ok(crate::instance::UpdateInstanceOutcome::NotActive { error: crate::instance::InstanceNotActive { state: self.ports.try_generate_cortex_instance_instance_state()? } });
+        }
+        // `rekey-refused`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceUpdateInstance(&input), "rekey-refused")? {
+            return Ok(crate::instance::UpdateInstanceOutcome::RekeyRefused { error: crate::instance::RekeyRefused { name: input.name.clone(), source: self.ports.try_generate_string()?, field: self.ports.try_generate_string()? } });
         }
         // `updated`: the default.
         let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {

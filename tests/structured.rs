@@ -14,13 +14,14 @@ use serde_json::Value;
 /// A stand-in `connectors` with one ready `directory` connection whose `people.list` answers the
 /// file `people.json` as `{"people": [...]}`, logging each invocation to `people.log`.
 const CONNECTORS: &str = r#"R="@ROOT@"
-case "$*" in
-  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"directory","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
+# Connectors 0.60.0 reads an invoke's input from standard input: A is the argv and that input.
+IN=""; if [ "$1" = invoke ]; then IN=$(cat); fi; A="$* $IN"
+case "$A" in
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"directory","connector":"directory","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
   *"connections revalidate"*) echo '{"ok":true,"result":{}}' ;;
-  *"operations describe"*) echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
-  *"--operation people.list"*)
-    echo "$*" >> "$R/people.log"
-    printf '{"ok":true,"result":{"adapter":"directory","operation":"people.list","revision":"r","result":{"people":%s}}}\n' "$(cat "$R/people.json")" ;;
+  "invoke "*" people.list "*)
+    echo "$A" >> "$R/people.log"
+    printf '{"ok":true,"result":{"connector":"directory","instance":"main","operation":"people.list","revision":"r","result":{"people":%s}}}\n' "$(cat "$R/people.json")" ;;
   *) echo '{"ok":false}'; exit 2 ;;
 esac
 "#;
@@ -378,20 +379,21 @@ mod cases {
     /// logging each invocation to `<op>.log`. When the directory `pages-<op>` exists, it answers
     /// `pages-<op>/<n>.json` for the input's `"page":<n>` (1 when absent), and `[]` past the last.
     const CONNECTORS: &str = r#"R="@ROOT@"
-case "$*" in
-  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"directory","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
+# Connectors 0.60.0 reads an invoke's input from standard input: A is the argv and that input.
+IN=""; if [ "$1" = invoke ]; then IN=$(cat); fi; A="$* $IN"
+case "$A" in
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"directory","connector":"directory","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
   *"connections revalidate"*) echo '{"ok":true,"result":{}}' ;;
-  *"operations describe"*) echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
-  *"--operation "*)
-    OP=$(printf '%s' "$*" | sed -n 's/.*--operation \([^ ]*\).*/\1/p')
-    echo "$*" >> "$R/$OP.log"
+  "invoke "*)
+    OP="$3"
+    echo "$A" >> "$R/$OP.log"
     if [ -d "$R/pages-$OP" ]; then
-      PAGE=$(printf '%s' "$*" | sed -n 's/.*"page":\([0-9]*\).*/\1/p'); [ -n "$PAGE" ] || PAGE=1
+      PAGE=$(printf '%s' "$A" | sed -n 's/.*"page":\([0-9]*\).*/\1/p'); [ -n "$PAGE" ] || PAGE=1
       if [ -f "$R/pages-$OP/$PAGE.json" ]; then BODY=$(cat "$R/pages-$OP/$PAGE.json"); else BODY='[]'; fi
     else
       BODY=$(cat "$R/$OP.json")
     fi
-    printf '{"ok":true,"result":{"adapter":"directory","operation":"%s","revision":"r","result":{"people":%s}}}\n' "$OP" "$BODY" ;;
+    printf '{"ok":true,"result":{"connector":"directory","instance":"main","operation":"%s","revision":"r","result":{"people":%s}}}\n' "$OP" "$BODY" ;;
   *) echo '{"ok":false}'; exit 2 ;;
 esac
 "#;

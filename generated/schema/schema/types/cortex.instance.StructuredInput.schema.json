@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d",
-    "contract_digest": "slice-sha256/2:71c337723c193e8224ff8673c3047dc86a727f513bd37488f822fc13825fbdda",
+    "source_digest": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
+    "contract_digest": "slice-sha256/2:84b447768a256de341db0e55a5f3571dee1ed1646e485573d6d4cf089f32c822",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -54,6 +54,131 @@
       "additionalProperties": false,
       "x-ess-invariants": [
         "paging.stop_older_than_since != true"
+      ]
+    },
+    "cortex.instance.FollowAtLeast": {
+      "title": "FollowAtLeast",
+      "x-ess-name": "cortex.instance.FollowAtLeast",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "field",
+        "number"
+      ],
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "number > 0"
+      ]
+    },
+    "cortex.instance.FollowEquals": {
+      "title": "FollowEquals",
+      "x-ess-name": "cortex.instance.FollowEquals",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "value": {}
+      },
+      "required": [
+        "field",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.FollowRule": {
+      "title": "FollowRule",
+      "x-ess-name": "cortex.instance.FollowRule",
+      "x-ess-kind": "union",
+      "oneOf": [
+        {
+          "title": "at_least",
+          "type": "object",
+          "properties": {
+            "rule": {
+              "type": "string",
+              "const": "at_least"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.FollowAtLeast"
+            }
+          },
+          "required": [
+            "rule",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "equals",
+          "type": "object",
+          "properties": {
+            "rule": {
+              "type": "string",
+              "const": "equals"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.FollowEquals"
+            }
+          },
+          "required": [
+            "rule",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "within_days",
+          "type": "object",
+          "properties": {
+            "rule": {
+              "type": "string",
+              "const": "within_days"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.FollowWithinDays"
+            }
+          },
+          "required": [
+            "rule",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "x-ess-union-tag": "rule"
+    },
+    "cortex.instance.FollowWithinDays": {
+      "title": "FollowWithinDays",
+      "x-ess-name": "cortex.instance.FollowWithinDays",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "field",
+        "days"
+      ],
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "days > 0"
       ]
     },
     "cortex.instance.PageStyle": {
@@ -157,6 +282,9 @@
           "items": {
             "type": "string"
           }
+        },
+        "store_lookup": {
+          "$ref": "#/$defs/cortex.instance.StoreLookup"
         }
       },
       "required": [
@@ -205,6 +333,16 @@
         "Timestamp"
       ]
     },
+    "cortex.instance.StoreLookup": {
+      "title": "StoreLookup",
+      "x-ess-name": "cortex.instance.StoreLookup",
+      "x-ess-kind": "enum",
+      "type": "string",
+      "enum": [
+        "OwnType",
+        "AnyType"
+      ]
+    },
     "cortex.instance.StructuredChild": {
       "title": "StructuredChild",
       "x-ess-name": "cortex.instance.StructuredChild",
@@ -229,6 +367,9 @@
         },
         "parent": {
           "type": "string"
+        },
+        "follow": {
+          "$ref": "#/$defs/cortex.instance.FollowRule"
         }
       },
       "required": [

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "StoreOutcomeUnknown payload",
-  "description": "EKR could not say whether a store write of the run took effect (`ekr stage begin`, `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage, or extracts the batch again.",
+  "description": "EKR could not say whether a store write of the run took effect (`ekr stage begin`, `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage, or extracts the batch again. For `cortex schema`, the write is a proposal's schema transaction (`ekr commit`) or the stage of `cortex schema apply`; the reason names it.",
   "x-ess-name": "cortex.instance.StoreOutcomeUnknown",
   "x-ess-kind": "error-payload",
   "type": "object",
@@ -17,8 +17,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d",
-    "contract_digest": "slice-sha256/2:b38aaf47d963c4a6d35263f3d0b92d5e9e1d2bc49fddbad8e0f92cbb16ba01ba",
+    "source_digest": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
+    "contract_digest": "slice-sha256/2:ada0a2ca585af6361bcd497ad3703909a3b87ce4ff0bcaff13b0b230eade0ac1",
     "regenerate": "ess generate"
   }
 }

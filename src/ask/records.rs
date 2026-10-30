@@ -634,17 +634,23 @@ pub fn outcome_name(o: ma::AnswerOutcome) -> &'static str {
         ma::AnswerOutcome::Answered => "answered",
         ma::AnswerOutcome::Failed => "failed",
         ma::AnswerOutcome::Limited => "limited",
+        ma::AnswerOutcome::ClientClosed => "client-closed",
+        ma::AnswerOutcome::CutOff => "cut-off",
     }
 }
 
-fn outcome_of(name: &str) -> Option<ma::AnswerOutcome> {
-    [
-        ma::AnswerOutcome::Answered,
-        ma::AnswerOutcome::Failed,
-        ma::AnswerOutcome::Limited,
-    ]
-    .into_iter()
-    .find(|o| outcome_name(*o) == name)
+/// Every answer outcome, in the order the specification declares them.
+pub const OUTCOMES: [ma::AnswerOutcome; 5] = [
+    ma::AnswerOutcome::Answered,
+    ma::AnswerOutcome::Failed,
+    ma::AnswerOutcome::Limited,
+    ma::AnswerOutcome::ClientClosed,
+    ma::AnswerOutcome::CutOff,
+];
+
+/// The answer outcome `name` names, as [`outcome_name`] writes it.
+pub fn outcome_of(name: &str) -> Option<ma::AnswerOutcome> {
+    OUTCOMES.into_iter().find(|o| outcome_name(*o) == name)
 }
 
 pub fn value_name(v: ma::VoteValue) -> &'static str {
@@ -914,27 +920,61 @@ impl Keeper {
             steps: 0,
             unrestored: 0,
         };
+        // What the model calls made before the answer ended spent.
+        let spent =
+            |steps, input_tokens, output_tokens, cached_tokens, context_tokens| ma::AskDone {
+                input_tokens,
+                output_tokens,
+                cached_tokens,
+                context_tokens,
+                steps,
+                ..zero.clone()
+            };
         let (kind, done, reason) = match outcome {
             ma::AskOutcome::Answered { answered } => {
-                (ma::AnswerOutcome::Answered, &answered.done, None)
+                (ma::AnswerOutcome::Answered, answered.done.clone(), None)
             }
-            ma::AskOutcome::LimitReached { error } => {
-                (ma::AnswerOutcome::Limited, &zero, Some(error.limit.clone()))
-            }
+            ma::AskOutcome::LimitReached { error } => (
+                ma::AnswerOutcome::Limited,
+                zero.clone(),
+                Some(error.limit.clone()),
+            ),
             ma::AskOutcome::ModelFailed { .. } => (
                 ma::AnswerOutcome::Failed,
-                &zero,
+                zero.clone(),
                 Some("model-failed".into()),
             ),
             ma::AskOutcome::ReaderFailed { .. } => (
                 ma::AnswerOutcome::Failed,
-                &zero,
+                zero.clone(),
                 Some("reader-failed".into()),
             ),
+            ma::AskOutcome::ClientClosed { error: e } => (
+                ma::AnswerOutcome::ClientClosed,
+                spent(
+                    e.steps,
+                    e.input_tokens,
+                    e.output_tokens,
+                    e.cached_tokens,
+                    e.context_tokens,
+                ),
+                Some("client-closed".into()),
+            ),
+            ma::AskOutcome::CutOff { error: e } => (
+                ma::AnswerOutcome::CutOff,
+                spent(
+                    e.steps,
+                    e.input_tokens,
+                    e.output_tokens,
+                    e.cached_tokens,
+                    e.context_tokens,
+                ),
+                Some("cut-off".into()),
+            ),
             // A refusal before the answer starts is no answer and leaves no record.
-            ma::AskOutcome::Unidentified { .. } | ma::AskOutcome::RateLimited { .. } => {
-                return Ok(())
-            }
+            ma::AskOutcome::Unidentified { .. }
+            | ma::AskOutcome::RateLimited { .. }
+            | ma::AskOutcome::Busy { .. } => return Ok(()),
         };
         let input = ma::RecordAnswer {
             answer_id: ma::AnswerId(asked.answer_id.clone()),
@@ -962,6 +1002,10 @@ impl Keeper {
             at: stamp(asked.at_ms),
         };
         self.run(|_| {}, |app| app.record_answer(input))?;
+        // A reader leaving is no fault of the answer: it opens no review item, `slow` included.
+        if kind == ma::AnswerOutcome::ClientClosed {
+            return Ok(());
+        }
         if kind != ma::AnswerOutcome::Answered {
             self.open_review(&asked.answer_id, ma::ReviewCause::Failed)?;
         }
@@ -1025,6 +1069,12 @@ impl Keeper {
             ma::CastVoteOutcome::Unidentified { .. } => {
                 return Err(VoteRefused::Store(
                     "an unidentified vote reached the store".into(),
+                ))
+            }
+            // The route answers these before or around the store; the store never forces them.
+            ma::CastVoteOutcome::BadRequest { .. } | ma::CastVoteOutcome::StoreFailed { .. } => {
+                return Err(VoteRefused::Store(
+                    "a refusal of the vote route reached the store".into(),
                 ))
             }
             ma::CastVoteOutcome::Cast { .. } | ma::CastVoteOutcome::Changed { .. } => {}
@@ -1132,6 +1182,27 @@ fn refused(e: String) -> VoteRefused {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every outcome the specification declares (its generated schema) is written and read back
+    /// under its own name, so a record of each kind can be read again.
+    #[test]
+    fn every_declared_answer_outcome_reads_back() {
+        let schema: Value = serde_json::from_str(include_str!(
+            "../../generated/schema/schema/types/cortex.ask.AnswerOutcome.schema.json"
+        ))
+        .unwrap();
+        let declared: Vec<&str> = schema["$defs"]["cortex.ask.AnswerOutcome"]["enum"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        let named: Vec<&str> = OUTCOMES.into_iter().map(outcome_name).collect();
+        assert_eq!(named, declared);
+        for o in OUTCOMES {
+            assert_eq!(outcome_of(outcome_name(o)), Some(o));
+        }
+    }
 
     #[test]
     fn an_instant_reads_back_as_it_was_written() {

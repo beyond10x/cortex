@@ -2,13 +2,15 @@
 //! store's nodes, of any type, that one of the batch's keys names by their canonical name or an
 //! alias (origin `Store`), ahead of the names the run's own batches extracted (origin `Run`, at
 //! most [`RUN_PER_TYPE`] per node type). The cap holds for run names only, so every store hit of
-//! the batch is shown. No noun is persisted: the store is read once per batch (`ekr snapshot`).
+//! the batch is shown. No noun is persisted: a run reads the store once ([`Lookup`]: one `ekr
+//! snapshot` at its first batch), and grows what it read by what each of its batches applied.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use cortex_model::instance as m;
 use serde_json::Value;
 
+use crate::ekr::Snapshot;
 use crate::evidence::Issued;
 use crate::sources::Origin;
 
@@ -53,51 +55,7 @@ pub fn store_hits(
     if terms.is_empty() {
         return Vec::new();
     }
-    let types: BTreeMap<&str, &str> = ontology["node_types"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|t| Some((t["id"].as_str()?, t["name"].as_str()?)))
-        .collect();
-    let mut hits = Vec::new();
-    for node in snapshot["graph"]["graph"]["nodes"]
-        .as_object()
-        .into_iter()
-        .flatten()
-        .map(|(_, n)| n)
-    {
-        let Some(name) = node["canonical_name"].as_str() else {
-            continue;
-        };
-        let aliases: Vec<&str> = node["aliases"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .collect();
-        let named = std::iter::once(name)
-            .chain(aliases.iter().copied())
-            .any(|n| terms.contains(&fold(n)));
-        if !named {
-            continue;
-        }
-        let Some(node_type) = node["type_id"].as_str().and_then(|id| types.get(id)) else {
-            continue;
-        };
-        let mut others: Vec<String> = Vec::new();
-        for alias in aliases {
-            if alias != name && !others.iter().any(|o| o == alias) {
-                others.push(alias.to_string());
-            }
-        }
-        hits.push(m::KnownEntity {
-            node_type: node_type.to_string(),
-            name: name.to_string(),
-            aliases: others,
-            origin: m::KnownOrigin::Store,
-        });
-    }
-    hits
+    Index::from_snapshot(snapshot, ontology).hits(terms)
 }
 
 /// `store` hits, then the run's own names (`run`, by node type), at most [`RUN_PER_TYPE`] of a
@@ -152,21 +110,221 @@ pub fn masked(hits: Vec<m::KnownEntity>) -> Vec<m::KnownEntity> {
         .collect()
 }
 
-/// The known entities of `batch`: [`store_hits`] of one read of `store` (`ekr snapshot`),
-/// [`masked`], then [`merge`]d with the run's own names `run`.
-pub fn for_batch(
-    store: &crate::ekr::Store,
-    ontology: &Value,
-    batch: &[Issued],
-    run: &BTreeMap<String, Vec<String>>,
-) -> Result<Vec<m::KnownEntity>, String> {
-    let terms = terms(batch);
-    let hits = if terms.is_empty() {
-        Vec::new()
-    } else {
-        store_hits(&store.snapshot()?, ontology, &terms)
-    };
-    Ok(merge(masked(hits), run))
+/// The store's nodes as known entities of origin `Store`, each with its exact names, looked up by
+/// their [`fold`]ed canonical name and aliases: what [`store_hits`] finds in one snapshot, kept for
+/// a run and grown by what it applies ([`Index::applied`]).
+#[derive(Debug, Default)]
+pub struct Index {
+    /// In the snapshot's node order, then in the order applied.
+    nodes: Vec<m::KnownEntity>,
+    /// Each folded canonical name and alias, and the positions in `nodes` it names.
+    by_term: BTreeMap<String, Vec<usize>>,
+    /// Each node's aliases as EKR holds them, by position in `nodes`: what EKR resolves a named
+    /// thing by, byte for byte; its canonical name is never compared (`ekr resolve`).
+    exact: Vec<BTreeSet<String>>,
+}
+
+impl Index {
+    /// Every node of `snapshot` (`ekr snapshot`, read whole) of a type `ontology` (`ekr ontology`)
+    /// names: [`Index::of`].
+    pub fn from_snapshot(snapshot: &Value, ontology: &Value) -> Self {
+        Self::of(&Snapshot::of(snapshot), ontology)
+    }
+
+    /// Every node of `snapshot` of a type `ontology` (`ekr ontology`) names.
+    pub fn of(snapshot: &Snapshot, ontology: &Value) -> Self {
+        let types: BTreeMap<&str, &str> = ontology["node_types"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|t| Some((t["id"].as_str()?, t["name"].as_str()?)))
+            .collect();
+        let mut index = Self::default();
+        for node in snapshot.graph.graph.nodes.values() {
+            let Some(name) = node.canonical_name.as_deref() else {
+                continue;
+            };
+            let Some(node_type) = node.type_id.as_deref().and_then(|id| types.get(id)) else {
+                continue;
+            };
+            index.add(node_type, name, node.aliases.iter().map(String::as_str));
+        }
+        index
+    }
+
+    /// A node of type `node_type` named `name`, also known as `aliases` (`name` among them or not).
+    fn add<'a>(&mut self, node_type: &str, name: &str, aliases: impl IntoIterator<Item = &'a str>) {
+        let mut others: Vec<String> = Vec::new();
+        let mut exact: BTreeSet<String> = BTreeSet::new();
+        for alias in aliases {
+            exact.insert(alias.to_string());
+            if alias != name && !others.iter().any(|o| o == alias) {
+                others.push(alias.to_string());
+            }
+        }
+        self.exact.push(exact);
+        let at = self.nodes.len();
+        for term in std::iter::once(name).chain(others.iter().map(String::as_str)) {
+            let positions = self.by_term.entry(fold(term)).or_default();
+            if positions.last() != Some(&at) {
+                positions.push(at);
+            }
+        }
+        self.nodes.push(m::KnownEntity {
+            node_type: node_type.to_string(),
+            name: name.to_string(),
+            aliases: others,
+            origin: m::KnownOrigin::Store,
+        });
+    }
+
+    /// Every node one of `terms` names, each once, in the index's order ([`store_hits`]).
+    pub fn hits(&self, terms: &BTreeSet<String>) -> Vec<m::KnownEntity> {
+        let at: BTreeSet<usize> = terms
+            .iter()
+            .filter_map(|t| self.by_term.get(t))
+            .flatten()
+            .copied()
+            .collect();
+        at.into_iter().map(|i| self.nodes[i].clone()).collect()
+    }
+
+    /// Adds the nodes `ekr apply-extraction` created applying `document` (the
+    /// `ekr.extraction-document/1` the run wrote), as its `report` (`ekr.integrate.ExtractionReport`)
+    /// tells. The report names no node, so the named things are read from the document as the verb
+    /// resolves them: each entity, then each fact's subject and object. Those of one node type
+    /// that share an alias, directly or through another, are one thing. A thing is not created when
+    /// the report lists the place it first appears under `rejected` (`entities[i]`,
+    /// `facts[i].subject`, `facts[i].object`: EKR names a thing it did not create there). A fact the
+    /// report rejects with no `transaction_id` was refused before anything was validated, and
+    /// creates nothing only it names; one rejected with a `transaction_id` was refused at commit,
+    /// after its subject and object were created, so they count. A thing with an alias equal, byte
+    /// for byte, to an alias of an indexed node of its type is that node, and adds nothing (a
+    /// canonical name is never compared); any other is a new node, named by the least, in byte
+    /// order, of its members' first aliases, with every alias of them. A `replaces` fact with
+    /// nothing left to replace is refused without a transaction and creates nothing here; the run
+    /// applies it again ([`crate::extract::reapply_rounds`]) and calls this with each round's
+    /// document and report too, so what only it named is added then. A foreign writer's commit
+    /// during the run is not seen.
+    pub fn applied(&mut self, document: &serde_yaml_ng::Value, report: &Value) {
+        use serde_yaml_ng::Value as Yaml;
+        let rejected: BTreeMap<&str, bool> = report["rejected"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|r| Some((r["item"].as_str()?, !r["transaction_id"].is_null())))
+            .collect();
+        let named = |v: &Yaml| -> Option<(String, Vec<String>)> {
+            let ty = v.get("node_type")?.as_str()?.to_string();
+            let aliases: Vec<String> = v
+                .get("aliases")?
+                .as_sequence()?
+                .iter()
+                .filter_map(|a| a.as_str())
+                .filter(|a| !a.is_empty())
+                .map(str::to_string)
+                .collect();
+            (!aliases.is_empty()).then_some((ty, aliases))
+        };
+        // Each named thing, and whether the report names its place as not created.
+        let mut things: Vec<(String, Vec<String>, bool)> = Vec::new();
+        let entities = document.get("entities").and_then(Yaml::as_sequence);
+        for (i, e) in entities.into_iter().flatten().enumerate() {
+            let refused = rejected.contains_key(format!("entities[{i}]").as_str());
+            things.extend(named(e).map(|(ty, a)| (ty, a, refused)));
+        }
+        let facts = document.get("facts").and_then(Yaml::as_sequence);
+        for (i, fact) in facts.into_iter().flatten().enumerate() {
+            if rejected.get(format!("facts[{i}]").as_str()) == Some(&false) {
+                continue;
+            }
+            let fact = match fact {
+                Yaml::Tagged(t) => &t.value,
+                other => other,
+            };
+            for end in ["subject", "object"] {
+                let refused = rejected.contains_key(format!("facts[{i}].{end}").as_str());
+                things.extend(
+                    fact.get(end)
+                        .and_then(named)
+                        .map(|(ty, a)| (ty, a, refused)),
+                );
+            }
+        }
+        // One thing per node type and alias, transitively, not created when any place of it is.
+        let mut groups: Vec<(String, Vec<String>, BTreeSet<String>, bool)> = Vec::new();
+        for (ty, aliases, refused) in things {
+            let first = aliases[0].clone();
+            let mut all: BTreeSet<String> = aliases.into_iter().collect();
+            let mut firsts = vec![first];
+            let mut refused = refused;
+            let mut i = 0;
+            while i < groups.len() {
+                if groups[i].0 == ty && !groups[i].2.is_disjoint(&all) {
+                    let (_, f, a, r) = groups.swap_remove(i);
+                    firsts.extend(f);
+                    all.extend(a);
+                    refused |= r;
+                } else {
+                    i += 1;
+                }
+            }
+            groups.push((ty, firsts, all, refused));
+        }
+        for (ty, firsts, all, refused) in groups {
+            let held = all.iter().any(|alias| {
+                self.by_term.get(&fold(alias)).is_some_and(|at| {
+                    at.iter()
+                        .any(|&n| self.nodes[n].node_type == ty && self.exact[n].contains(alias))
+                })
+            });
+            if refused || held {
+                continue;
+            }
+            let name = firsts.iter().min().expect("one member").clone();
+            self.add(&ty, &name, all.iter().map(String::as_str));
+        }
+    }
+}
+
+/// The known entities a run shows the model, of one read of the store: the [`Index`] is built from
+/// one `ekr snapshot` at the first batch that names anything, kept for the run and grown after
+/// each apply ([`Lookup::applied`]).
+#[derive(Debug, Default)]
+pub struct Lookup {
+    index: Option<Index>,
+}
+
+impl Lookup {
+    /// The known entities of `batch`: the index's hits of its [`terms`], [`masked`], then
+    /// [`merge`]d with the run's own names `run`. The first call with a term reads the store
+    /// through the run's `session`.
+    pub fn for_batch(
+        &mut self,
+        session: &crate::ekr::Session,
+        ontology: &Value,
+        batch: &[Issued],
+        run: &BTreeMap<String, Vec<String>>,
+    ) -> Result<Vec<m::KnownEntity>, String> {
+        let terms = terms(batch);
+        let hits = if terms.is_empty() {
+            Vec::new()
+        } else {
+            if self.index.is_none() {
+                self.index = Some(Index::of(&session.snapshot()?, ontology));
+            }
+            self.index.as_ref().expect("built above").hits(&terms)
+        };
+        Ok(merge(masked(hits), run))
+    }
+
+    /// [`Index::applied`], once the index is built; before, the snapshot that builds it holds the
+    /// document.
+    pub fn applied(&mut self, document: &serde_yaml_ng::Value, report: &Value) {
+        if let Some(index) = &mut self.index {
+            index.applied(document, report);
+        }
+    }
 }
 
 /// `text` on one line: each line break (`\n`, `\r`, U+2028, U+2029) and every other control
@@ -307,6 +465,56 @@ mod tests {
         );
         assert_eq!(store_hits(&snapshot, &ontology, &set(&["api"])), vec![]);
         assert_eq!(store_hits(&json!({}), &ontology, &set(&["acme"])), vec![]);
+    }
+
+    /// `story:one-store-read-per-run`: what a batch applied is found by the next batch's terms as
+    /// a fresh snapshot would find it, without reading the store again.
+    #[test]
+    fn an_applied_document_grows_the_index_as_ekr_resolves_its_named_things() {
+        let (snapshot, ontology) = graph();
+        let mut index = Index::from_snapshot(&snapshot, &ontology);
+        let document: serde_yaml_ng::Value = serde_yaml_ng::from_str(
+            "entities:\n\
+             - {node_type: Service, aliases: [zeta, billing]}\n\
+             - {node_type: Service, aliases: [alpha-svc, billing]}\n\
+             - {node_type: Repository, aliases: [repo:acme/api, other]}\n\
+             - {node_type: Service, aliases: [refused]}\n\
+             - {node_type: Organization, aliases: [web]}\n\
+             facts:\n\
+             - !Relation {subject: {node_type: Person, aliases: [Ada]}, relation: OWNS, \
+               object: {node_type: Service, aliases: [gone]}, evidence: [e]}\n\
+             - !Property {subject: {node_type: Person, aliases: [Bob]}, property: p, \
+               value: {value_kind: String, value: v}, evidence: [e]}\n",
+        )
+        .unwrap();
+        let report = json!({"rejected": [{"item": "entities[3]"}, {"item": "facts[0].object"},
+                                {"item": "facts[1]"}]});
+        index.applied(&document, &report);
+
+        // Two entities sharing `billing` are one node, named by the least first alias.
+        assert_eq!(
+            index.hits(&set(&["billing"])),
+            vec![store("Service", "alpha-svc", &["billing", "zeta"])]
+        );
+        // An alias of a node of its type held already resolves to that node: nothing is added.
+        assert_eq!(
+            index.hits(&set(&["other", "repo:acme/api"])),
+            vec![store("Repository", "acme/api", &["repo:acme/api"])]
+        );
+        // The same name of another type is a node of its own.
+        assert_eq!(
+            index.hits(&set(&["web"])),
+            vec![
+                store("Service", "web", &[]),
+                store("Organization", "web", &[])
+            ]
+        );
+        // A fact's subject is a named thing; a rejected part names nothing.
+        assert_eq!(
+            index.hits(&set(&["ada"])),
+            vec![store("Person", "Ada", &[])]
+        );
+        assert_eq!(index.hits(&set(&["refused", "gone", "bob"])), vec![]);
     }
 
     #[test]

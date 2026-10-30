@@ -20,7 +20,7 @@ use cortex_cli::schedule::{self, Systemd};
 use cortex_cli::snapshot::{self, Refusal, RestoreError};
 use cortex_cli::{ekr, eval, home, instance, model_map, quality, run, schema, spec, structured};
 
-/// Spin up EKR knowledge brains from a spec, fed on a schedule by Connectors data sources.
+/// Spin up EKR knowledge instances from a spec, fed on a schedule by Connectors data sources.
 #[derive(Parser)]
 #[command(name = "cortex", version)]
 struct Cli {
@@ -620,6 +620,15 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
         },
         Command::Sources => match app.sources() {
             Ok(rows) => {
+                // A status file that cannot be read fails the listing, naming the file, instead of
+                // listing the source as never run.
+                for row in &rows {
+                    let (instance, source) = split(&row.source_id.0);
+                    let layout = Layout::new(ctx.home.instance_dir(instance));
+                    if let Err(e) = cortex_cli::status::read(&layout, source) {
+                        return fail(e);
+                    }
+                }
                 for row in rows {
                     println!(
                         "{}",
@@ -757,6 +766,7 @@ fn seed_instance(
         store: layout.dir.join("seed-check.sqlite"),
         launch: None,
         stage: None,
+        ready: Default::default(),
     };
     let checked = seed_and_apply(&scratch, &seed_path, schema.as_deref())
         .and_then(|()| kind_refusal(spec, &scratch));
@@ -881,6 +891,49 @@ fn foreign_units(
     }
 }
 
+/// Why `spec`'s instance `name` cannot be held in this home: one of its unit names is the unit
+/// name of another active instance of the home, or a source's is the instance's own viewer's
+/// ([`schedule::unit_name_collision`]). Checked before a command changes anything, whether or not
+/// it writes units: a later `update` would write them.
+fn unit_collision(ctx: &Ctx, name: &str, spec: &m::InstanceSpec) -> Option<String> {
+    let shared = ctx.shared.borrow();
+    let others: Vec<(String, Vec<String>)> = shared
+        .registry
+        .instances
+        .values()
+        .filter(|i| i.state == m::InstanceState::Active && i.data.name.0 != name)
+        .map(|i| {
+            let other = i.data.name.0.clone();
+            let sources = shared
+                .registry
+                .sources
+                .values()
+                .filter(|s| s.data.instance_name.0 == other)
+                .map(|s| s.data.name.clone())
+                .collect();
+            (other, sources)
+        })
+        .collect();
+    let sources: Vec<String> = spec.sources.iter().map(|s| s.name.clone()).collect();
+    schedule::unit_name_collision(name, &sources, &others)
+}
+
+/// Fails a `create` or `adopt` that already recorded the instance `name` and its sources: takes
+/// them out of the registry again and removes the instance directory `layout`, so nothing is left
+/// half registered and a retry is not `name-taken`. Called before any unit is written.
+fn unregister(ctx: &Ctx, name: &str, layout: &Layout, reason: impl std::fmt::Display) -> ExitCode {
+    {
+        let mut shared = ctx.shared.borrow_mut();
+        shared.registry.instances.remove(name);
+        shared
+            .registry
+            .sources
+            .retain(|_, s| s.data.instance_name.0 != name);
+    }
+    let _ = std::fs::remove_dir_all(&layout.dir);
+    fail(reason)
+}
+
 /// Puts what installing the units did in `detail["units"]`: each unit taken over from a home that
 /// holds no instance of the name ([`Systemd::taken_over`]), and why the install failed, when it
 /// did.
@@ -914,9 +967,25 @@ fn install_sources(
     }
     detail["binary"] = placed.json();
     let token_env = spec.model.gateway.as_ref().map(|g| g.token_env.as_str());
-    spec.sources
-        .iter()
-        .try_for_each(|s| systemd.install_source(name, &s.name, &s.schedule, &ctx.tools, token_env))
+    // A source its failures disabled keeps its timer off: its units are written, not enabled.
+    let disabled = |source: &str| {
+        ctx.shared
+            .borrow()
+            .registry
+            .sources
+            .get(&format!("{name}/{source}"))
+            .is_some_and(|s| s.state == m::SourceState::Disabled)
+    };
+    spec.sources.iter().try_for_each(|s| {
+        systemd.install_source(
+            name,
+            &s.name,
+            &s.schedule,
+            &ctx.tools,
+            token_env,
+            !disabled(&s.name),
+        )
+    })
 }
 
 fn create(
@@ -937,6 +1006,9 @@ fn create(
     }
     let name = spec.name.0.clone();
     if let Some(reason) = foreign_units(ctx, &name, &spec, units, true) {
+        return fail(reason);
+    }
+    if let Some(reason) = unit_collision(ctx, &name, &spec) {
         return fail(reason);
     }
     let layout = Layout::new(ctx.home.instance_dir(&name));
@@ -1056,7 +1128,14 @@ fn create(
         m::CreateInstanceOutcome::Created { instance_created }
         | m::CreateInstanceOutcome::Partial { instance_created } => {
             let partial = seeded.as_ref().is_some_and(|ran| !seed_finished(ran));
-            let port = instance_created.view_port as u16;
+            let Ok(port) = u16::try_from(instance_created.view_port) else {
+                return unregister(
+                    ctx,
+                    &name,
+                    &layout,
+                    format!("serve.view_port {} is no port", instance_created.view_port),
+                );
+            };
             let meta = Meta {
                 format: "cortex.instance-meta/1".into(),
                 spec_dir: std::fs::canonicalize(&loaded.dir).unwrap_or(loaded.dir.clone()),
@@ -1065,7 +1144,7 @@ fn create(
                 adopted: false,
             };
             if let Err(e) = layout.save_meta(&meta) {
-                return fail(e);
+                return unregister(ctx, &name, &layout, e);
             }
             for source in &spec.sources {
                 let input = m::AddSource {
@@ -1076,7 +1155,7 @@ fn create(
                     schedule: source.schedule.clone(),
                 };
                 if let Err(e) = app.add_source(input) {
-                    return fail(e);
+                    return unregister(ctx, &name, &layout, e);
                 }
             }
             let mut detail = json!({
@@ -1332,6 +1411,9 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
     if let Some(reason) = foreign_units(ctx, &name, &spec, a.units, true) {
         return fail(reason);
     }
+    if let Some(reason) = unit_collision(ctx, &name, &spec) {
+        return fail(reason);
+    }
     let layout = Layout::new(ctx.home.instance_dir(&name));
 
     // `name-taken` is the generated behaviour's own lookup; a taken name skips the checks below.
@@ -1410,7 +1492,14 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
             let Some(found) = adopted else {
                 return fail("adopted without reading the store");
             };
-            let port = instance_adopted.view_port as u16;
+            let Ok(port) = u16::try_from(instance_adopted.view_port) else {
+                return unregister(
+                    ctx,
+                    &name,
+                    &layout,
+                    format!("serve.view_port {} is no port", instance_adopted.view_port),
+                );
+            };
             let meta = Meta {
                 format: "cortex.instance-meta/1".into(),
                 spec_dir: std::fs::canonicalize(&loaded.dir).unwrap_or(loaded.dir.clone()),
@@ -1419,7 +1508,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                 adopted: true,
             };
             if let Err(e) = layout.save_meta(&meta) {
-                return fail(e);
+                return unregister(ctx, &name, &layout, e);
             }
             for source in &spec.sources {
                 let input = m::AddSource {
@@ -1430,7 +1519,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                     schedule: source.schedule.clone(),
                 };
                 if let Err(e) = app.add_source(input) {
-                    return fail(e);
+                    return unregister(ctx, &name, &layout, e);
                 }
             }
             let mut detail = json!({
@@ -1486,6 +1575,188 @@ fn viewer_resolves_anew(ctx: &Ctx, name: &str, store: &ekr::Store, units: Units)
         .is_ok_and(|id| id != written)
 }
 
+/// A record path as `sources::at` reads it: `$` is the record, and a leading `$.` is dropped, so
+/// `key` and `$.key` are one path.
+fn record_path(path: &str) -> String {
+    match path {
+        "$" => path.to_string(),
+        _ => path.strip_prefix("$.").unwrap_or(path).to_string(),
+    }
+}
+
+/// The fields a source's document keys are derived from, by name: its kind, then
+/// - for a `connectors` source, its `adapter`, `operation`, `id` path and `key` template;
+/// - for a `files` source, whether it keys whole files (no `records`, or `records` in
+///   `WholeFile` format) or records of a format, and for records their `id` path;
+/// - for a `structured` source, where its records come from (`input`), from Connectors its
+///   `adapter` and `operation`, from files its `paths` and `glob` (both in every record's key),
+///   and its `mapping.id` path.
+///
+/// A path read from a record is compared as `sources::at` reads it. A `files` source's `paths`
+/// are not here: each file's key is its own path, which a list of roots does not change; a root
+/// that reaches a seen file under another spelling is [`respelled_root`]. Its glob only picks
+/// files and is not in their keys.
+fn keyed_by(settings: &m::SourceSettings) -> Vec<(&'static str, String)> {
+    let kind = match settings {
+        m::SourceSettings::Web(_) => "web",
+        m::SourceSettings::Connectors(_) => "connectors",
+        m::SourceSettings::Files(_) => "files",
+        m::SourceSettings::Structured(_) => "structured",
+    };
+    let mut fields = vec![("kind", kind.to_string())];
+    match settings {
+        m::SourceSettings::Connectors(c) => fields.extend([
+            ("adapter", c.adapter.clone()),
+            ("operation", c.operation.clone()),
+            ("id", record_path(&c.id)),
+            ("key", format!("{:?}", c.key)),
+        ]),
+        m::SourceSettings::Files(f) => match &f.records {
+            Some(r) if r.format != m::RecordFormat::WholeFile => fields.extend([
+                ("records", format!("{:?}", r.format)),
+                ("records.id", record_path(&r.id)),
+            ]),
+            _ => fields.push(("records", "whole files".to_string())),
+        },
+        m::SourceSettings::Structured(s) => {
+            match &s.input {
+                m::StructuredInput::Connectors(c) => fields.extend([
+                    ("input", "connectors".to_string()),
+                    ("adapter", c.adapter.clone()),
+                    ("operation", c.operation.clone()),
+                ]),
+                m::StructuredInput::Files(f) => fields.extend([
+                    ("input", "files".to_string()),
+                    ("paths", format!("{:?}", f.paths)),
+                    ("glob", f.glob.clone()),
+                ]),
+            }
+            fields.push(("mapping.id", record_path(&s.mapping.id)));
+        }
+        m::SourceSettings::Web(_) => {}
+    }
+    fields
+}
+
+/// A `files` root as its files' keys start: `~/` expanded and a relative root read against
+/// `base`, as `sources::under` reads it, with no trailing `/`.
+fn root_spelling(base: &Path, root: &str) -> String {
+    let path = cortex_cli::ekr::expand(root);
+    let full = if path.is_absolute() {
+        path
+    } else {
+        base.join(path)
+    };
+    let text = full.display().to_string();
+    match text.trim_end_matches('/') {
+        "" => text,
+        trimmed => trimmed.to_string(),
+    }
+}
+
+/// The directory `spelling` names, with `.` dropped and `..` taking the step before it away.
+fn root_directory(spelling: &str) -> Vec<std::ffi::OsString> {
+    let mut steps: Vec<std::ffi::OsString> = Vec::new();
+    for step in Path::new(spelling).components() {
+        match step {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir if matches!(steps.last(), Some(last) if last != ".." && last != "/") =>
+            {
+                steps.pop();
+            }
+            other => steps.push(other.as_os_str().to_os_string()),
+        }
+    }
+    steps
+}
+
+/// Whether a root of `new` that `old` does not list reaches a file one of `old`'s roots reached
+/// under another spelling (`docs` and `./docs`, `a/../docs`, `~/docs` and `$HOME/./docs`): that
+/// file's key, its path as the root reaches it, changes. A root added beside the old ones, a root
+/// removed, the roots reordered, or a root inside another written the same way (`docs` and
+/// `docs/sub`), keys no file another way. Relative roots are read against `base`.
+fn respelled_root(base: &Path, old: &m::FilesSource, new: &m::FilesSource) -> bool {
+    let before: Vec<String> = old.paths.iter().map(|r| root_spelling(base, r)).collect();
+    let inside = |a: &str, b: &str| a == b || a.starts_with(&format!("{b}/"));
+    new.paths
+        .iter()
+        .map(|r| root_spelling(base, r))
+        .filter(|added| !before.contains(added))
+        .any(|added| {
+            let dir = root_directory(&added);
+            before.iter().any(|was| {
+                let was_dir = root_directory(was);
+                let overlap = dir.starts_with(&was_dir) || was_dir.starts_with(&dir);
+                overlap && !inside(&added, was) && !inside(was, &added)
+            })
+        })
+}
+
+/// Whether `new` respells an input that `old`'s documents are keyed by: under one `key` with
+/// `{input.…}` placeholders, each input projects onto what those placeholders render from it, and
+/// a projection of `old` is gone while one `new` adds appeared. Adding, removing or reordering
+/// inputs, or changing a field the key does not name, leaves every remaining document's key as
+/// it was.
+fn respelled_inputs(old: &m::ConnectorsSource, new: &m::ConnectorsSource) -> bool {
+    let Some(key) = new.key.as_deref() else {
+        return false;
+    };
+    if old.key.as_deref() != Some(key)
+        || cortex_cli::structured::template_input_fields(key).is_empty()
+    {
+        return false;
+    }
+    let project = |c: &m::ConnectorsSource| -> std::collections::BTreeSet<Vec<Option<String>>> {
+        c.inputs
+            .iter()
+            .map(|input| cortex_cli::structured::input_projection(key, &model_map::to_serde(input)))
+            .collect()
+    };
+    let (before, after) = (project(old), project(new));
+    before.difference(&after).next().is_some() && after.difference(&before).next().is_some()
+}
+
+/// The first source the frozen spec `old` and `new` both name whose documents `new` keys another
+/// way while its seen state holds a document: its name and the first field that changed. A source
+/// with no state file, or one with no document, is not; a state file that cannot be read counts
+/// as holding one. A `files` root is read against the directory the instance was created from
+/// (`meta.json`'s `spec_dir`), or as written when that cannot be read.
+fn rekeyed(
+    layout: &Layout,
+    old: &m::InstanceSpec,
+    new: &m::InstanceSpec,
+) -> Option<(String, &'static str)> {
+    let base = layout
+        .load_meta()
+        .map(|meta| meta.spec_dir)
+        .unwrap_or_default();
+    new.sources.iter().find_map(|source| {
+        let was = old.sources.iter().find(|s| s.name == source.name)?;
+        let (before, after) = (keyed_by(&was.settings), keyed_by(&source.settings));
+        let field = after
+            .iter()
+            .zip(&before)
+            .find(|(a, b)| a != b)
+            .map(|(a, _)| a.0)
+            .or_else(|| match (&was.settings, &source.settings) {
+                (m::SourceSettings::Files(o), m::SourceSettings::Files(n))
+                    if respelled_root(&base, o, n) =>
+                {
+                    Some("paths")
+                }
+                (m::SourceSettings::Connectors(o), m::SourceSettings::Connectors(n))
+                    if respelled_inputs(o, n) =>
+                {
+                    Some("inputs")
+                }
+                _ => None,
+            })?;
+        let seen = cortex_cli::state::SeenState::load(&layout.seen(&source.name))
+            .map_or(true, |state| !state.documents.is_empty());
+        seen.then(|| (source.name.clone(), field))
+    })
+}
+
 fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> ExitCode {
     let loaded = match spec::load_given(path) {
         Ok(l) => l,
@@ -1507,6 +1778,9 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
             != layout.store_handle(&spec).launched_through()
     }) || viewer_resolves_anew(ctx, name, &layout.store_handle(&spec), units);
     if let Some(reason) = foreign_units(ctx, name, &spec, units, relaunch) {
+        return fail(reason);
+    }
+    if let Some(reason) = unit_collision(ctx, name, &spec) {
         return fail(reason);
     }
     // A store the spec cannot use, another store than the instance's (its history is in the store
@@ -1531,6 +1805,18 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
     if refusal.is_none() && structured::has_structured(&spec) && layout.host().is_file() {
         if let Ok(ontology) = layout.store_handle(&spec).ontology() {
             refusal = structured::spec_refusal(&spec, &ontology);
+        }
+    }
+    // A source whose documents the new spec keys another way while its seen state holds one is
+    // refused (`rekey-refused`): its seen keys would match nothing, and every document would be
+    // extracted again. A frozen spec that cannot be read is left to the error below.
+    if let Ok(old) = layout.load_spec() {
+        if let Some((source, field)) = rekeyed(&layout, &old, &spec) {
+            let mut shared = ctx.shared.borrow_mut();
+            shared
+                .external
+                .insert(("cortex.instance.UpdateInstance", "rekey-refused"), true);
+            shared.strings.extend([source, field.to_string()]);
         }
     }
     let seed_digest = match &refusal {
@@ -1570,6 +1856,11 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
             outcome: "not-active",
             ok: false,
             detail: json!({"name": name}),
+        },
+        Ok(m::UpdateInstanceOutcome::RekeyRefused { error }) => Done {
+            outcome: "rekey-refused",
+            ok: false,
+            detail: json!({"name": error.name.0, "source": error.source, "field": error.field}),
         },
         Ok(m::UpdateInstanceOutcome::NoSuchInstance { error }) => Done {
             outcome: "no-such-instance",
@@ -1722,6 +2013,9 @@ fn restore(app: &mut App, ctx: &Ctx, name: &str, snapshot: &str) -> ExitCode {
             if let Some(restored) = finished {
                 detail["before_restore"] = json!(restored.before_restore);
                 detail["state_restored"] = json!(restored.state_restored);
+                if let Some(e) = restored.state_failed {
+                    detail["state_failed"] = json!(e);
+                }
                 if let Some(e) = restored.viewer_failed {
                     detail["units"] = json!({"failed": e});
                 }
@@ -2100,6 +2394,10 @@ fn propose_schema(
                 shared.external.insert((CMD, "propose-failed"), true);
                 shared.strings.push_back(reason);
             }
+            Err(schema::Failure::StoreOutcomeUnknown(reason)) => {
+                shared.external.insert((CMD, "store-outcome-unknown"), true);
+                shared.strings.push_back(reason);
+            }
         }
     }
     let detail = |e: &m::SchemaChangesProposed| {
@@ -2160,13 +2458,29 @@ fn propose_schema(
             ok: false,
             detail: json!({"reason": error.reason}),
         },
+        Ok(m::ProposeSchemaChangesOutcome::StoreOutcomeUnknown { error }) => Done {
+            outcome: "store-outcome-unknown",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
         Ok(m::ProposeSchemaChangesOutcome::NoSuchInstance { error }) => Done {
             outcome: "no-such-instance",
             ok: false,
             detail: json!({"name": error.name.0}),
         },
     };
-    print("schema", &done)
+    print_schema(&done)
+}
+
+/// `print` for `cortex schema` and its verbs: `store-outcome-unknown` exits
+/// [`EXIT_STORE_OUTCOME_UNKNOWN`], as a run does, so a caller tells a store fault from a refusal.
+fn print_schema(done: &Done) -> ExitCode {
+    let printed = print("schema", done);
+    if done.outcome == "store-outcome-unknown" {
+        ExitCode::from(EXIT_STORE_OUTCOME_UNKNOWN)
+    } else {
+        printed
+    }
 }
 
 /// `schema approve` (`reason` none) and `schema reject`: decides the run's proposals under the
@@ -2343,7 +2657,7 @@ fn apply_schema_run(app: &mut App, ctx: &Ctx, name: &str, stamp: &str) -> ExitCo
         },
         Ok(m::ApplySchemaProposalsOutcome::NoSuchInstance { error }) => no_such_instance(error),
     };
-    print("schema", &done)
+    print_schema(&done)
 }
 
 fn refusal_reason(refusal: schema::Refusal) -> String {
@@ -2463,16 +2777,7 @@ fn run_source(
     let (done, failure) = match outcome {
         m::RunSourceOutcome::Ran { source_ran } => {
             let report = ctx.shared.borrow_mut().last_run.take().unwrap_or_default();
-            let count = |n: Option<i64>| n.and_then(|n| u64::try_from(n).ok());
-            figures = Some(cortex_cli::status::Figures {
-                read: count(Some(source_ran.documents_new)).unwrap_or(0),
-                applied: count(Some(source_ran.documents_applied)).unwrap_or(0),
-                input_tokens: count(source_ran.input_tokens)
-                    .zip(count(source_ran.cache_creation_input_tokens))
-                    .map(|(a, b)| a.saturating_add(b)),
-                cached_tokens: count(source_ran.cache_read_input_tokens),
-                output_tokens: count(source_ran.output_tokens),
-            });
+            figures = Some(run_figures(&report));
             let mut detail = json!({
                 "source_id": source_ran.source_id.0,
                 "documents_new": source_ran.documents_new,
@@ -2480,6 +2785,7 @@ fn run_source(
                 "cost_usd": source_ran.cost_usd.map(|c| c.0),
                 "facts_refused": report.facts_refused,
                 "parts_rejected": report.parts_rejected,
+                "facts_reapplied": report.facts_reapplied,
                 "masked": report.masked,
                 "stopped": report.stopped,
             });
@@ -2688,6 +2994,12 @@ fn run_source(
             None,
         ),
     };
+    // A run that applied a batch and then failed left its report: its documents and tokens are
+    // counted as a run's that ended `ran` are.
+    if figures.is_none() {
+        let partial = ctx.shared.borrow_mut().last_run.take();
+        figures = partial.as_ref().map(run_figures);
+    }
     print("run", &done);
     let disabled = match (record, &failure) {
         (true, Some(reason)) => record_failure(app, ctx, source_id, reason).1,
@@ -2698,6 +3010,22 @@ fn run_source(
         report_run(ctx, source_id, disabled, figures);
     }
     ExitCode::from(status)
+}
+
+/// What a run read, applied and spent, as `metrics.prom` counts it, whether it ended `ran` or
+/// failed after it applied a batch: the tokens its answers reported (`Report::reported`).
+fn run_figures(report: &run::Report) -> cortex_cli::status::Figures {
+    let count = |n: Option<i64>| n.and_then(|n| u64::try_from(n).ok());
+    let usage = &report.reported;
+    cortex_cli::status::Figures {
+        read: count(Some(report.documents_new)).unwrap_or(0),
+        applied: count(Some(report.documents_applied)).unwrap_or(0),
+        input_tokens: count(usage.input_tokens)
+            .zip(count(usage.cache_creation_input_tokens))
+            .map(|(a, b)| a.saturating_add(b)),
+        cached_tokens: count(usage.cache_read_input_tokens),
+        output_tokens: count(usage.output_tokens),
+    }
 }
 
 /// Writes the source's status from the outcome the run recorded on it, then the metric file and
@@ -2823,7 +3151,7 @@ fn enable(app: &mut App, ctx: &Ctx, source_id: &str) -> ExitCode {
 /// `cortex ask serve`: a spec the service cannot serve is refused (exit 2, naming the field)
 /// before anything binds; a service that stops exits 1.
 fn ask_serve(home: &Home, spec: &std::path::Path) -> ExitCode {
-    let (settings, loaded) = match cortex_cli::spec::load_given(spec)
+    let (settings, loaded) = match cortex_cli::spec::load_served(spec)
         .and_then(|loaded| cortex_cli::ask::Settings::of(home, &loaded.model).map(|s| (s, loaded)))
     {
         Ok(s) => s,

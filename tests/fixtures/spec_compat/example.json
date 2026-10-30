@@ -80,6 +80,7 @@
       "documents_applied": 2,
       "documents_input_tokens": null,
       "documents_new": 2,
+      "facts_reapplied": 0,
       "facts_refused": 1,
       "fixed_input_tokens": null,
       "input_tokens": null,

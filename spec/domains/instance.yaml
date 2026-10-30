@@ -1,7 +1,7 @@
 domain: cortex.instance
 
 summary: >-
-  Instances of a knowledge brain and the data sources that feed them. An instance owns one EKR
+  Knowledge instances and the data sources that feed them. An instance owns one EKR
   store, created from the instance spec's seed. A source fetches documents on its own schedule,
   keeps those that are new or changed, has a model extract them into an EKR extraction document
   and applies it to the instance's store.
@@ -86,6 +86,12 @@ types:
       sites: cortex.instance.SitesInput
       search: cortex.instance.SearchInput
 
+  # UNMAPPED: `refresh_after_days` is 0 to 36500 and the two maxima above 0; a spec outside these
+  # is refused (exit 2, naming the field). Below 0 (or 0 for a maximum) is refused wherever a spec
+  # is read (`spec::check`); above 36500 only where an operator gives one to `create`, `update` or
+  # `adopt` (`spec::load_given`), so an instance's frozen copy from before the bound keeps running
+  # and a run saturates its window. These are checks on Integer values the specification has no
+  # construct for; `tests/spec_forms.rs` tests them.
   - name: cortex.instance.FetchPolicy
     kind: struct
     fields:
@@ -134,6 +140,51 @@ types:
       - {name: max_pages, type: Integer}
       - {name: stop_older_than_since, type: Optional<Boolean>}
 
+  # A rule a parent record must match for a child operation to be called for it
+  # (`cortex.instance.ChildCall.follow`, `cortex.instance.StructuredChild.follow`). `field` is a
+  # dotted path into the parent record (`$.` allowed before it), as `{a.b}` placeholders name one.
+  # `equals`: the value there equals `value`, of the same JSON kind (`false` is not `"false"`;
+  # numbers compare by value). `within_days`: the value there is a text holding an RFC 3339
+  # instant, a date alone (`2026-10-05`, midnight UTC) or epoch seconds, no earlier than `days`
+  # days before the run's start. `at_least`: the value there is a JSON number no less than
+  # `number`. A parent without the field, or with a value of another kind, does not match.
+  - name: cortex.instance.FollowRule
+    kind: union
+    tag: rule
+    variants:
+      equals: cortex.instance.FollowEquals
+      within_days: cortex.instance.FollowWithinDays
+      at_least: cortex.instance.FollowAtLeast
+
+  - name: cortex.instance.FollowEquals
+    kind: struct
+    fields:
+      - {name: field, type: String}
+      - {name: value, type: Json}
+
+  - name: cortex.instance.FollowWithinDays
+    kind: struct
+    fields:
+      - {name: field, type: String}
+      - {name: days, type: Integer}
+    invariants:
+      - days > 0
+
+  - name: cortex.instance.FollowAtLeast
+    kind: struct
+    fields:
+      - {name: field, type: String}
+      - {name: number, type: Integer}
+    invariants:
+      - number > 0
+
+  # `text`, as a source's own `text`: each template is rendered from one child record (`{a.b}`
+  # placeholders, a missing or non-scalar value rendering empty), the blank ones dropped and the
+  # rest joined by a line break, and each child record that renders to text is one paragraph
+  # after the parent's text. Absent means each child record's JSON is that paragraph.
+  # `follow`: the child operation is called only for a parent the rule matches
+  # (`cortex.instance.FollowRule`, measured from the run's start); for another, no call is made
+  # and the document's text is the parent's alone. Absent means every parent.
   - name: cortex.instance.ChildCall
     kind: struct
     fields:
@@ -141,6 +192,8 @@ types:
       - {name: input, type: Json}
       - {name: records, type: String}
       - {name: paging, type: Optional<cortex.instance.Paging>}
+      - {name: text, type: Optional<List<String>>}
+      - {name: follow, type: Optional<cortex.instance.FollowRule>}
     invariants:
       - paging.stop_older_than_since != true
 
@@ -155,12 +208,38 @@ types:
       # UNMAPPED: in every string value of an input, a run replaces the window placeholders by its
       # window, each end cut to the second: `{since}` and `{until}` by RFC 3339 in UTC
       # (`2026-10-05T12:34:56Z`), `{since_epoch}` and `{until_epoch}` by the same instants as
-      # whole seconds since the Unix epoch, a decimal string (`1790000000`). Any other text,
-      # another `{...}` included, reaches Connectors unchanged. ESS states no rule on the text
-      # of a Json value; src/sources.rs and tests/connectors_walks.rs hold it.
+      # whole seconds since the Unix epoch, a decimal string (`1790000000`), and
+      # `{since_minutes_ago}` by the whole minutes from the window's start to the time of each
+      # call (each input, each page), rounded up from the milliseconds, the number alone
+      # (`updated >= -{since_minutes_ago}m`).
+      # Any other text, another `{...}` included, reaches Connectors unchanged. ESS states no
+      # rule on the text of a Json value; src/sources.rs and tests/connectors_walks.rs hold it.
       - {name: inputs, type: List<Json>}
       - {name: records, type: String}
       - {name: id, type: String}
+      # `key`: a template a document's key is rendered from instead of the value at `id`, so two
+      # records with one id in two inputs stay two documents: `{a.b}` names a field of the
+      # record, `{input.a.b}` one of the input the record was read with, after its window is
+      # filled in (`{input.channel}:{ts}` keys a message by its channel and its time). The key is
+      # `<adapter>:<operation>:<rendered>`. Absent means the value at `id`.
+      # UNMAPPED: a record is left out of the fetch and counted in the run's `skipped`, by
+      # operation and reason, when the value at `id` is missing or null (without `key`), or when
+      # a placeholder of `key` names a field the record or its input lacks, or holds as no scalar
+      # or as blank text; no `<adapter>:<operation>:null` key is written. ESS has no construct for
+      # the rendering of a String from a record; src/sources.rs holds it and
+      # tests/connectors_walks.rs tests it.
+      # UNMAPPED: the spec check refuses (exit 2, naming the source and the key, for `create`,
+      # `update`, `adopt` and a run alike) a `key` that is no template by the grammar of
+      # `cortex.instance.RecordMapping.alias_templates`: empty, naming no field, or with an
+      # unclosed `{` or a stray `}`; and an `{input.…}` placeholder on a source without inputs, or
+      # one some input does not hold as a scalar. `cortex update` refuses a change of `key` on a
+      # source with seen documents as a re-key, and, while `key` names an `{input.…}` field, a
+      # change of `inputs` that drops what one input renders for those placeholders and adds
+      # another (a respelled input); adding, removing or reordering inputs, or changing a field
+      # the key does not name, is no re-key. ESS has no construct for the grammar of a String;
+      # `spec::check` and `src/main.rs` hold it, tests/w30a_shapes_adversary.rs,
+      # tests/w30a_shapes_adversary_pass2.rs and tests/connectors_walks.rs test it.
+      - {name: key, type: Optional<String>}
       - {name: time, type: Optional<String>}
       - {name: text, type: List<String>}
       - {name: paging, type: Optional<cortex.instance.Paging>}
@@ -242,10 +321,24 @@ types:
   # `update`, `adopt` and a run alike) an empty template, a template that names no field, and a
   # template whose placeholders are not `{path}` with a dotted path of ASCII letters, digits, `_`
   # and `-` (an unclosed `{`, a lone `}`, `{}`, a nested `{`, or another character in a path, a
-  # non-ASCII letter included). A template alias matches a store node of the mapping's own
-  # `node_type` only. ESS
-  # has no construct for the grammar of a String; `spec::check` holds it and
-  # `tests/known_entities.rs` tests it.
+  # non-ASCII letter included). ESS has no construct for the grammar of a String; `spec::check`
+  # holds it and `tests/known_entities.rs` tests it.
+  # `store_lookup` is how a record meets the store's nodes (`cortex.instance.StoreLookup`); absent
+  # means `OwnType`.
+  # UNMAPPED: with `AnyType`, before each batch the run reads the store once (`ekr snapshot`) and
+  # takes, for every record of the run under that mapping, the nodes of any type whose canonical
+  # name or one of whose aliases equals the record's name or one of its aliases (its
+  # `alias_templates` included), both lowercased. A record whose matches are all of one type other
+  # than its `node_type` is written onto that node: its entity, properties and relations take that
+  # node's type and are named by that node's canonical name before the record's aliases, and a
+  # relation or a child's parent relation naming the record names that node. A record matching
+  # nodes of more than one type (its own included) is refused alone, naming the types: it is left
+  # out of its batch, named with its key in the run's `rejected` and not marked seen, and the rest
+  # of the batch is applied. So is a record whose matched node's type declares a mapped property in
+  # another value kind than the mapping writes, naming the type, the property and both kinds. A
+  # record matching no node, or nodes of its own type only, is written as with `OwnType`. ESS has
+  # no construct for a read of the store's graph; `src/structured.rs` holds it and
+  # `tests/known_entities_adversary.rs` tests it.
   - name: cortex.instance.RecordMapping
     kind: struct
     fields:
@@ -256,6 +349,15 @@ types:
       - {name: properties, type: List<cortex.instance.PropertyMapping>}
       - {name: relations, type: List<cortex.instance.RelationMapping>}
       - {name: alias_templates, type: Optional<List<String>>}
+      - {name: store_lookup, type: Optional<cortex.instance.StoreLookup>}
+
+  # How a structured record meets the store's nodes. `OwnType`: by its aliases, as EKR resolves
+  # them, within the mapping's `node_type` only (a template alias matches a store node of that
+  # type only). `AnyType`: by its name or one of its aliases, against nodes of every type
+  # (`cortex.instance.RecordMapping`).
+  - name: cortex.instance.StoreLookup
+    kind: enum
+    variants: [OwnType, AnyType]
 
   # Where a known entity shown to the model came from: `Store`, a node the store holds that one
   # of the batch's keys or aliases names; `Run`, a name cortex's own earlier runs extracted.
@@ -275,6 +377,11 @@ types:
       - {name: aliases, type: List<String>}
       - {name: origin, type: cortex.instance.KnownOrigin}
 
+  # `follow`: the child operation is called only for a parent record the rule matches
+  # (`cortex.instance.FollowRule`). A parent it does not match is still read and applied as a
+  # node; its records of that operation are not asked for, and none of its earlier ones is ended
+  # (`dropped: Supersede`), as after a child call that failed. The run's `skipped` counts, per
+  # child operation, the parents its rule did not match. Absent means every parent.
   - name: cortex.instance.StructuredChild
     kind: struct
     fields:
@@ -285,6 +392,7 @@ types:
       - {name: mapping, type: cortex.instance.RecordMapping}
       - {name: time, type: Optional<String>}
       - {name: parent, type: String}
+      - {name: follow, type: Optional<cortex.instance.FollowRule>}
     invariants:
       - paging.stop_older_than_since != true
 
@@ -313,7 +421,8 @@ types:
       - {name: operation, type: String}
       # UNMAPPED: the window placeholders of `cortex.instance.ConnectorsSource.inputs` hold here
       # alike: `{since}`, `{until}` (RFC 3339), `{since_epoch}`, `{until_epoch}` (whole epoch
-      # seconds). The inputs of `children` and `links` are filled from records, not the window.
+      # seconds), `{since_minutes_ago}` (whole minutes before each call, rounded up). The
+      # inputs of `children` and `links` are filled from records, not the window.
       - {name: inputs, type: List<Json>}
       - {name: paging, type: Optional<cortex.instance.Paging>}
       - {name: children, type: Optional<List<cortex.instance.StructuredChild>>}
@@ -339,6 +448,11 @@ types:
       connectors: cortex.instance.StructuredConnectors
       files: cortex.instance.StructuredFiles
 
+  # UNMAPPED: with `Supersede`, a run that selects no record and whose listing (each record's
+  # key and text hash), unsettled records and held prefixes equal those of the last run that
+  # ended the source's dropped values without a failed commit reads nothing of the store: no
+  # `ekr snapshot` and no `ekr stage begin`. ESS has no construct for a read of the store;
+  # `src/run.rs` holds it and `tests/idle_supersede.rs` tests it.
   - name: cortex.instance.DropPolicy
     kind: enum
     variants: [Keep, Supersede]
@@ -630,12 +744,28 @@ types:
     fields:
       - {name: keep, type: Integer}
 
+  # How long a run's directory under `runs/` is kept. UNMAPPED: at the end of every run that
+  # fetched its documents (a source run or a seed run, whatever its outcome), cortex removes each
+  # directory under `runs/` whose name is one cortex gives a run, `<unix ms>-<source>`, and whose
+  # time is more than `keep_days` days before that run's start; the current run's directory,
+  # named after it, is never one. A name cortex did not give, and a file, are never removed. Without a
+  # `runs` section nothing is removed. `create`, `update` and `adopt` refuse a `keep_days` below
+  # 1. ESS has no rule on files or ranges; tests/runs_retention.rs holds it.
+  - name: cortex.instance.RunsPolicy
+    kind: struct
+    fields:
+      - {name: keep_days, type: Integer}
+
   - name: cortex.instance.EkrPin
     kind: struct
     fields:
       - {name: version, type: String}
       - {name: bin, type: Optional<String>}
 
+  # UNMAPPED: `view_port` is a port from 0 to 65535; a spec outside it is refused (exit 2, naming
+  # the field, for `create`, `update` and `adopt`: `spec::load_given`). The port is read only when
+  # an instance is made, so an instance's frozen copy is not held to it. A check on an Integer the
+  # specification has no construct for; `tests/spec_forms.rs` tests it.
   - name: cortex.instance.ServeSpec
     kind: struct
     fields:
@@ -665,6 +795,11 @@ types:
   # `disabled` when the run's recorded failure disabled the source. It holds no secret: one the
   # hook needs it reads itself, outside cortex. The call lasts `timeout_s` seconds at most, absent
   # means 10; then the hook's process group is killed.
+  # UNMAPPED: `timeout_s` is 1 to 86400; a spec outside it is refused (exit 2, naming the field).
+  # Below 1 is refused wherever a spec is read (`spec::check`); above 86400 only where an operator
+  # gives one (`spec::load_given`), and a frozen copy from before the bound is capped at 86400 when
+  # the hook is called. A check on an Integer the specification has no construct for;
+  # `tests/spec_forms.rs` tests it.
   - name: cortex.instance.RunHook
     kind: struct
     fields:
@@ -688,13 +823,21 @@ types:
   #   it recorded its outcome;
   # - `cortex_source_last_run_documents{source, kind}` (gauge), the last run's documents: `read`,
   #   the new or changed documents it selected to extract (`SourceRan.documents_new`), and
-  #   `applied` (`SourceRan.documents_applied`); present only when the last run ended `ran`;
+  #   `applied` (`SourceRan.documents_applied`); present when the last run ended `ran`, and when
+  #   it applied a batch and then ended with another outcome (`extraction-failed`,
+  #   `apply-refused`, `store-outcome-unknown`, `batch-too-large`, `terminated`,
+  #   `model-unavailable`), which reports what it read and applied before it ended; a run whose
+  #   applied batches were undone afterwards (its gate refused it, `apply-refused`, or a gated
+  #   run ended `terminated` or `store-outcome-unknown` and was undone) reports `applied` 0,
+  #   the store holding none of them, and still the documents it read and the tokens it spent;
   # - `cortex_source_documents_total{source, kind}` (counter), the same, added up over every run
-  #   that ended `ran`;
+  #   that reports them; a run that ended before it applied a batch adds nothing, and a run
+  #   that was undone adds no applied documents;
   # - `cortex_source_model_tokens_total{source, kind}` (counter), the model tokens those runs
   #   reported: `input` (`input_tokens` and `cache_creation_input_tokens`), `cached`
-  #   (`cache_read_input_tokens`) and `output` (`output_tokens`); a run whose answers did not
-  #   report a count adds nothing to it.
+  #   (`cache_read_input_tokens`) and `output` (`output_tokens`), each summed over the answers
+  #   that reported it, a failed answer included; an answer that did not report a count adds
+  #   nothing to it.
   # Every label is the source id or a fixed name: no series holds a credential, a prompt, a
   # question or document content. A source's status file (`status/<source>.json`) keeps these
   # figures, so the whole file is rewritten from the status files. A metric file cortex cannot
@@ -719,6 +862,7 @@ types:
       - {name: store, type: Optional<cortex.instance.StoreSpec>}
       - {name: redaction, type: Optional<cortex.instance.RedactionPolicy>}
       - {name: snapshots, type: Optional<cortex.instance.SnapshotPolicy>}
+      - {name: runs, type: Optional<cortex.instance.RunsPolicy>}
       - {name: gate, type: Optional<cortex.instance.RunGate>}
       - {name: monitoring, type: Optional<cortex.instance.MonitoringSpec>}
       - {name: ask, type: Optional<cortex.ask.AskSpec>}
@@ -1117,6 +1261,16 @@ errors:
     fields:
       - {name: name, type: cortex.instance.InstanceName}
 
+  - name: cortex.instance.RekeyRefused
+    summary: >-
+      An update may not change how a source keys its documents while the source has seen
+      documents: its seen state would no longer match, and every document would be extracted
+      again. To re-key on purpose, remove the source's `state/<source>.json` first.
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: source, type: String}
+      - {name: field, type: String}
+
   - name: cortex.instance.InstanceNotActive
     summary: The instance is removed, so nothing changed.
     fields:
@@ -1217,7 +1371,9 @@ errors:
       EKR could not say whether a store write of the run took effect (`ekr stage begin`,
       `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage
       answered that the publication outcome is unknown). Nothing about the source was wrong; the
-      next run settles the stage, or extracts the batch again.
+      next run settles the stage, or extracts the batch again. For `cortex schema`, the write is a
+      proposal's schema transaction (`ekr commit`) or the stage of `cortex schema apply`; the
+      reason names it.
     fields:
       - {name: reason, type: String}
 
@@ -1245,10 +1401,10 @@ errors:
   - name: cortex.instance.RunTerminated
     summary: >-
       The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended,
-      and stopped at the next safe point: a model call in flight was ended. A gated run is undone
-      (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it
-      applied, and a later run extracts the rest. Nothing about the source was wrong: the failure
-      is not counted against it.
+      and stopped at the next safe point: a fetch, a model call or a read of the store in flight
+      was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an
+      ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about
+      the source was wrong: the failure is not counted against it.
     fields:
       - {name: reason, type: String}
 
@@ -1329,7 +1485,10 @@ errors:
     summary: >-
       A model call for schema proposals failed, timed out, answered no valid proposals or found the
       budget or the instance's daily ceiling spent, the redaction policy refused what the model
-      would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+      would be shown, or EKR could not read the store's ontology, or `proposals.jsonl` could not
+      be written. Nothing was applied and no proposal was recorded, except when a line of
+      `proposals.jsonl` could not be written after earlier proposals were applied: those stay
+      applied, the lines before stay written, and the reason names both counts.
     fields:
       - {name: reason, type: String}
 
@@ -1367,8 +1526,12 @@ errors:
   - name: cortex.instance.SchemaApplyFailed
     summary: >-
       EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer
-      a transaction. Nothing was published: the stage was abandoned, or on `sqlite` the snapshot
-      taken before was restored; every approved proposal is still `approved`.
+      a transaction: nothing was published, the stage was abandoned, or on `sqlite` the snapshot
+      taken before was restored, and every approved proposal is still `approved`. Or, after the
+      changes were published, EKR could not read the store's head or `proposals.jsonl` could not
+      be written: the changes stay in the store, and the reason says so and names the revision
+      (on `postgres`, the head the stage was published at; on `sqlite`, the last committed one),
+      or, when no proposal was applied, says no change was committed.
     fields:
       - {name: reason, type: String}
 
@@ -1565,6 +1728,25 @@ commands:
             state: {generated: true}
         summary: The instance is removed; nothing changed.
 
+      - name: rekey-refused
+        external: >-
+          A source the frozen spec and the new one both name, whose `state/<source>.json` holds a
+          seen document, changes a field its documents are keyed by: its `kind`; a `connectors`
+          source's `adapter`, `operation` or `id`; a `files` source's `records` format (no
+          `records` and `WholeFile` are one), with a per-record format their `records.id`, or a
+          root of its `paths` that reaches a seen file under another spelling (`docs` and
+          `./docs`; adding, removing or reordering roots is not one); a `structured` source's
+          `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths`
+          or `glob` as written, or its `mapping.id`. A record path is compared as it is read
+          (`key` and `$.key` are one path)
+        error: cortex.instance.RekeyRefused
+        payload:
+          cortex.instance.RekeyRefused:
+            name: input.name
+            source: {generated: true}
+            field: {generated: true}
+        summary: Nothing changed; the frozen spec and every source's seen state are as they were.
+
       - name: updated
         updates: cortex.instance.Instance
         instance: name
@@ -1689,9 +1871,41 @@ commands:
       # effect that creates or updates one record per element of a collection (`instances:` is
       # refused on `creates:`, `affects:` only updates), so the per-source state file holds it and
       # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.
+      # UNMAPPED: a batch of several documents the model answered it failed on (an error answer
+      # that cost more than zero and is not unfit for its window, or an answer with no structured
+      # output; not `model-unavailable`, not a timeout, crash or call that left no JSON answer,
+      # and not an error answer that cost zero, which came before any model was asked) ends the
+      # run as any failed batch does and counts one failed batch for each of its documents, kept
+      # per key in `failures/<source>.json` beside `state/`, so a run that is undone keeps them.
+      # A later run asks such a batch whole once more; when it fails again, its documents are
+      # asked alone in that run. A batch that holds a document in 2 failed batches, or one that
+      # failed alone, is not asked whole: its other documents together first, then each such
+      # document alone, those with the lowest count first. A document the
+      # model answers it failed on alone adds one to its count of consecutive failed runs, kept
+      # per key with the hash of the text and the last reason; an applied document drops its
+      # count, and a run that read the source's whole listing (no window, nothing unread) drops
+      # the counts of documents the source no longer lists. Below 3 the run stops at it
+      # (`extraction-failed` when nothing was applied, else `ran` with `stopped` naming it and its
+      # count). From 3 on, while its text is the one that last failed, the document is skipped:
+      # named in the run's `skipped` with its count and reason, not sent to the model, not marked
+      # seen, wanted no longer for the run's success or its window, and the batches after it run.
+      # A changed text keeps the count and is asked once more alone; a failure skips it again.
+      # ESS has no per-element record effect (beyond10x/ess#459); src/state.rs, src/extract.rs
+      # and src/run.rs hold it and tests/poison_document.rs tests it.
+      # UNMAPPED: the window a run leaves for the next. A run that applied every document it
+      # wanted and read every record records its window's end as `last_success_started_at`. Any
+      # other run, `ran` with `stopped` or a failure, sets `pending_since`, the next run's
+      # `{since}` until one succeeds: when the fetch read every record and every wanted document
+      # left unapplied has a readable record time (`time`), the earliest of those times less 5
+      # minutes, between the run's `{since}` and `{until}`; else the run's `{since}`; and never
+      # after the `held_since` the run computed, so a run that fails while it holds back a change
+      # by `refresh_after_days` leaves the change in the next window. A document skipped after 3
+      # failures is not wanted. ESS models no window over a source's records; src/state.rs, src/sources.rs
+      # and src/run.rs hold it and tests/connectors_walks.rs tests it.
       # UNMAPPED: after every outcome that names a source, the instance's `monitoring` reports it:
       # `metrics.prom` is rewritten with the source's run counted under its outcome, its duration,
-      # and for `ran` its documents and model tokens (`cortex.instance.MonitoringSpec`), and for
+      # and for `ran`, or any outcome reached after a batch was applied, its documents and model
+      # tokens (`cortex.instance.MonitoringSpec`), and for
       # `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`,
       # `connection-unavailable`, `batch-too-large`, `terminated` and `model-unavailable` the hook
       # is called once, with
@@ -1699,8 +1913,11 @@ commands:
       # outside the model's records and no metric; tests/run_status.rs,
       # tests/store_outcome_unknown.rs, tests/connections_revalidate_retry.rs and
       # tests/run_metrics.rs hold it.
-      # UNMAPPED: before each batch is sent to the model, the run reads the store once
-      # (`ekr snapshot`) and takes every node, of any type, whose canonical name or one of whose
+      # UNMAPPED: a run reads the store once (`ekr snapshot`, at its first batch) and keeps what
+      # it read, adding after each apply the nodes that batch's extraction document named (by
+      # the least of their first aliases, as EKR names a node it creates); a commit another
+      # writer makes during the run is not seen by it. Before each batch is sent to the model,
+      # the run takes from that every node, of any type, whose canonical name or one of whose
       # aliases equals one of the batch's terms, both lowercased: each document's key and, for a
       # record, its id (after the first `#` of a file record's key `<path>#<id>`, after
       # `<adapter>:<operation>:` of a Connectors record's). Those nodes are shown to the model as
@@ -1714,11 +1931,18 @@ commands:
       # or another control character in it is written as a space. Behind a model window the
       # batch size counts the store hits' lines in the request's fixed part: a batch of more
       # than one document whose documents and known-entity lines exceed the size is split in
-      # two before it is sent. ESS has no construct for a read of the store's graph or for what
-      # a prompt holds; `src/run.rs` holds it and `tests/known_entities.rs` tests it.
+      # two before it is sent. The store's ontology names the prompt shows (`ekr ontology`: node
+      # type names, their property names and value kinds, edge type names with their source and
+      # target types) are masked for credential shapes and written on one line in the same way,
+      # with or without a redaction policy, and then pass through the instance's redaction like
+      # every known name. ESS has no construct for a read of the store's graph or for what
+      # a prompt holds; `src/run.rs`, `src/known.rs` and `src/extract.rs` hold it, and
+      # `tests/known_entities.rs` and `tests/one_store_read.rs` test it.
       # A structured source calls no model; `alias_templates` reach the store as aliases of its
-      # entities, by which EKR resolves them to a node of their type: a template alias matches a
-      # store node of the mapping's own type only.
+      # entities, by which EKR resolves them to a node of their type: with the mapping's
+      # `store_lookup` absent or `OwnType`, a template alias matches a store node of the mapping's
+      # own type only; with `AnyType`, the run reads the store before each batch and writes a
+      # record onto the node of another type it names (`cortex.instance.RecordMapping`).
       # UNMAPPED: with `fetch_only` (`cortex run --fetch-only`), `fetched` exits 0 and
       # `fetch-only-failed` exits 1 and prints `fetch-failed`. Neither writes the source's status
       # file, `metrics.prom`, `cortex.log`, the seen documents or the window (`pending_since`),
@@ -1784,6 +2008,15 @@ commands:
           rest. No model was asked, and nothing was written: not the store, the seen documents,
           the source's status or `cortex.log`; no snapshot or stage was taken and no run counted.
 
+      # UNMAPPED: the bound of a `connectors` call. Every call a run makes through the `connectors`
+      # binary is waited for at most `CORTEX_CONNECTORS_TIMEOUT_S` seconds (120, at least 1); past
+      # it the call and its process group are killed and reaped, and the call fails as `timeout`,
+      # not retried, which an invocation answers as `fetch-failed`. A file a `files` source reads
+      # that cannot be read, is over 16 MiB or is not UTF-8 text is named in `skipped`; one of a
+      # `structured` source's `files` input fails the fetch instead, so that `dropped: Supersede`
+      # never reads its records as no longer listed. ESS has no deadline or size construct;
+      # tests/connectors_call_deadline.rs, tests/file_records.rs and tests/structured_files.rs
+      # hold it.
       - name: fetch-failed
         external: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first
         error: cortex.instance.FetchFailed
@@ -1935,9 +2168,20 @@ commands:
           A part of one document is not this outcome: the run leaves it out and goes on.
 
       # UNMAPPED: the signal and the safe point. `cortex run` (not `--fetch-only`) handles SIGTERM:
-      # the run stops at its next safe point, before a fetch result is used, before each batch, or
-      # by ending the model call in flight (its process group is sent SIGTERM, then SIGKILL after
-      # 5 s); a structured source stops before each record batch. A gated run is undone as a run
+      # the run stops at its next safe point: during the fetch, by ending the `connectors` call in
+      # flight (its process group is sent SIGTERM, then SIGKILL after 5 s), before each page of a
+      # paged read, before each file of a `files` read and in a wait between Connectors attempts,
+      # with nothing marked seen and the window's `since` unchanged; before a fetch result is
+      # used; before each batch; in the wait before a model call is asked again; or by ending the
+      # model call in flight as a fetch's call is ended; or, while it waits for its `ekr session` to
+      # answer a read (`ontology`, `snapshot`, `schema`, `quality`, `head`), by ending the session
+      # and what it started the same way; a write the session was asked (`mint`, `propose`,
+      # `validate`, `commit`) is waited for. A structured source stops before each
+      # record batch. The reason names the point: `stopped while it fetched`, `stopped before it
+      # used the documents it fetched`, `stopped before batch <n>`, `stopped before record batch
+      # <n>`, `while it waited to ask the model again for batch <n>; no call was in flight`,
+      # `while the model was asked for batch <n>; the call was ended`, or `while it waited for its
+      # ekr session to answer <verb>; the session was ended`. A gated run is undone as a run
       # its gate refuses is: its stage abandoned and `state/` put back, or its kept snapshot
       # restored; an ungated run keeps the batches it applied, each marked seen, and its window
       # is kept pending, as a failed run's is. A second SIGTERM ends the process at once, exit
@@ -2021,6 +2265,7 @@ commands:
             source_id: input.source_id
             documents_new: {generated: true}
             documents_applied: {generated: true}
+            facts_reapplied: {generated: true}
             cost_usd: {generated: true}
             cost_counted: {generated: true}
             daily_ceiling_reached: {generated: true}
@@ -2184,10 +2429,13 @@ commands:
             name: input.name
             snapshot: input.snapshot
         summary: >-
-          The store and the instance state were snapshotted as `<ms>-before-restore`, then put
-          back to the snapshot's copies: every source's seen state and the known entity names
-          included, so the next runs apply again what the undone runs applied. A viewer that was
-          running was stopped first and started again after.
+          The store and the instance state were snapshotted as `<ms>-before-restore`, then the
+          store was put back to the snapshot's copy, and after it the instance state: every
+          source's seen state and the known entity names included, so the next runs apply again
+          what the undone runs applied. A state copy that could not be written back leaves the
+          store restored and the state as it was, reported as `state_restored: false` with the
+          reason in `state_failed`. A viewer that was running was stopped first and started again
+          after.
 
       - name: no-such-instance
         unknown_instance: true
@@ -2477,12 +2725,29 @@ commands:
         summary: No model was asked and nothing was written.
 
       - name: propose-failed
-        external: A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology
+        external: A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, EKR cannot read the ontology, or `proposals.jsonl` cannot be written
         error: cortex.instance.ProposeFailed
         payload:
           cortex.instance.ProposeFailed:
             reason: {generated: true}
-        summary: Nothing was applied and no `proposals.jsonl` was written.
+        summary: >-
+          Nothing was applied and no proposal was recorded, except when a line of
+          `proposals.jsonl` could not be written after earlier proposals were applied: those stay
+          applied and the lines before it stay written; the reason names how many of each.
+
+      - name: store-outcome-unknown
+        external: >-
+          Applying, EKR cannot say whether a proposal's schema transaction took effect (`ekr
+          commit` answers that the publication outcome is unknown)
+        error: cortex.instance.StoreOutcomeUnknown
+        payload:
+          cortex.instance.StoreOutcomeUnknown:
+            reason: {generated: true}
+        summary: >-
+          The round stops at that proposal and asks EKR for no later one. The proposals before it
+          stay decided and recorded in `proposals.jsonl`; it and every later one are not recorded.
+          The reason names the proposal; `ekr ontology` answers whether its change took effect.
+          `cortex schema` exits 4, as `cortex run` does for this outcome.
 
       - name: proposed
         when: dry_run
@@ -2724,12 +2989,19 @@ commands:
           head is where it was (`postgres`) or back at the snapshot (`sqlite`).
 
       - name: apply-failed
-        external: EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction
+        external: EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction, or, after the publish, read the store's head, or `proposals.jsonl` cannot be written
         error: cortex.instance.SchemaApplyFailed
         payload:
           cortex.instance.SchemaApplyFailed:
             reason: {generated: true}
-        summary: Nothing was published; every approved proposal is still `approved`.
+        summary: >-
+          Before the publish, nothing was published and every approved proposal is still
+          `approved`. After it, when a proposal was applied, the changes are in the store and the
+          reason says so, naming the revision: the head the stage was published at (`postgres`) or
+          the last committed one (`sqlite`); when none was, the reason says no change was
+          committed. When only the head could not be read, every decision is written to
+          `proposals.jsonl`; when `proposals.jsonl` could not be written, it still lists every
+          approved proposal `approved`.
 
       - name: store-outcome-unknown
         external: EKR cannot say whether the stage's begin or publish took effect
@@ -2739,7 +3011,8 @@ commands:
             reason: {generated: true}
         summary: >-
           Every approved proposal is still `approved`. The stage is kept in `stage.json`, and the
-          next run of a source settles it.
+          next run of a source settles it. `cortex schema apply` exits 4, as `cortex run` does for
+          this outcome.
 
       - name: applied
         updates: cortex.instance.Instance
@@ -2809,17 +3082,24 @@ events:
   # (the system prompt, the answer's schema, and the prompt up to the documents: the instance's
   # description and instructions, the ontology and the known entity names) and the documents.
   # The two add up to `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`.
+  # `cost_usd` adds up what those calls cost, a failed or cut-off call included, as the run's
+  # dollar budget counts them: `0` for a run with no model call, absent as soon as one answer
+  # carried no cost.
   # `cost_counted` is false when the instance's model is behind a gateway: `cost_usd` is then what
   # `claude` reported, counted against no dollar limit (`cortex.instance.ModelSpec`).
   # `batch_chars` is the most characters of document text, counted as UTF-8 bytes, the run put in
   # one extraction request (`cortex.instance.ModelSpec.batch_chars`, given or derived); `splits`
   # counts the batches it split in two because a request was too long for the model's window or
   # its answer was cut off.
+  # `facts_reapplied` counts the facts marked `replaces: true` that EKR rejected because nothing
+  # active was there to replace, applied again as plain assertions and stored; they are not
+  # among the parts EKR rejected.
   - name: cortex.instance.SourceRan
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: documents_new, type: Integer}
       - {name: documents_applied, type: Integer}
+      - {name: facts_reapplied, type: Integer}
       - {name: cost_usd, type: Optional<Decimal>}
       - {name: cost_counted, type: Boolean}
       - {name: daily_ceiling_reached, type: Boolean}

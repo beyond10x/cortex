@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClientClosed payload",
+  "description": "The reader closed the stream before its last event; no further model or tool call is made, and the answer opens no review item. A model call in flight when the reader left runs to its reply or `max_seconds`, and the answer keeps its `max_in_flight` slot until it ends. `steps` counts the model calls made, and the token counts add up their `usage` as `cortex.ask.AskDone` does; `context_tokens` is the prompt tokens of the last one.",
+  "x-ess-name": "cortex.ask.ClientClosed",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "steps": {
+      "type": "integer"
+    },
+    "input_tokens": {
+      "type": "integer"
+    },
+    "output_tokens": {
+      "type": "integer"
+    },
+    "cached_tokens": {
+      "type": "integer"
+    },
+    "context_tokens": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "steps",
+    "input_tokens",
+    "output_tokens",
+    "cached_tokens",
+    "context_tokens"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
+    "contract_digest": "slice-sha256/2:05fac4b2c7e02ef156d607f3b9d70a6f20443a8289cda1630cf76971f0354c53",
+    "regenerate": "ess generate"
+  }
+}

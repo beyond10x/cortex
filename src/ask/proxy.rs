@@ -5,11 +5,17 @@
 //! policy the runner gives `claude` this server instead of `ekr mcp`: MCP over HTTP (the
 //! streamable-HTTP transport, one JSON response per `POST`), bound to `127.0.0.1` on a free port
 //! under a random path and behind a random bearer header, for one case only. It answers `initialize` and `ping` itself and forwards
-//! `tools/list` and `tools/call` to the reader ([`mcp::Reader`]). Each tool result is shown as
-//! the ask service shows it ([`super::shown`]): its text redacted with the case's batch, or a
-//! withheld tool error. The batch, the case's one placeholder mapping, stays in this process, so
-//! the runner restores the answer with it; nothing of it is written anywhere.
+//! `tools/list` and `tools/call` to the reader ([`mcp::Reader`]). Each tool result's text is
+//! redacted with the case's batch as the ask service redacts it ([`super::shown`]), or withheld as
+//! a tool error, but it is passed on whole: unlike the ask service, this server does not cut it to
+//! `ask.limits.max_result_bytes`. The batch, the case's one placeholder mapping, stays in this
+//! process, so the runner restores the answer with it; nothing of it is written anywhere.
+//!
+//! The request line and the header lines are read up to 64 KiB (`MAX_HEAD`), before the bearer
+//! check; a line that reaches it is refused (431) with nothing more read. Each connection leaves
+//! the server's open list once it is answered, so the list holds only connections in progress.
 
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,6 +31,10 @@ use crate::redact::{Batch, Redactor};
 /// The most bytes of one request this server reads.
 const MAX_REQUEST: usize = 1 << 20;
 
+/// The most bytes of a request's head this server reads: its request line and header lines, line
+/// ends included.
+const MAX_HEAD: usize = 64 << 10;
+
 /// A tool result this server passes on whole: the reader's results are not cut.
 const NO_CUT: usize = usize::MAX;
 
@@ -32,6 +42,16 @@ const NO_CUT: usize = usize::MAX;
 pub struct Served<'r, T> {
     pub answer: T,
     pub batch: Batch<'r>,
+    /// The connections in the server's open list when `f` returned.
+    open: usize,
+}
+
+impl<T> Served<'_, T> {
+    /// The connections in the server's open list when `f` returned: a count for tests.
+    #[doc(hidden)]
+    pub fn open_connections(&self) -> usize {
+        self.open
+    }
 }
 
 /// Why [`serve`] did not call `f`.
@@ -55,14 +75,14 @@ impl std::fmt::Display for ServeError {
 /// every connection still open, so no idle or trickling client holds the case.
 struct Stopper<'a> {
     stop: &'a AtomicBool,
-    open: &'a Mutex<Vec<TcpStream>>,
+    open: &'a Mutex<HashMap<u64, TcpStream>>,
 }
 
 impl Drop for Stopper<'_> {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
         let open = self.open.lock().unwrap_or_else(|e| e.into_inner());
-        for stream in open.iter() {
+        for stream in open.values() {
             let _ = stream.shutdown(Shutdown::Both);
         }
     }
@@ -112,30 +132,40 @@ pub fn serve<'r, T>(
     }}});
     let state = Mutex::new((reader, batch));
     let stop = AtomicBool::new(false);
-    let open = Mutex::new(Vec::new());
+    let open = Mutex::new(HashMap::new());
     let answer = std::thread::scope(|s| {
         let stopper = Stopper {
             stop: &stop,
             open: &open,
         };
         s.spawn(|| {
+            let mut next = 0u64;
             while !stop.load(Ordering::SeqCst) {
                 match listener.accept() {
                     Ok((stream, _)) => {
                         let _ = stream.set_nonblocking(false);
-                        if let Ok(copy) = stream.try_clone() {
-                            open.lock().unwrap_or_else(|e| e.into_inner()).push(copy);
-                        }
+                        // A connection the end of the case could not shut down is not served.
+                        let Ok(copy) = stream.try_clone() else {
+                            let _ = stream.shutdown(Shutdown::Both);
+                            continue;
+                        };
+                        let id = next;
+                        next += 1;
+                        open.lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .insert(id, copy);
                         // Registered, then checked: a stop that came between is not missed.
                         if stop.load(Ordering::SeqCst) {
                             let _ = stream.shutdown(Shutdown::Both);
                             return;
                         }
-                        let (path, bearer, state) = (&path, &bearer, &state);
+                        let (path, bearer, state, open) = (&path, &bearer, &state, &open);
                         s.spawn(move || {
                             handle(&stream, path, bearer, state, deadline);
-                            // `open` holds a clone of this socket, so dropping `stream` alone
-                            // would leave the client waiting for the end of the response.
+                            // Out of the list before the client sees the end of the connection.
+                            // The list's clone of this socket would otherwise keep it open, so
+                            // dropping `stream` alone would leave the client waiting.
+                            open.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
                             let _ = stream.shutdown(Shutdown::Both);
                         });
                     }
@@ -144,12 +174,18 @@ pub fn serve<'r, T>(
             }
         });
         let answer = f(&question, &config);
+        let left = open.lock().unwrap_or_else(|e| e.into_inner()).len();
         drop(stopper);
-        answer
+        (answer, left)
     });
+    let (answer, open) = answer;
     let (reader, batch) = state.into_inner().unwrap_or_else(|e| e.into_inner());
     drop(reader);
-    Ok(Served { answer, batch })
+    Ok(Served {
+        answer,
+        batch,
+        open,
+    })
 }
 
 /// Whether `a` and `b` are equal, in time that depends on their lengths only.
@@ -170,8 +206,39 @@ pub(crate) fn token() -> Result<String, String> {
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
-/// Answers one HTTP request on `stream`; the caller closes it. A request without the `bearer` header is
-/// refused with 401.
+/// One line of a request's head.
+enum HeadLine {
+    Line(String),
+    /// The line reached what is left of [`MAX_HEAD`] without ending.
+    TooLarge,
+    /// The connection ended, failed or timed out before the line ended, or it is no UTF-8.
+    Closed,
+}
+
+/// Reads the next line of a request's head, at most `left` bytes, and takes what it read from
+/// `left`.
+fn head_line(reader: &mut impl BufRead, left: &mut usize) -> HeadLine {
+    if *left == 0 {
+        return HeadLine::TooLarge;
+    }
+    let mut line = Vec::new();
+    match reader.take(*left as u64).read_until(b'\n', &mut line) {
+        Ok(0) | Err(_) => return HeadLine::Closed,
+        Ok(n) => *left -= n,
+    }
+    if !line.ends_with(b"\n") {
+        return if *left == 0 {
+            HeadLine::TooLarge
+        } else {
+            HeadLine::Closed
+        };
+    }
+    String::from_utf8(line).map_or(HeadLine::Closed, HeadLine::Line)
+}
+
+/// Answers one HTTP request on `stream`; the caller closes it. A head over [`MAX_HEAD`] is
+/// refused with 431 as soon as it reaches it, before the bearer check and with nothing more read;
+/// a request without the `bearer` header is refused with 401.
 fn handle(
     stream: &TcpStream,
     path: &str,
@@ -181,17 +248,22 @@ fn handle(
 ) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
     let mut reader = BufReader::new(stream);
-    let mut request_line = String::new();
-    if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
-        return;
-    }
+    let mut left = MAX_HEAD;
+    let too_large =
+        |mut out: &TcpStream| respond(&mut out, "431 Request Header Fields Too Large", None);
+    let request_line = match head_line(&mut reader, &mut left) {
+        HeadLine::Line(line) => line,
+        HeadLine::TooLarge => return too_large(stream),
+        HeadLine::Closed => return,
+    };
     let mut length = 0;
     let mut authorized = false;
     loop {
-        let mut line = String::new();
-        if reader.read_line(&mut line).unwrap_or(0) == 0 {
-            return;
-        }
+        let line = match head_line(&mut reader, &mut left) {
+            HeadLine::Line(line) => line,
+            HeadLine::TooLarge => return too_large(stream),
+            HeadLine::Closed => return,
+        };
         let line = line.trim_end();
         if line.is_empty() {
             break;

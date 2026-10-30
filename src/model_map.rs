@@ -75,8 +75,8 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
         model: m::ModelSpec {
             model: spec.model.model.clone(),
             backend: opt(&spec.model.backend).map(|b| match *b {
-                s::CortexInstanceModelBackend::V0 => m::ModelBackend::Claude,
-                s::CortexInstanceModelBackend::V1 => m::ModelBackend::Codex,
+                s::CortexInstanceModelBackend::Claude => m::ModelBackend::Claude,
+                s::CortexInstanceModelBackend::Codex => m::ModelBackend::Codex,
             }),
             budget_usd: opt(&spec.model.budget_usd).map(Decimal),
             daily_ceiling_usd: opt(&spec.model.daily_ceiling_usd).map(Decimal),
@@ -137,6 +137,12 @@ pub fn instance_spec(spec: &s::CortexInstanceInstanceSpec) -> Result<m::Instance
                 keep: int(&p.keep, "snapshots.keep")?,
             }),
         },
+        runs: match &spec.runs {
+            EssPresence::Absent => None,
+            EssPresence::Present(p) => Some(m::RunsPolicy {
+                keep_days: int(&p.keep_days, "runs.keep_days")?,
+            }),
+        },
         gate: opt(&spec.gate).map(|g| m::RunGate {
             checks: g
                 .checks
@@ -183,6 +189,10 @@ fn ask_spec(a: &s::CortexAskAskSpec) -> Result<ma::AskSpec, MapError> {
                 &a.limits.per_identity_per_minute,
                 "ask.limits.per_identity_per_minute",
             )?,
+            max_tool_calls: match &a.limits.max_tool_calls {
+                EssPresence::Absent => None,
+                EssPresence::Present(n) => Some(int(n, "ask.limits.max_tool_calls")?),
+            },
         },
         link_templates: match &a.link_templates {
             EssPresence::Absent => None,
@@ -208,6 +218,10 @@ fn ask_spec(a: &s::CortexAskAskSpec) -> Result<ma::AskSpec, MapError> {
                 ca_file: opt(&r.ca_file),
                 connection: connection_ref(&r.connection),
             }),
+        },
+        max_in_flight: match &a.max_in_flight {
+            EssPresence::Absent => None,
+            EssPresence::Present(n) => Some(int(n, "ask.max_in_flight")?),
         },
     })
 }
@@ -286,13 +300,13 @@ fn connection_ref(c: &s::CortexInstanceConnectionRef) -> m::ConnectionRef {
 
 fn redaction_class(class: &s::CortexInstanceRedactionClass) -> m::RedactionClass {
     match class {
-        s::CortexInstanceRedactionClass::V0 => m::RedactionClass::Credential,
-        s::CortexInstanceRedactionClass::V1 => m::RedactionClass::Email,
-        s::CortexInstanceRedactionClass::V2 => m::RedactionClass::IpAddress,
-        s::CortexInstanceRedactionClass::V3 => m::RedactionClass::PaymentCard,
-        s::CortexInstanceRedactionClass::V4 => m::RedactionClass::Phone,
-        s::CortexInstanceRedactionClass::V5 => m::RedactionClass::RareName,
-        s::CortexInstanceRedactionClass::V6 => m::RedactionClass::Url,
+        s::CortexInstanceRedactionClass::Credential => m::RedactionClass::Credential,
+        s::CortexInstanceRedactionClass::Email => m::RedactionClass::Email,
+        s::CortexInstanceRedactionClass::IpAddress => m::RedactionClass::IpAddress,
+        s::CortexInstanceRedactionClass::PaymentCard => m::RedactionClass::PaymentCard,
+        s::CortexInstanceRedactionClass::Phone => m::RedactionClass::Phone,
+        s::CortexInstanceRedactionClass::RareName => m::RedactionClass::RareName,
+        s::CortexInstanceRedactionClass::Url => m::RedactionClass::Url,
     }
 }
 
@@ -341,10 +355,10 @@ fn paging(
                 (stop, _) => stop,
             },
             style: match *p.style {
-                s::CortexInstancePageStyle::V0 => m::PageStyle::Keyset,
-                s::CortexInstancePageStyle::V1 => m::PageStyle::NextLink,
-                s::CortexInstancePageStyle::V2 => m::PageStyle::PageNumber,
-                s::CortexInstancePageStyle::V3 => m::PageStyle::Token,
+                s::CortexInstancePageStyle::Keyset => m::PageStyle::Keyset,
+                s::CortexInstancePageStyle::NextLink => m::PageStyle::NextLink,
+                s::CortexInstancePageStyle::PageNumber => m::PageStyle::PageNumber,
+                s::CortexInstancePageStyle::Token => m::PageStyle::Token,
             },
             param: p.param.clone(),
             next: opt(&p.next),
@@ -356,9 +370,9 @@ fn paging(
 fn file_records(r: &s::CortexInstanceFileRecords) -> m::FileRecords {
     m::FileRecords {
         format: match *r.format {
-            s::CortexInstanceRecordFormat::V0 => m::RecordFormat::JsonLines,
-            s::CortexInstanceRecordFormat::V1 => m::RecordFormat::MarkdownSections,
-            s::CortexInstanceRecordFormat::V2 => m::RecordFormat::WholeFile,
+            s::CortexInstanceRecordFormat::JsonLines => m::RecordFormat::JsonLines,
+            s::CortexInstanceRecordFormat::MarkdownSections => m::RecordFormat::MarkdownSections,
+            s::CortexInstanceRecordFormat::WholeFile => m::RecordFormat::WholeFile,
         },
         id: r.id.clone(),
         time: opt(&r.time),
@@ -392,11 +406,11 @@ fn record_mapping(mapping: &s::CortexInstanceRecordMapping) -> m::RecordMapping 
                 property: p.property.clone(),
                 path: p.path.clone(),
                 value_kind: opt(&p.value_kind).map(|k| match *k {
-                    s::CortexInstanceSchemaValueKind::V0 => m::SchemaValueKind::Boolean,
-                    s::CortexInstanceSchemaValueKind::V1 => m::SchemaValueKind::Decimal,
-                    s::CortexInstanceSchemaValueKind::V2 => m::SchemaValueKind::Integer,
-                    s::CortexInstanceSchemaValueKind::V3 => m::SchemaValueKind::String,
-                    s::CortexInstanceSchemaValueKind::V4 => m::SchemaValueKind::Timestamp,
+                    s::CortexInstanceSchemaValueKind::Boolean => m::SchemaValueKind::Boolean,
+                    s::CortexInstanceSchemaValueKind::Decimal => m::SchemaValueKind::Decimal,
+                    s::CortexInstanceSchemaValueKind::Integer => m::SchemaValueKind::Integer,
+                    s::CortexInstanceSchemaValueKind::String => m::SchemaValueKind::String,
+                    s::CortexInstanceSchemaValueKind::Timestamp => m::SchemaValueKind::Timestamp,
                 }),
             })
             .collect(),
@@ -410,6 +424,10 @@ fn record_mapping(mapping: &s::CortexInstanceRecordMapping) -> m::RecordMapping 
             })
             .collect(),
         alias_templates: opt(&mapping.alias_templates),
+        store_lookup: opt(&mapping.store_lookup).map(|l| match *l {
+            s::CortexInstanceStoreLookup::AnyType => m::StoreLookup::AnyType,
+            s::CortexInstanceStoreLookup::OwnType => m::StoreLookup::OwnType,
+        }),
     }
 }
 
@@ -425,7 +443,42 @@ fn structured_child(
         mapping: record_mapping(&child.mapping),
         time: opt(&child.time),
         parent: child.parent.clone(),
+        follow: follow(&child.follow, &format!("{at}.follow"))?,
     })
+}
+
+/// A child's `follow` rule; `days` and `number` above 0, as the rule's invariants declare.
+fn follow(
+    rule: &EssPresence<Box<s::CortexInstanceFollowRule>>,
+    at: &str,
+) -> Result<Option<m::FollowRule>, MapError> {
+    let EssPresence::Present(rule) = rule else {
+        return Ok(None);
+    };
+    let positive = |n: &serde_json::Number, name: &str| {
+        let n = int(n, at)?;
+        if n > 0 {
+            Ok(n)
+        } else {
+            Err(MapError(format!(
+                "{at}: {name} {n}: use a whole number above 0"
+            )))
+        }
+    };
+    Ok(Some(match &**rule {
+        s::CortexInstanceFollowRule::V0(r) => m::FollowRule::AtLeast(m::FollowAtLeast {
+            field: r.value.field.clone(),
+            number: positive(&r.value.number, "number")?,
+        }),
+        s::CortexInstanceFollowRule::V1(r) => m::FollowRule::Equals(m::FollowEquals {
+            field: r.value.field.clone(),
+            value: json(&r.value.value),
+        }),
+        s::CortexInstanceFollowRule::V2(r) => m::FollowRule::WithinDays(m::FollowWithinDays {
+            field: r.value.field.clone(),
+            days: positive(&r.value.days, "days")?,
+        }),
+    }))
 }
 
 fn compare_link(link: &s::CortexInstanceCompareLink, at: &str) -> Result<m::CompareLink, MapError> {
@@ -490,8 +543,8 @@ fn structured(
         records: st.records.clone(),
         mapping: record_mapping(&st.mapping),
         dropped: opt(&st.dropped).map(|d| match *d {
-            s::CortexInstanceDropPolicy::V0 => m::DropPolicy::Keep,
-            s::CortexInstanceDropPolicy::V1 => m::DropPolicy::Supersede,
+            s::CortexInstanceDropPolicy::Keep => m::DropPolicy::Keep,
+            s::CortexInstanceDropPolicy::Supersede => m::DropPolicy::Supersede,
         }),
     })
 }
@@ -505,7 +558,7 @@ fn source_spec(source: &s::CortexInstanceSourceSpec) -> Result<m::SourceSpec, Ma
         policy: m::FetchPolicy {
             refresh_after_days: int(&source.policy.refresh_after_days, &at)?,
             change: match *source.policy.change {
-                s::CortexInstanceChangeDetection::V0 => m::ChangeDetection::ContentHash,
+                s::CortexInstanceChangeDetection::ContentHash => m::ChangeDetection::ContentHash,
             },
             max_documents_per_run: int(&source.policy.max_documents_per_run, &at)?,
             max_chars_per_document: int(&source.policy.max_chars_per_document, &at)?,
@@ -527,6 +580,7 @@ fn settings(
                 inputs: c.value.inputs.iter().map(json).collect(),
                 records: c.value.records.clone(),
                 id: c.value.id.clone(),
+                key: opt(&c.value.key),
                 time: opt(&c.value.time),
                 text: c.value.text.clone(),
                 paging: paging(
@@ -546,6 +600,8 @@ fn settings(
                             &format!("{at}.child"),
                             Some(STOP_ONLY_ON_SOURCE),
                         )?,
+                        text: opt(&child.text),
+                        follow: follow(&child.follow, &format!("{at}.child.follow"))?,
                     }),
                 },
             })
@@ -575,14 +631,14 @@ fn web_input(input: &s::CortexInstanceWebInput, at: &str) -> Result<m::WebInput,
                 queries: search.value.queries.clone(),
                 policy: m::SearchPolicy {
                     topic: match *p.topic {
-                        s::CortexInstanceSearchTopic::V0 => m::SearchTopic::General,
-                        s::CortexInstanceSearchTopic::V1 => m::SearchTopic::News,
+                        s::CortexInstanceSearchTopic::General => m::SearchTopic::General,
+                        s::CortexInstanceSearchTopic::News => m::SearchTopic::News,
                     },
                     time_range: opt(&p.time_range).map(|t| match *t {
-                        s::CortexInstanceTimeRange::V0 => m::TimeRange::Day,
-                        s::CortexInstanceTimeRange::V1 => m::TimeRange::Month,
-                        s::CortexInstanceTimeRange::V2 => m::TimeRange::Week,
-                        s::CortexInstanceTimeRange::V3 => m::TimeRange::Year,
+                        s::CortexInstanceTimeRange::Day => m::TimeRange::Day,
+                        s::CortexInstanceTimeRange::Month => m::TimeRange::Month,
+                        s::CortexInstanceTimeRange::Week => m::TimeRange::Week,
+                        s::CortexInstanceTimeRange::Year => m::TimeRange::Year,
                     }),
                     max_results: int(&p.max_results, at)?,
                     include_domains: p.include_domains.clone(),
@@ -595,8 +651,8 @@ fn web_input(input: &s::CortexInstanceWebInput, at: &str) -> Result<m::WebInput,
         s::CortexInstanceWebInput::V1(sites) => m::WebInput::Sites(m::SitesInput {
             urls: sites.value.urls.clone(),
             mode: match *sites.value.mode {
-                s::CortexInstanceWebMode::V0 => m::WebMode::Crawl,
-                s::CortexInstanceWebMode::V1 => m::WebMode::Pages,
+                s::CortexInstanceWebMode::Crawl => m::WebMode::Crawl,
+                s::CortexInstanceWebMode::Pages => m::WebMode::Pages,
             },
             policy: match &sites.value.policy {
                 EssPresence::Absent => None,

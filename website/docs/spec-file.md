@@ -22,7 +22,8 @@ Model Context Protocol specification, and a budget of $0.50 per run.
 ```yaml
 format: cortex.instance/1
 name: example
-description: Developments in open-source vector databases and the companies behind them.
+description: >-
+  Developments in open-source vector databases and the companies behind them.
 ekr: {version: "0.0.34"}
 seed: {schema: seed/schema.yaml, documents: []}
 model: {model: claude-sonnet-5-5, budget_usd: "1", timeout_s: 900}
@@ -43,6 +44,7 @@ serve: {}
 | `store` | optional: the store's backend, SQLite or PostgreSQL ([`store`](#store)) |
 | `redaction` | optional: what is kept from the model, and what refuses a run ([`redaction`](#redaction)) |
 | `snapshots` | optional: how many snapshots of a `sqlite` store are kept ([`snapshots`](#snapshots)) |
+| `runs` | optional: how many days each run's directory under `runs/` is kept ([`runs`](#runs)) |
 | `gate` | optional: the checks a run is held to ([`gate`](#gate)) |
 | `monitoring` | optional: what a run reports besides its printed line ([`monitoring`](#monitoring)) |
 | `ask` | optional: the ask service's settings ([Ask service](./ask-service.md#the-ask-section)) |
@@ -74,7 +76,7 @@ different seed files answers `seed-change-refused`.
 | field | meaning |
 |---|---|
 | `model` | the model name passed to `claude --model` |
-| `backend` | optional: `Claude` (the default) runs `claude -p`. `Codex` is accepted by `create` and `update` but extracts nothing in this release: every run fails as `extraction-failed`, naming `story:codex-model-backend` (see [Commands](./commands.md#global-options)) |
+| `backend` | optional: `Claude` (the default) runs `claude -p`. `Codex` is accepted by `create` and `update` but extracts nothing in this release: every run fails as `extraction-failed`, saying the Codex backend does not extract yet (see [Commands](./commands.md#global-options)) |
 | `budget_usd` | the spending limit of one run, in US dollars, as a decimal string; above 0. A run stops starting new batches once it is spent. Required without a `gateway`; with one it may be omitted, and bounds nothing (see [A model gateway](#a-model-gateway)) |
 | `daily_ceiling_usd` | optional: the most the instance's model calls spend in one UTC calendar day, in US dollars, as a decimal string; above 0. Absent means no ceiling. See [The daily ceiling](#the-daily-ceiling). Bounds nothing behind a `gateway` |
 | `budget_tokens` | optional: the most tokens one run's model calls use, a whole number above 0. Absent means no limit in tokens. Required with a `gateway`. See [Limits in tokens](#limits-in-tokens) |
@@ -122,7 +124,11 @@ a smaller `batch_chars` makes its batches smaller.
 ### The daily ceiling
 
 ```yaml
-model: {model: claude-sonnet-5-5, budget_usd: "1", daily_ceiling_usd: "5", timeout_s: 900}
+model:
+  model: claude-sonnet-5-5
+  budget_usd: "1"
+  daily_ceiling_usd: "5"
+  timeout_s: 900
 ```
 
 `daily_ceiling_usd` covers every model call of the instance in one UTC calendar day: the runs of
@@ -154,7 +160,10 @@ model:
   budget_tokens: 200000
   daily_ceiling_tokens: 2000000
   timeout_s: 900
-  gateway: {base_url: "https://gateway.example", token_env: GW_TOKEN, max_context_tokens: 128000}
+  gateway:
+    base_url: "https://gateway.example"
+    token_env: GW_TOKEN
+    max_context_tokens: 128000
 ```
 
 | field | meaning |
@@ -202,7 +211,12 @@ figure bounds nothing:
 ### Limits in tokens
 
 ```yaml
-model: {model: claude-sonnet-5-5, budget_usd: "1", budget_tokens: 200000, daily_ceiling_tokens: 2000000, timeout_s: 900}
+model:
+  model: claude-sonnet-5-5
+  budget_usd: "1"
+  budget_tokens: 200000
+  daily_ceiling_tokens: 2000000
+  timeout_s: 900
 ```
 
 The dollar limits rely on the cost `claude` states in each answer, and for a model `claude` cannot
@@ -280,7 +294,15 @@ settings:
   kind: web
   value:
     profile: tavily.api-key
-    input: {input: search, value: {queries: [widget engine], policy: {topic: news, max_results: 5, include_domains: [], exclude_domains: []}}}
+    input:
+      input: search
+      value:
+        queries: [widget engine]
+        policy:
+          topic: news
+          max_results: 5
+          include_domains: []
+          exclude_domains: []
 ```
 
 ### `kind: web`
@@ -323,16 +345,29 @@ The records of any operation a Connectors adapter admits.
 | field | meaning |
 |---|---|
 | `adapter`, `connection` or `profile`, `operation` | what to invoke; the connection by id or by profile of `adapter` ([Naming a connection](#naming-a-connection)) |
-| `inputs` | a list of JSON inputs; the operation is invoked once per input. `{since}`, `{until}`, `{since_epoch}` and `{until_epoch}` in a string value are replaced by the run's window |
+| `inputs` | a list of JSON inputs; the operation is invoked once per input. `{since}`, `{until}`, `{since_epoch}`, `{until_epoch}` and `{since_minutes_ago}` in a string value are replaced by the run's window |
 | `records` | dotted path to the array of records in the answer, for example `issues` |
 | `id` | dotted path to a record's stable id |
+| `key` | optional: a template the document's key is rendered from instead of `id`: `{a.b}` is a field of the record, `{input.a.b}` one of the input it was read with, its window filled in. `{input.channel}:{ts}` keeps two messages with one `ts` in two channels two documents |
 | `time` | optional dotted path to the record's publication time, which dates its evidence and the facts drawn from it ([how](./operating.md#what-one-run-does)) |
 | `text` | templates whose `{a.b}` placeholders are filled from the record; the non-empty results, joined, are the document's text |
 | `paging` | optional: how to read every page of the answer (below) |
-| `child` | optional: an operation invoked once per record, whose records are added to that record's text (below) |
+| `child` | optional: an operation invoked once per record (or per record its `follow` rule matches), whose records are added to that record's text (below) |
 
-A record without an id, or whose text is empty, is skipped. A document's key is
-`<adapter>:<operation>:<id>`; a key read twice in one run counts once.
+A document's key is `<adapter>:<operation>:<id>`, or `<adapter>:<operation>:<rendered key>` with
+`key`; a key read twice in one run counts once. A record whose id is missing or null, or one of
+whose `key` placeholders names a field it (or its input) lacks, holds as no scalar or as blank
+text, is left out and counted in the run's `skipped` by operation and reason
+(`` tracker.issues.list: 2 records skipped: no value at id `key` ``); no key ends in `null`. A record
+whose text is empty is skipped. A `key` that is not a template (empty, without a placeholder, or
+with an unclosed `{` or a stray `}`) is refused when the spec is read, and so is an `{input.…}`
+placeholder on a source without `inputs`, or one that some input does not hold as a text, number
+or boolean. Adding, removing or changing `key` re-keys the source: `cortex update` refuses it
+while the source has seen documents. While `key` names an `{input.…}`, `update` also refuses a
+respelled input: a change of `inputs` after which what one input rendered for those placeholders
+is gone and something new is rendered (`channel: C1` becoming `channel: general`). Adding an
+input, removing one, reordering them, or changing a field the key does not name (`limit`) keeps
+every remaining key and is accepted.
 
 **The window.** `{since}` and `{until}` are instants in RFC 3339, in UTC and to the second
 (`2026-10-05T12:34:56Z`). `{until}` is the start of this run. `{since}` is 5 minutes before the
@@ -349,8 +384,18 @@ inputs:
   - {channel: "C1", oldest: "{since_epoch}"}
 ```
 
-The value stays a JSON string. Any other text in braces, such as `{since_ms}`, is passed to the
-operation as written.
+`{since_minutes_ago}` is the whole minutes from `{since}` to the moment each call is made (each
+input, each page, each retry after a renewal), rounded up from the milliseconds, so a call made
+after the run's start still asks from no later than `{since}` and the window is never narrowed. It
+is for a query language that takes a relative date, such as an issue tracker's:
+
+```yaml
+inputs:
+  - {jql: "project = OPS AND updated >= -{since_minutes_ago}m"}
+```
+
+It is the number alone; the unit is written after it. The value stays a JSON string. Any other
+text in braces, such as `{since_ms}`, is passed to the operation as written.
 
 With `refresh_after_days: 0` the first run's window is empty (`{since}` equals `{until}`), so
 records older than the 5 minutes before that run are never read. Set `refresh_after_days` to 1 or
@@ -358,9 +403,16 @@ more to read that much history on the first run.
 
 A run is successful when it applied every new or changed document it fetched and read every
 record. A run that is not successful (it stopped early, failed, left documents beyond
-`max_documents_per_run`, or left records unread) keeps its `{since}` as the lower bound of every
-later run until one succeeds, so the next run asks for them again. That holds before the first
-successful run too: the window does not slide with the clock. Records are left unread by a walk
+`max_documents_per_run`, or left records unread) sets the `{since}` of every later run until one
+succeeds, so the next run asks again for what it did not apply. When the run read every record
+and every new or changed document it did not apply has a readable `time`, that `{since}` is the
+earliest of those times less 5 minutes, never before the run's own `{since}`: under a backlog
+the window moves forward past what was applied, and one document that keeps failing holds it
+only at its own time. Otherwise it is the run's own `{since}`. It is never after a change the run
+held back by `refresh_after_days`, so a run that fails leaves that change in the next window.
+That holds before the first successful run too: the window does not slide with the clock. A
+document skipped after failing alone on 3 consecutive runs (see
+[Operating](./operating.md#what-one-run-does)) holds no window. Records are left unread by a walk
 that reaches `max_pages` with pages left, by an empty page that still names a next one, by a
 `NextLink` link without its parameter, and by a child call that fails for a record, which leaves
 that record out of the run. Each of these says so in `stopped`, in the run's result and in
@@ -405,7 +457,12 @@ operation: pages.changed
 records: results
 id: id
 time: version.createdAt
-paging: {style: NextLink, param: cursor, next: _links.next, max_pages: 20, stop_older_than_since: true}
+paging:
+  style: NextLink
+  param: cursor
+  next: _links.next
+  max_pages: 20
+  stop_older_than_since: true
 ```
 
 :::caution[PageNumber paging can skip records]
@@ -418,9 +475,19 @@ provider for a sort that writes do not reorder, such as by creation time or id.
 
 **`child`** has the fields `operation` (on the same adapter and connection), `input` (JSON whose
 `{a.b}` placeholders are filled from the parent record), `records` (the dotted path to the array
-of records in its answer) and an optional `paging`, walked the same way. Each child record is
-added to the parent's text as one paragraph of JSON. The change hash covers the whole text,
-children included, so a child field that changes on every call (a duration, a signed URL) makes
+of records in its answer), an optional `paging`, walked the same way, and two optional fields:
+
+- `text`: templates rendered from each child record as a source's `text` is from its record; the
+  non-empty results, joined by a line break, are that record's paragraph, and a record that
+  renders to nothing adds none. `text: ["{author.displayName} {created}: {body}"]` adds one line
+  per comment. Without `text`, each child record is added as one paragraph of JSON.
+- `follow`: the child is called only for a parent record the rule matches, one of the rules a
+  `structured` source's [children](#kind-structured) take; `{rule: at_least, value: {field:
+  reply_count, number: 1}}` reads the replies of threads that have any. Another parent makes no
+  call, and its text is its own alone.
+
+Each child record is added to the parent's text as one paragraph. The change hash covers the
+whole text, children included, so a child field that changes on every call (a duration, a signed URL) makes
 the parent extracted again after each `refresh_after_days`.
 
 Child records count toward the document's `max_chars_per_document`. Text past it, child records
@@ -444,6 +511,10 @@ earlier version holds the hash of the cut text, so every document longer than
 | `records` | optional: read each file as records, one document per record (below). Without it, each file is one document |
 
 Files that are not UTF-8 text, or are empty, are skipped. A document's key is the file's path.
+A file that cannot be read, is larger than 16 MiB or is not UTF-8 text is named in `skipped`, in
+the run's result and in `cortex.log` (`<path>: cannot be read: <why>; skipped`,
+`<path>: larger than the 16 MiB cap; skipped`, `<path>: not UTF-8 text; skipped`), with
+`records` too; an empty file is named nowhere.
 
 **`records`** has the fields:
 
@@ -457,7 +528,7 @@ Files that are not UTF-8 text, or are empty, are skipped. A document's key is th
 | `fallback_text` | optional templates tried in order only when every `text` template renders empty; the first non-empty result is the record's text |
 | `thread` | optional dotted path to the field that groups records into threads |
 | `filters` | a list, possibly empty, of `field` (a dotted path), `values` and `include`. With `include: true` only records whose field equals one of the values are read; with `include: false` those records are left out. A record is read only when it passes every filter |
-| `lookup` | optional path of a JSON file holding one object of strings, an id to a name; read against the spec file's directory as `paths` are. It maps the author and every `<@id>` in the text (below) |
+| `lookup` | optional path of a JSON file holding one object of strings, an id to a name; read against the spec file's directory as `paths` are. A lookup that is larger than 16 MiB, cannot be read or is not a regular file (a FIFO, say) fails the fetch. It maps the author and every `<@id>` in the text (below) |
 
 A record of a `MarkdownSections` file is one level-two section, with the fields `heading` (the
 heading's text) and `body` (the lines up to the next level-two heading, trimmed), so
@@ -527,8 +598,10 @@ a structured run costs 0.
 | `mapping` | how a record becomes an entity (below) |
 | `dropped` | optional: `Keep` (the default) leaves every value the source asserted earlier; `Supersede` ends each value the source no longer lists (below) |
 
-A file of a `from: files` input that cannot be read, is not JSON, or holds no array at `records`
-fails the run with `fetch-failed`, naming the file, and nothing is applied or ended. So does a
+A file of a `from: files` input that cannot be read, is larger than 16 MiB, is not JSON, or holds
+no array at `records` fails the run with `fetch-failed`, naming the file, and nothing is applied
+or ended. It is not skipped: with `dropped: Supersede`, a skipped file's records would read as no
+longer listed and their values be ended. So does a
 path under which no file matches `glob` (a file moved away, a mount not there yet), naming the
 path and the glob.
 
@@ -544,6 +617,7 @@ and `$` alone is the answer itself.
 | `properties` | `property`, `path` and an optional `value_kind`: the value at the path is asserted for the property, in the property's value kind (below) |
 | `relations` | `relation`, `target_type` and `target_name`: a relation from the record's entity to the entity of `target_type` named by the value at the `target_name` path, one per value when it holds a list |
 | `alias_templates` | optional: fixed-format aliases, each a text with `{path}` placeholders filled from the record (below) |
+| `store_lookup` | optional: `OwnType` (the default) lets a record meet store nodes of its `node_type` only; `AnyType` writes it onto a store node of another type its name or an alias names (below) |
 
 A record without an id or a name is skipped, and a record whose id was already read in the run
 counts once.
@@ -596,7 +670,28 @@ or blank text there, gets no alias from that template, with no error. The spec c
 template, a template that names no field (every record would share its alias), and any other
 placeholder syntax: an unclosed `{`, a lone `}`, `{}`, a nested `{`, or a character in a path
 other than ASCII letters, digits, `_`, `-` and the dots between names (a non-ASCII letter is
-refused). A template alias matches a store node of the mapping's own `node_type` only.
+refused). A template alias matches a store node of the mapping's own `node_type` only, unless
+the mapping sets `store_lookup: AnyType`.
+
+**Store lookup.** EKR resolves an alias within one node type, so by default (`store_lookup:
+OwnType`, or no `store_lookup`) a record whose alias another writer gave a node of another type
+becomes a second node holding that alias. With `store_lookup: AnyType`, the run reads the store
+(`ekr snapshot`) before each batch and looks for the nodes, of any type, whose canonical name or
+one of whose aliases equals the record's name or one of its aliases (its alias templates
+included), both lowercased. In the example above with `store_lookup: AnyType` added, a store whose
+`Project` node holds `repo:acme/api` gets the record's properties and relations on that `Project`
+node, and no `Repository` node:
+
+- matches all of one type other than `node_type`: the record is written onto that node, as that
+  node's type, and a relation or a child's parent relation naming the record in the same run
+  names that node;
+- matches of more than one type (its own included): the record is refused alone, named in the
+  run's `rejected` with the types (`its name or aliases match store nodes of more than one type
+  (store_lookup: AnyType): Project, Service`), and not marked seen, so the next run tries it
+  again; the rest of its batch is applied;
+- a match whose type declares a mapped property in another value kind than the mapping writes:
+  refused alike, naming the type, the property and both kinds;
+- no match, or matches of its own type only: written as with `OwnType`.
 
 **Values.** Each mapped property is declared and written in one value kind: the `value_kind` its
 mapping names (`String`, `Integer`, `Decimal`, `Boolean` or `Timestamp`), else the kind the
@@ -626,8 +721,12 @@ kind of a property the store already holds is a schema change ([`cortex schema`]
 A changed value adds an assertion of the new value. With `dropped: Keep` the old one stays active beside it, so a
 property can hold every value a record has had.
 
-**Dropped values.** With `dropped: Supersede`, after each run cortex reads the store
-(`ekr snapshot`) for the active assertions this source made: those whose evidence is all
+**Dropped values.** With `dropped: Supersede`, after a run cortex reads the store
+(`ekr snapshot`) for the active assertions this source made, unless the run selected no record
+and its listing (every record's key and text), the records it holds back and the parents whose
+child call failed are those of the last run that ended the dropped values: such a run reads
+nothing of the store, and begins no stage. A commit another writer made in between is compared
+by the next run whose listing changed. The assertions this source made are those whose evidence is all
 `record:<identity>` of this source's identities. It compares each with what the record lists now
 and ends the ones it no longer lists, in transactions of their own (`runs/<run>/ends-<n>.yaml`):
 
@@ -654,8 +753,9 @@ Values another source asserted are never ended. A `kind: connectors` source cite
 a structured source does, so `create` and `update` refuse a `dropped: Supersede` structured source
 that reads the adapter and operation a `connectors` source of the spec reads, naming both. Two
 structured sources whose identities share one prefix (the same adapter and operation, or the same
-paths and `glob`) are one source here, as they are one record set: a run of one ends the values of
-records only the other lists.
+paths and `glob`) are one record set, so a run of one would end the values of records only the
+other lists: `create` and `update` refuse such a pair when either has `dropped: Supersede`, naming
+both and the prefix. With `dropped: Keep` on both the pair is accepted.
 
 **Relations.** A relation target names a record of the same run by that record's identity (the
 target taken as an id) or, when exactly one record of the run has it, by its name or a mapped
@@ -677,6 +777,7 @@ record the source read, whose records become nodes of their own, each linked to 
 | `mapping` | how a child record becomes an entity, as `mapping` above, relations included |
 | `time` | optional dotted path to the child record's publication time, which dates its evidence and the facts drawn from it ([how](./operating.md#what-one-run-does)); without it, a child's facts are dated by the run |
 | `parent` | the name of the relation from each child record's node to its parent's node |
+| `follow` | optional: a rule the parent record must match for the child to be called for it (below) |
 
 A child record's identity is `<prefix>/<operation>:<parent>:<id>`: the source's prefix, the child
 operation, its parent's identity after the source's prefix (the parent's id, or its digest), with
@@ -699,7 +800,22 @@ the `parent` relation from the child's node type to the parent's; children with 
 share one edge type.
 
 Every run calls each child once for every parent it reads (more with `paging`), whether or not the
-parent changed. A child call that fails for one parent (Connectors answers `forbidden`, say, or the
+parent changed, unless the child has a `follow` rule. Then it is called only for the parents the
+rule matches; `field` is a dotted path into the parent record, as `{a.b}` placeholders name one:
+
+| `follow` | the parent matches when |
+|---|---|
+| `{rule: equals, value: {field: archived, value: false}}` | the value at `field` equals `value`, of the same JSON kind: `false` is not `"false"`; numbers compare by value, whole numbers exactly |
+| `{rule: within_days, value: {field: last_activity_at, days: 30}}` | the value at `field` is a text holding an RFC 3339 instant, a date alone (midnight UTC) or epoch seconds, no earlier than `days` days before the run's start; `days` above 0 |
+| `{rule: at_least, value: {field: star_count, number: 1}}` | the value at `field` is a JSON number no less than `number`; `number` above 0 |
+
+A parent without the field, or with a value of another kind, does not match. A parent the rule
+does not match is still read and applied as a node; only its records of that child are not asked
+for, and none of its earlier ones is ended (`dropped: Supersede`), as after a failed call. The run
+counts those parents per child in `skipped`
+(`tags.list: 2 parents not followed by its rule; …`).
+
+A child call that fails for one parent (Connectors answers `forbidden`, say, or the
 answer has no array at `records`) does not fail the run: the parent and its other children are
 read and applied, and the run names the parent's identity and the operation, with the reason, in
 `skipped`. That parent's records of that operation are not read in that run, and none of its
@@ -781,7 +897,7 @@ applies. Shorten or unmap the value at the source to clear it. Change detection,
 
 | field | meaning |
 |---|---|
-| `refresh_after_days` | a document whose text changed is extracted again only when it was last applied at least this many days ago; 0 or more. A record read from a file ([`kind: files`](#kind-files)) and a `structured` source's change whose text changed only in its links ([`kind: structured`](#kind-structured)) wait for nothing |
+| `refresh_after_days` | a document whose text changed is extracted again only when it was last applied at least this many days ago; 0 to 36500. A record read from a file ([`kind: files`](#kind-files)) and a `structured` source's change whose text changed only in its links ([`kind: structured`](#kind-structured)) wait for nothing |
 | `change` | how a change is detected; `ContentHash` is the only value |
 | `max_documents_per_run` | the most documents one run extracts; above 0 |
 | `max_chars_per_document` | longer text is cut to this many characters; above 0. Text is also cut, at a character boundary, to what a 16,384-byte evidence payload holds after its header (EKR 0.0.32's bound), so about 5,400 characters of a three-byte script such as Chinese fit. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |
@@ -821,6 +937,19 @@ snapshots: {keep: 3}
 |---|---|
 | `keep` | the newest snapshots cortex named that are kept; a new snapshot removes the oldest beyond it. Files of other names in `snapshots/` are never removed. 0 takes none. Without a `snapshots` section, 3 |
 
+## `runs`
+
+Optional. How long each run's directory under `runs/` is kept (the prompts, answers and
+extraction documents of its batches; see [Operating](./operating.md#where-things-live)).
+
+```yaml
+runs: {keep_days: 14}
+```
+
+| field | meaning |
+|---|---|
+| `keep_days` | a whole number of days, at least 1; `create`, `update` and `adopt` refuse a smaller one. At the end of every run that fetched its documents (a seed run included), whatever its outcome, the run directories older than this are removed: those named as cortex names one, `<unix ms>-<source>`, timed by that name. The current run's directory is never removed, nor is any other name or a file. Without a `runs` section nothing is removed |
+
 ## `gate`
 
 Optional. Checks a source run is held to once it applied something; a run that fails one is
@@ -849,7 +978,9 @@ status in `cortex sources`; see [Operating](./operating.md#failures).
 ```yaml
 monitoring:
   metrics: true
-  hook: {command: [/usr/local/bin/notify-oncall, --channel, brains], timeout_s: 10}
+  hook:
+    command: [/usr/local/bin/notify-oncall, --channel, brains]
+    timeout_s: 10
 ```
 
 | field | meaning |
@@ -857,13 +988,13 @@ monitoring:
 | `metrics` | `true` rewrites `metrics.prom` in the instance directory after every run of a source, in the Prometheus text format, for a textfile collector or a sidecar to read: runs by outcome, the last run's time, duration and documents, and documents and model tokens over time (see [Failures](./operating.md#failures)). Without it, no metric file is written |
 | `hook` | optional: a command called once for each run that fails, with the source id and the outcome appended as its last two arguments |
 | `hook.command` | the program and its first arguments, run without a shell in the instance directory, in a process group of its own. It must name a program. A relative path holding a `/` is read against the spec file's directory; a bare name is looked up on `PATH`. It holds no secret: a hook that needs one reads it itself |
-| `hook.timeout_s` | how long the call may last, in seconds, above 0; then the hook's process group is killed. Without it, 10 |
+| `hook.timeout_s` | how long the call may last, in seconds, 1 to 86400; then the hook's process group is killed. Without it, 10 |
 
 ## `serve`
 
 | field | meaning |
 |---|---|
-| `view_port` | optional port for `ekr view` on 127.0.0.1; without it, `cortex create` takes the first free port from 18900 |
+| `view_port` | optional port for `ekr view` on 127.0.0.1, 0 to 65535; without it, `cortex create` takes the first free port from 18900 |
 
 ## `store`
 

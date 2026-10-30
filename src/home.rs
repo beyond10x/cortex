@@ -98,17 +98,49 @@ impl Home {
     }
 }
 
-/// Writes `bytes` to `path` through a sibling temporary file and a rename.
+/// Writes `bytes` to `path` through a sibling temporary file and a rename. The temporary file is
+/// synced before the rename and the directory after it, so a crash leaves the old file or the new
+/// one, never an empty one, and a write reported done stays done.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let dir = path.parent().unwrap_or(Path::new("."));
+    write_atomic_traced(path, bytes, &mut |_, _| {})
+}
+
+/// [`write_atomic`], calling `trace` after each step with its name (`write`, `sync`, `rename`,
+/// `sync-dir`) and the path it acted on.
+fn write_atomic_traced(
+    path: &Path,
+    bytes: &[u8],
+    trace: &mut dyn FnMut(&'static str, &Path),
+) -> Result<(), String> {
+    use std::io::Write;
+    let dir = path
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
     let tmp = dir.join(format!(
         ".{}.{}.tmp",
         path.file_name().and_then(|n| n.to_str()).unwrap_or("file"),
         std::process::id()
     ));
-    std::fs::write(&tmp, bytes).map_err(|e| format!("cannot write {}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("cannot replace {}: {e}", path.display()))
+    let cannot_write = |e: std::io::Error| format!("cannot write {}: {e}", tmp.display());
+    let mut file = std::fs::File::create(&tmp).map_err(cannot_write)?;
+    file.write_all(bytes).map_err(cannot_write)?;
+    trace("write", &tmp);
+    file.sync_all()
+        .map_err(|e| format!("cannot sync {}: {e}", tmp.display()))?;
+    trace("sync", &tmp);
+    drop(file);
+    std::fs::rename(&tmp, path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("cannot replace {}: {e}", path.display())
+    })?;
+    trace("rename", path);
+    std::fs::File::open(dir)
+        .and_then(|d| d.sync_all())
+        .map_err(|e| format!("cannot sync {}: {e}", dir.display()))?;
+    trace("sync-dir", dir);
+    Ok(())
 }
 
 /// `rel` normalised lexically: `.` components and repeated or trailing separators dropped, so
@@ -536,5 +568,24 @@ serve: {}
                 .unwrap();
         let reread: Value = serde_json::from_str(REGISTRY).unwrap();
         assert_eq!(written, reread);
+    }
+
+    /// The file's bytes reach the disk before the rename makes them the file, and the rename
+    /// reaches it before the write is reported: a crash leaves the old file or the new one, never
+    /// an empty one.
+    #[test]
+    fn an_atomic_write_syncs_the_file_before_the_rename_and_the_directory_after() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("d/registry.json");
+        let mut steps = Vec::new();
+        write_atomic_traced(&path, b"{}", &mut |step, at| {
+            steps.push((step, at.to_path_buf()))
+        })
+        .unwrap();
+        let names: Vec<&str> = steps.iter().map(|(s, _)| *s).collect();
+        assert_eq!(names, ["write", "sync", "rename", "sync-dir"]);
+        assert_eq!(steps[2].1, path);
+        assert_eq!(steps[3].1, tmp.path().join("d"));
+        assert_eq!(std::fs::read(&path).unwrap(), b"{}");
     }
 }

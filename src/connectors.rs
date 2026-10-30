@@ -2,12 +2,14 @@
 //! never sees a credential; Connectors signs every call.
 
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
 
 use serde_json::Value;
+
+use crate::terminate::Waited;
 
 pub struct Connectors {
     pub bin: PathBuf,
@@ -118,6 +120,9 @@ pub enum InvokeError {
     /// Connectors answered a retryable failure (`kind` `operational`, `next_action`
     /// `retry_explicitly`) to every attempt of a revalidation, before any invocation answered.
     Unavailable(String),
+    /// The run was sent SIGTERM ([`crate::terminate`]) during a call, which was ended, or during a
+    /// wait between attempts: what it stopped.
+    Terminated(String),
 }
 
 impl std::fmt::Display for InvokeError {
@@ -127,6 +132,7 @@ impl std::fmt::Display for InvokeError {
             Self::Lapsed(m) => write!(f, "connection evidence lapsed: {m}"),
             Self::Failed(m) => write!(f, "connectors failed: {m}"),
             Self::Unavailable(m) => write!(f, "connection unavailable: {m}"),
+            Self::Terminated(m) => f.write_str(m),
         }
     }
 }
@@ -135,13 +141,21 @@ impl std::fmt::Display for InvokeError {
 /// deadline ran out. The operation is a read, so repeating it costs at most one more provider call.
 const TIMEOUT_AT_ADMISSION: &str = ": timeout at admission";
 
+/// The code of a failure envelope: `error.data.code`, else `error.code`, which is all an
+/// `ess-cli/1` parse refusal carries (`{"error":{"code":"cli_parse","data":{}},"ok":false}`).
+fn failure_code(doc: &Value) -> Option<&str> {
+    let error = &doc["error"];
+    error["data"]["code"]
+        .as_str()
+        .or_else(|| error["code"].as_str())
+}
+
 fn envelope(doc: Value, what: &str) -> Result<Value, InvokeError> {
     if doc["ok"] == Value::Bool(true) {
         return Ok(doc["result"].clone());
     }
-    let data = &doc["error"]["data"];
-    let code = data["code"].as_str().unwrap_or("unknown");
-    let stage = data["stage"].as_str().unwrap_or("unknown");
+    let code = failure_code(&doc).unwrap_or("unknown");
+    let stage = doc["error"]["data"]["stage"].as_str().unwrap_or("unknown");
     let message = format!("{what}: {code} at {stage}");
     if code == "not_granted" && stage == "admission" {
         return Err(InvokeError::Lapsed(message));
@@ -189,12 +203,12 @@ impl Connectors {
     }
 
     fn json(&self, args: &[&str], what: &str) -> Result<Value, InvokeError> {
-        envelope(self.answer(args, what)?, what)
+        envelope(self.answer(args, None, what)?, what)
     }
 
     /// [`Self::json`], with a [`retryable`] failure answered as [`InvokeError::Unavailable`].
     fn json_or_unavailable(&self, args: &[&str], what: &str) -> Result<Value, InvokeError> {
-        let doc = self.answer(args, what)?;
+        let doc = self.answer(args, None, what)?;
         let again = retryable(&doc);
         match envelope(doc, what) {
             Err(InvokeError::Failed(message)) if again => Err(InvokeError::Unavailable(message)),
@@ -202,13 +216,58 @@ impl Connectors {
         }
     }
 
-    /// The JSON document `connectors` answered, success or refusal.
-    fn answer(&self, args: &[&str], what: &str) -> Result<Value, InvokeError> {
-        let out = Command::new(&self.bin)
+    /// The JSON document `connectors` answered, success or refusal. `input`, when given, is the
+    /// child's standard input, written whole and closed; otherwise it reads none. The call runs in
+    /// a process group of its own and is waited for as a model call is
+    /// ([`crate::terminate::wait`]): a run sent SIGTERM ends it, and its group, and answers
+    /// [`InvokeError::Terminated`]. It is waited for at most `CORTEX_CONNECTORS_TIMEOUT_S` seconds
+    /// (120, at least 1); past that it is killed, with its group, and fails as `timeout`
+    /// ([`InvokeError::Failed`]).
+    fn answer(
+        &self,
+        args: &[&str],
+        input: Option<&[u8]>,
+        what: &str,
+    ) -> Result<Value, InvokeError> {
+        use std::os::unix::process::CommandExt;
+        if crate::terminate::requested() {
+            return Err(InvokeError::Terminated(format!(
+                "the {what} call was not made"
+            )));
+        }
+        let mut child = Command::new(&self.bin)
             .args(args)
             .args(["--output", "json"])
-            .output()
+            // A group of its own is not the terminal's foreground group: its stdin is a pipe or
+            // nothing, never the terminal.
+            .process_group(0)
+            .stdin(if input.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .map_err(|e| InvokeError::Failed(format!("cannot run connectors: {e}")))?;
+        let limit = Duration::from_secs(setting("CORTEX_CONNECTORS_TIMEOUT_S", 120).max(1));
+        let out = match crate::terminate::wait_within(&mut child, input, "connectors", limit) {
+            Waited::Done(out) => out,
+            Waited::Failed(e) => return Err(InvokeError::Failed(e)),
+            Waited::Terminated => {
+                return Err(InvokeError::Terminated(format!(
+                    "the {what} call was ended"
+                )))
+            }
+            // Not `TIMEOUT_AT_ADMISSION`: a call that hung is not tried again.
+            Waited::TimedOut => {
+                return Err(InvokeError::Failed(format!(
+                    "{what}: timeout after {} s (CORTEX_CONNECTORS_TIMEOUT_S); the connectors \
+                     call was killed",
+                    limit.as_secs()
+                )))
+            }
+        };
         // A refusal's JSON envelope goes to stderr, with nothing on stdout.
         let answer = if out.stdout.iter().all(u8::is_ascii_whitespace) {
             &out.stderr
@@ -273,7 +332,7 @@ impl Connectors {
     /// Connectors keeps evidence for a short lifetime (60 s for the shipped HTTP adapters), and
     /// refuses reads with `not_granted` after it; a scheduled run therefore revalidates first.
     pub fn ensure_ready(&self, adapter: &str, connection: &str) -> Result<(), InvokeError> {
-        self.revalidate(adapter, connection, false)
+        self.revalidate(adapter, connection, false).map(|_| ())
     }
 
     /// Revalidates `connection`; unless `force`, only when it is not `ready`. A retryable failure
@@ -281,7 +340,13 @@ impl Connectors {
     /// `CORTEX_REVALIDATE_ATTEMPTS` attempts in all (4, at least 1), pausing
     /// `CORTEX_REVALIDATE_PAUSE_MS` (5000) before the second and doubling after it; one that
     /// remains is [`InvokeError::Unavailable`], naming the last error. A refusal is not retried.
-    fn revalidate(&self, adapter: &str, connection: &str, force: bool) -> Result<(), InvokeError> {
+    /// Answers the connection's `connections list` entry, read before the revalidation.
+    fn revalidate(
+        &self,
+        adapter: &str,
+        connection: &str,
+        force: bool,
+    ) -> Result<Value, InvokeError> {
         self.attempts(|| self.revalidate_once(adapter, connection, force))
     }
 
@@ -298,8 +363,12 @@ impl Connectors {
         let mut attempt = 1;
         loop {
             match attempt_once() {
-                Err(InvokeError::Unavailable(_)) if attempt < attempts => {
-                    std::thread::sleep(pause);
+                Err(InvokeError::Unavailable(m)) if attempt < attempts => {
+                    if crate::terminate::sleep(pause) {
+                        return Err(InvokeError::Terminated(format!(
+                            "it waited to try again after {m}"
+                        )));
+                    }
                     pause = pause.saturating_mul(2);
                     attempt += 1;
                 }
@@ -319,7 +388,7 @@ impl Connectors {
         adapter: &str,
         connection: &str,
         force: bool,
-    ) -> Result<(), InvokeError> {
+    ) -> Result<Value, InvokeError> {
         let listed = self.json_or_unavailable(
             &["connections", "list", "--adapter", adapter],
             "connections list",
@@ -334,8 +403,9 @@ impl Connectors {
                 "{adapter}: no connection {connection}"
             )));
         };
+        let found = found.clone();
         if !force && found["state"].as_str() == Some("ready") {
-            return Ok(());
+            return Ok(found);
         }
         let revision = found["revision"].as_str().unwrap_or_default().to_string();
         let what = "connections revalidate";
@@ -350,6 +420,7 @@ impl Connectors {
                 "--expected-revision",
                 &revision,
             ],
+            None,
             what,
         )?;
         // Connectors can apply a revalidation and still be unable to confirm it
@@ -357,11 +428,11 @@ impl Connectors {
         let unconfirmed = doc["error"]["data"]["next_action"].as_str() == Some("retry_status");
         let again = retryable(&doc);
         match envelope(doc, what) {
-            Err(InvokeError::Failed(message)) if unconfirmed => {
-                self.await_ready(adapter, connection, &message)
-            }
+            Err(InvokeError::Failed(message)) if unconfirmed => self
+                .await_ready(adapter, connection, &message)
+                .map(|()| found),
             Err(InvokeError::Failed(message)) if again => Err(InvokeError::Unavailable(message)),
-            other => other.map(|_| ()),
+            other => other.map(|_| found),
         }
     }
 
@@ -372,8 +443,10 @@ impl Connectors {
         let pause = Duration::from_millis(setting("CORTEX_STATUS_POLL_MS", 5000));
         let mut state = String::from("unknown");
         for read in 0..polls {
-            if read > 0 {
-                std::thread::sleep(pause);
+            if read > 0 && crate::terminate::sleep(pause) {
+                return Err(InvokeError::Terminated(format!(
+                    "it waited to read the status of {connection} again"
+                )));
             }
             let status = self.json(
                 &[
@@ -399,9 +472,12 @@ impl Connectors {
         )))
     }
 
-    /// Invokes `operation` and answers the adapter's own result; a lapse is renewed and a timeout
-    /// at admission retried, each at most once. The CLI wraps it as
-    /// `{adapter, operation, revision, result}`, with `result` a JSON document in a string.
+    /// Invokes `operation` and answers the adapter's own result, which must be a JSON object; a
+    /// lapse is renewed and a timeout at admission retried, each at most once. The call is
+    /// Connectors 0.60.0's `invoke <connector>/<instance> <operation>`: the target comes from the
+    /// connection's `connections list` entry ([`target`]), the schema and revision are the
+    /// current description's, and the input goes on standard input. Connectors wraps the answer
+    /// as `{connector, instance, operation, revision, result}` ([`result`]).
     /// A revalidation still unavailable after its retries is [`InvokeError::Unavailable`] until an
     /// invocation of this process answered, and [`InvokeError::Failed`] after it: a run that has
     /// fetched documents fails as it always did.
@@ -412,14 +488,30 @@ impl Connectors {
         operation: &str,
         input: &Value,
     ) -> Result<Value, InvokeError> {
-        self.ensure_ready(adapter, connection)
+        self.invoke_filled(adapter, connection, operation, input, &Value::clone)
+    }
+
+    /// [`Self::invoke`], with `input` passed through `fill` as each attempt is made: a retry after
+    /// a renewal or a timeout at admission is filled at its own time (`{since_minutes_ago}`).
+    pub fn invoke_filled(
+        &self,
+        adapter: &str,
+        connection: &str,
+        operation: &str,
+        input: &Value,
+        fill: &dyn Fn(&Value) -> Value,
+    ) -> Result<Value, InvokeError> {
+        let entry = self
+            .revalidate(adapter, connection, false)
             .map_err(|e| self.after_fetch(e))?;
+        let target = target(adapter, connection, &entry)?;
         // Evidence listed as ready can lapse before the read is admitted; renew once and retry.
         // A timeout at admission is Connectors' deadline running out on a read; retry that once
         // too. Each retry is spent at most once, so the loop runs at most three invocations.
         let (mut renew, mut timeout) = (true, true);
         let answer = loop {
-            match self.invoke_once(adapter, connection, operation, input) {
+            let input = serde_json::to_vec(&fill(input)).expect("plain JSON");
+            match self.invoke_once(adapter, &target, connection, operation, &input) {
                 Err(InvokeError::Lapsed(_)) if renew => {
                     renew = false;
                     self.revalidate(adapter, connection, true)
@@ -432,13 +524,7 @@ impl Connectors {
             }
         };
         self.answered.store(true, Ordering::Relaxed);
-        match answer.get("result") {
-            Some(Value::String(text)) => serde_json::from_str(text).map_err(|e| {
-                InvokeError::Failed(format!("{adapter}.{operation}: result is not JSON: {e}"))
-            }),
-            Some(inner) if inner.is_object() => Ok(inner.clone()),
-            _ => Ok(answer),
-        }
+        result(&format!("{adapter}.{operation}"), answer)
     }
 
     /// `error`, an [`InvokeError::Unavailable`] made [`InvokeError::Failed`] once an invocation
@@ -452,52 +538,88 @@ impl Connectors {
         }
     }
 
+    /// One `connectors invoke <target> <operation> --connection <connection> --input-stdin`, the
+    /// one spawn of a call: no description is read first, since `--schema` and `--revision` left
+    /// out are the current description's. No field of `input` is in the argv.
     fn invoke_once(
         &self,
         adapter: &str,
+        target: &str,
         connection: &str,
         operation: &str,
-        input: &Value,
+        input: &[u8],
     ) -> Result<Value, InvokeError> {
-        let described = self.json(
+        let what = format!("{adapter}.{operation}");
+        let doc = self.answer(
             &[
-                "operations",
-                "describe",
-                "--adapter",
-                adapter,
-                "--operation",
-                operation,
-            ],
-            "operations describe",
-        )?;
-        let schema = described["schema"]
-            .as_str()
-            .ok_or_else(|| InvokeError::Failed(format!("{adapter}.{operation}: no schema")))?
-            .to_string();
-        let revision = described["revision"]
-            .as_str()
-            .ok_or_else(|| InvokeError::Failed(format!("{adapter}.{operation}: no revision")))?
-            .to_string();
-        let input = serde_json::to_string(input).expect("plain JSON");
-        self.json(
-            &[
-                "operations",
                 "invoke",
-                "--adapter",
-                adapter,
+                target,
+                operation,
                 "--connection",
                 connection,
-                "--operation",
-                operation,
-                "--schema",
-                &schema,
-                "--revision",
-                &revision,
-                "--input-json",
-                &input,
+                "--input-stdin",
             ],
-            &format!("{adapter}.{operation}"),
-        )
+            Some(input),
+            &what,
+        )?;
+        invoked(doc, &what)
+    }
+}
+
+/// [`envelope`] of an `invoke` answer. A parse refusal (`cli_parse`) of that command line is a
+/// Connectors older than 0.60.0, which has no `invoke <connector>/<instance> <operation>`: it is
+/// refused naming the version cortex needs.
+fn invoked(doc: Value, what: &str) -> Result<Value, InvokeError> {
+    let parse = doc["ok"] != Value::Bool(true) && failure_code(&doc) == Some("cli_parse");
+    match envelope(doc, what) {
+        Err(InvokeError::Failed(message)) if parse => Err(InvokeError::Failed(format!(
+            "{message}; connectors does not know the invoke command line: cortex needs \
+             Connectors 0.60.0 or newer"
+        ))),
+        other => other,
+    }
+}
+
+/// The `invoke` target `<connector>/<instance>` of a `connections list` entry, which carries
+/// `connector` and `instance` beside `adapter` from Connectors 0.54.0 on. An entry without them is
+/// a Connectors older than 0.54.0, which has no `invoke` either: refused naming the entry. A
+/// Connectors from 0.54.0 to 0.59.x lists both and refuses the `invoke` command line instead
+/// ([`invoked`]).
+fn target(adapter: &str, connection: &str, entry: &Value) -> Result<String, InvokeError> {
+    let field = |name: &str| entry[name].as_str().filter(|v| !v.is_empty());
+    match (field("connector"), field("instance")) {
+        (Some(connector), Some(instance)) => Ok(format!("{connector}/{instance}")),
+        _ => Err(InvokeError::Failed(format!(
+            "{adapter}: the connections list entry of {connection} names no connector and \
+             instance; cortex invokes through Connectors 0.60.0 or newer"
+        ))),
+    }
+}
+
+/// The JSON type of `value`, as a reason names it.
+fn json_type(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "a boolean",
+        Value::Number(_) => "a number",
+        Value::String(_) => "a string",
+        Value::Array(_) => "an array",
+        Value::Object(_) => "an object",
+    }
+}
+
+/// The provider's `result` of an `invoke` answer (`InvokeResult`), which a source reads as a JSON
+/// object; any other JSON type, or none, is refused naming it.
+fn result(what: &str, mut answer: Value) -> Result<Value, InvokeError> {
+    match answer.get_mut("result").map(Value::take) {
+        Some(inner @ Value::Object(_)) => Ok(inner),
+        Some(other) => Err(InvokeError::Failed(format!(
+            "{what}: the result is {}, not an object",
+            json_type(&other)
+        ))),
+        None => Err(InvokeError::Failed(format!(
+            "{what}: the answer has no result"
+        ))),
     }
 }
 
@@ -625,6 +747,84 @@ mod tests {
             calls.contains("connections list --adapter tavily"),
             "{calls}"
         );
+    }
+
+    /// `story:connectors-invoke-0-60`: the target comes from the list entry's `connector` and
+    /// `instance`, not from the adapter; an entry without them is refused naming the version.
+    #[test]
+    fn the_invoke_target_is_the_entrys_connector_and_instance() {
+        let mut listed = entry("tavily-alias", "conn_A", "p", "ready");
+        listed["connector"] = json!("tavily");
+        listed["instance"] = json!("main");
+        assert_eq!(
+            target("tavily-alias", "conn_A", &listed).unwrap(),
+            "tavily/main"
+        );
+        for missing in ["connector", "instance"] {
+            let mut old = listed.clone();
+            old.as_object_mut().unwrap().remove(missing);
+            let why = target("tavily-alias", "conn_A", &old)
+                .unwrap_err()
+                .to_string();
+            for part in ["conn_A", "Connectors 0.60.0 or newer"] {
+                assert!(why.contains(part), "{part:?} in {why}");
+            }
+        }
+    }
+
+    /// A parse refusal carries its code in `error.code` and an empty `data`: the reason names it,
+    /// not "unknown"; and an `invoke` refused so names the Connectors version cortex needs.
+    #[test]
+    fn a_parse_refusal_is_named_and_on_invoke_names_connectors_0_60() {
+        let parse = json!({"error": {"code": "cli_parse", "data": {}}, "ok": false});
+        let why = envelope(parse.clone(), "tavily.op")
+            .unwrap_err()
+            .to_string();
+        assert!(why.contains("tavily.op: cli_parse at unknown"), "{why}");
+        let why = invoked(parse, "tavily.op").unwrap_err().to_string();
+        for part in ["cli_parse", "Connectors 0.60.0 or newer"] {
+            assert!(why.contains(part), "{part:?} in {why}");
+        }
+        let lapsed = json!({"ok": false, "error": {"code": "failure",
+            "data": {"code": "not_granted", "stage": "admission"}}});
+        assert!(matches!(
+            invoked(lapsed, "tavily.op"),
+            Err(InvokeError::Lapsed(_))
+        ));
+        let other = json!({"ok": false, "error": {"code": "failure",
+            "data": {"code": "unavailable", "stage": "dispatch"}}});
+        let why = invoked(other, "tavily.op").unwrap_err().to_string();
+        assert!(!why.contains("0.60.0"), "{why}");
+    }
+
+    /// R3-10: an object `result` is the answer; any other JSON type is refused naming it.
+    #[test]
+    fn a_result_that_is_no_object_is_refused_naming_its_json_type() {
+        let answer = |result: Value| {
+            json!({"connector": "tavily", "instance": "main", "operation": "op",
+                   "revision": "r", "result": result})
+        };
+        assert_eq!(
+            result("tavily.op", answer(json!({"records": []}))).unwrap(),
+            json!({"records": []})
+        );
+        for (value, named) in [
+            (json!([1]), "an array"),
+            (json!("{\"records\":[]}"), "a string"),
+            (json!(3), "a number"),
+            (json!(true), "a boolean"),
+            (Value::Null, "null"),
+        ] {
+            let why = result("tavily.op", answer(value)).unwrap_err().to_string();
+            assert!(
+                why.contains("tavily.op: the result is ") && why.contains(named),
+                "{named:?} in {why}"
+            );
+        }
+        let why = result("tavily.op", json!({"connector": "tavily"}))
+            .unwrap_err()
+            .to_string();
+        assert!(why.contains("no result"), "{why}");
     }
 
     #[test]

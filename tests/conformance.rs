@@ -77,6 +77,7 @@ fn placeholder_spec() -> m::InstanceSpec {
         store: None,
         redaction: None,
         snapshots: None,
+        runs: None,
         gate: None,
         monitoring: None,
         ask: None,
@@ -229,6 +230,7 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "source_id": e.source_id.0,
                 "documents_new": e.documents_new,
                 "documents_applied": e.documents_applied,
+                "facts_reapplied": e.facts_reapplied,
                 "cost_usd": e.cost_usd.map(|c| c.0),
                 "cost_counted": e.cost_counted,
                 "daily_ceiling_reached": e.daily_ceiling_reached,
@@ -344,8 +346,81 @@ fn manifest_dir() -> std::path::PathBuf {
         .into()
 }
 
+/// The suite a mutation audit hands the runner (`ess verify conform mutate --emit`), when set; its
+/// scenario count is the audit's, so the floor below holds only `spec/suite.json`.
+const SUITE_ENV: &str = "CORTEX_CONFORMANCE_SUITE";
+/// Where to write the run's `ess-conformance-report/2`, for `ess verify conform mutate --collect`.
+const REPORT_ENV: &str = "CORTEX_CONFORMANCE_REPORT";
+
+fn suite_path() -> std::path::PathBuf {
+    std::env::var_os(SUITE_ENV)
+        .map(Into::into)
+        .unwrap_or_else(|| manifest_dir().join("spec/suite.json"))
+}
+
 fn suite() -> Value {
-    serde_json::from_slice(&std::fs::read(manifest_dir().join("spec/suite.json")).unwrap()).unwrap()
+    serde_json::from_slice(&std::fs::read(suite_path()).unwrap()).unwrap()
+}
+
+/// Writes the `ess-conformance-report/2` `--collect` scores: every scenario passed or failed, the
+/// suite bound by the SHA-256 of its exact bytes.
+fn write_report(path: &std::path::Path, suite: &Value, passed: &[String], failed: &[String]) {
+    use sha2::{Digest, Sha256};
+    let bytes = std::fs::read(suite_path()).unwrap();
+    let digest: String = Sha256::digest(&bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    let provenance = &suite["provenance"];
+    let mut passed = passed.to_vec();
+    let mut failed = failed.to_vec();
+    passed.sort();
+    failed.sort();
+    let status = if failed.is_empty() {
+        "passed"
+    } else {
+        "failed"
+    };
+    let report = json!({
+        "format": "ess-conformance-report/2",
+        "specification": format!(
+            "{}/{}",
+            provenance["system"].as_str().unwrap(),
+            provenance["specification_version"].as_str().unwrap()
+        ),
+        "spec_digest": provenance["spec_digest"],
+        "implementation": format!("cortex-conformance {}", env!("CARGO_PKG_VERSION")),
+        "policy": "complete-selection/1",
+        "producer_profile": "go-scenario-status/2",
+        "suite": {
+            "digest": format!("sha256:{digest}"),
+            "digest_profile": "sha256-json-bytes/1",
+            "version": provenance["suite_version"],
+        },
+        "coverage": {"knowledge": "unknown"},
+        "counts": {
+            "total": passed.len() + failed.len(),
+            "passed": passed.len(),
+            "failed": failed.len(),
+            "error": 0,
+            "unsupported": 0,
+            "skipped": 0,
+        },
+        "outcomes": {
+            "passed": passed,
+            "failed": failed,
+            "error": [],
+            "unsupported": [],
+            "skipped": [],
+        },
+        "execution_status": status,
+        "conformance_status": if failed.is_empty() { "inconclusive" } else { "failed" },
+        "completed_at": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64,
+    });
+    std::fs::write(path, serde_json::to_string_pretty(&report).unwrap() + "\n").unwrap();
 }
 
 /// The pattern the generated event schema gives `field` of `event`, which a `decimal` must match.
@@ -635,6 +710,13 @@ impl Scenario {
                     Some(("SeedChangeRefused", json!({"name": error.name.0}))),
                 ),
                 m::UpdateInstanceOutcome::Updated { .. } => ("updated", None),
+                m::UpdateInstanceOutcome::RekeyRefused { error } => (
+                    "rekey-refused",
+                    Some((
+                        "RekeyRefused",
+                        json!({"name": error.name.0, "source": error.source, "field": error.field}),
+                    )),
+                ),
                 m::UpdateInstanceOutcome::NotActive { error } => (
                     "not-active",
                     Some((
@@ -942,6 +1024,10 @@ impl Scenario {
                     "propose-failed",
                     Some(("ProposeFailed", json!({"reason": error.reason}))),
                 ),
+                m::ProposeSchemaChangesOutcome::StoreOutcomeUnknown { error } => (
+                    "store-outcome-unknown",
+                    Some(("StoreOutcomeUnknown", json!({"reason": error.reason}))),
+                ),
                 m::ProposeSchemaChangesOutcome::NoSuchInstance { error } => (
                     "no-such-instance",
                     Some(("InstanceNotFound", json!({"name": error.name.0}))),
@@ -1071,6 +1157,40 @@ impl Scenario {
                     "reader-failed",
                     Some(("cortex.ask.ReaderFailed", json!({"reason": error.reason}))),
                 ),
+                ma::AskOutcome::Busy { error } => (
+                    "busy",
+                    Some((
+                        "cortex.ask.Busy",
+                        json!({"max_in_flight": error.max_in_flight}),
+                    )),
+                ),
+                ma::AskOutcome::CutOff { error } => (
+                    "cut-off",
+                    Some((
+                        "cortex.ask.CutOff",
+                        json!({
+                            "finish_reason": error.finish_reason,
+                            "steps": error.steps,
+                            "input_tokens": error.input_tokens,
+                            "output_tokens": error.output_tokens,
+                            "cached_tokens": error.cached_tokens,
+                            "context_tokens": error.context_tokens,
+                        }),
+                    )),
+                ),
+                ma::AskOutcome::ClientClosed { error } => (
+                    "client-closed",
+                    Some((
+                        "cortex.ask.ClientClosed",
+                        json!({
+                            "steps": error.steps,
+                            "input_tokens": error.input_tokens,
+                            "output_tokens": error.output_tokens,
+                            "cached_tokens": error.cached_tokens,
+                            "context_tokens": error.context_tokens,
+                        }),
+                    )),
+                ),
             },
             "cortex.ask.RecordAnswer" => {
                 let tool_calls = input
@@ -1104,14 +1224,8 @@ impl Scenario {
                         question: s("question"),
                         answer: optional("answer"),
                         reason: optional("reason"),
-                        outcome: [
-                            ma::AnswerOutcome::Answered,
-                            ma::AnswerOutcome::Failed,
-                            ma::AnswerOutcome::Limited,
-                        ]
-                        .into_iter()
-                        .find(|o| records::outcome_name(*o) == outcome)
-                        .unwrap_or_else(|| panic!("unknown answer outcome {outcome}")),
+                        outcome: records::outcome_of(&outcome)
+                            .unwrap_or_else(|| panic!("unknown answer outcome {outcome}")),
                         tool_calls,
                         latency_ms: int("latency_ms"),
                         input_tokens: int("input_tokens"),
@@ -1151,6 +1265,17 @@ impl Scenario {
                         Some((
                             "cortex.ask.AnswerNotFound",
                             json!({"answer_id": error.answer_id.0}),
+                        )),
+                    ),
+                    ma::CastVoteOutcome::BadRequest { error } => (
+                        "bad-request",
+                        Some(("cortex.ask.BadRequest", json!({"message": error.message}))),
+                    ),
+                    ma::CastVoteOutcome::StoreFailed { error } => (
+                        "store-failed",
+                        Some((
+                            "cortex.ask.StoreFailed",
+                            json!({"request_id": error.request_id}),
                         )),
                     ),
                 }
@@ -1200,6 +1325,17 @@ impl Scenario {
                     Some((
                         "cortex.ask.ReviewNotFound",
                         json!({"review_id": error.review_id.0}),
+                    )),
+                ),
+                ma::CloseReviewOutcome::BadRequest { error } => (
+                    "bad-request",
+                    Some(("cortex.ask.BadRequest", json!({"message": error.message}))),
+                ),
+                ma::CloseReviewOutcome::StoreFailed { error } => (
+                    "store-failed",
+                    Some((
+                        "cortex.ask.StoreFailed",
+                        json!({"request_id": error.request_id}),
                     )),
                 ),
             },
@@ -1524,6 +1660,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     );
     let scenarios = suite["scenarios"].as_object().expect("scenarios");
     let mut failed = Vec::new();
+    let (mut passed_ids, mut failed_ids) = (Vec::new(), Vec::new());
     for (name, scenario) in scenarios {
         let steps = scenario["steps"].as_array().expect("steps").clone();
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -1539,13 +1676,21 @@ fn every_scenario_of_the_synthesized_suite_holds() {
                 .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
                 .unwrap_or_default();
             failed.push(format!("{name}: {msg}"));
+            failed_ids.push(name.clone());
+        } else {
+            passed_ids.push(name.clone());
         }
     }
-    assert_eq!(
-        scenarios.len(),
-        115,
-        "the suite's scenario count moved; update this floor"
-    );
+    if let Some(path) = std::env::var_os(REPORT_ENV) {
+        write_report(path.as_ref(), &suite, &passed_ids, &failed_ids);
+    }
+    if std::env::var_os(SUITE_ENV).is_none() {
+        assert_eq!(
+            scenarios.len(),
+            124,
+            "the suite's scenario count moved; update this floor"
+        );
+    }
     assert!(
         failed.is_empty(),
         "{} of {} scenarios failed:\n{}",

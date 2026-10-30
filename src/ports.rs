@@ -353,6 +353,7 @@ fn source_ran(source_id: m::SourceId, report: &Report) -> m::SourceRan {
         source_id,
         documents_new: report.documents_new,
         documents_applied: report.documents_applied,
+        facts_reapplied: report.facts_reapplied as i64,
         cost_usd: cost_decimal(report.cost_usd),
         cost_counted: report.cost_counted,
         daily_ceiling_reached: report.daily_ceiling_reached,
@@ -642,6 +643,12 @@ impl RunSourceBehavior for Ports {
         ]
         .into_iter()
         .find(|(outcome, _)| self.decided(RUN, outcome));
+        // A run that applied a batch and then failed reports what it read, applied and spent,
+        // as a run that ended `ran` does (main.rs, `status::Figures`); one that failed before it
+        // applied a batch reports none. A run its gate undid reports what it read and spent,
+        // and no applied document: the store holds none.
+        self.shared.borrow_mut().last_run = None;
+        let mut partial = Report::default();
         let result = match forced {
             Some((_, failure)) => Err(failure(self.generate_string())),
             None => {
@@ -649,10 +656,13 @@ impl RunSourceBehavior for Ports {
                 let layout = Layout::new(self.home.instance_dir(&found.data.instance_name.0));
                 match self.runner.as_mut() {
                     Some(runner) => runner(&found.data),
-                    None => run::run(&layout, &self.tools, &found.data),
+                    None => run::run(&layout, &self.tools, &found.data, &mut partial),
                 }
             }
         };
+        if result.is_err() && (partial.documents_applied > 0 || partial.undone) {
+            self.shared.borrow_mut().last_run = Some(partial);
+        }
         let report = match result {
             Err(Failure::Fetch(reason)) => {
                 self.note(found, m::RunOutcome::FetchFailed, Some(reason.clone()));
@@ -726,5 +736,21 @@ impl RunSourceBehavior for Ports {
         let ran = source_ran(input.source_id, &report);
         self.shared.borrow_mut().last_run = Some(report);
         Ok(m::RunSourceOutcome::Ran { source_ran: ran })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `SourceRan` carries the facts the run applied again, as the run's report counts them.
+    #[test]
+    fn the_source_ran_event_carries_the_facts_the_run_applied_again() {
+        let report = Report {
+            facts_reapplied: 3,
+            ..Report::default()
+        };
+        let ran = source_ran(m::SourceId("i/s".into()), &report);
+        assert_eq!(ran.facts_reapplied, 3);
     }
 }

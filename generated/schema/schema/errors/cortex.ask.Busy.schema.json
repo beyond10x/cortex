@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Busy payload",
+  "description": "The service is working on `max_in_flight` answers already; it answers 429 at once, asks no model and spends no question of the minute. Ask again later.",
+  "x-ess-name": "cortex.ask.Busy",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "max_in_flight": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "max_in_flight"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
+    "contract_digest": "slice-sha256/2:951d0b3ba117eb7f83eddc1ae6abfd0aae0644b6143551923633243e640eaa87",
+    "regenerate": "ess generate"
+  }
+}

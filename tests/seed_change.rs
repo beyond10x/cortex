@@ -324,3 +324,131 @@ fn a_dangling_or_looping_symlink_inside_a_seed_directory_is_left_out() {
     let same = update(&w, &spec);
     assert_eq!(outcome(&same), (0, Some("updated")), "{}", same.1);
 }
+
+/// The world's spec `t` with its one source `issues` a `connectors` source of `adapter`'s
+/// `operation`, keyed by the record path `id` (`story:update-refuses-rekey`).
+fn connectors_spec(w: &World, adapter: &str, operation: &str, id: &str) -> PathBuf {
+    let path = w.spec("t", "conn_test");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let start = text.find("sources:\n").unwrap();
+    let end = text.find("serve:").unwrap();
+    let source = format!(
+        r#"sources:
+  - name: issues
+    schedule: daily
+    settings:
+      kind: connectors
+      value:
+        adapter: {adapter}
+        connection: conn_test
+        operation: {operation}
+        inputs: [{{}}]
+        records: /issues
+        id: {id}
+        text: [/summary]
+    policy: {{refresh_after_days: 0, change: ContentHash, max_documents_per_run: 10, max_chars_per_document: 5000}}
+"#
+    );
+    std::fs::write(&path, format!("{}{source}{}", &text[..start], &text[end..])).unwrap();
+    path
+}
+
+/// The bytes of the instance's frozen spec and of its source `issues`' state file, `None` when
+/// it has none.
+fn frozen_and_seen(w: &World) -> (String, Option<String>) {
+    let dir = w.home.join("instances/t");
+    (
+        std::fs::read_to_string(dir.join("instance.yaml")).unwrap(),
+        std::fs::read_to_string(dir.join("state/issues.json")).ok(),
+    )
+}
+
+/// Writes the state file of the source `issues` with `keys` seen.
+fn seen(w: &World, keys: &[&str]) {
+    let documents: serde_json::Map<String, Value> = keys
+        .iter()
+        .map(|k| {
+            (
+                k.to_string(),
+                serde_json::json!({"hash": "h", "applied_at": 1_790_000_000_000_i64}),
+            )
+        })
+        .collect();
+    let dir = w.home.join("instances/t/state");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("issues.json"),
+        serde_json::json!({"format": "cortex.seen/1", "documents": documents}).to_string(),
+    )
+    .unwrap();
+}
+
+/// Acceptance 1: a change to how a `connectors` source keys its documents (its `id` path, its
+/// `adapter` or its `operation`) while its seen state holds keys is refused as `rekey-refused`,
+/// exit 1, naming the source and the field; the frozen spec and the state file are unchanged.
+#[test]
+fn an_update_that_rekeys_a_source_with_seen_documents_is_refused() {
+    let w = World::new();
+    let spec = connectors_spec(&w, "tavily", "issues.list", "/key");
+    create(&w, &spec);
+    seen(&w, &["I-1", "I-2"]);
+    let before = frozen_and_seen(&w);
+    let listed = observed(&w).0;
+
+    for (field, adapter, operation, id) in [
+        ("id", "tavily", "issues.list", "/number"),
+        ("adapter", "tracker", "issues.list", "/key"),
+        ("operation", "tavily", "issues.search", "/key"),
+    ] {
+        connectors_spec(&w, adapter, operation, id);
+        let refused = update(&w, &spec);
+        assert_eq!(
+            outcome(&refused),
+            (1, Some("rekey-refused")),
+            "{field}: {}",
+            refused.1
+        );
+        let detail = &refused.1["detail"];
+        assert_eq!(detail["name"], "t", "{}", refused.1);
+        assert_eq!(detail["source"], "issues", "{}", refused.1);
+        assert_eq!(detail["field"], field, "{}", refused.1);
+        assert_eq!(frozen_and_seen(&w), before, "{field}: the refusal wrote");
+        assert_eq!(
+            observed(&w).0,
+            listed,
+            "{field}: the refusal changed the row"
+        );
+    }
+
+    // The spec as frozen is still accepted.
+    connectors_spec(&w, "tavily", "issues.list", "/key");
+    let same = update(&w, &spec);
+    assert_eq!(outcome(&same), (0, Some("updated")), "{}", same.1);
+}
+
+/// Acceptance 2: the same change on a source with no state file, or one with no seen document,
+/// is accepted.
+#[test]
+fn an_update_that_rekeys_a_source_with_no_seen_documents_is_accepted() {
+    let w = World::new();
+    let spec = connectors_spec(&w, "tavily", "issues.list", "/key");
+    create(&w, &spec);
+    let _ = std::fs::remove_file(w.home.join("instances/t/state/issues.json"));
+
+    connectors_spec(&w, "tavily", "issues.list", "/number");
+    let missing = update(&w, &spec);
+    assert_eq!(outcome(&missing), (0, Some("updated")), "{}", missing.1);
+    assert!(
+        frozen_and_seen(&w).0.contains("id: /number"),
+        "the frozen spec is the new one"
+    );
+
+    seen(&w, &[]);
+    connectors_spec(&w, "tavily", "issues.search", "/key");
+    let empty = update(&w, &spec);
+    assert_eq!(outcome(&empty), (0, Some("updated")), "{}", empty.1);
+    assert!(
+        frozen_and_seen(&w).0.contains("operation: issues.search"),
+        "the frozen spec is the new one"
+    );
+}

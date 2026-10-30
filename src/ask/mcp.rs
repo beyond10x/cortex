@@ -1,5 +1,12 @@
 //! The EKR MCP reader (`ekr mcp`), spoken to over its stdio: one JSON-RPC message per line. One
 //! reader is started per answer and killed when the answer ends.
+//!
+//! The reader is not pooled across answers, on purpose: an answer that ends at a limit, fails or
+//! loses its client may leave its reader mid-call, stuck or holding state, and only killing it
+//! guarantees the next answer does not inherit it. `tests/ask_adversary.rs` holds that every
+//! reader an answer started is gone when its stream ends, and that a closed request stops its
+//! reader. The cost is one start (and one store open) per question, bounded by
+//! `ask.max_in_flight` readers at once.
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
@@ -39,9 +46,15 @@ impl Reader {
             .stderr(Stdio::null());
         // The reader reads a store and needs no model credential: no ANTHROPIC_* or CLAUDE_*
         // variable, nor the names the command lists (the gateway's token), reaches it.
+        // Nor any `EKR_*` variable it inherits (such as `EKR_STAGE` or `EKR_FULL_REPLAY` from the
+        // operator's shell): only the ones the command sets below, as for a store `ekr` a run
+        // starts (`crate::ekr`).
         for (name, _) in std::env::vars_os() {
             let name = name.to_string_lossy();
-            if name.starts_with("ANTHROPIC_") || name.starts_with("CLAUDE_") {
+            if name.starts_with("ANTHROPIC_")
+                || name.starts_with("CLAUDE_")
+                || name.starts_with("EKR_")
+            {
                 cmd.env_remove(name.as_ref());
             }
         }

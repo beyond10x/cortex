@@ -829,8 +829,8 @@ fn a_postgres_run_that_fails_its_gate_is_undone() {
         .unwrap_or_else(|| panic!("no abandoned stage: {listed}"));
     assert_eq!(undone["base"].as_i64(), Some(kept), "{listed}");
 
-    // The failing run's `apply-extraction` and the gate's reads ran in its stage, through the
-    // launch; the stage verbs ran on the store.
+    // The failing run's `apply-extraction` and its session, through which the run and the gate
+    // read, ran in its stage, through the launch; the stage verbs ran on the store.
     let id = undone["stage_id"].as_str().unwrap();
     let log = std::fs::read_to_string(w.root.join("ekr-stage.log")).unwrap();
     let run_log: Vec<&str> = log.lines().skip(log_lines).collect();
@@ -840,7 +840,7 @@ fn a_postgres_run_that_fails_its_gate_is_undone() {
             .any(|l| l.starts_with(&format!("{id}|{verb}")))
     };
     assert!(in_stage("apply-extraction"), "{log}");
-    assert!(in_stage("ontology"), "{log}");
+    assert!(in_stage("session"), "{log}");
     for verb in ["stage begin", &format!("stage abandon {id}")] {
         assert!(
             run_log.iter().any(|l| *l == format!("-|{verb}")),
@@ -883,6 +883,57 @@ fn maker_proposer(w: &World) {
         r#"fact=$(cat | grep -oE '^=== Fact [0-9a-f-]{36}' | head -1 | cut -d' ' -f3)
 echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"total_cost_usd\":0.02,\"structured_output\":{\"proposals\":[{\"change\":{\"kind\":\"add_node_type\",\"value\":{\"name\":\"Maker\",\"properties\":[]}},\"reason\":\"r\",\"facts\":[\"$fact\"],\"evidence\":[\"E1\"]}]}}"
 "#,
+    );
+}
+
+/// Adversary, `story:ekr-session-per-run` acceptance 2 on PostgreSQL: the gate's `ekr quality`,
+/// asked through the run's session joined to its stage, reads what the run's one-shot
+/// `apply-extraction`s committed in that stage. A gate of `assertions.active max 0` on a store the
+/// run fills refuses it, naming a count above 0, and the head stays where it was.
+#[test]
+fn adversary_a_postgres_runs_session_quality_reads_the_applies_of_its_stage() {
+    if !container_runtime("the PostgreSQL session visibility case") {
+        return;
+    }
+    let w = World::new();
+    let pg = Postgres::start(&w.root);
+    let state = w.root.join("connectors-state");
+    let (app, owner) = pg.launched(&state);
+    let staged_ekr = stage_logging_ekr(&w);
+    launching_connectors(&w, &state, &staged_ekr);
+    let spec = spec_with_ekr(&w, "pg", &launched_store(&app), &staged_ekr);
+    let mut text = std::fs::read_to_string(&spec).unwrap();
+    text.push_str("gate:\n  checks:\n    - {measure: assertions.active, max: \"0\"}\n");
+    std::fs::write(&spec, text).unwrap();
+    let (code, out, err) = cortex(
+        &w,
+        &[
+            "create",
+            "--spec",
+            spec.to_str().unwrap(),
+            "--postgres-schema-config",
+            owner.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, Some(0), "{out}{err}");
+    let dir = w.home.join("instances/pg");
+    let head = postgres_head(&dir, &pg.app)["revision"].as_i64();
+
+    let (code, out, err) = cortex(&w, &["run", "pg/docs"]);
+    let refused = last_json(&out);
+    assert_ne!(code, Some(0), "{out}{err}");
+    assert_eq!(refused["outcome"], "apply-refused", "{out}{err}");
+    let reason = refused["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(reason.contains("assertions.active = "), "{reason}");
+    assert!(
+        !reason.contains("assertions.active = 0 "),
+        "the session's quality did not see the stage's applies: {reason}"
+    );
+    assert_eq!(postgres_head(&dir, &pg.app)["revision"].as_i64(), head);
+    let log = std::fs::read_to_string(w.root.join("ekr-stage.log")).unwrap();
+    assert!(
+        !log.lines().any(|l| l.ends_with("|quality")),
+        "the gate's quality was a request, not a process: {log}"
     );
 }
 
@@ -2195,6 +2246,7 @@ fn review_the_direct_viewer_exec_start_quotes_the_ekr_path() {
         store: w.root.join("pg/app.json"),
         launch: None,
         stage: None,
+        ready: Default::default(),
     };
     world_systemd(&w).install_view("q", &store, 18996).unwrap();
     let unit = std::fs::read_to_string(w.units.join("cortex-q-view.service")).unwrap();
@@ -2225,6 +2277,7 @@ fn review_the_launched_viewer_exec_start_quotes_every_word() {
             schema_connection: None,
         }),
         stage: None,
+        ready: Default::default(),
     };
     world_systemd(&w).install_view("q", &store, 18996).unwrap();
     let unit = std::fs::read_to_string(w.units.join("cortex-q-view.service")).unwrap();
@@ -2327,7 +2380,8 @@ fn security_every_ekr_that_opens_a_launched_store_holds_the_connection_on_descri
     let _ = cortex(&w, &["schema", "pg", "--sample", "1", "--dry-run"]);
 
     let (log, opened) = store_invocations(&w);
-    for verb in ["head", "seed", "apply-extraction", "quality", "sample"] {
+    // The run's reads and its gate's `ekr quality` are requests to its `ekr session`.
+    for verb in ["head", "seed", "apply-extraction", "session", "sample"] {
         assert!(
             opened
                 .iter()

@@ -45,6 +45,9 @@ pub enum FetchError {
     /// [`InvokeError::Unavailable`]: Connectors could not revalidate the connection before the run
     /// fetched anything.
     Unavailable(String),
+    /// The run was sent SIGTERM ([`crate::terminate`]) and the fetch stopped: a `connectors` call
+    /// ended ([`InvokeError::Terminated`]), or no further page or file read. What it stopped.
+    Terminated(String),
 }
 
 impl From<InvokeError> for FetchError {
@@ -53,6 +56,7 @@ impl From<InvokeError> for FetchError {
             InvokeError::Missing(m) => FetchError::Missing(m),
             InvokeError::Failed(m) | InvokeError::Lapsed(m) => FetchError::Failed(m),
             InvokeError::Unavailable(m) => FetchError::Unavailable(m),
+            InvokeError::Terminated(m) => FetchError::Terminated(m),
         }
     }
 }
@@ -60,9 +64,20 @@ impl From<InvokeError> for FetchError {
 impl std::fmt::Display for FetchError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Missing(m) | Self::Failed(m) | Self::Unavailable(m) => f.write_str(m),
+            Self::Missing(m) | Self::Failed(m) | Self::Unavailable(m) | Self::Terminated(m) => {
+                f.write_str(m)
+            }
         }
     }
+}
+
+/// A safe point of a fetch, between its pages and its files: [`FetchError::Terminated`] once the
+/// run was sent SIGTERM ([`crate::terminate`]), naming what it did not read.
+fn stop_before(what: impl FnOnce() -> String) -> Result<(), FetchError> {
+    if crate::terminate::requested() {
+        return Err(FetchError::Terminated(format!("{} was not read", what())));
+    }
+    Ok(())
 }
 
 /// How far a run's `{since}` reaches back before the start of the last successful run: a record a
@@ -79,11 +94,13 @@ pub struct Window {
 }
 
 impl Window {
-    /// The window of a run that starts at `start_ms`. It reaches back [`OVERLAP_MS`] before the start
-    /// of the source's last successful run, or, before the first, `refresh_after_days` before
-    /// `start_ms`; and never later than `held_since_ms`, which covers every change the last run
-    /// held back, or `pending_since_ms`, the `{since}` of a run since the last successful one that
-    /// did not succeed.
+    /// The window of a run that starts at `start_ms`. It starts at `pending_since_ms`, which a run
+    /// since the last successful one that did not succeed left (`SeenState::pending_after`: that
+    /// run's `{since}`, or the earliest record time it wanted and did not apply, less the
+    /// overlap, every record before it read and applied); without one, [`OVERLAP_MS`] before the
+    /// start of the source's last successful run, or, before the first, `refresh_after_days`
+    /// before `start_ms`. It is never later than `held_since_ms`, which covers every change the
+    /// last run held back.
     pub fn of_run(
         start_ms: i64,
         last_success_ms: Option<i64>,
@@ -91,14 +108,14 @@ impl Window {
         pending_since_ms: Option<i64>,
         refresh_after_days: i64,
     ) -> Self {
-        let since = last_success_ms.map_or(start_ms - refresh_after_days * 86_400_000, |last| {
-            last - OVERLAP_MS
+        let since = pending_since_ms.unwrap_or_else(|| {
+            last_success_ms.map_or(
+                start_ms.saturating_sub(refresh_after_days.saturating_mul(86_400_000)),
+                |last| last - OVERLAP_MS,
+            )
         });
         Self {
-            since_ms: [held_since_ms, pending_since_ms]
-                .into_iter()
-                .flatten()
-                .fold(since, i64::min),
+            since_ms: held_since_ms.into_iter().fold(since, i64::min),
             until_ms: start_ms,
         }
     }
@@ -129,8 +146,61 @@ pub fn rfc3339(ms: i64) -> String {
 
 /// `input` with the window placeholders in every string value replaced by the window's instants:
 /// `{since}` and `{until}` in RFC 3339, `{since_epoch}` and `{until_epoch}` as whole seconds since
-/// the Unix epoch, cut to the second as [`rfc3339`] cuts them, so both name the same instant.
+/// the Unix epoch, cut to the second as [`rfc3339`] cuts them, so both name the same instant, and
+/// `{since_minutes_ago}` as the whole minutes from the window's start to the run's start
+/// ([`minutes_ago`]). A call fills that one at its own time instead ([`window_for_call`]).
 fn with_window(input: &Value, window: &Window) -> Value {
+    since_minutes_ago(
+        &window_for_call(input, window),
+        window.since_ms,
+        window.until_ms,
+    )
+}
+
+/// The whole minutes from `since_ms` to `at_ms`, rounded up from the milliseconds, so a relative
+/// date of that many minutes before `at_ms` (`updated >= -{since_minutes_ago}m`) is no later than
+/// `since_ms`.
+fn minutes_ago(since_ms: i64, at_ms: i64) -> String {
+    at_ms
+        .saturating_sub(since_ms)
+        .saturating_add(59_999)
+        .div_euclid(60_000)
+        .to_string()
+}
+
+/// `input` with `{since_minutes_ago}` in every string value replaced by [`minutes_ago`] from
+/// `since_ms` to `at_ms`.
+fn since_minutes_ago(input: &Value, since_ms: i64, at_ms: i64) -> Value {
+    match input {
+        Value::String(t) => {
+            Value::String(t.replace("{since_minutes_ago}", &minutes_ago(since_ms, at_ms)))
+        }
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|v| since_minutes_ago(v, since_ms, at_ms))
+                .collect(),
+        ),
+        Value::Object(fields) => Value::Object(
+            fields
+                .iter()
+                .map(|(k, v)| (k.clone(), since_minutes_ago(v, since_ms, at_ms)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// `input`, its pages' too, as each call is made with it: `{since_minutes_ago}` filled from the
+/// window's start to the time of the call, so a call made after the run's start (a later input,
+/// a later page, a retry after a renewal: [`Connectors::invoke_filled`]) still asks from no later
+/// than `{since}`.
+fn at_call(input: &Value, since_ms: i64) -> Value {
+    since_minutes_ago(input, since_ms, crate::instance::now_ms())
+}
+
+/// [`with_window`] but `{since_minutes_ago}`, which is left for [`at_call`].
+fn window_for_call(input: &Value, window: &Window) -> Value {
     match input {
         Value::String(t) => Value::String(
             t.replace("{since}", &rfc3339(window.since_ms))
@@ -144,11 +214,13 @@ fn with_window(input: &Value, window: &Window) -> Value {
                     &window.until_ms.div_euclid(1000).to_string(),
                 ),
         ),
-        Value::Array(items) => Value::Array(items.iter().map(|v| with_window(v, window)).collect()),
+        Value::Array(items) => {
+            Value::Array(items.iter().map(|v| window_for_call(v, window)).collect())
+        }
         Value::Object(fields) => Value::Object(
             fields
                 .iter()
-                .map(|(k, v)| (k.clone(), with_window(v, window)))
+                .map(|(k, v)| (k.clone(), window_for_call(v, window)))
                 .collect(),
         ),
         other => other.clone(),
@@ -273,6 +345,7 @@ fn walk_until(
         .collect();
     let pages = paging.map_or(1, |p| p.max_pages.max(1));
     for n in 1..=pages {
+        stop_before(|| format!("{what}: page {n}"))?;
         let answer = invoke(&input)?;
         let answer = body(&answer);
         let page = at(answer, records)
@@ -360,6 +433,48 @@ fn percent_decode(text: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
+/// The largest file a `files` or `structured` source reads, and a `records` lookup file: 16 MiB.
+pub const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+
+/// The bytes of the file at `path`, read up to [`MAX_FILE_BYTES`] and no further; why not, when it
+/// cannot be read (`cannot be read: <error>`), is no regular file once symlinks are followed (`not
+/// a regular file`: a FIFO would block the run in `open`), or is larger (`larger than the 16 MiB
+/// cap`). It is opened without blocking and checked again, so a FIFO put in its place after the
+/// first check is refused as well.
+fn read_capped(path: &Path) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    use std::os::unix::fs::OpenOptionsExt;
+    let regular = |meta: std::fs::Metadata| {
+        if meta.is_file() {
+            Ok(())
+        } else {
+            Err("not a regular file".to_string())
+        }
+    };
+    std::fs::metadata(path)
+        .map_err(|e| format!("cannot be read: {e}"))
+        .and_then(regular)?;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
+        .open(path)
+        .map_err(|e| format!("cannot be read: {e}"))?;
+    file.metadata()
+        .map_err(|e| format!("cannot be read: {e}"))
+        .and_then(regular)?;
+    let mut bytes = Vec::new();
+    file.take(MAX_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("cannot be read: {e}"))?;
+    if bytes.len() as u64 > MAX_FILE_BYTES {
+        return Err(format!(
+            "larger than the {} MiB cap",
+            MAX_FILE_BYTES / (1024 * 1024)
+        ));
+    }
+    Ok(bytes)
+}
+
 /// Adds `why` to `unread` unless it is there already.
 fn note(unread: &mut Vec<String>, why: String) {
     if !unread.contains(&why) {
@@ -394,6 +509,10 @@ pub struct Fetched {
     /// A `structured` source's child calls that failed, one per parent and operation. The parent
     /// and the other children are read; the run names each in `skipped`.
     pub failed_children: Vec<ChildFailure>,
+    /// A `structured` source's child calls its `follow` rule left out, one per parent and
+    /// operation: `(parent raw id, operation)`. The run keeps the values of those children as for
+    /// a failed call, and counts them per operation in `skipped`.
+    pub not_followed: Vec<(String, String)>,
     /// What a `structured` source's `links` found: by the identity of each change linked, the
     /// link's relation and the identity of the tag it is linked to, in the order of `links`.
     pub links: BTreeMap<String, Vec<(String, String)>>,
@@ -429,6 +548,17 @@ pub struct LinkFailure {
 /// Consecutive runs a parent's child call may fail and still hold the window; from this many on,
 /// the parent is skipped.
 pub const CHILD_FAILURE_LIMIT: u32 = 3;
+
+/// Consecutive runs a document's extraction may fail with the document alone in its request and
+/// still be asked again; from this many on, it is skipped until its text changes
+/// (`crate::state::Failures`).
+pub const DOCUMENT_FAILURE_LIMIT: u32 = 3;
+
+/// Batches of several documents a document may be in that the model answered it failed on, with
+/// no failure alone, and still be asked in a batch: a batch that failed once is asked whole once
+/// more, and from this many failures on each of its documents is asked alone
+/// (`crate::state::Failures::alone`).
+pub const BATCH_FAILURE_LIMIT: u32 = 2;
 
 /// The documents of one source. `window` fills `{since}` and `{until}` in a `connectors`
 /// source's inputs, and `child_failures` counts the consecutive runs each parent's child call
@@ -548,8 +678,9 @@ fn mapped_records<'r>(
 /// The records of a `structured` source's `files` input: every file under `paths` (read against
 /// `base`, `~/` expanded) whose path below its root matches `glob`, in file name order, each a
 /// JSON document whose `records` path holds the list (a leading byte-order mark is ignored), read
-/// as [`structured_records`] reads a page. A root, a file or a list that cannot be read fails the
-/// fetch, naming the file, and so does a root under which no file matches `glob`: a source that
+/// as [`structured_records`] reads a page. A root, a file or a list that cannot be read, or a file
+/// over [`MAX_FILE_BYTES`], fails the fetch, naming the file, and so does a root under which no
+/// file matches `glob`: a source that
 /// leaves a record out of a run must not have it read as no longer listed (`dropped: Supersede`).
 fn fetch_structured_files(
     st: &m::StructuredSource,
@@ -576,8 +707,10 @@ fn fetch_structured_files(
             }
             matched = true;
             let path = entry.path().display();
-            let bytes = std::fs::read(entry.path())
-                .map_err(|e| FetchError::Failed(format!("{path}: {e}")))?;
+            stop_before(|| "the next file".into())?;
+            // Not skipped: a file left out would have its records read as no longer listed.
+            let bytes = read_capped(entry.path())
+                .map_err(|why| FetchError::Failed(format!("{path}: {why}")))?;
             let unmarked = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
             let answer: Value = serde_json::from_slice(unmarked)
                 .map_err(|e| FetchError::Failed(format!("{path}: not JSON: {e}")))?;
@@ -614,7 +747,8 @@ fn fetch_structured_files(
 /// mapping is one document more, keyed `<child prefix>:<parent raw id>:<raw id>`
 /// ([`crate::structured::child_key`]). A child call that fails leaves that parent's records of
 /// the operation unread and is named in `failed_children`; the parent and its other children are
-/// read.
+/// read. A child with a `follow` rule is called only for a parent the rule matches ([`follows`],
+/// measured from the window's end, the run's start); another parent goes to `not_followed`.
 ///
 /// After its children, each of the source's `links` is found for the parent ([`compare_links`]):
 /// what it links goes to `links`, by the identities the run gives the records (`redactor` is the
@@ -632,6 +766,7 @@ fn fetch_structured(
     let mut unread = Vec::new();
     let mut keys = BTreeSet::new();
     let mut failed_children = Vec::new();
+    let mut not_followed = Vec::new();
     let mut links: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
     let mut failed_links = Vec::new();
     let prefix = crate::structured::prefix(st);
@@ -641,11 +776,15 @@ fn fetch_structured(
         let operation = operation.to_string();
         move |input: &Value| Ok(connectors.invoke(&c.adapter, connection, &operation, input)?)
     };
+    // An input's own calls fill `{since_minutes_ago}` as each attempt is made ([`at_call`]).
+    let fill = |input: &Value| at_call(input, window.since_ms);
     for input in &c.inputs {
         let records = walk(
-            &mut invoker(&c.operation),
+            &mut |input: &Value| {
+                Ok(connectors.invoke_filled(&c.adapter, connection, &c.operation, input, &fill)?)
+            },
             &format!("{}.{}", c.adapter, c.operation),
-            &with_window(&to_serde(input), window),
+            &window_for_call(&to_serde(input), window),
             &st.records,
             c.paging.as_ref(),
             &mut unread,
@@ -655,6 +794,10 @@ fn fetch_structured(
             // call read them all.
             let mut read: BTreeMap<&str, Read> = BTreeMap::new();
             for child in children {
+                if !follows(child.follow.as_ref(), record, window.until_ms) {
+                    not_followed.push((parent.clone(), child.operation.clone()));
+                    continue;
+                }
                 let mut left = Vec::new();
                 let found = walk(
                     &mut invoker(&child.operation),
@@ -678,6 +821,8 @@ fn fetch_structured(
                         let records = added.into_iter().map(|(id, r)| (id, r.clone())).collect();
                         read.insert(child.operation.as_str(), Read { records, whole });
                     }
+                    // A stop is the run's, not a failure of the child call.
+                    Err(e @ FetchError::Terminated(_)) => return Err(e),
                     Err(e) => failed_children.push(ChildFailure {
                         parent: parent.clone(),
                         operation: child.operation.clone(),
@@ -717,6 +862,7 @@ fn fetch_structured(
         documents: docs,
         unread,
         failed_children,
+        not_followed,
         links,
         failed_links,
         ..Fetched::default()
@@ -1041,10 +1187,13 @@ fn invoker<'a>(
 /// The records of a `connectors` source, one document per record. Each input, with the run's
 /// window filled in, is walked page by page, ended with `stop_older_than_since` at the first
 /// record older than the window's start ([`StopAt`]); with a `child`, the child operation is invoked once
-/// per record, its input filled from the record, its pages walked the same way, and each of its
-/// records appended to the parent's text as one JSON paragraph. A parent whose child call fails
+/// per record its `follow` rule matches ([`follows`]), its input filled from the record, its pages
+/// walked the same way, and each of its records appended to the parent's text as one paragraph:
+/// its `text` templates rendered, or its JSON without them. A parent whose child call fails
 /// is left out of this fetch and named in `unread`; from its [`CHILD_FAILURE_LIMIT`]th consecutive
-/// failed run on, in `skipped` instead. A successful call clears the parent's count.
+/// failed run on, in `skipped` instead. A successful call clears the parent's count. A record's key
+/// is `<adapter>:<operation>:<id>` ([`record_id`]); a record with none is left out and counted in
+/// `skipped` by reason.
 fn fetch_records(
     c: &m::ConnectorsSource,
     connection: &str,
@@ -1067,22 +1216,32 @@ fn fetch_records(
             time,
             since_ms: window.since_ms,
         });
+    let what = format!("{}.{}", c.adapter, c.operation);
+    // Records left out for want of a key, counted by reason.
+    let mut unkeyed: BTreeMap<String, usize> = BTreeMap::new();
     for input in &c.inputs {
+        // Each attempt of a call fills `{since_minutes_ago}` at its own time ([`at_call`]); a
+        // record's `{input.…}` reads the input as the run's start filled it.
+        let fill = |input: &Value| at_call(input, window.since_ms);
         let records = walk_until(
-            &mut invoker(connectors, c, connection, &c.operation),
-            &format!("{}.{}", c.adapter, c.operation),
-            &with_window(&to_serde(input), window),
+            &mut |input: &Value| {
+                Ok(connectors.invoke_filled(&c.adapter, connection, &c.operation, input, &fill)?)
+            },
+            &what,
+            &window_for_call(&to_serde(input), window),
             &c.records,
             c.paging.as_ref(),
             stop,
             &mut unread,
         )?;
+        let input = with_window(&to_serde(input), window);
         for record in &records {
-            let Some(id) = at(record, &c.id).map(|v| match v {
-                Value::String(t) => t.clone(),
-                other => other.to_string(),
-            }) else {
-                continue;
+            let id = match record_id(c, record, &input) {
+                Ok(id) => id,
+                Err(why) => {
+                    *unkeyed.entry(why).or_default() += 1;
+                    continue;
+                }
             };
             let mut text = c
                 .text
@@ -1098,7 +1257,11 @@ fn fetch_records(
             if !keys.insert(key.clone()) {
                 continue;
             }
-            if let Some(child) = &c.child {
+            let child = c
+                .child
+                .as_ref()
+                .filter(|child| follows(child.follow.as_ref(), record, window.until_ms));
+            if let Some(child) = child {
                 let children = match walk(
                     &mut invoker(connectors, c, connection, &child.operation),
                     &format!("{}.{}", c.adapter, child.operation),
@@ -1129,9 +1292,20 @@ fn fetch_records(
                         continue;
                     }
                 };
-                for child in &children {
-                    text.push_str("\n\n");
-                    text.push_str(&child.to_string());
+                for record in &children {
+                    let paragraph = match &child.text {
+                        Some(templates) => templates
+                            .iter()
+                            .map(|t| render(t, record))
+                            .filter(|t| !t.trim().is_empty())
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                        None => record.to_string(),
+                    };
+                    if !paragraph.trim().is_empty() {
+                        text.push_str("\n\n");
+                        text.push_str(&paragraph);
+                    }
                 }
             }
             docs.push(Document {
@@ -1150,6 +1324,10 @@ fn fetch_records(
             });
         }
     }
+    for (why, n) in unkeyed {
+        let records = if n == 1 { "record" } else { "records" };
+        skipped.push(format!("{what}: {n} {records} skipped: {why}"));
+    }
     Ok(Fetched {
         documents: docs,
         unread,
@@ -1157,6 +1335,30 @@ fn fetch_records(
         child_failures: failures,
         ..Fetched::default()
     })
+}
+
+/// What a `connectors` record's key holds after `<adapter>:<operation>:`: its `key` template
+/// rendered from the record, with `{input.…}` from `input` (the input it was read with, its window
+/// filled in), or without one the value at `id`, text as it is and any other value as JSON. `Err`
+/// says why there is none: the id is missing or null, or a placeholder of the template names no
+/// scalar, or blank text ([`crate::structured::render_template`]).
+fn record_id(c: &m::ConnectorsSource, record: &Value, input: &Value) -> Result<String, String> {
+    match &c.key {
+        Some(template) => {
+            let mut context = match record {
+                Value::Object(fields) => fields.clone(),
+                _ => serde_json::Map::new(),
+            };
+            context.insert("input".into(), input.clone());
+            crate::structured::render_template(template, &Value::Object(context))
+                .ok_or_else(|| format!("no value for key `{template}`"))
+        }
+        None => match at(record, &c.id) {
+            None | Some(Value::Null) => Err(format!("no value at id `{}`", c.id)),
+            Some(Value::String(t)) => Ok(t.clone()),
+            Some(other) => Ok(other.to_string()),
+        },
+    }
 }
 
 /// `path` from a spec read against `base` with `~/` expanded, as `paths` and `lookup` are.
@@ -1171,11 +1373,11 @@ fn under(base: &Path, path: &str) -> std::path::PathBuf {
 
 /// The lookup file of a `records` spec, a JSON object of strings (an id to a name), read as a
 /// record file is: a leading byte-order mark is ignored, and a blank id or name is no value
-/// ([`scalar`]), so the id it would map is kept. A file that cannot be read, or holds anything
-/// else, fails the fetch with an error naming the file.
+/// ([`scalar`]), so the id it would map is kept. A file that cannot be read, is over
+/// [`MAX_FILE_BYTES`], or holds anything else, fails the fetch with an error naming the file.
 fn read_lookup(path: &Path) -> Result<BTreeMap<String, String>, FetchError> {
-    let bytes = std::fs::read(path)
-        .map_err(|e| FetchError::Failed(format!("lookup {}: {e}", path.display())))?;
+    let bytes = read_capped(path)
+        .map_err(|why| FetchError::Failed(format!("lookup {}: {why}", path.display())))?;
     let unmarked = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
     let lookup: BTreeMap<String, String> = serde_json::from_slice(unmarked).map_err(|e| {
         FetchError::Failed(format!(
@@ -1190,8 +1392,10 @@ fn read_lookup(path: &Path) -> Result<BTreeMap<String, String>, FetchError> {
 }
 
 /// The files of a `files` source: one document per file, or with `records`, one per record of
-/// each file ([`file_records`]), and what was left out as `skipped`. A record's thread context
-/// holds at most `max_context` characters. A `records` lookup file is read once, before any file.
+/// each file ([`file_records`]), and what was left out as `skipped`: a file that cannot be read,
+/// is over [`MAX_FILE_BYTES`] or is not UTF-8 text is named there with the reason. A record's
+/// thread context holds at most `max_context` characters. A `records` lookup file is read once,
+/// before any file.
 fn fetch_files(
     f: &m::FilesSource,
     base: &Path,
@@ -1218,10 +1422,15 @@ fn fetch_files(
             if !glob.is_match(rel) {
                 continue;
             }
-            let Ok(bytes) = std::fs::read(entry.path()) else {
-                continue;
-            };
+            stop_before(|| "the next file".into())?;
             let path = entry.path().display().to_string();
+            let bytes = match read_capped(entry.path()) {
+                Ok(bytes) => bytes,
+                Err(why) => {
+                    note(&mut skipped, format!("{path}: {why}; skipped"));
+                    continue;
+                }
+            };
             let title = entry.file_name().to_str();
             match &f.records {
                 Some(r) => docs.extend(file_records(
@@ -1233,16 +1442,25 @@ fn fetch_files(
                     &mut read,
                     &mut skipped,
                 )),
-                None => docs.extend(whole_file(path, title, bytes)),
+                None => docs.extend(whole_file(path, title, bytes, &mut skipped)),
             }
         }
     }
     Ok((docs, skipped))
 }
 
-/// A file as one document, keyed by its path; none when it is not UTF-8 text or is blank.
-fn whole_file(path: String, title: Option<&str>, bytes: Vec<u8>) -> Option<Document> {
-    let text = String::from_utf8(bytes).ok()?;
+/// A file as one document, keyed by its path; none when it is blank, or when it is not UTF-8
+/// text, which is named in `skipped`.
+fn whole_file(
+    path: String,
+    title: Option<&str>,
+    bytes: Vec<u8>,
+    skipped: &mut Vec<String>,
+) -> Option<Document> {
+    let Ok(text) = String::from_utf8(bytes) else {
+        note(skipped, format!("{path}: not UTF-8 text; skipped"));
+        return None;
+    };
     if text.trim().is_empty() {
         return None;
     }
@@ -1342,7 +1560,7 @@ fn file_records(
     let unmarked = content.strip_prefix(b"\xef\xbb\xbf").unwrap_or(content);
     let records = match r.format {
         m::RecordFormat::WholeFile => {
-            return whole_file(path.into(), title, content.to_vec())
+            return whole_file(path.into(), title, content.to_vec(), skipped)
                 .into_iter()
                 .collect();
         }
@@ -1461,6 +1679,86 @@ fn context(earlier: &[String], max: usize) -> String {
 fn passes(f: &m::RecordFilter, record: &Value) -> bool {
     let hit = scalar(record, &f.field).is_some_and(|v| f.values.contains(&v));
     hit == f.include
+}
+
+/// Whether a child operation is called for the parent `record` under its `follow` rule
+/// (`cortex.instance.FollowRule`), `start_ms` being the run's start. `equals`: the value at the
+/// field is of the rule's JSON kind and equal to it, numbers by value. `within_days`: it is a text
+/// read as a document's time is ([`instant`]), no earlier than `days` days before `start_ms`.
+/// `at_least`: it is a JSON number no less than `number`. A missing field, or a value of another
+/// kind, does not match. No rule matches every parent. An integer compares exactly, however
+/// large, with an integer or with a number written with a fraction or an exponent; only two of
+/// the latter compare as `f64` ([`Num`]).
+pub fn follows(rule: Option<&m::FollowRule>, record: &Value, start_ms: i64) -> bool {
+    let Some(rule) = rule else {
+        return true;
+    };
+    match rule {
+        m::FollowRule::Equals(r) => {
+            let want = to_serde(&r.value);
+            at(record, &r.field).is_some_and(|got| match (Num::of(got), Num::of(&want)) {
+                (Some(a), Some(b)) => a.compare(b) == Some(std::cmp::Ordering::Equal),
+                _ => *got == want,
+            })
+        }
+        m::FollowRule::WithinDays(r) => at(record, &r.field)
+            .and_then(Value::as_str)
+            .and_then(instant)
+            .is_some_and(|t| t >= start_ms.saturating_sub(r.days.saturating_mul(86_400_000))),
+        m::FollowRule::AtLeast(r) => at(record, &r.field)
+            .and_then(Num::of)
+            .and_then(|n| n.compare(Num::Int(i128::from(r.number))))
+            .is_some_and(|o| o != std::cmp::Ordering::Less),
+    }
+}
+
+/// A JSON number as a `follow` rule compares it: an integer (any `i64` or `u64`) as itself,
+/// anything else as the `f64` JSON reads it as.
+#[derive(Clone, Copy)]
+enum Num {
+    Int(i128),
+    Float(f64),
+}
+
+impl Num {
+    fn of(v: &Value) -> Option<Self> {
+        let Value::Number(n) = v else {
+            return None;
+        };
+        n.as_i64()
+            .map(i128::from)
+            .or_else(|| n.as_u64().map(i128::from))
+            .map(Num::Int)
+            .or_else(|| n.as_f64().map(Num::Float))
+    }
+
+    /// Exact between two integers and between an integer and a float ([`int_against_float`]);
+    /// by `f64` only between two floats.
+    fn compare(self, other: Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (Num::Int(a), Num::Int(b)) => Some(a.cmp(&b)),
+            (Num::Int(a), Num::Float(b)) => int_against_float(a, b),
+            (Num::Float(a), Num::Int(b)) => {
+                int_against_float(b, a).map(std::cmp::Ordering::reverse)
+            }
+            (Num::Float(a), Num::Float(b)) => a.partial_cmp(&b),
+        }
+    }
+}
+
+/// `int` against `float` exactly, never casting `int` to `f64`: against the whole number below or
+/// at `float` (an `f64` floor is exact), and below `float` when equal to that floor and `float` has a
+/// fraction. The floor's cast saturates at the `i128` bounds, which no JSON integer (an `i64` or
+/// `u64`) reaches, so a float beyond them, or an infinite one, still orders right. `None` for NaN.
+fn int_against_float(int: i128, float: f64) -> Option<std::cmp::Ordering> {
+    if float.is_nan() {
+        return None;
+    }
+    let floor = float.floor();
+    Some(match int.cmp(&(floor as i128)) {
+        std::cmp::Ordering::Equal if floor < float => std::cmp::Ordering::Less,
+        order => order,
+    })
 }
 
 /// The text, number or boolean at `path` of `record`, as text; `None` for anything else or blank
@@ -1604,6 +1902,147 @@ fn markdown_sections(content: &str) -> Vec<Value> {
 mod tests {
     use super::*;
 
+    /// 2026-10-30T00:00:00Z, and one day, in milliseconds.
+    const START: i64 = 1_793_318_400_000;
+    const DAY: i64 = 86_400_000;
+
+    #[test]
+    fn a_follow_rule_matches_a_parent_by_equal_value_recent_time_or_large_enough_number() {
+        let equals = |value: mj_value::Value| {
+            m::FollowRule::Equals(m::FollowEquals {
+                field: "archived".into(),
+                value,
+            })
+        };
+        let archived = |v: Value| json!({"archived": v});
+        let no = equals(mj_value::Value::Bool(false));
+        assert!(follows(Some(&no), &archived(json!(false)), START));
+        assert!(!follows(Some(&no), &archived(json!(true)), START));
+        assert!(!follows(Some(&no), &archived(json!("false")), START));
+        assert!(!follows(Some(&no), &json!({}), START));
+        let one = equals(mj_value::Value::Number("1".into()));
+        assert!(follows(Some(&one), &archived(json!(1.0)), START));
+        assert!(!follows(Some(&one), &archived(json!("1")), START));
+
+        let recent = m::FollowRule::WithinDays(m::FollowWithinDays {
+            field: "$.last.at".into(),
+            days: 30,
+        });
+        let at = |t: Value| json!({"last": {"at": t}});
+        assert!(follows(
+            Some(&recent),
+            &at(json!(rfc3339(START - 3 * DAY))),
+            START
+        ));
+        assert!(follows(Some(&recent), &at(json!("2026-10-27")), START));
+        assert!(follows(
+            Some(&recent),
+            &at(json!(rfc3339(START - 30 * DAY))),
+            START
+        ));
+        assert!(!follows(
+            Some(&recent),
+            &at(json!(rfc3339(START - 90 * DAY))),
+            START
+        ));
+        assert!(!follows(Some(&recent), &json!({"last": {}}), START));
+        assert!(!follows(Some(&recent), &at(json!(START / 1000)), START));
+        assert!(!follows(Some(&recent), &at(json!("yesterday")), START));
+
+        let stars = m::FollowRule::AtLeast(m::FollowAtLeast {
+            field: "stars".into(),
+            number: 5,
+        });
+        assert!(follows(Some(&stars), &json!({"stars": 5}), START));
+        assert!(follows(Some(&stars), &json!({"stars": 7.5}), START));
+        assert!(!follows(Some(&stars), &json!({"stars": 4}), START));
+        assert!(!follows(Some(&stars), &json!({"stars": "5"}), START));
+
+        assert!(follows(None, &json!({}), START));
+    }
+
+    /// D25: integers compare exactly, above 2^53 too, in `equals` and `at_least`; a number that
+    /// is not an integer still compares by value.
+    #[test]
+    fn a_follow_rule_compares_large_integers_exactly() {
+        let big: Value = serde_json::from_str(r#"{"n": 9007199254740993}"#).unwrap();
+        let below: Value = serde_json::from_str(r#"{"n": 9007199254740992}"#).unwrap();
+        let equals = m::FollowRule::Equals(m::FollowEquals {
+            field: "n".into(),
+            value: mj_value::Value::Number("9007199254740993".into()),
+        });
+        assert!(follows(Some(&equals), &big, START));
+        assert!(!follows(Some(&equals), &below, START));
+        let huge = m::FollowRule::Equals(m::FollowEquals {
+            field: "n".into(),
+            value: mj_value::Value::Number("18446744073709551615".into()),
+        });
+        let max: Value = serde_json::from_str(r#"{"n": 18446744073709551615}"#).unwrap();
+        assert!(follows(Some(&huge), &max, START));
+        assert!(!follows(Some(&huge), &big, START));
+        let at_least = m::FollowRule::AtLeast(m::FollowAtLeast {
+            field: "n".into(),
+            number: 9_007_199_254_740_993,
+        });
+        assert!(follows(Some(&at_least), &big, START));
+        assert!(!follows(Some(&at_least), &below, START));
+        let decimal: Value = serde_json::from_str(r#"{"n": 9007199254740993.5}"#).unwrap();
+        assert!(follows(Some(&at_least), &decimal, START));
+    }
+
+    /// D30 (adversary pass 2): an integer and a number written with a fraction or an exponent
+    /// compare exactly, never by casting the integer to `f64`.
+    #[test]
+    fn a_follow_rule_compares_an_integer_with_a_float_exactly() {
+        let n =
+            |text: &str| -> Value { serde_json::from_str(&format!(r#"{{"n": {text}}}"#)).unwrap() };
+        let equals = |v: &str| {
+            m::FollowRule::Equals(m::FollowEquals {
+                field: "n".into(),
+                value: mj_value::Value::Number(v.into()),
+            })
+        };
+        let at_least = |number: i64| {
+            m::FollowRule::AtLeast(m::FollowAtLeast {
+                field: "n".into(),
+                number,
+            })
+        };
+        let big = 9_007_199_254_740_993;
+        for (parent, eq, least) in [
+            ("9007199254740992.0", false, false),
+            ("9007199254740994.0", false, true),
+            ("9.007199254740992e15", false, false),
+            ("1e300", false, true),
+            ("-1e300", false, false),
+        ] {
+            let got = (
+                follows(Some(&equals("9007199254740993")), &n(parent), START),
+                follows(Some(&at_least(big)), &n(parent), START),
+            );
+            assert_eq!(got, (eq, least), "{parent}");
+        }
+        for (parent, eq, least) in [
+            ("3.0", true, true),
+            ("3e0", true, true),
+            ("2.5", false, false),
+            ("3.5", false, true),
+            ("-3.0", false, false),
+        ] {
+            let got = (
+                follows(Some(&equals("3")), &n(parent), START),
+                follows(Some(&at_least(3)), &n(parent), START),
+            );
+            assert_eq!(got, (eq, least), "{parent}");
+        }
+        assert!(follows(Some(&equals("-3")), &n("-3.0"), START));
+        assert!(!follows(Some(&equals("-3")), &n("-2.5"), START));
+        assert!(follows(Some(&equals("2.5")), &n("2.5"), START));
+        assert!(follows(Some(&equals("3.0")), &n("3"), START));
+    }
+
+    use cortex_model::json as mj_value;
+
     fn paging(style: m::PageStyle, next: Option<&str>, max_pages: i64) -> m::Paging {
         m::Paging {
             style,
@@ -1739,6 +2178,65 @@ mod tests {
         assert_eq!((held.since_ms, held.until_ms), (100, 1_000_000));
         let pending = Window::of_run(1_000_000, None, Some(500), Some(200), 0);
         assert_eq!(pending.since_ms, 200);
+        // A window a run moved past what it applied starts there, after the last successful run's
+        // start or `refresh_after_days` back; a held change still reaches it back.
+        let advanced = Window::of_run(1_000_000, Some(400_000), None, Some(700_000), 7);
+        assert_eq!(advanced.since_ms, 700_000);
+        let before_a_success = Window::of_run(1_000_000_000, None, None, Some(900_000_000), 3);
+        assert_eq!(before_a_success.since_ms, 900_000_000);
+        let held = Window::of_run(1_000_000, Some(400_000), Some(600_000), Some(700_000), 7);
+        assert_eq!(held.since_ms, 600_000);
+    }
+
+    /// `story:window-relative-placeholders`: `{since_minutes_ago}` is the ceiling of (run start −
+    /// window start) in whole minutes, from the raw milliseconds, as the number alone.
+    #[test]
+    fn since_minutes_ago_is_the_window_rounded_up_to_whole_minutes() {
+        let jql = json!({"jql": "updated >= -{since_minutes_ago}m"});
+        let at = |since_ms, until_ms| with_window(&jql, &Window { since_ms, until_ms });
+        let start = 1_790_000_000_000;
+        assert_eq!(
+            at(start - 3 * 86_400_000, start),
+            json!({"jql": "updated >= -4320m"})
+        );
+        assert_eq!(at(start - 60_001, start), json!({"jql": "updated >= -2m"}));
+        assert_eq!(at(start - 60_000, start), json!({"jql": "updated >= -1m"}));
+        assert_eq!(at(start - 1, start), json!({"jql": "updated >= -1m"}));
+        assert_eq!(at(start, start), json!({"jql": "updated >= -0m"}));
+        // The window of a run five minutes after the last successful one: its overlap included.
+        let after = Window::of_run(start, Some(start - 300_000), None, None, 7);
+        assert_eq!(
+            with_window(&json!(["{since_minutes_ago}", "{since}"]), &after),
+            json!([
+                ((300_000 + OVERLAP_MS) / 60_000).to_string(),
+                rfc3339(after.since_ms)
+            ])
+        );
+    }
+
+    /// D36: a call fills `{since_minutes_ago}` from the window's start to its own time, so a call
+    /// made after the run's start asks from no later than `{since}`; the other placeholders are
+    /// the run's.
+    #[test]
+    fn a_call_fills_since_minutes_ago_at_its_own_time() {
+        let now = crate::instance::now_ms();
+        // A run that started an hour ago, its window two hours less 30 s long: three hours less
+        // 30 s before the call, which rounds up to 180 minutes.
+        let window = Window {
+            since_ms: now - 3 * 3_600_000 + 30_000,
+            until_ms: now - 3_600_000,
+        };
+        let input = json!({"jql": "updated >= -{since_minutes_ago}m", "since": "{since}"});
+        let left = window_for_call(&input, &window);
+        assert_eq!(
+            left,
+            json!({"jql": "updated >= -{since_minutes_ago}m", "since": rfc3339(window.since_ms)})
+        );
+        assert_eq!(
+            at_call(&left, window.since_ms)["jql"],
+            json!("updated >= -180m"),
+            "from since to the call, not to the run's start"
+        );
     }
 }
 

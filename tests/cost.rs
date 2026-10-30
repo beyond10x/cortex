@@ -228,6 +228,62 @@ fn each_call_is_given_the_budget_that_remains() {
     assert_eq!(ran["detail"]["stopped"], Value::Null, "{ran}");
 }
 
+/// Like [`costs_per_call`], except that a line `cut:<cost>` makes that call answer that its
+/// answer was cut off at the output limit, at `<cost>`, and exit 1. The call still reaches the
+/// world's `claude`, so its arguments are logged.
+fn cut_off_per_call(w: &World, costs: &[&str]) {
+    std::fs::rename(w.bin.join("claude"), w.bin.join("claude-real")).unwrap();
+    std::fs::write(w.root.join("costs"), costs.join("\n") + "\n").unwrap();
+    executable(
+        &w.bin.join("claude"),
+        &format!(
+            r#"R="{root}"
+n=$(cat "$R/claude-calls.log" 2>/dev/null | wc -l)
+c=$(sed -n "$((n+1))p" "$R/costs")
+case "$c" in
+  cut:*)
+    "$R/bin/claude-real" "$@" > /dev/null
+    printf '{{"type":"result","subtype":"success","is_error":true,"result":"API Error: Claude'"'"'s response exceeded the 16000 output token maximum.","total_cost_usd":%s}}\n' "${{c#cut:}}"
+    exit 1 ;;
+esac
+"$R/bin/claude-real" "$@" | sed "s/\"total_cost_usd\":0.01,/\"total_cost_usd\":$c,/"
+"#,
+            root = w.root.display()
+        ),
+    );
+}
+
+/// `story:run-cost-counted-on-refusal`: a first call cut off at the output limit is split, and
+/// what it cost counts against the run's budget and in the run's cost, as it does in the day's.
+#[test]
+fn a_cut_off_call_counts_against_the_budget_and_in_the_run_cost() {
+    let w = World::new();
+    std::fs::write(w.root.join("answer.json"), two_batch_pages()).unwrap();
+    let path = spec(&w, "cut", "5", "");
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    // The first batch of three is cut off and split into one page and two; then the fourth page.
+    cut_off_per_call(&w, &["cut:0.3", "0.25", "0.25", "0.25"]);
+    let (code, ran) = w.cortex(&["run", "cut/news"]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["splits"], 1, "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 4, "{ran}");
+    assert_eq!(
+        budgets_given(&w),
+        ["5.0000", "4.7000", "4.4500", "4.2000"],
+        "{ran}"
+    );
+    assert_eq!(ran["detail"]["cost_usd"], "1.0500", "{ran}");
+    assert_eq!(last_log_line(&w, "cut")["cost_usd"], 1.05);
+    // What remains after the run is the budget less the cost it reports.
+    let reported: f64 = ran["detail"]["cost_usd"].as_str().unwrap().parse().unwrap();
+    let given_last: f64 = budgets_given(&w)[3].parse().unwrap();
+    assert!(
+        ((5.0 - reported) - (given_last - 0.25)).abs() < 1e-9,
+        "{ran}"
+    );
+}
+
 /// A spec like [`spec`] with a second source, `more`, reading the same pages, and the instance's
 /// daily ceiling `ceiling` (`story:daily-instance-budget`).
 fn ceiling_spec(w: &World, name: &str, budget: &str, ceiling: &str) -> PathBuf {

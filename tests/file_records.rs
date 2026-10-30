@@ -796,4 +796,53 @@ echo "=== end of prompt ===" >> "$R/prompt.log"
         assert!(reason.contains(&named), "{reason} does not name {named}");
         assert!(keys(&w, "chat").is_empty());
     }
+
+    /// `story:connectors-call-deadline` acceptance 2, for a `files` source: a file over the
+    /// 16 MiB cap, an unreadable one and one that is not UTF-8 text are each named in `skipped`
+    /// with the reason, and the readable file beside them is read.
+    #[test]
+    fn an_over_cap_unreadable_or_non_utf8_file_is_named_in_skipped() {
+        use std::os::unix::fs::PermissionsExt;
+        let docs = format!(
+            "  - name: docs\n    schedule: daily\n    settings:\n      kind: files\n      value:\n        paths: [docs]\n        glob: \"*.txt\"\n    {POLICY}\n"
+        );
+        let w = world(
+            &[
+                ("docs/ok.txt", b"Example Labs develops the Widget engine.\n"),
+                ("docs/latin.txt", b"Caf\xe9 Example Labs.\n"),
+                (
+                    "docs/locked.txt",
+                    b"Example Labs runs the Gadget runtime.\n",
+                ),
+            ],
+            &docs,
+            "",
+        );
+        let locked = w.root.join("docs/locked.txt");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let big = std::fs::File::create(w.root.join("docs/big.txt")).unwrap();
+        big.set_len(16 * 1024 * 1024 + 1).unwrap();
+        drop(big);
+
+        let ran = run(&w, "docs");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let skipped: Vec<String> = ran["detail"]["skipped"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .map(|l| l.as_str().unwrap_or_default().to_string())
+            .collect();
+        let named = |file: &str, why: &str| {
+            skipped
+                .iter()
+                .any(|l| l.contains(&format!("docs/{file}")) && l.contains(why))
+        };
+        assert!(named("big.txt", "16 MiB"), "{skipped:?}");
+        assert!(named("locked.txt", "cannot be read"), "{skipped:?}");
+        assert!(named("latin.txt", "not UTF-8"), "{skipped:?}");
+        let read = keys(&w, "docs");
+        assert_eq!(read.len(), 1, "{read:?}");
+        assert!(read[0].ends_with("docs/ok.txt"), "{read:?}");
+    }
 }

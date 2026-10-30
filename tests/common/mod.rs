@@ -25,6 +25,32 @@ pub fn ekr() -> PathBuf {
     bin
 }
 
+/// Lines that make a `/bin/sh` stand-in `ekr` serve `ekr session` itself: each request line
+/// `{"argv":[…]}` runs the stand-in again as the one-shot `ekr <argv>`, its standard input closed,
+/// and is answered `{"exit":…,"stdout":…,"stderr":…}`, as the real `ekr session` answers. A
+/// stand-in that logs or fails verbs by its arguments then sees each verb a run sends its session as
+/// one process of its own. Put them where the stand-in should see `session` itself: first, to log
+/// only the verbs, or after its own log line, to log the session too. An argument holding `"` or a
+/// line break is not supported; the stdout of a verb answered through it must be JSON.
+pub const EKR_SESSION_SHIM: &str = r#"if [ "$1" = session ]; then
+  E=$(mktemp "${0%/*}/.ekr-session-stderr.XXXXXX") || exit 1
+  while IFS= read -r REQ; do
+    L=$(printf '%s' "$REQ" | sed -e 's/^{"argv":\["//' -e 's/"\]}$//' -e 's/","/\n/g')
+    set --
+    while IFS= read -r A; do set -- "$@" "$A"; done <<EOF_ARGV
+$L
+EOF_ARGV
+    O=$("$0" "$@" < /dev/null 2> "$E"); X=$?
+    O=$(printf '%s' "$O" | tr '\n' ' ')
+    case "$O" in *[![:space:]]*) ;; *) O=null ;; esac
+    S=$(sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' "$E" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/\\n/g')
+    printf '{"exit":%s,"stdout":%s,"stderr":"%s"}\n' "$X" "$O" "$S"
+  done
+  rm -f "$E"
+  exit 0
+fi
+"#;
+
 /// Writes a `/bin/sh` stand-in at `path` and makes it executable.
 ///
 /// A child shell writes the file, never this process: a descriptor open for writing here would be
@@ -43,10 +69,16 @@ pub fn executable(path: &Path, body: &str) {
     assert!(status.success(), "cannot write {}", path.display());
 }
 
-/// The CLI's envelope around an adapter answer: `result.result` is the answer as a JSON string.
+/// The connector and instance a stand-in's `connections list` entry names beside its adapter, as
+/// Connectors 0.60.0 lists them; `invoke` is called on `<connector>/<instance>`.
+pub const LISTED: &str = r#""connector":"tavily","instance":"main""#;
+
+/// Connectors 0.60.0's `InvokeResult` envelope around an adapter answer: `result.result` is the
+/// answer `pages`, a JSON text, as the JSON value it holds.
 pub fn answer(pages: &str) -> String {
-    serde_json::json!({"ok": true, "result": {"adapter": "tavily", "operation": "websearch.search",
-        "revision": "r", "result": pages}})
+    let pages: Value = serde_json::from_str(pages).expect("the pages are JSON");
+    serde_json::json!({"ok": true, "result": {"connector": "tavily", "instance": "main",
+        "operation": "websearch.search", "revision": "r", "result": pages}})
     .to_string()
 }
 
@@ -77,30 +109,32 @@ impl World {
         let bin = root.join("bin");
         std::fs::create_dir_all(&bin).unwrap();
         std::fs::write(root.join("answer.json"), answer(PAGES)).unwrap();
-        // connectors: one tavily connection, `conn_test` or the id in the file `connection`,
-        // pending until revalidated; `invoke` answers answer.json, or fails when the file `fail`
-        // exists.
+        // connectors (0.60.0): one tavily connection of `tavily/main`, `conn_test` or the id in the
+        // file `connection`, pending until revalidated; `invoke` logs its argv to invocations.log
+        // and its standard input to inputs.log, and answers answer.json, or fails when the file
+        // `fail` exists. Any other command line, `operations …` included, is refused with exit 2:
+        // 0.60.0 removed the `operations` invoke, and cortex calls no other `operations` command.
         executable(
             &bin.join("connectors"),
             &format!(
                 r#"R="{root}"
 case "$*" in
-  *"connections list"*) if [ -e "$R/revalidated" ]; then S=ready; else S=pending; fi; C=conn_test; if [ -e "$R/connection" ]; then C=$(cat "$R/connection"); fi; printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily","connection":"%s","state":"%s","revision":"rev1"}}]}}}}' "$C" "$S" ;;
+  *"connections list"*) if [ -e "$R/revalidated" ]; then S=ready; else S=pending; fi; C=conn_test; if [ -e "$R/connection" ]; then C=$(cat "$R/connection"); fi; printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily",{listed},"connection":"%s","state":"%s","revision":"rev1"}}]}}}}' "$C" "$S" ;;
   *"connections revalidate"*)
     echo "$*" >> "$R/revalidations.log"; touch "$R/revalidated"
     if [ -e "$R/unknown" ]; then echo '{{"ok":false,"error":{{"code":"failure","data":{{"code":"outcome_unknown","kind":"operational","next_action":"retry_status","stage":"publication"}}}}}}' >&2; exit 1; fi
     echo '{{"ok":true,"result":{{}}}}' ;;
   *"connections status"*) echo "$*" >> "$R/status.log"; if [ -e "$R/revalidated" ] && [ ! -e "$R/stays-pending" ]; then S=ready; else S=pending; fi; printf '{{"ok":true,"result":{{"connection":{{"summary":{{"state":"%s"}}}}}}}}' "$S" ;;
-  *"operations describe"*) echo '{{"ok":true,"result":{{"schema":"s","revision":"r"}}}}' ;;
-  *"operations invoke"*)
-    echo "$*" >> "$R/invocations.log"
+  "invoke tavily/main "*)
+    echo "$*" >> "$R/invocations.log"; cat >> "$R/inputs.log"; echo >> "$R/inputs.log"
     if [ -e "$R/lapse" ]; then rm "$R/lapse"; echo '{{"ok":false,"error":{{"code":"failure","data":{{"code":"not_granted","stage":"admission"}}}}}}' >&2; exit 1; fi
     if [ -e "$R/fail" ]; then echo '{{"ok":false,"error":{{"code":"failure","data":{{"code":"unavailable","stage":"execution"}}}}}}'; exit 1; fi
     cat "$R/answer.json" ;;
   *) echo '{{"ok":false}}'; exit 2 ;;
 esac
 "#,
-                root = root.display()
+                root = root.display(),
+                listed = LISTED,
             ),
         );
         // claude: records its arguments and whether ANTHROPIC_API_KEY reached it, then answers

@@ -611,3 +611,108 @@ fn a_second_widening_of_one_round_plans_against_the_first() {
     );
     assert_eq!(w.head("w2"), head + 1, "one schema transaction");
 }
+
+/// A stand-in `ekr` in front of the real one: while `<root>/fail-head-after-commit` exists, an
+/// `ekr head` after an `ekr commit` fails as an unavailable store does.
+fn head_failing_ekr(w: &World) -> PathBuf {
+    let path = w.bin.join("ekr-head");
+    let body = r#"R="@R@"; EKR="@EKR@"
+if [ "$1" = commit ] && [ -e "$R/fail-head-after-commit" ]; then
+  "$EKR" "$@"; s=$?; [ "$s" = 0 ] && touch "$R/committed"; exit "$s"
+fi
+if [ "$1" = head ] && [ -e "$R/committed" ]; then
+  echo "ekr: the store is unavailable: injected" >&2; exit 1
+fi
+exec "$EKR" "$@"
+"#
+    .replace("@R@", &w.root.display().to_string())
+    .replace("@EKR@", &common::ekr().display().to_string());
+    executable(&path, &body);
+    path
+}
+
+/// [`instance`] on [`head_failing_ekr`].
+fn instance_on_head_failing_ekr(name: &str) -> World {
+    let w = World::new();
+    let path = w.spec(name, "conn_test");
+    let bin = head_failing_ekr(&w);
+    let text = std::fs::read_to_string(&path).unwrap().replace(
+        &common::ekr().display().to_string(),
+        &bin.display().to_string(),
+    );
+    std::fs::write(&path, text).unwrap();
+    extract_products(&w);
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    let (code, ran) = w.cortex(&["run", &format!("{name}/news")]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    proposer(&w);
+    w
+}
+
+/// `story:schema-apply-outcome-unknown` acceptance 2: the store's head cannot be read after the
+/// changes were committed. `apply-failed` says the changes are in the store and names the
+/// revision they reached, not that every approved proposal is still approved, and the decisions
+/// are written.
+#[test]
+fn a_head_that_cannot_be_read_after_the_apply_reports_what_was_published() {
+    let w = instance_on_head_failing_ekr("hf");
+    let stamp = review(&w, "hf", json!([node_type("Maker"), node_type("Vendor")]));
+    let head = w.head("hf");
+    let (code, out) = w.cortex(&["schema", "approve", "hf", &stamp]);
+    assert_eq!(code, 0, "{out}");
+    std::fs::write(w.root.join("fail-head-after-commit"), "").unwrap();
+
+    let (code, out) = w.cortex(&["schema", "apply", "hf", &stamp]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("apply-failed")),
+        "{out}"
+    );
+    let reason = out["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(!reason.contains("still approved"), "{out}");
+    assert!(reason.contains("the changes are in the store"), "{out}");
+    assert!(
+        reason.contains(&format!("revision {}", head + 2)),
+        "the revision is not named: {out}"
+    );
+    assert_eq!(w.head("hf"), head + 2, "both changes are committed");
+    assert_eq!(statuses(&run_dir(&w, "hf", &stamp)), ["applied", "applied"]);
+}
+
+/// `story:schema-apply-outcome-unknown` acceptance 2: `proposals.jsonl` cannot be rewritten after
+/// the changes were committed. `apply-failed` says the changes are in the store, names the
+/// revision, and says the file still lists the proposals approved.
+#[test]
+fn decisions_that_cannot_be_written_after_the_apply_report_what_was_published() {
+    let w = instance("wf");
+    let stamp = review(&w, "wf", json!([node_type("Maker"), node_type("Vendor")]));
+    let head = w.head("wf");
+    let (code, out) = w.cortex(&["schema", "approve", "wf", &stamp]);
+    assert_eq!(code, 0, "{out}");
+    let dir = run_dir(&w, "wf", &stamp);
+    // The rewrite goes through `.proposals.jsonl.next`; a directory there fails it.
+    std::fs::create_dir(dir.join(".proposals.jsonl.next")).unwrap();
+
+    let (code, out) = w.cortex(&["schema", "apply", "wf", &stamp]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("apply-failed")),
+        "{out}"
+    );
+    let reason = out["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(reason.contains("the changes are in the store"), "{out}");
+    assert!(
+        reason.contains(&format!("revision {}", head + 2)),
+        "the revision is not named: {out}"
+    );
+    assert!(
+        reason.contains("still lists every approved proposal approved"),
+        "{out}"
+    );
+    assert_eq!(w.head("wf"), head + 2, "both changes are committed");
+    assert_eq!(statuses(&dir), ["approved", "approved"]);
+    let names = type_names(&ekr(&w, "wf", &["ontology"]));
+    assert!(names.contains(&"Maker".to_string()), "{names:?}");
+    assert!(names.contains(&"Vendor".to_string()), "{names:?}");
+}

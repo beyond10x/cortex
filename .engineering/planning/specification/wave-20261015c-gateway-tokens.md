@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: specification:wave-20261015c-gateway-tokens
 kind: specification
-status: approved
+status: implemented
 title: 'Wave 20261015c: model through a gateway, token budget'
 relations:
 - specifies: story:model-through-gateway
 - specifies: story:token-budget
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-15T15:50:11Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-15T15:50:11Z", actor: "human:timo", revision: 3}
+- {from: "approved", to: "implemented", at: "2026-10-30T09:39:33Z", actor: "human:timo", revision: 4}
 ---
 ## Wave 20261015c: model through a gateway, token budget
 

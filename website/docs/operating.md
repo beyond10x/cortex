@@ -8,7 +8,14 @@ description: Where instances live, what a run does, the systemd units, failures 
 
 ## Where things live
 
-Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
+Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`. cortex replaces
+each file it rewrites (the registry, a status, a state file) through a temporary file it syncs
+to disk, a rename, and a sync of the directory, so a crash leaves the old file or the new one.
+A `create` or `adopt` that fails after it recorded the instance takes it out of the registry
+again and removes its directory, so it can be retried. A source status file that cannot be read
+fails `cortex sources`, naming the file, and a run leaves it as it is (`cortex.log` says why);
+other commands list the source as if it had never run. To recover, delete that file: the next
+run of the source writes it again, with its counts starting from zero.
 
 | path | holds |
 |---|---|
@@ -23,7 +30,8 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `instances/<name>/meta.json` | the viewer's port and the directory the spec was created from |
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
 | `instances/<name>/state/entities.json` | entity names from earlier runs, offered to the model so it reuses them |
-| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report, or claude's error text (`claude/error.txt`) |
+| `instances/<name>/failures/<source>.json` | documents whose extraction failed (`cortex.failures/1`): each key's text hash, its consecutive runs failed with the document alone (`runs`, `0` when none), the failed batches of several it was in (`batches`, absent when none) and the last reason; outside `state/`, so undoing a run keeps it (see [What one run does](#what-one-run-does)) |
+| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report, or claude's error text (`claude/error.txt`); kept until a run removes it after the spec's [`runs.keep_days`](./spec-file.md#runs), and forever without one. `runs/` belongs to cortex: with `keep_days`, any directory in it named like a run directory (`<digits>-<lowercase letters, digits and dashes>`) is removed once that name is older than `keep_days`, whoever put it there |
 | `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
 | `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
@@ -41,6 +49,14 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
   `OnCalendar=<schedule>` and `Persistent=true`; the service runs
   `<home>/bin/cortex --home <home> run <instance>/<source> --record-failure`.
 - `cortex-<instance>-view.service`, which runs `ekr view` on the store at the instance's port.
+
+An instance and a source name may hold `-`, so two instances could name one unit: instance `a`
+with source `b-c` and instance `a-b` with source `c` would both be `cortex-a-b-c`, and source
+`b-view` of `a` would be the viewer of `a-b`. `create`, `adopt` and `update` refuse such a spec
+before changing anything, with or without `--no-units`, naming the unit and the instance or
+source that holds it in the home; a source named `view` is refused the same way. A source that
+is disabled keeps its timer off through `update`: its units are written again, its timer is not
+enabled until `cortex source enable`.
 
 ### Which process serves what
 
@@ -140,16 +156,19 @@ run's. A `store-outcome-unknown`, `connection-unavailable`, `batch-too-large`,
 ## Stopping a run
 
 `cortex run` handles SIGTERM, which a Kubernetes Job's deadline or `systemctl stop` sends. The
-run stops at its next safe point: once its fetch returns, before each batch, or at once during a
-model call, whose process group is sent SIGTERM and, after 5 seconds, SIGKILL. A structured
-source stops before each record batch. A gated run is then undone as a run its gate refuses is:
+run stops at its next safe point: at once during its fetch or a model call, whose process (with
+its process group) is sent SIGTERM and, after 5 seconds, SIGKILL; between the pages of a paged
+read and the files of a `files` source; before it uses what it fetched; before each batch; and in
+the wait before a model call is asked again. A structured source stops before each record batch.
+A run stopped during its fetch marks nothing seen and keeps its window, so the next run asks for
+the same `since`. A gated run is then undone as a run its gate refuses is:
 on `postgres` its stage is abandoned and `state/` put back, on `sqlite` its kept snapshot is
 restored once a batch committed. An ungated run keeps the batches it applied, each marked seen,
 and the next run extracts the rest. The run prints `terminated` with a `reason` saying where it
 stopped and what was undone, records it in the source's status, the metric file and the hook,
-and exits 8. A fetch from Connectors is not interrupted: the run stops when it returns, so leave
-a grace period (Kubernetes' `terminationGracePeriodSeconds`, systemd's `TimeoutStopSec`) longer
-than a fetch takes. A second SIGTERM ends the process at once with exit status 143, recording
+and exits 8. Leave a grace period (Kubernetes' `terminationGracePeriodSeconds`, systemd's
+`TimeoutStopSec`) of more than 5 seconds, so a child that ignores SIGTERM is killed before the
+run is. A second SIGTERM ends the process at once with exit status 143, recording
 nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
 
 ## What one run does
@@ -169,7 +188,9 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    of these, or lies before 1970 or after the run's start, and a document with no time, are
    observed at the run's start. EKR dates each fact from the earliest observed time of the
    evidence it cites, so a fact is valid from when its source said it. Which documents a run
-   keeps, and its window, still go by the run's own times.
+   keeps, and its window, still go by the run's own times, except that a run that leaves wanted
+   documents unapplied moves its window to the earliest of their record times (see
+   [the spec file](./spec-file.md#kind-connectors)).
 5. **Extract** in batches of up to `model.batch_chars` characters (UTF-8 bytes), 60,000 unless the spec gives a
    size or a gateway's window sets one (see [The batch size](./spec-file.md#the-batch-size)); a
    batch too long for the model's window is split and asked again. Each batch is one `claude -p` call that
@@ -183,10 +204,20 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    that fact `replaces: true`, and EKR supersedes every active value of the same entity and
    property from the new one's time on, so one value stays current and the older one is kept,
    superseded by it. EKR rejects such a fact when there is no current value to replace
-   (`replacement-without-active-assertion`), and the value is then not stored; and when the
-   current value is dated later than the replacement (`invalid-supersession`), as when an older
-   document is read after a newer one, and the newer value then stays current. Either rejection is
-   listed in the run's `rejected` and the rest of the document applies.
+   (`replacement-without-active-assertion`); cortex then applies that fact again in the same batch
+   without `replaces`, so its value is stored as a plain assertion, and counts it in the run's
+   `facts_reapplied` instead of `rejected`. When the batch holds several such facts for one entity
+   and property, the earliest (by its document's time) is stored that way and each later one is
+   applied after it, still replacing, so one value stays current here too. When the batch also
+   states a plain value of that entity and property, which EKR stored, that value takes its place
+   in the same time order: a rejected replacement older than it is not applied again (the batch's
+   newer value stays current, and the replacement is listed in `rejected`), and the newer ones are
+   applied after it still replacing, so EKR supersedes it. If that second apply
+   fails in the store, the run stops after the batch and the documents whose values it carried
+   are not marked seen, so a later run extracts them again. EKR also rejects it when the current value is dated
+   later than the replacement (`invalid-supersession`), as when an older document is read after a
+   newer one, and the newer value then stays current; that rejection is listed in the run's
+   `rejected` and the rest of the document applies.
 6. **Merge.** A fact citing an evidence id cortex did not issue for that batch is refused; cortex
    adds the evidence items itself and records each web page as a `WebPage` node.
 7. **Apply** the document with `ekr apply-extraction`, then record the batch's documents as seen.
@@ -199,7 +230,10 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
 8. **Check** the run against the spec's [`gate`](./spec-file.md#gate), when it applied
    something. A failed check undoes the run (see [Failures](#failures)).
 
-**Known entities.** Before each batch is sent, the run reads the store once (`ekr snapshot`) and
+**Known entities.** A run reads the store once, at its first batch (`ekr snapshot`), and keeps
+what it read, adding after each apply the nodes that batch's document named (a new one named by
+the least of its first aliases, as EKR names it). A commit another writer makes while the run is
+going is not seen by that run; the next run reads it. Before each batch is sent, the run
 takes every node, of any type, whose canonical name or one of whose aliases equals one of the
 batch's terms, both lowercased: each document's key and, for a record, its id (after the first
 `#` of a file record's key `<path>#<id>`, so an id holding `#` is taken whole, after
@@ -219,13 +253,16 @@ listed. Matching is exact after lowercasing (`str::to_lowercase`, not full case 
 does not match `Straße`); a similar name is not a hit. A store node's name and aliases are another
 writer's text: they are masked for credential shapes on every run, with or without a `redaction`
 policy, and then pass through the policy like every known name; a line break or another control
-character in a type, name or alias is written as a space, so each type keeps its one line. Behind
+character in a type, name or alias is written as a space, so each type keeps its one line. The
+store's ontology names the prompt lists (node types with their properties and value kinds,
+relations with their source and target types) are treated the same way: masked, then the
+policy, and each written on one line. Behind
 a model window, a batch whose store hits make its prompt's fixed part longer than the batch size
 allowed for is split in two before it is sent (see
 [the batch size](./spec-file.md#the-batch-size)). `ekr snapshot` reads the
-whole graph (nodes, edges, assertions and evidence) at the head, once per batch, so on a large
-store each batch takes that read's time on top of the model call; a `structured` source calls no
-model and makes no such read.
+whole graph (nodes, edges, assertions and evidence) at the head, once per run, so on a large
+store the first batch takes that read's time on top of the model call; a `structured` source
+calls no model and makes no such read.
 
 A `structured` source skips steps 5 and 6: each batch of records is mapped to an extraction
 document by the source's `mapping` and applied without a model call, at a cost of 0 (see
@@ -245,9 +282,31 @@ the UTC day reaches `model.daily_ceiling_usd` (see
 calls have used `model.budget_tokens`, when the instance's tokens of the UTC day reach
 `model.daily_ceiling_tokens`, or when an answer reported no `usage` or a count in it below 0, so
 its tokens could not be counted (see [the spec file](./spec-file.md#limits-in-tokens)). Each stop is checked before a
-batch, keeps the batches before it applied, and names the limit in `stopped`. When a batch fails after an earlier
-one was applied, the run ends as `ran` with `stopped` set; when the first batch fails, nothing was
-applied and the run fails.
+batch, keeps the batches before it applied, and names the limit in `stopped`.
+
+When the model answers that it failed on a batch of several documents (an error answer, or an
+answer with no structured output), the run stops there as at any failed batch (after one call),
+and each of the batch's documents counts one failed batch. A later run asks such a batch whole
+once more, so one failed answer costs no call per document. When it fails again, its documents
+are asked alone in that run, and from then on a batch that holds a document in two failed
+batches, or one that failed alone, asks its other documents together, then each such document
+alone, those that failed alone fewer times first. So one document that fails every time does not
+stop the others, and a failing call that spends the run's `budget_usd` still leaves the next run
+a document further. Only an answer
+marks or counts a document: an error answer that cost nothing came before any model was asked (a
+sign-in or a usage limit), and a call that timed out, crashed or left no JSON answer says nothing
+about the documents; neither marks nor counts one. A document that fails alone is counted in
+`failures/<source>.json` in the instance directory, beside `state/` and not in it, so a run its
+gate undoes keeps the count. Below 3 consecutive failures the run stops at that document: when an
+earlier document was applied, the run ends as `ran` with `stopped` set, naming the document and its
+count; when none was, nothing was applied and the run fails as `extraction-failed`. From the third
+consecutive failure on, while its text is the one that last failed, the document is skipped: it
+is named in `skipped` (`<key>: extraction failed with the document alone on 3 consecutive runs
+(<reason>); skipped until its text changes`), in the run's result and in `cortex.log`, it is not
+sent to the model, it holds no window, and the batches after it run. A changed text keeps the
+count and is asked once more alone: applied, it drops the count; failed, it is skipped again. A
+run that read the source's whole listing (no window, nothing left unread) drops the counts of
+documents the source no longer lists.
 
 ### Counting what a run would extract
 
@@ -313,6 +372,16 @@ and hook report it as any failed run's do, and the next scheduled run starts as 
 revalidation that fails after the run fetched documents (a lapse renewed mid-run) is retried the
 same way and, if it still fails, fails the run as `fetch-failed`, counted.
 
+Every `connectors` call of a run (a list, a revalidation, a status read, an invocation) is waited
+for at most `CORTEX_CONNECTORS_TIMEOUT_S` seconds (default 120, at least 1). A call still running
+then is killed with what it started and fails as `timeout`
+(`<operation>: timeout after <n> s (CORTEX_CONNECTORS_TIMEOUT_S); the connectors call was killed`);
+it is not retried, and an invocation that fails so fails the run as `fetch-failed`, counted. The
+bound is the whole call's: a `connectors` that exited while a process it started still holds its
+output is read until the deadline, and then that process is killed with the call's process group.
+A value too large for the clock sets no bound. The long-lived `connectors connections launch` of a
+store's `ekr` is not bounded by it.
+
 A run that fails a check of the spec's `gate` fails as `apply-refused` and is counted the same
 way. Its `reason` names each failed check with its measure and value
 (`facts_refused = 1 (max 0)`). On a `sqlite` store the run is undone first: the store and
@@ -368,12 +437,17 @@ cortex_source_model_tokens_total{source="example/news",kind="output"} 6120
 | `cortex_source_runs_total{source, outcome}` | counter | the source's runs under each outcome (`ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable`, `batch-too-large`, `terminated`, `model-unavailable`, `disabled`), every outcome written, 0 for one that never happened |
 | `cortex_source_last_run_timestamp_seconds{source}` | gauge | when the last run started |
 | `cortex_source_last_run_duration_seconds{source}` | gauge | how long the last run took, to the moment it recorded its outcome, whatever the outcome |
-| `cortex_source_last_run_documents{source, kind}` | gauge | the last run's documents: `read`, the new or changed documents it selected to extract (`documents_new`), and `applied` (`documents_applied`). Present only when the last run ended `ran` |
-| `cortex_source_documents_total{source, kind}` | counter | the same, added up over the runs that ended `ran` |
-| `cortex_source_model_tokens_total{source, kind}` | counter | the model tokens those runs reported: `input` (`input_tokens` and `cache_creation_input_tokens`), `cached` (`cache_read_input_tokens`) and `output` (`output_tokens`). A run whose answers did not report a count adds nothing to it |
+| `cortex_source_last_run_documents{source, kind}` | gauge | the last run's documents: `read`, the new or changed documents it selected to extract (`documents_new`), and `applied` (`documents_applied`). Present when the last run ended `ran`, and when it applied a batch and then ended with another outcome (`extraction-failed`, `apply-refused`, `store-outcome-unknown`, `batch-too-large`, `terminated`, `model-unavailable`): then it reports what the run read and applied before it ended. Absent after a run that ended before it applied a batch |
+| `cortex_source_documents_total{source, kind}` | counter | the same, added up over every run that reports them, whatever its outcome; a run that ended before it applied a batch adds nothing |
+| `cortex_source_model_tokens_total{source, kind}` | counter | the model tokens those runs reported: `input` (`input_tokens` and `cache_creation_input_tokens`), `cached` (`cache_read_input_tokens`) and `output` (`output_tokens`), each summed over the answers that reported it, a failed answer included. An answer that did not report a count adds nothing to it |
 
-A run that did not end `ran` adds no documents or tokens, even when it applied batches before it
-stopped (`batch-too-large`, `model-unavailable`, `terminated`). Every label is the source id or a
+A run that applied batches and then ended with another outcome (`extraction-failed`,
+`apply-refused`, `store-outcome-unknown`, `batch-too-large`, `terminated` or `model-unavailable`)
+and kept its batches adds the documents it read and applied
+and the tokens its answers reported, as a run that ended `ran` does; a run that ended before it
+applied a batch adds none. A run that was undone afterwards (its gate refused it, or a gated run
+ended `terminated` or `store-outcome-unknown` and was undone) adds the documents it read and the
+tokens it spent but no applied document, as the store holds none of them. Every label is the source id or a
 fixed name: no series holds a credential, a prompt, a question or a document's content. The
 figures are kept in the status file and start from the first run cortex recorded them for.
 
@@ -472,6 +546,9 @@ in `snapshots/`, without the extension. To undo the last run, restore the newest
 Because `state/` is put back, the next runs apply again what the undone runs applied, at the
 cost of their model calls. A snapshot with no copy of `state/` in `snapshots-state/` (one you
 copied without it) puts back the store only, and the restore reports `state_restored: false`.
+So does a copy of `state/` that cannot be written back once the store is restored: the restore
+still answers `restored`, with the store at the snapshot, `state/` as it was, and the reason in
+`state_failed`.
 
 To undo a restore, restore its `before_restore` snapshot.
 

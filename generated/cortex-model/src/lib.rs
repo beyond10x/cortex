@@ -1,11 +1,11 @@
 // generated from cortex v1
-// model digest 7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d
-// contract digest 45be6012d6ca07f5842ea4b833a0421e5880da4b6a06706d61c0d0abe43f7aab
+// model digest dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7
+// contract digest 857182a81f324b2743cfc95ae1fab53d1e8a5a7f0c41dbd9fcda27ed70b7ed9d
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Semantic types synthesised from the `cortex` specification, v1.
 //!
-//! Spin up knowledge brains from a spec. Each instance is one EKR store fed on a schedule by the data sources its spec connects: web pages found by search or crawled from listed sites, records of any Connectors operation, and local files. Secrets never pass through cortex; a source names a Connectors connection and only invokes operations through it.
+//! Spin up knowledge instances from a spec. Each instance is one EKR store fed on a schedule by the data sources its spec connects: web pages found by search or crawled from listed sites, records of any Connectors operation, and local files. Secrets never pass through cortex; a source names a Connectors connection and only invokes operations through it.
 //!
 //! Generated, not written: the specification is the source of truth, and the door to changing
 //! anything here is `ess synthesize`. What is deliberately absent — behaviour, queries,

@@ -2,17 +2,18 @@
 format: aep.planning-md/3
 id: specification:wave-20261017d-entities-figures-outcomes
 kind: specification
-status: approved
+status: implemented
 title: 'Wave 20261017d: store entities, figure renderer, run outcomes'
 relations:
 - specifies: story:store-entities-known-to-model
 - specifies: story:figure-svg-renderer
 - specifies: story:run-metrics
 - specifies: story:model-unavailable-outcome
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-17T15:56:17Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-17T15:56:17Z", actor: "human:timo", revision: 3}
+- {from: "approved", to: "implemented", at: "2026-10-30T09:39:33Z", actor: "human:timo", revision: 4}
 ---
 ## Wave 20261017d: store entities, figure renderer, run outcomes
 

@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d
-  contract digest 45be6012d6ca07f5842ea4b833a0421e5880da4b6a06706d61c0d0abe43f7aab
+  model digest dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7
+  contract digest 857182a81f324b2743cfc95ae1fab53d1e8a5a7f0c41dbd9fcda27ed70b7ed9d
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-251 capabilities: **243 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+263 capabilities: **255 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -61,6 +61,10 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.FetchPolicy` |
 | domain type | `cortex.instance.FileRecords` |
 | domain type | `cortex.instance.FilesSource` |
+| domain type | `cortex.instance.FollowAtLeast` |
+| domain type | `cortex.instance.FollowEquals` |
+| domain type | `cortex.instance.FollowRule` |
+| domain type | `cortex.instance.FollowWithinDays` |
 | domain type | `cortex.instance.GateCheck` |
 | domain type | `cortex.instance.HookResult` |
 | domain type | `cortex.instance.Instance.State` |
@@ -94,6 +98,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.RunGate` |
 | domain type | `cortex.instance.RunHook` |
 | domain type | `cortex.instance.RunOutcome` |
+| domain type | `cortex.instance.RunsPolicy` |
 | domain type | `cortex.instance.SchemaCardinality` |
 | domain type | `cortex.instance.SchemaChange` |
 | domain type | `cortex.instance.SchemaProperty` |
@@ -115,6 +120,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.SourceSettings` |
 | domain type | `cortex.instance.SourceSpec` |
 | domain type | `cortex.instance.SqliteStore` |
+| domain type | `cortex.instance.StoreLookup` |
 | domain type | `cortex.instance.StoreSpec` |
 | domain type | `cortex.instance.StructuredChild` |
 | domain type | `cortex.instance.StructuredConnectors` |
@@ -202,6 +208,10 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | event type | `cortex.instance.SourceFetched` |
 | event type | `cortex.instance.SourceRan` |
 | error type | `cortex.ask.AnswerNotFound` |
+| error type | `cortex.ask.BadRequest` |
+| error type | `cortex.ask.Busy` |
+| error type | `cortex.ask.ClientClosed` |
+| error type | `cortex.ask.CutOff` |
 | error type | `cortex.ask.FigureInvalid` |
 | error type | `cortex.ask.FigureTooLarge` |
 | error type | `cortex.ask.LimitReached` |
@@ -211,6 +221,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | error type | `cortex.ask.ReviewExists` |
 | error type | `cortex.ask.ReviewNotFound` |
 | error type | `cortex.ask.ReviewNotOpen` |
+| error type | `cortex.ask.StoreFailed` |
 | error type | `cortex.ask.Unidentified` |
 | error type | `cortex.instance.ApplyRefused` |
 | error type | `cortex.instance.BackendMismatch` |
@@ -232,6 +243,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | error type | `cortex.instance.ModelUnavailable` |
 | error type | `cortex.instance.NameTaken` |
 | error type | `cortex.instance.ProposeFailed` |
+| error type | `cortex.instance.RekeyRefused` |
 | error type | `cortex.instance.RestoreUnsupported` |
 | error type | `cortex.instance.RunTerminated` |
 | error type | `cortex.instance.SampleFailed` |

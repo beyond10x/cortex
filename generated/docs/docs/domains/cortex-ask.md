@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d
-contract digest slice-sha256/2:8e4882ffeb89fedba865cb3ea3d9ed39407d9183f92f2fab62f59484495f5ef3
+model digest dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7
+contract digest slice-sha256/2:93636ffddc8e11296bb401275c89f8ae5f64fd3f353ca722d9ca71b7fa981aa7
 do not edit: regenerate with `ess generate`
 -->
 
@@ -19,7 +19,7 @@ The answer service of an instance: cortex ask serve answers a question over the 
 
 ### `AnswerOutcome`
 
-`cortex.ask.AnswerOutcome` is one of `answered`, `failed` and `limited`.
+`cortex.ask.AnswerOutcome` is one of `answered`, `failed`, `limited`, `client-closed` and `cut-off`.
 
 ### `AskDelta`
 
@@ -69,16 +69,17 @@ The answer service of an instance: cortex ask serve answers a question over the 
 
 ### `AskLimits`
 
-`cortex.ask.AskLimits` is a record of four fields:
+`cortex.ask.AskLimits` is a record of five fields:
 
 - `max_steps` — `Integer`
 - `max_result_bytes` — `Integer`
 - `max_seconds` — `Integer`
 - `per_identity_per_minute` — `Integer`
+- `max_tool_calls` — `Optional<Integer>`, which may be absent
 
 ### `AskSpec`
 
-`cortex.ask.AskSpec` is a record of eight fields:
+`cortex.ask.AskSpec` is a record of nine fields:
 
 - `listen` — `String`
 - `identity_header` — `String`
@@ -88,6 +89,7 @@ The answer service of an instance: cortex ask serve answers a question over the 
 - `retention_days` — `Optional<Integer>`, which may be absent
 - `slow_after_ms` — `Optional<Integer>`, which may be absent
 - `records` — `Optional<cortex.ask.PostgresRecords>`, which may be absent
+- `max_in_flight` — `Optional<Integer>`, which may be absent
 
 ### `AskStatus`
 
@@ -362,17 +364,23 @@ It takes:
 - `question` — `String`
 - `identity` — `String`
 
-It has six outcomes.
+It has nine outcomes.
 
 **`unidentified`** — It answers 401; no model was asked. Decided outside the input: The request carries no identity in the header the spec names. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.Unidentified`, carrying `header`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`rate-limited`** — It answers 429 with an `error` event carrying `retry_after`; no model was asked. Decided outside the input: The identity asked its per-minute limit of questions in the last minute. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.RateLimited`, carrying `identity` and `retry_after`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`busy`** — It answers 429 with an `error` event whose `reason` is `busy`; no model was asked. Decided outside the input: The service is working on its most answers at once. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.Busy`, carrying `max_in_flight`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`limit-reached`** — The stream ends with an `error` event naming the limit, and no `done`. Decided outside the input: The model still asks for a tool at the step limit, or the time limit passes. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.LimitReached`, carrying `limit`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`model-failed`** — The stream ends with an `error` event, and no `done`. Decided outside the input: The model gateway cannot be reached or answers an error. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.ModelFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`reader-failed`** — The stream ends with an `error` event, and no `done`. Decided outside the input: The EKR MCP reader cannot be started or stops answering. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.ReaderFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`cut-off`** — The stream ends with an `error` event whose `reason` is `cut-off`, and no `done`. Decided outside the input: The model's reply ends because of its token limit or a content filter. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.CutOff`, carrying `finish_reason`, `steps`, `input_tokens`, `output_tokens`, `cached_tokens` and `context_tokens`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`client-closed`** — The answer stops; nobody reads its last event. Decided outside the input: The reader closes the stream before its last event. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.ClientClosed`, carrying `steps`, `input_tokens`, `output_tokens`, `cached_tokens` and `context_tokens`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`answered`** — The stream ends with a `done` event carrying the answer and what it cites. The default branch, taken when no other outcome's condition matched. No entity in this specification changes. It emits `cortex.ask.Answered`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -388,9 +396,13 @@ It takes:
 - `value` — `cortex.ask.VoteValue`
 - `comment` — `Optional<String>`, which may be absent
 
-It has four outcomes.
+It has six outcomes.
 
 **`unidentified`** — It answers 401; nothing was cast. Decided outside the input: The request carries no identity in the header the spec names. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.Unidentified`, carrying `header`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`bad-request`** — It answers 413 for a body above 64 KiB, else 400; nothing was cast. Decided outside the input: The body is above 64 KiB or is not a vote's body. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.BadRequest`, carrying `message`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`store-failed`** — It answers 500; the detail goes only to the service's standard error. Decided outside the input: The answer records cannot be read or written. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.StoreFailed`, carrying `request_id`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`no-such-answer`** — It answers 404; nothing was cast. Decided outside the input: No answer record carries `answer_id`. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.AnswerNotFound`, carrying `answer_id`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
@@ -409,7 +421,11 @@ It takes:
 - `expect_facts` — `List<String>`
 - `expect_nodes` — `List<String>`
 
-It has three outcomes.
+It has five outcomes.
+
+**`bad-request`** — It answers 413 for a body above 64 KiB, else 400; nothing changed. Decided outside the input: The body is above 64 KiB or is not a close's body. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.BadRequest`, carrying `message`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`store-failed`** — It answers 500; the detail goes only to the service's standard error. Decided outside the input: The answer records cannot be read or written. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.StoreFailed`, carrying `request_id`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`closed`** — The item leaves the review queue with its reason. The default branch, taken when no other outcome's condition matched. It moves a `cortex.ask.ReviewItem` from `Open` to `Closed`, along the declared move `close`. The instance is the one named by the input field `review_id`. It emits `cortex.ask.ReviewClosed`. It sets `close_reason` from `input.reason`, `closed_at` from `implementation-generated`, `expect_facts` from `input.expect_facts` and `expect_nodes` from `input.expect_nodes`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -567,6 +583,57 @@ It carries:
 
 Reported by `cortex.ask.CastVote` on its `no-such-answer` outcome.
 
+### `BadRequest`
+
+The body of a record route is above 64 KiB, which answers 413, or is not the body the route takes, which answers 400; `message` says why, for a person.
+
+It carries:
+
+- `message` — `String`
+
+Reported by `cortex.ask.CastVote` on its `bad-request` outcome.
+
+Reported by `cortex.ask.CloseReview` on its `bad-request` outcome.
+
+### `Busy`
+
+The service is working on `max_in_flight` answers already; it answers 429 at once, asks no model and spends no question of the minute. Ask again later.
+
+It carries:
+
+- `max_in_flight` — `Integer`
+
+Reported by `cortex.ask.Ask` on its `busy` outcome.
+
+### `ClientClosed`
+
+The reader closed the stream before its last event; no further model or tool call is made, and the answer opens no review item. A model call in flight when the reader left runs to its reply or `max_seconds`, and the answer keeps its `max_in_flight` slot until it ends. `steps` counts the model calls made, and the token counts add up their `usage` as `cortex.ask.AskDone` does; `context_tokens` is the prompt tokens of the last one.
+
+It carries:
+
+- `steps` — `Integer`
+- `input_tokens` — `Integer`
+- `output_tokens` — `Integer`
+- `cached_tokens` — `Integer`
+- `context_tokens` — `Integer`
+
+Reported by `cortex.ask.Ask` on its `client-closed` outcome.
+
+### `CutOff`
+
+The model's reply ended because of its token limit (`finish_reason` `length`) or a content filter (`content_filter`), so its text is no answer and is not streamed. `finish_reason` is the one the gateway gave; `steps` and the token counts are those of the model calls made, as for `cortex.ask.ClientClosed`.
+
+It carries:
+
+- `finish_reason` — `String`
+- `steps` — `Integer`
+- `input_tokens` — `Integer`
+- `output_tokens` — `Integer`
+- `cached_tokens` — `Integer`
+- `context_tokens` — `Integer`
+
+Reported by `cortex.ask.Ask` on its `cut-off` outcome.
+
 ### `FigureInvalid`
 
 The figure holds a value it cannot be drawn from: a negative bar count, a timeline instant that is not RFC 3339, a node id given twice, or an edge to a node the graph does not have; nothing is drawn. `field` names the value, `reason` says why, for a person.
@@ -661,6 +728,18 @@ It carries:
 
 Reported by `cortex.ask.CloseReview` on its `wrong-state` outcome.
 
+### `StoreFailed`
+
+The answer records could not be read or written; it answers 500 with a fixed message and `request_id`. The detail (a database path, SQL text) goes only to the service's standard error, on a line naming that `request_id`.
+
+It carries:
+
+- `request_id` — `String`
+
+Reported by `cortex.ask.CastVote` on its `store-failed` outcome.
+
+Reported by `cortex.ask.CloseReview` on its `store-failed` outcome.
+
 ### `Unidentified`
 
 The request carries no identity in the header the spec names; it answers 401.
@@ -698,4 +777,4 @@ It may invoke [`OpenReview`](#openreview), [`PurgeExpired`](#purgeexpired) and [
 
 ---
 
-Generated from cortex v1 · model digest `7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d` · contract digest `slice-sha256/2:8e4882ffeb89fedba865cb3ea3d9ed39407d9183f92f2fab62f59484495f5ef3`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7` · contract digest `slice-sha256/2:93636ffddc8e11296bb401275c89f8ae5f64fd3f353ca722d9ca71b7fa981aa7`. Do not edit this file; change the specification and regenerate it with `ess generate`.

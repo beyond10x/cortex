@@ -90,29 +90,6 @@ fn foreign_writer(w: &World, name: &str, ty: &str, aliases: &[&str]) {
     );
 }
 
-/// Every node of instance `name`'s store: `(type id, canonical name, aliases)`.
-fn nodes(w: &World, name: &str) -> Vec<(String, String, Vec<String>)> {
-    let snapshot = ekr_json(w, name, &["snapshot"]);
-    snapshot["graph"]["graph"]["nodes"]
-        .as_object()
-        .into_iter()
-        .flatten()
-        .map(|(_, n)| {
-            (
-                n["type_id"].as_str().unwrap_or_default().to_string(),
-                n["canonical_name"].as_str().unwrap_or_default().to_string(),
-                n["aliases"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .map(str::to_string)
-                    .collect(),
-            )
-        })
-        .collect()
-}
-
 fn prompts(w: &World) -> Vec<String> {
     std::fs::read_to_string(w.root.join("prompt.log"))
         .unwrap_or_default()
@@ -426,8 +403,9 @@ fn a_failed_store_read_fails_the_run_before_the_model_is_asked() {
     executable(
         &wrapper,
         &format!(
-            "for a in \"$@\"; do if [ \"$a\" = snapshot ]; then echo 'snapshot unavailable' >&2; \
+            "{}for a in \"$@\"; do if [ \"$a\" = snapshot ]; then echo 'snapshot unavailable' >&2; \
              exit 3; fi; done\nexec \"{}\" \"$@\"\n",
+            common::EKR_SESSION_SHIM,
             ekr().display()
         ),
     );
@@ -452,7 +430,12 @@ fn a_failed_store_read_fails_the_run_before_the_model_is_asked() {
 
 // ---- alias templates ------------------------------------------------------------------------
 
-fn structured_source(templates: &str) -> String {
+/// A structured source over `registry/*.json` whose mapping writes `Repository` nodes with the
+/// alias templates `templates`, and `store_lookup: <lookup>` when `lookup` is given.
+fn structured_source(templates: &str, lookup: Option<&str>) -> String {
+    let lookup = lookup
+        .map(|l| format!("\n          store_lookup: {l}"))
+        .unwrap_or_default();
     format!(
         "  - name: registry\n    schedule: daily\n    settings:\n      kind: structured\n      \
          value:\n        input:\n          from: files\n          value: {{paths: [registry], \
@@ -460,40 +443,185 @@ fn structured_source(templates: &str) -> String {
          node_type: Repository\n          id: \"$.id\"\n          name: \"$.path\"\n          \
          aliases: []\n          properties: [{{property: path, path: \"$.path\"}}]\n          \
          relations: []\n          \
-         alias_templates: {templates}\n    {POLICY}\n"
+         alias_templates: {templates}{lookup}\n    {POLICY}\n"
     )
 }
 
-/// The story's case: an adopted store knows the repository as `repo:acme/api`, under another
-/// type than the structured mapping's. "A store node with that alias is found by the lookup":
-/// a structured run makes no lookup, and EKR resolves an alias within one node type only, so the
-/// record becomes a second node holding the same alias.
-#[test]
-#[ignore = "out of scope: a structured run does not look up other types; follow-up"]
-fn a_template_alias_reaches_a_store_node_of_another_type() {
+/// A world with instance `name` on [`structured_source`] (template `repo:{namespace}/{path}`,
+/// `lookup`) whose registry holds `repos`.
+fn registry_world(name: &str, repos: &str, lookup: Option<&str>) -> World {
     let w = world();
     std::fs::create_dir_all(w.root.join("registry")).unwrap();
     std::fs::write(
         w.root.join("registry/repos.json"),
-        r#"{"repos": [{"id": 7, "namespace": "acme", "path": "api"}]}"#,
+        format!(r#"{{"repos": {repos}}}"#),
     )
     .unwrap();
     let real = ekr().display().to_string();
     create_with(
         &w,
-        "xtype",
-        &structured_source(r#"["repo:{namespace}/{path}"]"#),
+        name,
+        &structured_source(r#"["repo:{namespace}/{path}"]"#, lookup),
         "",
         &real,
     );
+    w
+}
+
+/// The nodes of instance `name`'s store holding `alias`: `(type name, every property value of
+/// an active assertion on it, by property name)`.
+fn holding(w: &World, name: &str, alias: &str) -> Vec<(String, BTreeSet<(String, String)>)> {
+    let snapshot = ekr_json(w, name, &["snapshot"]);
+    let ontology = ekr_json(w, name, &["ontology"]);
+    let mut types = BTreeMap::new();
+    let mut properties = BTreeMap::new();
+    for t in ontology["node_types"].as_array().into_iter().flatten() {
+        types.insert(
+            t["id"].as_str().unwrap_or_default(),
+            t["name"].as_str().unwrap_or_default(),
+        );
+        for p in t["properties"].as_array().into_iter().flatten() {
+            properties.insert(
+                p["id"].as_str().unwrap_or_default(),
+                p["name"].as_str().unwrap_or_default(),
+            );
+        }
+    }
+    let graph = &snapshot["graph"]["graph"];
+    graph["nodes"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(_, n)| n)
+        .filter(|n| {
+            n["aliases"]
+                .as_array()
+                .is_some_and(|a| a.iter().any(|x| x == alias))
+        })
+        .map(|n| {
+            let values = graph["assertions"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .map(|(_, a)| a)
+                .filter(|a| a["lifecycle"] == "Active" && a["subject"]["Node"] == n["id"])
+                .filter_map(|a| {
+                    let p = properties.get(a["predicate"]["Property"].as_str()?)?;
+                    let v = &a["object"]["Value"]["value"];
+                    let v = v.as_str().map_or_else(|| v.to_string(), str::to_string);
+                    Some((p.to_string(), v))
+                })
+                .collect();
+            let ty = n["type_id"]
+                .as_str()
+                .and_then(|id| types.get(id))
+                .copied()
+                .unwrap_or_default();
+            (ty.to_string(), values)
+        })
+        .collect()
+}
+
+/// The story's case: an adopted store knows the repository as `repo:acme/api`, under another
+/// type than the structured mapping's. With `store_lookup: AnyType` the run finds that node and
+/// writes the record onto it, so one node holds the alias, and it carries the record's `path`.
+#[test]
+fn a_template_alias_reaches_a_store_node_of_another_type() {
+    let w = registry_world(
+        "xtype",
+        r#"[{"id": 7, "namespace": "acme", "path": "api"}]"#,
+        Some("AnyType"),
+    );
     foreign_writer(&w, "xtype", "Project", &["acme api", "repo:acme/api"]);
     let (code, ran) = w.cortex(&["run", "xtype/registry"]);
-    assert_eq!(code, 0, "{ran}");
-    let holding: Vec<_> = nodes(&w, "xtype")
-        .into_iter()
-        .filter(|(_, _, aliases)| aliases.iter().any(|a| a == "repo:acme/api"))
-        .collect();
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
+    let holding = holding(&w, "xtype", "repo:acme/api");
     assert_eq!(holding.len(), 1, "one node per alias: {holding:?}");
+    assert_eq!(holding[0].0, "Project", "{holding:?}");
+    assert!(
+        holding[0].1.contains(&("path".into(), "api".into())),
+        "the record's property is on the store's node: {holding:?}"
+    );
+    // A second run over a changed record finds the same node again.
+    std::fs::write(
+        w.root.join("registry/repos.json"),
+        r#"{"repos": [{"id": 7, "namespace": "acme", "path": "api", "x": 1}]}"#,
+    )
+    .unwrap();
+    let (code, again) = w.cortex(&["run", "xtype/registry"]);
+    assert_eq!(code, 0, "{again}");
+    assert_eq!(self::holding(&w, "xtype", "repo:acme/api").len(), 1);
+}
+
+/// Without `store_lookup` (its default, `OwnType`), the run behaves as before the setting: EKR
+/// resolves the template alias within the mapping's own type only, so the record is a node of
+/// its own beside the store's `Project`.
+#[test]
+fn without_store_lookup_a_template_alias_meets_its_own_type_only() {
+    let w = registry_world(
+        "owntype",
+        r#"[{"id": 7, "namespace": "acme", "path": "api"}]"#,
+        None,
+    );
+    foreign_writer(&w, "owntype", "Project", &["acme api", "repo:acme/api"]);
+    let (code, ran) = w.cortex(&["run", "owntype/registry"]);
+    assert_eq!(code, 0, "{ran}");
+    let types: BTreeSet<String> = holding(&w, "owntype", "repo:acme/api")
+        .into_iter()
+        .map(|(ty, _)| ty)
+        .collect();
+    assert_eq!(
+        types,
+        BTreeSet::from(["Project".to_string(), "Repository".to_string()])
+    );
+}
+
+/// A record whose template alias names a `Project` and a `Service` node is refused alone, naming
+/// both types; the other record of the batch is applied, and the refused one is tried again.
+#[test]
+fn a_record_matching_nodes_of_two_types_is_refused_alone_naming_both() {
+    let w = registry_world(
+        "twotypes",
+        r#"[{"id": 7, "namespace": "acme", "path": "api"},
+            {"id": 8, "namespace": "acme", "path": "web"}]"#,
+        Some("AnyType"),
+    );
+    foreign_writer(&w, "twotypes", "Project", &["acme api", "repo:acme/api"]);
+    foreign_writer(&w, "twotypes", "Service", &["api service", "repo:acme/api"]);
+    let (code, ran) = w.cortex(&["run", "twotypes/registry"]);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
+    let rejected = ran["detail"]["rejected"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(rejected.len(), 1, "{ran}");
+    assert!(
+        rejected[0]["document"]
+            .as_str()
+            .is_some_and(|d| d.ends_with(":7")),
+        "{ran}"
+    );
+    let refusal = rejected[0]["refusal"].as_str().unwrap_or_default();
+    assert!(
+        refusal.contains("Project") && refusal.contains("Service"),
+        "{ran}"
+    );
+    // The other record is applied as a node of its own type; the refused one wrote nothing.
+    let web = holding(&w, "twotypes", "repo:acme/web");
+    assert_eq!(web.len(), 1, "{web:?}");
+    assert_eq!(web[0].0, "Repository");
+    let api = holding(&w, "twotypes", "repo:acme/api");
+    assert_eq!(api.len(), 2, "{api:?}");
+    assert!(api.iter().all(|(_, values)| values.is_empty()), "{api:?}");
+    // Not marked seen: the next run reads it again and refuses it again.
+    let (_, again) = w.cortex(&["run", "twotypes/registry"]);
+    assert_eq!(
+        again["detail"]["rejected"].as_array().map(Vec::len),
+        Some(1),
+        "{again}"
+    );
 }
 
 /// The specification and the docs say a placeholder path is "ASCII letters, digits, `_` and `-`":

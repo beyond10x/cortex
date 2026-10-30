@@ -355,16 +355,103 @@ fn an_env_style_password_in_a_text_is_masked() {
     assert_nowhere(&w, &t);
 }
 
+/// `PAGES` with `extra` appended to the second page's text.
+fn with_text(extra: &str) -> String {
+    let anchor = "Example Labs also develops the Gadget runtime.";
+    let pages = PAGES.replacen(anchor, &format!("{anchor} {extra}"), 1);
+    assert!(pages.contains(extra), "{pages}");
+    pages
+}
+
+/// A JSON-quoted name, `"password": "…"`: the quote between the name and the separator does not
+/// hide the assignment (R4-03).
+#[test]
+fn a_json_quoted_password_in_a_text_is_masked() {
+    let t = token("Zr4");
+    let w = plain(&with_text(&format!(
+        r#"Its config reads {{\"password\": \"{t}\"}}."#
+    )));
+    run(&w);
+    assert_nowhere(&w, &t);
+}
+
+/// A URL password with a raw `@` in it: the password runs to the last `@` before the host
+/// (R4-07).
+#[test]
+fn a_userinfo_password_with_an_at_sign_is_masked() {
+    let t = token("Zr4");
+    let w = plain(&pages_with_urls(
+        &format!("https://alice:Kd9@{t}@example.org/a"),
+        "https://example.org/b",
+    ));
+    run(&w);
+    assert_nowhere(&w, &t);
+}
+
+/// A value in a key with a raw `%` that is no escape (`%Zr`) does not end there (R4-12).
+#[test]
+fn an_access_token_with_a_raw_percent_sign_in_a_url_is_masked() {
+    let t = token("Zr4");
+    let w = plain(&pages_with_urls(
+        &format!("https://example.org/a?access_token=Kd9%{t}&page=2"),
+        "https://example.org/b",
+    ));
+    run(&w);
+    assert_nowhere(&w, &t);
+}
+
+/// A private key whose `END` line the provider cut off with the rest of the content is masked
+/// to its last line (R4-13).
+#[test]
+fn a_private_key_cut_before_its_end_line_is_masked() {
+    let lines: Vec<String> = ["Qk7", "Wm2", "Xs5"]
+        .iter()
+        .map(|seed| format!("MIIE{}", seed.repeat(20)))
+        .collect();
+    let cut = "Pz8rTq3";
+    // Assembled at runtime so no key-shaped literal sits in the source.
+    let block = format!(
+        r"-----BEGIN PRIVATE {}-----\n{}\n{cut}",
+        "KEY",
+        lines.join(r"\n")
+    );
+    let pages = PAGES.replacen(
+        r#"Example Labs also develops the Gadget runtime.","content_truncated":false"#,
+        &format!(
+            r#"Example Labs also develops the Gadget runtime. Its deploy key: {block}","content_truncated":true"#
+        ),
+        1,
+    );
+    assert!(pages.contains(&block), "{pages}");
+    let w = plain(&pages);
+    run(&w);
+    for line in &lines {
+        assert_nowhere(&w, line);
+    }
+    assert_nowhere(&w, cut);
+}
+
+/// `%3A`, a percent-encoded `:`, separates a name from its value as `%3D` does (R4-14).
+#[test]
+fn a_percent_encoded_colon_after_an_access_token_is_masked() {
+    let t = token("Zr4");
+    let w = plain(&pages_with_urls(
+        &format!("https://example.org/a?next=%2Fapi%3Faccess_token%3A{t}"),
+        "https://example.org/b",
+    ));
+    run(&w);
+    assert_nowhere(&w, &t);
+}
+
 /// A stand-in `connectors` for a `tracker` source whose one record's id is a URL with a token,
 /// and whose child call fails for every record.
 const RECORD_CONNECTORS: &str = r#"R="@ROOT@"
 case "$*" in
-  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"tracker","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"tracker","connector":"tracker","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
   *"connections revalidate"*) echo '{"ok":true,"result":{}}' ;;
-  *"operations describe"*) echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
-  *"--operation hooks.list"*)
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"hooks.list","revision":"r","result":{"hooks":[{"url":"https://hooks.example.org/in?access_token=@TOKEN@","summary":"Inbound hook"}]}}}\n' ;;
-  *"--operation deliveries.list"*)
+  "invoke "*" hooks.list "*)
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"hooks.list","revision":"r","result":{"hooks":[{"url":"https://hooks.example.org/in?access_token=@TOKEN@","summary":"Inbound hook"}]}}}\n' ;;
+  "invoke "*" deliveries.list "*)
     echo '{"ok":false,"error":{"code":"failure","data":{"code":"unavailable","stage":"execution"}}}'; exit 1 ;;
   *) echo '{"ok":false}'; exit 2 ;;
 esac

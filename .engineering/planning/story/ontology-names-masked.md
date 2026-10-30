@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:ontology-names-masked
 kind: story
-status: draft
+status: active
 title: The ontology names a run shows the model are masked and one-line
 summary: type, property and edge names from ekr ontology pass mask, one-line and redaction
 relations:
 - serves: vision:self-updating-instances
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-18T00:28:45Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-18T00:28:45Z", actor: "human:timo", revision: 3}
 ---
 ## Outcome
 

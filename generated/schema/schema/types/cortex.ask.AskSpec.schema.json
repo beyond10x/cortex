@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d",
-    "contract_digest": "slice-sha256/2:3506ee6f8825813ac2702bcbbd584fe74ec3a8e76597accfce39f03ab4c01f27",
+    "source_digest": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
+    "contract_digest": "slice-sha256/2:c412dd8b3fef68e8995a373f97e9d834d09900b858ed9ccb515981b7dcbbcc7d",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -25,6 +25,9 @@
           "type": "integer"
         },
         "per_identity_per_minute": {
+          "type": "integer"
+        },
+        "max_tool_calls": {
           "type": "integer"
         }
       },
@@ -65,6 +68,9 @@
         },
         "records": {
           "$ref": "#/$defs/cortex.ask.PostgresRecords"
+        },
+        "max_in_flight": {
+          "type": "integer"
         }
       },
       "required": [

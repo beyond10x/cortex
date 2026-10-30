@@ -10,7 +10,7 @@
 //! - `fail-always`: `connections revalidate` answers the retryable failure on every call.
 //! - `refuse`: once `fail` is spent, `connections revalidate` answers the envelope it holds.
 //! - `ready`: the connection is listed `ready` (else `pending` until a revalidation succeeds).
-//! - `lapse-first`: the first `operations invoke` answers `not_granted` at admission.
+//! - `lapse-first`: the first `invoke` answers `not_granted` at admission.
 //!
 //! Every entry `connections list` answers carries the profile `tavily.api-key`, so a spec may
 //! name the connection by id or by that profile.
@@ -42,7 +42,7 @@ case "$*" in
     if [ -e "$R/list-fail-always" ]; then echo "$RETRYABLE" >&2; exit 1; fi
     if [ -s "$R/list-fail" ]; then sed -i '1d' "$R/list-fail"; echo "$RETRYABLE" >&2; exit 1; fi
     if [ -e "$R/revalidated" ] || [ -e "$R/ready" ]; then S=ready; else S=pending; fi
-    printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily","connection":"conn_test","profile":"tavily.api-key","state":"%s","revision":"rev1"}}]}}}}' "$S" ;;
+    printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily","connector":"tavily","instance":"main","connection":"conn_test","profile":"tavily.api-key","state":"%s","revision":"rev1"}}]}}}}' "$S" ;;
   *"connections revalidate"*)
     date +%s%N >> "$R/revalidations.log"
     if [ -e "$R/fail-always" ]; then echo "$RETRYABLE" >&2; exit 1; fi
@@ -51,8 +51,7 @@ case "$*" in
     touch "$R/revalidated"
     echo '{{"ok":true,"result":{{}}}}' ;;
   *"connections status"*) printf '{{"ok":true,"result":{{"connection":{{"summary":{{"state":"ready"}}}}}}}}' ;;
-  *"operations describe"*) echo '{{"ok":true,"result":{{"schema":"s","revision":"r"}}}}' ;;
-  *"operations invoke"*)
+  "invoke "*)
     echo "$*" >> "$R/invocations.log"
     if [ -e "$R/lapse-first" ] && [ "$(wc -l < "$R/invocations.log")" -eq 1 ]; then
       echo '{NOT_GRANTED}' >&2; exit 1

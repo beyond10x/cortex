@@ -4,9 +4,11 @@
 //! (`story:extraction-supersedes`, EKR 0.0.31).
 //!
 //! Facts are dated by their document's time, so documents can arrive out of order. A replacement
-//! older than the value it would supersede is rejected by EKR (`invalid-supersession`), and one
-//! with nothing active to replace is rejected too (`replacement-without-active-assertion`). cortex
-//! lists either under the run's `rejected`, with the document it cites, and the run goes on.
+//! older than the value it would supersede is rejected by EKR (`invalid-supersession`); cortex
+//! lists it under the run's `rejected`, with the document it cites, and the run goes on. One with
+//! nothing active to replace is rejected too (`replacement-without-active-assertion`); cortex
+//! applies it again without `replaces`, so its value is stored as a plain assertion, and counts it
+//! in the run's `facts_reapplied` (`story:replacement-applied-as-assertion`).
 
 mod common;
 
@@ -287,30 +289,181 @@ fn a_replacement_older_than_the_value_it_replaces_is_listed_and_the_run_goes_on(
     assert_eq!(developed_by(graph), ["a", "b"]);
 }
 
+/// The last line of the instance's `cortex.log`.
+fn last_log_line(w: &World) -> Value {
+    let text = std::fs::read_to_string(w.home.join("instances/owned/cortex.log")).unwrap();
+    serde_json::from_str(text.lines().last().expect("a log line")).unwrap()
+}
+
 /// A replacement with nothing active to replace is rejected by EKR as
-/// `replacement-without-active-assertion`, for that fact alone: the run lists it and the rest of
-/// the document applies.
+/// `replacement-without-active-assertion`; cortex applies that fact again without `replaces`
+/// (`story:replacement-applied-as-assertion`), so its value is stored as a plain assertion, is
+/// neither rejected nor listed, and the run counts it in `facts_reapplied`.
 #[test]
-fn a_replacement_with_nothing_to_replace_is_listed_and_the_run_goes_on() {
+fn a_replacement_with_nothing_to_replace_is_stored_as_an_assertion() {
     let w = world();
     let ran = run_with(
         &w,
         &[r#"{"id":"a","time":"2026-01-02","text":"The owner is now Alice."}"#],
     );
     assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
-    assert_eq!(ran["detail"]["parts_rejected"], 1, "{ran}");
-    let refusals = refusals(&ran);
-    assert_eq!(refusals.len(), 1, "{ran}");
-    assert_eq!(refusals[0].0, "a", "{ran}");
-    assert!(
-        refusals[0]
-            .1
-            .contains("replacement-without-active-assertion"),
-        "{ran}"
-    );
+    assert_eq!(ran["detail"]["parts_rejected"], 0, "{ran}");
+    assert_eq!(ran["detail"]["facts_reapplied"], 1, "{ran}");
+    assert!(refusals(&ran).is_empty(), "{ran}");
 
     let snap = snapshot(&w);
     let graph = &snap["graph"]["graph"];
-    assert!(owners(graph).is_empty());
+    let owners = owners(graph);
+    assert_eq!(owners.len(), 1, "{owners:?}");
+    assert_eq!(
+        (
+            owners[0].value.as_str(),
+            &owners[0].records,
+            owners[0].from,
+            active(&owners[0])
+        ),
+        ("Alice", &vec!["a".to_string()], Some(JAN_2), true),
+        "{owners:?}"
+    );
     assert_eq!(developed_by(graph), ["a"]);
+}
+
+/// The acceptance of `story:replacement-applied-as-assertion`: in a batch of two documents, the
+/// one whose replacement has nothing to replace keeps its value, the run report and its log line
+/// count one re-applied fact, and the stored value is an ordinary one a later replacement
+/// supersedes.
+#[test]
+fn a_reapplied_replacement_is_counted_and_a_later_one_supersedes_it() {
+    let w = world();
+    let ran = run_with(
+        &w,
+        &[
+            r#"{"id":"a","time":"2026-01-02","text":"The owner is now Alice."}"#,
+            r#"{"id":"c","time":"2026-01-02","text":"Nothing about owners."}"#,
+        ],
+    );
+    assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
+    assert_eq!(ran["detail"]["facts_reapplied"], 1, "{ran}");
+    assert_eq!(ran["detail"]["parts_rejected"], 0, "{ran}");
+    assert_eq!(last_log_line(&w)["facts_reapplied"], 1);
+    let graph = snapshot(&w)["graph"]["graph"].clone();
+    let alice: Vec<Owner> = owners(&graph);
+    assert!(
+        alice.len() == 1 && active(&alice[0]) && alice[0].value == "Alice",
+        "{alice:?}"
+    );
+    assert_eq!(developed_by(&graph), ["a", "c"]);
+
+    let later = run_with(
+        &w,
+        &[
+            r#"{"id":"a","time":"2026-01-02","text":"The owner is now Alice."}"#,
+            r#"{"id":"c","time":"2026-01-02","text":"Nothing about owners."}"#,
+            r#"{"id":"b","time":"2026-01-03","text":"The owner is now Bob."}"#,
+        ],
+    );
+    assert_eq!(later["detail"]["facts_reapplied"], 0, "{later}");
+    assert_eq!(later["detail"]["parts_rejected"], 0, "{later}");
+    let graph = snapshot(&w)["graph"]["graph"].clone();
+    let owners = owners(&graph);
+    let now: Vec<&Owner> = owners.iter().filter(|o| active(o)).collect();
+    assert!(
+        now.len() == 1 && now[0].value == "Bob",
+        "Bob supersedes Alice: {owners:?}"
+    );
+}
+
+/// Adversary (`story:replacement-applied-as-assertion`): one batch, an empty store, two documents
+/// a day apart that each change the owner. EKR has nothing active to replace for either, so both
+/// are applied again as plain assertions. A one-cardinality property must still end with one
+/// active value, the newer one, as it does when the two documents arrive in two runs.
+#[test]
+fn adversary_two_replacements_with_nothing_to_replace_in_one_batch_leave_the_newer_active() {
+    let w = world();
+    let ran = run_with(
+        &w,
+        &[
+            r#"{"id":"a","time":"2026-01-02","text":"The owner is now Alice."}"#,
+            r#"{"id":"b","time":"2026-01-03","text":"The owner is now Bob."}"#,
+        ],
+    );
+    assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
+    let graph = snapshot(&w)["graph"]["graph"].clone();
+    let owners = owners(&graph);
+    let now: Vec<&Owner> = owners.iter().filter(|o| active(o)).collect();
+    assert!(
+        now.len() == 1 && now[0].value == "Bob",
+        "one active owner, Bob: {owners:?}; run: {ran}"
+    );
+}
+
+/// Adversary (`story:replacement-applied-as-assertion`): the first apply commits and rejects the
+/// replacement for having nothing to replace; the re-apply then fails once for a cause of the
+/// store's (here an `ekr` that fails on `reapply.yaml` the first time). EKR would not reject the
+/// fact again, so the value must not be lost: a later run stores it. Today the document is marked
+/// seen, the next run skips it, and the value never reaches the store.
+#[test]
+fn adversary_a_reapply_that_fails_once_does_not_lose_the_value() {
+    let w = World::new();
+    executable(&w.bin.join("claude"), CLAUDE);
+    std::fs::create_dir_all(w.root.join("chat")).unwrap();
+    let flaky = w.bin.join("ekr-flaky");
+    executable(
+        &flaky,
+        &format!(
+            r#"R="{root}"
+case "$*" in
+  *reapply.yaml*)
+    if [ ! -e "$R/flaked" ]; then
+      touch "$R/flaked"
+      echo "ekr: the store is unavailable: injected once" >&2
+      exit 1
+    fi ;;
+esac
+exec "{ekr}" "$@"
+"#,
+            root = w.root.display(),
+            ekr = ekr().display()
+        ),
+    );
+    let path = w.root.join("owned.yaml");
+    std::fs::write(
+        &path,
+        format!(
+            r#"format: cortex.instance/1
+name: owned
+description: Test brain.
+ekr: {{version: "0.0.32", bin: "{ekr}"}}
+seed: {{documents: []}}
+model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
+sources:
+  - name: chat
+    schedule: daily
+    settings:
+      kind: files
+      value:
+        paths: [chat]
+        glob: "*.jsonl"
+        records: {{format: JsonLines, id: id, time: time, text: ["{{text}}"], filters: []}}
+    policy: {{refresh_after_days: 7, change: ContentHash, max_documents_per_run: 50, max_chars_per_document: 5000}}
+serve: {{view_port: 18993}}
+"#,
+            ekr = flaky.display()
+        ),
+    )
+    .unwrap();
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+
+    let records = [r#"{"id":"a","time":"2026-01-02","text":"The owner is now Alice."}"#];
+    let first = run_with(&w, &records);
+    assert!(w.root.join("flaked").exists(), "the re-apply ran: {first}");
+    let second = run_with(&w, &records);
+    let graph = snapshot(&w)["graph"]["graph"].clone();
+    let owners = owners(&graph);
+    assert!(
+        owners.len() == 1 && active(&owners[0]) && owners[0].value == "Alice",
+        "Alice is stored after the failed re-apply and a later run: {owners:?}; \
+         first: {first}; second: {second}"
+    );
 }

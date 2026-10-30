@@ -1,0 +1,30 @@
+{
+  "format": "ess-diff-acknowledgements/1",
+  "before": "0f7251f0c444abe6dc1366bd90cef115ffd6b3c2bd521752108a810a42d41fc1",
+  "after": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
+  "acknowledged": [
+    "command/cortex.ask.Ask/outcome-added/busy",
+    "command/cortex.ask.Ask/outcome-added/client-closed",
+    "command/cortex.ask.Ask/outcome-added/cut-off",
+    "command/cortex.ask.CastVote/outcome-added/bad-request",
+    "command/cortex.ask.CastVote/outcome-added/store-failed",
+    "command/cortex.ask.CloseReview/outcome-added/bad-request",
+    "command/cortex.ask.CloseReview/outcome-added/store-failed",
+    "command/cortex.instance.ApplySchemaProposals/outcome-condition-changed/apply-failed",
+    "command/cortex.instance.ProposeSchemaChanges/outcome-added/store-outcome-unknown",
+    "command/cortex.instance.ProposeSchemaChanges/outcome-condition-changed/propose-failed",
+    "command/cortex.instance.RunSource/outcome-response-payload-changed/ran",
+    "command/cortex.instance.UpdateInstance/outcome-added/rekey-refused",
+    "event/cortex.instance.SourceRan/field-added/facts_reapplied",
+    "type/cortex.ask.AnswerOutcome/variant-added/client-closed",
+    "type/cortex.ask.AnswerOutcome/variant-added/cut-off",
+    "type/cortex.ask.AskLimits/field-added/max_tool_calls",
+    "type/cortex.ask.AskSpec/field-added/max_in_flight",
+    "type/cortex.instance.ChildCall/field-added/follow",
+    "type/cortex.instance.ChildCall/field-added/text",
+    "type/cortex.instance.ConnectorsSource/field-added/key",
+    "type/cortex.instance.InstanceSpec/field-added/runs",
+    "type/cortex.instance.RecordMapping/field-added/store_lookup",
+    "type/cortex.instance.StructuredChild/field-added/follow"
+  ]
+}

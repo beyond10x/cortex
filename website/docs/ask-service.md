@@ -29,8 +29,16 @@ model:
 ask:
   listen: "127.0.0.1:8088"
   identity_header: x-asker
-  limits: {max_steps: 8, max_result_bytes: 16384, max_seconds: 120, per_identity_per_minute: 10}
-  link_templates: {node: "https://view.example/node/{id}", evidence: "https://view.example/evidence/{id}"}
+  limits:
+    max_steps: 8
+    max_result_bytes: 16384
+    max_seconds: 120
+    per_identity_per_minute: 10
+    max_tool_calls: 16
+  max_in_flight: 8
+  link_templates:
+    node: "https://view.example/node/{id}"
+    evidence: "https://view.example/evidence/{id}"
   guidance: Answer in English, in at most five sentences.
   retention_days: 90
   slow_after_ms: 20000
@@ -44,6 +52,8 @@ ask:
 | `limits.max_result_bytes` | the most bytes of one tool result the model is shown |
 | `limits.max_seconds` | the most seconds one answer takes, every model and tool call included |
 | `limits.per_identity_per_minute` | the most questions of one identity in a sliding minute |
+| `limits.max_tool_calls` | optional: the most tool calls one step makes (default 16); the calls past it are not made, the model is told so for each, and a second `status` event of the step says how many were not made |
+| `max_in_flight` | optional: the most answers the service works on at once, over every identity (default 8); a question past it answers 429 `busy` at once |
 | `link_templates` | optional: the URL of a cited node or evidence, `{id}` replaced by its percent-encoded id |
 | `guidance` | optional: text added to the service's system prompt |
 | `retention_days` | optional: how many days an answer record is kept, with its votes and review items (default 90) |
@@ -51,7 +61,7 @@ ask:
 | `records` | required on a `postgres` store, refused on a `sqlite` one: the PostgreSQL schema of the answer records ([Records on a PostgreSQL store](#records-on-a-postgresql-store)) |
 
 `cortex ask serve` refuses to start (exit 2, naming the field) a spec with no `ask` section, no
-`model.gateway`, a limit, `retention_days` or `slow_after_ms` of 0 or less, an `identity_header`
+`model.gateway`, a limit, `retention_days`, `slow_after_ms` or `max_in_flight` of 0 or less, an `identity_header`
 that is no header name, or `ask.records` that does not fit the store (see
 [Records on a PostgreSQL store](#records-on-a-postgresql-store)). It then opens its records
 (exit 1 when it cannot) and purges the expired ones. Once bound it prints one line,
@@ -68,9 +78,15 @@ no model. Bind `listen` where only that guard reaches it.
 The gateway is spoken to as an OpenAI-compatible endpoint: `POST <base_url>/v1/chat/completions`
 (`<base_url>/chat/completions` when `base_url` already ends in `/v1`), with the value of the
 variable `token_env` names as a bearer token, read when an answer starts. A missing or empty token
-fails the answer with `model-failed`, naming the variable. The reader does not inherit that
+fails the answer with `model-failed`; the service's log names the variable. The reader does not inherit that
 variable, nor any other `ANTHROPIC_*` or `CLAUDE_*` variable: it reads a store and gets no model
-credential. A `max_seconds` above ten years counts as ten years.
+credential. A `max_seconds` above ten years counts as ten years. A gateway answer above 4 MiB is
+not read past that and fails the answer with `model-failed`.
+
+Each answer starts its own reader and kills it when the answer ends; readers are not pooled, so
+no answer inherits a reader another answer left stuck or mid-call. At most `max_in_flight`
+readers run at once, and at most as many model calls: an answer holds its slot until its reader
+is stopped and its model call has ended, also when nobody reads it any more.
 
 ## The event contract
 
@@ -80,7 +96,7 @@ the event's name and its `data:` line the event as one JSON object, `{"event": <
 
 | event | fields | when |
 |---|---|---|
-| `status` | `format` (`cortex.ask-events/1`), `step`, `message` | first, then before each model call |
+| `status` | `format` (`cortex.ask-events/1`), `step`, `message` | first, then before each model call, and after a reply whose tool calls were cut to `max_tool_calls` |
 | `tool` | `step`, `name`, `arguments`, `result_bytes`, `truncated`, `failed`, `withheld` | after each tool call the model asked for |
 | `delta` | `text` | a piece of the model's text, in order |
 | `discard` | `step` | withdraws the `delta`s since the last `discard`: text before a tool call, not the answer |
@@ -100,11 +116,27 @@ answer's UUIDv7, the id its record and its votes carry.
 |---|---|---|
 | `unidentified` | 401 | no identity header; no model was asked |
 | `rate-limit` | 429 | the identity's questions of the minute are spent; `retry_after` (also the `Retry-After` header) is the whole seconds until the oldest leaves the window |
+| `busy` | 429 | the service is working on `max_in_flight` answers already; no model was asked and no question of the minute was spent |
 | `bad-request` | 400, or 413 | the body is not JSON with a non-empty `question`, or is above 1 MiB (413), or the question still holds a class `refuse_if_left` names (400); a refused body spends no question of the minute |
 | `step-limit` | 200 | the model still asked for a tool at `max_steps` |
 | `time-limit` | 200 | the answer passed `max_seconds` |
 | `model-failed` | 200 | the gateway could not be reached, answered an error or no message |
 | `reader-failed` | 200 | the reader could not be started or stopped answering |
+| `cut-off` | 200 | the model's reply ended at its token limit (`finish_reason` `length`) or at a content filter (`content_filter`); its text is no answer and is not streamed |
+
+The `error` event of an answer that started ends its `message` with `(request <answer_id>)`, the id
+of its record. The `message` of `model-failed` and `reader-failed` is a fixed text: what the
+gateway answered, the reader's program path and any other internal detail go only to the
+service's standard error, on a line naming that request id. Every line the service writes there
+is masked for credential shapes first, as a record is.
+
+A reader who closes the stream before its last event stops the answer at once: no model is
+asked again and the reader process is stopped. The answer is recorded as `client-closed`, with
+the token counts and steps of the model calls already made; it is no failure and opens no review
+item, `slow` included. A reader who leaves while the model is asked does not cut the call: it
+is waited for, up to `max_seconds`, so its tokens are counted, and none of its tool calls is
+made. Until it ends, the answer keeps its `max_in_flight` slot, so a client who disconnects
+cannot start more readers or model calls than `max_in_flight`.
 
 A tool result is rewritten into compact text (each text that is JSON written without whitespace)
 and cut at a character boundary to `max_result_bytes`; its `tool` event says whether it was cut.
@@ -140,23 +172,34 @@ Without a policy, the question and the tool results reach the model unchanged, `
 always false and `unrestored` 0. Detection is by pattern, with the limits that
 [Limits](./limits.md) states for extraction.
 
+A stream with one tool call and an answer, without a policy. The service sends each `data:` line
+as one line of JSON; here each is broken after a comma to fit the page:
+
 ```text
 event: status
-data: {"event":"status","value":{"format":"cortex.ask-events/1","message":"starting the reader","step":0}}
+data: {"event":"status","value":{"format":"cortex.ask-events/1",
+  "message":"starting the reader","step":0}}
 
 event: tool
-data: {"event":"tool","value":{"arguments":"{\"query\":\"widget\"}","failed":false,"name":"search","result_bytes":35,"step":1,"truncated":false,"withheld":false}}
+data: {"event":"tool","value":{"arguments":"{\"query\":\"widget\"}",
+  "failed":false,"name":"search","result_bytes":35,"step":1,
+  "truncated":false,"withheld":false}}
 
 event: done
-data: {"event":"done","value":{"answer":"…","answer_id":"0192f3a1-7c2e-7d41-9b0a-3f5e6d7c8b9a","cached_tokens":100,"context_tokens":200,"evidence":[],"input_tokens":300,"nodes":["n-42"],"output_tokens":30,"steps":2,"unrestored":0}}
+data: {"event":"done","value":{"answer":"…",
+  "answer_id":"0192f3a1-7c2e-7d41-9b0a-3f5e6d7c8b9a",
+  "cached_tokens":100,"context_tokens":200,"evidence":[],
+  "input_tokens":300,"nodes":["n-42"],"output_tokens":30,"steps":2,
+  "unrestored":0}}
 ```
 
 ## Answer records, votes and review
 
 Every answer the service gives, and every one that failed or hit a limit, is kept as a record
 (`cortex.ask.AnswerRecord`) before its last event is sent: the question, the identity, the answer or
-the reason there is none, the outcome (`answered`, `failed`, `limited`), the `tool` events, the
-latency, the token counts of its `done` event and the time. A request refused before it started
+the reason there is none, the outcome (`answered`, `failed`, `limited`, `client-closed`,
+`cut-off`), the `tool` events, the latency, the token counts and steps (of its `done` event; for
+`client-closed` and `cut-off`, of the model calls made before it ended; otherwise 0) and the time. A request refused before it started
 (401, 429, 400) leaves no record. The records are cortex's own, never in the EKR store: on a `sqlite`
 store they live in `instances/<name>/ask.sqlite` in the instance directory, on a `postgres` store in
 a schema of their own ([below](#records-on-a-postgresql-store)). Either carries its schema version,
@@ -167,7 +210,10 @@ whatever the instance's
 `redaction` policy; the mask is irreversible.
 
 The record routes need the identity header too (401 without it) and answer JSON; a refusal is
-`{"error": <reason>, "message": <text>}`.
+`{"error": <reason>, "message": <text>}`. A body above 64 KiB is refused with 413
+`bad-request`. A failure of the records answers 500 `store-failed` with a fixed message and a
+`request_id`; the detail (a database path, SQL text) goes only to the service's standard error,
+on a line naming that `request_id`.
 
 | route | body | answers |
 |---|---|---|
@@ -181,7 +227,7 @@ cause, and an item, once opened, stays as it was whatever happens after:
 | cause | opened when |
 |---|---|
 | `voted-down` | a `down` vote is cast on the answer, by anyone |
-| `failed` | the answer's outcome is `failed` or `limited` |
+| `failed` | the answer's outcome is `failed`, `limited` or `cut-off` (a `client-closed` answer opens none) |
 | `slow` | the answer took longer than `slow_after_ms` |
 
 A vote or a close that meets a purge or another close keeps to these answers: a vote whose answer
@@ -224,6 +270,15 @@ creates the schema when it is missing, migrates the tables `answers`, `votes`, `
 one JSON line each way on its standard input and output. A schema at a newer version is refused
 (the service exits 1). Only the records process reads the password; the service, its output and
 the instance directory never see it.
+
+Record calls are served one at a time in the order they arrive. A call waits at most 30 seconds
+for the calls before it, for a start of the records process and for the answer to its statement,
+and the records process runs each statement with a `statement_timeout` of 30 seconds. While the
+database stalls, a vote, `GET /review` or a close answers `store-failed` (500), and an answer
+whose record cannot be kept still ends, its record logged as not kept. A records process that did
+not answer in time is stopped and the next call starts another; a call that only waited behind
+others fails without stopping it, and a start that fails fails the calls that waited through it
+instead of each starting another.
 
 The operator, once per deployment:
 

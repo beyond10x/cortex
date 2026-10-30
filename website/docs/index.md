@@ -21,11 +21,13 @@ spec file          name, seed schema, model, sources, schedules
 instance           one directory, one EKR store (SQLite or PostgreSQL),
                    one viewer, one timer per source
    ↓  timer fires: cortex run <instance>/<source>
-fetch              web pages or operation records through Connectors, or local files
+fetch              web pages or operation records through Connectors,
+                   or local files
    ↓
 keep               only documents that are new or whose text changed
    ↓
-extract            one isolated model call per batch → an EKR extraction document
+extract            one isolated model call per batch
+                   → an EKR extraction document
    ↓
 apply              ekr apply-extraction into the instance's store
    ↓

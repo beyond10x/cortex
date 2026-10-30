@@ -1,14 +1,14 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d",
+  "source_digest": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:d625a738527245ba630134e4153bcc29ab095752352039835da7f803cc2d6e40",
-    "projection_digest": "22ff9b43a6084ab99ae6f780bc0eff1272a4268b315fa9bf439cb3d350e2261a"
+    "contract_digest": "slice-sha256/2:9530ec893eb7426ee0498eb083c1d14f32ff9acc1c997d7c93985519770e9eac",
+    "projection_digest": "194fb3527f4df205168c1ae6bfc5d3114e8aa38b8aa7c56db01a9852cf638191"
   },
-  "generator_version": "0.60.0",
+  "generator_version": "0.77.0",
   "target": "rust",
   "configuration": {
     "language": "rust",
@@ -41,6 +41,10 @@
     "cortex.instance.FetchPolicy": "CortexInstanceFetchPolicy",
     "cortex.instance.FileRecords": "CortexInstanceFileRecords",
     "cortex.instance.FilesSource": "CortexInstanceFilesSource",
+    "cortex.instance.FollowAtLeast": "CortexInstanceFollowAtLeast",
+    "cortex.instance.FollowEquals": "CortexInstanceFollowEquals",
+    "cortex.instance.FollowRule": "CortexInstanceFollowRule",
+    "cortex.instance.FollowWithinDays": "CortexInstanceFollowWithinDays",
     "cortex.instance.GateCheck": "CortexInstanceGateCheck",
     "cortex.instance.InstanceName": "CortexInstanceInstanceName",
     "cortex.instance.InstanceSpec": "CortexInstanceInstanceSpec",
@@ -61,6 +65,7 @@
     "cortex.instance.RelationMapping": "CortexInstanceRelationMapping",
     "cortex.instance.RunGate": "CortexInstanceRunGate",
     "cortex.instance.RunHook": "CortexInstanceRunHook",
+    "cortex.instance.RunsPolicy": "CortexInstanceRunsPolicy",
     "cortex.instance.SchemaValueKind": "CortexInstanceSchemaValueKind",
     "cortex.instance.SearchInput": "CortexInstanceSearchInput",
     "cortex.instance.SearchPolicy": "CortexInstanceSearchPolicy",
@@ -72,6 +77,7 @@
     "cortex.instance.SourceSettings": "CortexInstanceSourceSettings",
     "cortex.instance.SourceSpec": "CortexInstanceSourceSpec",
     "cortex.instance.SqliteStore": "CortexInstanceSqliteStore",
+    "cortex.instance.StoreLookup": "CortexInstanceStoreLookup",
     "cortex.instance.StoreSpec": "CortexInstanceStoreSpec",
     "cortex.instance.StructuredChild": "CortexInstanceStructuredChild",
     "cortex.instance.StructuredConnectors": "CortexInstanceStructuredConnectors",
@@ -450,6 +456,86 @@
       "detail": "model identity and wire mapping retained in source.schema.json"
     },
     {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowEquals/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowEquals/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowEquals/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/oneOf/0/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/oneOf/1/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/oneOf/2/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/x-ess-union-tag",
+      "rule": "x-ess-union-tag",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
       "pointer": "/$defs/cortex.instance.GateCheck/properties/max/format",
       "rule": "format",
       "detail": "retained in source.schema.json; no decoder behavior inferred"
@@ -770,6 +856,21 @@
       "detail": "model identity and wire mapping retained in source.schema.json"
     },
     {
+      "pointer": "/$defs/cortex.instance.RunsPolicy/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunsPolicy/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunsPolicy/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
       "pointer": "/$defs/cortex.instance.SchemaValueKind/title",
       "rule": "title",
       "detail": "retained in source.schema.json; no decoder behavior inferred"
@@ -956,6 +1057,21 @@
     },
     {
       "pointer": "/$defs/cortex.instance.SqliteStore/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.StoreLookup/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.StoreLookup/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.StoreLookup/x-ess-name",
       "rule": "x-ess-name",
       "detail": "model identity and wire mapping retained in source.schema.json"
     },
@@ -1282,12 +1398,32 @@
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
     },
     {
+      "pointer": "/$defs/cortex.ask.AskLimits/properties/max_tool_calls",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.ask.AskLimits/properties/max_tool_calls",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
       "pointer": "/$defs/cortex.ask.AskLimits/properties/per_identity_per_minute",
       "rule": "integer",
       "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
     },
     {
       "pointer": "/$defs/cortex.ask.AskLimits/properties/per_identity_per_minute",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.ask.AskSpec/properties/max_in_flight",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.ask.AskSpec/properties/max_in_flight",
       "rule": "rust_exact_numbers",
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
     },
@@ -1437,6 +1573,66 @@
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
     },
     {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/properties/number",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/properties/number",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/properties/number/minimum",
+      "rule": "minimum",
+      "detail": "validate this constraint against the source schema at runtime"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/x-ess-invariants",
+      "rule": "model_invariants",
+      "detail": "enforce the retained model invariant statements; structural codecs do not evaluate predicates"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowEquals/properties/value",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule",
+      "rule": "oneOf",
+      "detail": "validate exclusive branch membership against the source schema"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule",
+      "rule": "untagged_selection",
+      "detail": "native union decoding chooses the first structurally decodable alternative; it does not certify source branch constraints or external dispatch"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/properties/days",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/properties/days",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/properties/days/minimum",
+      "rule": "minimum",
+      "detail": "validate this constraint against the source schema at runtime"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/x-ess-invariants",
+      "rule": "model_invariants",
+      "detail": "enforce the retained model invariant statements; structural codecs do not evaluate predicates"
+    },
+    {
       "pointer": "/$defs/cortex.instance.GateCheck/properties/max/pattern",
       "rule": "pattern",
       "detail": "validate this constraint against the source schema at runtime"
@@ -1543,6 +1739,16 @@
     },
     {
       "pointer": "/$defs/cortex.instance.RunHook/properties/timeout_s",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunsPolicy/properties/keep_days",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.RunsPolicy/properties/keep_days",
       "rule": "rust_exact_numbers",
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
     },

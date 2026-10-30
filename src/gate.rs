@@ -121,7 +121,7 @@ pub fn quality(store: &Store) -> Result<Value, String> {
     if !out.status.success() {
         return Err(format!(
             "ekr quality failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
+            crate::ekr::said(&out.stderr)
         ));
     }
     serde_json::from_slice(&out.stdout).map_err(|e| format!("ekr quality answered no JSON: {e}"))

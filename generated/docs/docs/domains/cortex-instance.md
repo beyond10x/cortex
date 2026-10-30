@@ -1,13 +1,13 @@
 <!--
 generated from cortex v1
-model digest 7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d
-contract digest slice-sha256/2:c95224fb8d3cff9d28b45a484c3daa899f052427918e18607805cdc5fd3e052b
+model digest dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7
+contract digest slice-sha256/2:2a2fb4a7a05d3aa33fe4e580b154d02d18a9030ab8b4995bcee3c2d941084a50
 do not edit: regenerate with `ess generate`
 -->
 
 # Instances
 
-Instances of a knowledge brain and the data sources that feed them. An instance owns one EKR store, created from the instance spec's seed. A source fetches documents on its own schedule, keeps those that are new or changed, has a model extract them into an EKR extraction document and applies it to the instance's store.
+Knowledge instances and the data sources that feed them. An instance owns one EKR store, created from the instance spec's seed. A source fetches documents on its own schedule, keeps those that are new or changed, has a model extract them into an EKR extraction document and applies it to the instance's store.
 
 `cortex.instance` is one of cortex's bounded contexts. [Back to the index](../index.md).
 
@@ -19,12 +19,14 @@ Instances of a knowledge brain and the data sources that feed them. An instance 
 
 ### `ChildCall`
 
-`cortex.instance.ChildCall` is a record of four fields:
+`cortex.instance.ChildCall` is a record of six fields:
 
 - `operation` — `String`
 - `input` — `Json`
 - `records` — `String`
 - `paging` — `Optional<cortex.instance.Paging>`, which may be absent
+- `text` — `Optional<List<String>>`, which may be absent
+- `follow` — `Optional<cortex.instance.FollowRule>`, which may be absent
 
 Every value satisfies `paging.stop_older_than_since != true`.
 
@@ -56,7 +58,7 @@ Every value satisfies `(defined(connection) or defined(profile))`.
 
 ### `ConnectorsSource`
 
-`cortex.instance.ConnectorsSource` is a record of 11 fields:
+`cortex.instance.ConnectorsSource` is a record of 12 fields:
 
 - `adapter` — `String`
 - `connection` — `Optional<String>`, which may be absent
@@ -65,6 +67,7 @@ Every value satisfies `(defined(connection) or defined(profile))`.
 - `inputs` — `List<Json>`
 - `records` — `String`
 - `id` — `String`
+- `key` — `Optional<String>`, which may be absent
 - `time` — `Optional<String>`, which may be absent
 - `text` — `List<String>`
 - `paging` — `Optional<cortex.instance.Paging>`, which may be absent
@@ -183,6 +186,39 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 - `glob` — `String`
 - `records` — `Optional<cortex.instance.FileRecords>`, which may be absent
 
+### `FollowAtLeast`
+
+`cortex.instance.FollowAtLeast` is a record of two fields:
+
+- `field` — `String`
+- `number` — `Integer`
+
+Every value satisfies `number > 0`.
+
+### `FollowEquals`
+
+`cortex.instance.FollowEquals` is a record of two fields:
+
+- `field` — `String`
+- `value` — `Json`
+
+### `FollowRule`
+
+`cortex.instance.FollowRule` is one of three shapes, told apart by a `rule` field — tagged, so a decoder never has to guess which branch it is reading:
+
+- `at_least` — `cortex.instance.FollowAtLeast`
+- `equals` — `cortex.instance.FollowEquals`
+- `within_days` — `cortex.instance.FollowWithinDays`
+
+### `FollowWithinDays`
+
+`cortex.instance.FollowWithinDays` is a record of two fields:
+
+- `field` — `String`
+- `days` — `Integer`
+
+Every value satisfies `days > 0`.
+
 ### `GateCheck`
 
 `cortex.instance.GateCheck` is a record of three fields:
@@ -201,7 +237,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 
 ### `InstanceSpec`
 
-`cortex.instance.InstanceSpec` is a record of 14 fields:
+`cortex.instance.InstanceSpec` is a record of 15 fields:
 
 - `format` — `String`
 - `name` — `cortex.instance.InstanceName`
@@ -214,6 +250,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 - `store` — `Optional<cortex.instance.StoreSpec>`, which may be absent
 - `redaction` — `Optional<cortex.instance.RedactionPolicy>`, which may be absent
 - `snapshots` — `Optional<cortex.instance.SnapshotPolicy>`, which may be absent
+- `runs` — `Optional<cortex.instance.RunsPolicy>`, which may be absent
 - `gate` — `Optional<cortex.instance.RunGate>`, which may be absent
 - `monitoring` — `Optional<cortex.instance.MonitoringSpec>`, which may be absent
 - `ask` — `Optional<cortex.ask.AskSpec>`, which may be absent
@@ -365,7 +402,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 
 ### `RecordMapping`
 
-`cortex.instance.RecordMapping` is a record of seven fields:
+`cortex.instance.RecordMapping` is a record of eight fields:
 
 - `node_type` — `String`
 - `id` — `String`
@@ -374,6 +411,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 - `properties` — `List<cortex.instance.PropertyMapping>`
 - `relations` — `List<cortex.instance.RelationMapping>`
 - `alias_templates` — `Optional<List<String>>`, which may be absent
+- `store_lookup` — `Optional<cortex.instance.StoreLookup>`, which may be absent
 
 ### `RedactionClass`
 
@@ -421,6 +459,12 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 ### `RunOutcome`
 
 `cortex.instance.RunOutcome` is one of `ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable`, `batch-too-large`, `terminated`, `model-unavailable` and `disabled`.
+
+### `RunsPolicy`
+
+`cortex.instance.RunsPolicy` is a record of one field:
+
+- `keep_days` — `Integer`
 
 ### `SchemaCardinality`
 
@@ -563,6 +607,10 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 
 - `path` — `Optional<String>`, which may be absent
 
+### `StoreLookup`
+
+`cortex.instance.StoreLookup` is one of `OwnType` and `AnyType`.
+
 ### `StoreSpec`
 
 `cortex.instance.StoreSpec` is one of two shapes, told apart by a `backend` field — tagged, so a decoder never has to guess which branch it is reading:
@@ -572,7 +620,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 
 ### `StructuredChild`
 
-`cortex.instance.StructuredChild` is a record of seven fields:
+`cortex.instance.StructuredChild` is a record of eight fields:
 
 - `operation` — `String`
 - `input` — `Json`
@@ -581,6 +629,7 @@ Every value satisfies `(paging.stop_older_than_since != true or defined(time))` 
 - `mapping` — `cortex.instance.RecordMapping`
 - `time` — `Optional<String>`, which may be absent
 - `parent` — `String`
+- `follow` — `Optional<cortex.instance.FollowRule>`, which may be absent
 
 Every value satisfies `paging.stop_older_than_since != true`.
 
@@ -970,9 +1019,9 @@ It has seven outcomes.
 
 **`gate-failed`** — Nothing was published; every approved proposal is still `approved`, and the store's head is where it was (`postgres`) or back at the snapshot (`sqlite`). Decided outside the input: The store after the changes fails a check of the spec's gate. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaGateFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`apply-failed`** — Nothing was published; every approved proposal is still `approved`. Decided outside the input: EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaApplyFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`apply-failed`** — Before the publish, nothing was published and every approved proposal is still `approved`. After it, when a proposal was applied, the changes are in the store and the reason says so, naming the revision: the head the stage was published at (`postgres`) or the last committed one (`sqlite`); when none was, the reason says no change was committed. When only the head could not be read, every decision is written to `proposals.jsonl`; when `proposals.jsonl` could not be written, it still lists every approved proposal `approved`. Decided outside the input: EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction, or, after the publish, read the store's head, or `proposals.jsonl` cannot be written. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaApplyFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`store-outcome-unknown`** — Every approved proposal is still `approved`. The stage is kept in `stage.json`, and the next run of a source settles it. Decided outside the input: EKR cannot say whether the stage's begin or publish took effect. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.StoreOutcomeUnknown`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`store-outcome-unknown`** — Every approved proposal is still `approved`. The stage is kept in `stage.json`, and the next run of a source settles it. `cortex schema apply` exits 4, as `cortex run` does for this outcome. Decided outside the input: EKR cannot say whether the stage's begin or publish took effect. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.StoreOutcomeUnknown`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`applied`** — Every approved proposal is decided: `applied` with the revision and schema version it committed, or `refused`, `recorded-only` or `invalid` with why. `revision` is the store's head after the apply. Proposals still `pending` stay so. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaProposalsApplied`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -1070,11 +1119,13 @@ It takes:
 - `dry_run` — `Boolean`
 - `review` — `Boolean`
 
-It has six outcomes.
+It has seven outcomes.
 
 **`sample-failed`** — No model was asked and nothing was written. Decided outside the input: EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SampleFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`propose-failed`** — Nothing was applied and no `proposals.jsonl` was written. Decided outside the input: A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ProposeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`propose-failed`** — Nothing was applied and no proposal was recorded, except when a line of `proposals.jsonl` could not be written after earlier proposals were applied: those stay applied and the lines before it stay written; the reason names how many of each. Decided outside the input: A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, EKR cannot read the ontology, or `proposals.jsonl` cannot be written. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ProposeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`store-outcome-unknown`** — The round stops at that proposal and asks EKR for no later one. The proposals before it stay decided and recorded in `proposals.jsonl`; it and every later one are not recorded. The reason names the proposal; `ekr ontology` answers whether its change took effect. `cortex schema` exits 4, as `cortex run` does for this outcome. Decided outside the input: Applying, EKR cannot say whether a proposal's schema transaction took effect (`ekr commit` answers that the publication outcome is unknown). No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.StoreOutcomeUnknown`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`proposed`** — A dry run: every proposal not dropped is recorded and none is applied; `applied` and `refused` are 0, and a change EKR would be asked to apply is `dry-run`. `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. Taken when `dry_run` holds of the input. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaChangesProposed`. A test reaches it by constructing an input that satisfies that condition.
 
@@ -1158,7 +1209,7 @@ It has five outcomes.
 
 **`no-such-snapshot`** — Nothing was restored. Decided outside the input: The instance directory holds no snapshot by this name. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SnapshotNotFound`, carrying `snapshot`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`restored`** — The store and the instance state were snapshotted as `<ms>-before-restore`, then put back to the snapshot's copies: every source's seen state and the known entity names included, so the next runs apply again what the undone runs applied. A viewer that was running was stopped first and started again after. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SnapshotRestored`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+**`restored`** — The store and the instance state were snapshotted as `<ms>-before-restore`, then the store was put back to the snapshot's copy, and after it the instance state: every source's seen state and the known entity names included, so the next runs apply again what the undone runs applied. A state copy that could not be written back leaves the store restored and the state as it was, reported as `state_restored: false` with the reason in `state_failed`. A viewer that was running was stopped first and started again after. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SnapshotRestored`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
 **`no-such-instance`** — Nothing was restored. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
@@ -1232,11 +1283,13 @@ It takes:
 - `spec` — `cortex.instance.InstanceSpec`
 - `seed_digest` — `String`
 
-It has four outcomes.
+It has five outcomes.
 
 **`seed-change-refused`** — Nothing changed. Taken when the existing subject's stored fields satisfy `seed_digest != input.seed_digest`. No entity in this specification changes. It reports `cortex.instance.SeedChangeRefused`, carrying `name`. It emits nothing. A test establishes and independently observes the subject enum fact before selecting this branch.
 
 **`not-active`** — The instance is removed; nothing changed. Taken when the existing subject's stored fields satisfy `state == Removed`. No entity in this specification changes. It reports `cortex.instance.InstanceNotActive`, carrying `state`. It emits nothing. A test establishes and independently observes the subject enum fact before selecting this branch.
+
+**`rekey-refused`** — Nothing changed; the frozen spec and every source's seen state are as they were. Decided outside the input: A source the frozen spec and the new one both name, whose `state/<source>.json` holds a seen document, changes a field its documents are keyed by: its `kind`; a `connectors` source's `adapter`, `operation` or `id`; a `files` source's `records` format (no `records` and `WholeFile` are one), with a per-record format their `records.id`, or a root of its `paths` that reaches a seen file under another spelling (`docs` and `./docs`; adding, removing or reordering roots is not one); a `structured` source's `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths` or `glob` as written, or its `mapping.id`. A record path is compared as it is read (`key` and `$.key` are one path). No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.RekeyRefused`, carrying `name`, `source` and `field`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`updated`** — The frozen spec is replaced; sources, model and serve settings take effect on the next run. The viewer unit holds the connection id resolved at the last create, adopt or update: it is rewritten when the store's connection changed, or when its profile now resolves to another id. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.InstanceUpdated`. It sets `description` from `input.description` and `model` from `input.model`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -1520,6 +1573,7 @@ It carries:
 - `source_id` — `cortex.instance.SourceId`
 - `documents_new` — `Integer`
 - `documents_applied` — `Integer`
+- `facts_reapplied` — `Integer`
 - `cost_usd` — `Optional<Decimal>`, which may be absent
 - `cost_counted` — `Boolean`
 - `daily_ceiling_reached` — `Boolean`
@@ -1757,13 +1811,25 @@ Reported by `cortex.instance.CreateInstance` on its `name-taken` outcome.
 
 ### `ProposeFailed`
 
-A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology, or `proposals.jsonl` could not be written. Nothing was applied and no proposal was recorded, except when a line of `proposals.jsonl` could not be written after earlier proposals were applied: those stay applied, the lines before stay written, and the reason names both counts.
 
 It carries:
 
 - `reason` — `String`
 
 Reported by `cortex.instance.ProposeSchemaChanges` on its `propose-failed` outcome.
+
+### `RekeyRefused`
+
+An update may not change how a source keys its documents while the source has seen documents: its seen state would no longer match, and every document would be extracted again. To re-key on purpose, remove the source's `state/<source>.json` first.
+
+It carries:
+
+- `name` — `cortex.instance.InstanceName`
+- `source` — `String`
+- `field` — `String`
+
+Reported by `cortex.instance.UpdateInstance` on its `rekey-refused` outcome.
 
 ### `RestoreUnsupported`
 
@@ -1777,7 +1843,7 @@ Reported by `cortex.instance.RestoreSnapshot` on its `backend-unsupported` outco
 
 ### `RunTerminated`
 
-The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended, and stopped at the next safe point: a model call in flight was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about the source was wrong: the failure is not counted against it.
+The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended, and stopped at the next safe point: a fetch, a model call or a read of the store in flight was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about the source was wrong: the failure is not counted against it.
 
 It carries:
 
@@ -1799,7 +1865,7 @@ Reported by `cortex.instance.ProposeSchemaChanges` on its `sample-failed` outcom
 
 ### `SchemaApplyFailed`
 
-EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction. Nothing was published: the stage was abandoned, or on `sqlite` the snapshot taken before was restored; every approved proposal is still `approved`.
+EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction: nothing was published, the stage was abandoned, or on `sqlite` the snapshot taken before was restored, and every approved proposal is still `approved`. Or, after the changes were published, EKR could not read the store's head or `proposals.jsonl` could not be written: the changes stay in the store, and the reason says so and names the revision (on `postgres`, the head the stage was published at; on `sqlite`, the last committed one), or, when no proposal was applied, says no change was committed.
 
 It carries:
 
@@ -1940,13 +2006,15 @@ Reported by `cortex.instance.AdoptInstance` on its `store-held` outcome.
 
 ### `StoreOutcomeUnknown`
 
-EKR could not say whether a store write of the run took effect (`ekr stage begin`, `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage, or extracts the batch again.
+EKR could not say whether a store write of the run took effect (`ekr stage begin`, `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage, or extracts the batch again. For `cortex schema`, the write is a proposal's schema transaction (`ekr commit`) or the stage of `cortex schema apply`; the reason names it.
 
 It carries:
 
 - `reason` — `String`
 
 Reported by `cortex.instance.ApplySchemaProposals` on its `store-outcome-unknown` outcome.
+
+Reported by `cortex.instance.ProposeSchemaChanges` on its `store-outcome-unknown` outcome.
 
 Reported by `cortex.instance.RunSource` on its `store-outcome-unknown` outcome.
 
@@ -1979,4 +2047,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d` · contract digest `slice-sha256/2:c95224fb8d3cff9d28b45a484c3daa899f052427918e18607805cdc5fd3e052b`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7` · contract digest `slice-sha256/2:2a2fb4a7a05d3aa33fe4e580b154d02d18a9030ab8b4995bcee3c2d941084a50`. Do not edit this file; change the specification and regenerate it with `ess generate`.

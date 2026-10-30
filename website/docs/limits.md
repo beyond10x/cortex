@@ -23,9 +23,11 @@ stand; [Status](./status.mdx) lists what is planned.
 
 - **Credentials are masked; personal data is kept from the model, not from the store.** Fetched
   text is masked for credential shapes on every run: private keys, cloud, forge, chat and API
-  token shapes, JSON Web Tokens, the password in a URL such as `https://user:password@host`, and
-  `password=`-style assignments, also with a prefix (`DB_PASSWORD=`, `client_secret=`) or
-  percent-encoded (`access_token%3D`). That covers a document's text, title, description and URL,
+  token shapes, JSON Web Tokens, the password in a URL such as `https://user:password@host` (a
+  raw `@` in it included), a private key whose `END` line was cut off, and `password=`-style
+  assignments, also with a prefix (`DB_PASSWORD=`, `client_secret=`), quoted
+  (`"password": "…"`), with `=>`, or percent-encoded (`access_token%3D`, `access_token%3A`).
+  That covers a document's text, title, description and URL,
   and a URL or record key wherever cortex writes it: the run's `stopped` and `skipped` messages,
   its log and its state file. Masking is irreversible, so a credential in a listed shape is never
   stored. A URL that held one is stored and cited in its masked form, with the rest of its query
@@ -37,8 +39,8 @@ stand; [Status](./status.mdx) lists what is planned.
   the names it lists in `known_names`, rare capitalised words (`RareName`), and whatever its own
   regular-expression `rules` match, with placeholders such as `[Email-1]`, `[Url-1]` and
   `[Name-1]` in what the model is shown. That covers a document's text, title, description and
-  source line, and the known entity names; the question and every tool result of the
-  [ask service](./ask-service.md#redaction) and of the eval `mcp` runner. Before the answer is
+  source line, the store's ontology names and the known entity names; the question and every
+  tool result of the [ask service](./ask-service.md#redaction) and of the eval `mcp` runner. Before the answer is
   applied or returned, each placeholder is put
   back. The store and its evidence therefore hold the personal data and stay searchable for it;
   only the model does not see it. A placeholder the model changed or invented stays as written
@@ -48,7 +50,14 @@ stand; [Status](./status.mdx) lists what is planned.
 - **Links are found by their shape.** `Url` takes a link that starts with a scheme
   (`https://`), with `www.`, or with a dotted host followed by a path (`intranet.example.org/a`).
   A masked password or token inside a link stays part of it, so the whole link is one
-  placeholder. A bare host with no path, such as `example.org`, is not taken.
+  placeholder, and so do brackets and parentheses the link opens and closes
+  (`?filter[owner]=x`, `/wiki/Widget_(engine)`), and a `(` or `)` without a partner while the
+  link goes on after it (`?q=Jane(Doe`, `/a1)report.pdf`). A link ends at a `]` it did not
+  open, and at a `)` it did not open before a space, a bracket, a quote, the end of the text or
+  the punctuation that closes a sentence, as in `[https://host/x]`, a Markdown link and
+  `(see https://host/x).`; a citation such as `[1]` after the punctuation that ends it stays
+  outside. A bracket inside a bracket ends the link. A bare host
+  with no path, such as `example.org`, is not taken.
 - **Rare names are a guess.** `RareName` takes as a name a word that starts with a capital letter,
   has a lower-case letter in it, and appears at most `rare_limit` times (default 1) in the batch's
   document texts. Only text the model is shown counts: a word inside an address, a link, a known
@@ -99,8 +108,7 @@ stand; [Status](./status.mdx) lists what is planned.
 - **A web page is cited as a statement, not as a URL.** EKR 0.0.34 admits only `HumanStatement`
   evidence in an extraction document (`extraction-evidence-kind-unsupported` for any other), so
   cortex files a page as a `HumanStatement` whose identity is its URL. URL evidence waits on an EKR
-  release that admits it (EKR `story:extraction-admits-url-evidence`; here
-  `upstream-blocker:ekr-url-evidence`).
+  release that admits it in an extraction document.
 - **Relations in a store extracted before EKR 0.0.31 are not graph edges.** Since EKR 0.0.31 an
   extracted relation is also written as an edge, so `search` counts it in a node's `degree` and
   `expand` walks it. EKR does not backfill: relations a store took under EKR 0.0.30 or earlier stay
@@ -109,7 +117,18 @@ stand; [Status](./status.mdx) lists what is planned.
   whose text changed is extracted again only after `refresh_after_days`; cortex retracts nothing
   it applied from the earlier text. A record read from a file, and a `structured` change whose
   links to tags alone changed, are applied again on the next run.
-- **Text only.** A files source skips files that are not UTF-8 text; web sources read the text the
+- **A structured record meets nodes of another type only with `store_lookup: AnyType`.** By
+  default EKR resolves a record's aliases, its alias templates included, within the mapping's
+  `node_type` only, so a store node of another type holding the same alias gets a second node
+  beside it. With `AnyType` the run reads the store before each batch and writes the record onto
+  that node. Names are compared lowercased, not case-folded. A record whose name or aliases
+  match nodes of more than one type is refused, and so is one whose matched node's type declares a
+  mapped property in another value kind; neither is merged. A relation names a record written
+  onto another type's node as that node only when the record is applied in the same run;
+  otherwise it names it in the mapping's own type. cortex never merges two nodes that already
+  hold the same alias.
+- **Text only.** A files source skips files that are not UTF-8 text or are larger than 16 MiB,
+  naming each in the run's `skipped`; web sources read the text the
   websearch adapter returns.
 
 ## Instances
@@ -127,18 +146,20 @@ stand; [Status](./status.mdx) lists what is planned.
   signed-in `claude`, or a `model.gateway` in the spec, whose token is read from the variable it
   names; an `ANTHROPIC_API_KEY` in the environment is ignored either way. The spec accepts
   `model.backend: Codex`, but that backend extracts nothing in this release: every run, quality
-  measurement and schema round of such an instance fails, naming `story:codex-model-backend`.
+  measurement and schema round of such an instance fails, saying the Codex backend does not
+  extract yet.
 - **A model outage is told by its error text.** A run ends `model-unavailable`, not counted
   against the source, only when the model call's error names a refused connection, a model not
   loaded, or HTTP 502, 503, 504 or 529 (overloaded) in words cortex knows (see
   [When the model cannot be reached](./operating.md#when-the-model-cannot-be-reached)); an outage
   a gateway words otherwise, or a call that times out, ends `extraction-failed` and is counted.
   The run does not retry the model beyond the one repeat of an error that cost zero.
-- **A run's figures count completed runs only.** `metrics.prom` adds the documents and model
-  tokens of runs that ended `ran`; a run that stopped (`batch-too-large`, `model-unavailable`,
-  `terminated`) after applying batches adds none of them, though its tokens were spent.
-- **SIGTERM does not interrupt a fetch.** A run sent SIGTERM during a Connectors read stops when
-  the read returns; only a model call is ended at once.
+- **A run's figures count only what was reported after a batch was applied.** `metrics.prom` adds
+  the documents and model tokens of a run that ended `ran` or applied a batch before it ended
+  otherwise; a run that ended before it applied a batch adds none of them, though a failed model
+  call may have spent tokens, and a model call ended by SIGTERM never reports its tokens.
+- **A stopped fetch keeps nothing.** A run sent SIGTERM during its fetch ends the Connectors call
+  in flight and drops the pages it already read: the next run reads the whole window again.
 - **The daily ceiling is per instance.** `daily_ceiling_usd` bounds what one instance's model calls
   spend in a UTC day; nothing bounds the instances of a home together. An answer that states no
   cost adds nothing to the spend of the day.

@@ -37,9 +37,10 @@ A change here that moves none of these is a question for the operator, not a tas
 
 | command | does |
 |---|---|
-| `task check` | the gate: spec validity, generated-code drift, fmt, clippy (`-D warnings`), every test, documentation drift |
+| `task check` | the gate: spec validity, generated-code drift, spec compatibility, fmt, clippy (`-D warnings`), every test, documentation drift |
 | `task generate` | regenerate `generated/`, `spec/suite.json` and the derived site files from `spec/` |
 | `task drift` | fail when `generated/` or `spec/suite.json` differ from what `spec/` generates |
+| `task compat` | fail when `spec/` changes in a breaking or unknown way against `spec/` at the newest release tag and `spec/compat-ack.json` does not acknowledge the change |
 | `task docs-generate` | regenerate the derived site files (`cortex-docs generate`) |
 | `task docs-check` | fail when a derived site file is missing, stale or edited by hand |
 | `task website` | build the site (`npm ci`, `npm run build` in `website/`), as CI does |
@@ -48,11 +49,33 @@ A change here that moves none of these is a question for the operator, not a tas
 
 ## The specification comes first
 
-`spec/` is an ESS specification (`ess/20`, pinned to ESS 0.60.0 in `spec/ess-inputs.yaml`). It is
+`spec/` is an ESS specification (`ess/22`, pinned to ESS 0.77.0 in `spec/ess-inputs.yaml`). It is
 the source of truth for every noun, command, outcome, error and event.
 
 - Change `spec/`, then run `task generate`. Never edit anything under `generated/` or
   `spec/suite.json` by hand; `task drift` fails when they differ from what `spec/` generates.
+- `task compat` compares `spec/` with `spec/` at the newest release tag (`git describe --tags
+  --abbrev=0 --match 'v[0-9]*'`, so CI checks out with `fetch-depth: 0`) through
+  `ess verify diff --fail-on breaking-or-unknown`, and fails on a breaking or unknown change
+  that `spec/compat-ack.json` does not acknowledge. Review each such change, add its id to
+  `compat-ack.json` and its reason as a row of `spec/compat-ack.md` (`tests/compat_ack.rs` holds
+  the two files to each other). The acknowledgements are bound to the spec digests of both sides,
+  so every change to `spec/` also rewrites `after` in `compat-ack.json`; a stale file is refused,
+  and the refusal names the digest it compared. Never acknowledge a change you have not reviewed
+  to make the gate pass.
+- Exit statuses of `task compat`: `ess verify diff` exits 0 when the gate passes, 4 on an
+  unacknowledged change (each named on a `fails --fail-on` line) and 1 when it refuses the
+  acknowledgements file (stale digests, an id the delta does not hold, an id twice). `task compat`
+  reports both failures as 201 (`task: Failed to run task "compat": exit status <n>`); run
+  `task -x compat` to get ess's own status. Branch on that status, or on the `fails --fail-on`
+  and `refused:` lines it prints: 4 means review and acknowledge, 1 means rewrite the file's
+  digests.
+- **Reset the acknowledgements after each release.** Once the tag `v<version>` is pushed, the next
+  change to `main` sets `before` and `after` in `spec/compat-ack.json` to `.before.spec_digest`
+  and `.after.spec_digest` of `ess verify diff --from <spec at the tag> --to spec --format json`,
+  empties `acknowledged`, and
+  empties the table of `spec/compat-ack.md`. Until then `task compat` refuses the old file (ess
+  exit 1, `task` exit 201).
 - `generated/cortex-model` (`ess generate synthesize --target rust --layout crate`) holds the
   model types and the command behaviours. Two behaviours are obligations the code implements:
   `RunSource` and `RecordFailure` (`generated/cortex-model/PLAN.md`).
@@ -171,16 +194,17 @@ this repository and published by the organisation's reusable workflow.
 | `ekr apply-extraction` admits only `!HumanStatement` evidence (`extraction-evidence-kind-unsupported`) | EKR 0.0.30 `crates/ekr-integrate/src/extraction.rs:61`, `crates/ekr-kernel/src/validate/provenance.rs:129` | a web page is evidence `!HumanStatement {identity: <url>}` instead of `!Url` |
 | EKR's ESS spec models `ExtractedFact` as a `kind`-tagged union, its YAML reader wants `!Property` tags, and `ekr schema` writes `"!Property"` keys | EKR 0.0.30 `systems/ekr/domains/integrate.yaml:203`, `ekr schema ekr.extraction-document/1` | the model answers in `ekr schema`'s form; `src/extract.rs` turns `"!X"` keys into YAML tags |
 | `ekr apply-extraction` takes an evidence payload of at most 16,384 bytes: it reads the payload as a YAML sequence of one element per byte and rejects every fact citing a longer one (`transaction document limit: sequence_elements (at most 16384)`) | EKR 0.0.30 `ekr` help on `payload`; measured on 2026-10-06 (`tests/evidence_bound.rs`: 16,384 bytes apply) | `src/evidence.rs` cuts each payload at a character boundary to `PAYLOAD_MAX_BYTES`, and a run cuts the text it shows the model to what the payload holds. The cut keeps whole characters, not grapheme clusters (a letter can lose a following combining mark); the model text is cut at the same byte, so a citation still matches its evidence. A structured record's evidence leads with its mapped values; a record whose mapped values alone exceed the bound is skipped |
+| `ekr session` serves `ontology`, `snapshot`, `schema`, `head`, `mint`, `propose`, `validate`, `commit` and `quality`, one request per line, and refuses `apply-extraction` and the `ekr stage` verbs (`session-verb-refused`) | EKR 0.0.34 `docs/cli.md`, `ekr session` | a run holds one session for its reads and runs `ekr apply-extraction` as a process of its own (`src/ekr.rs` `Session::apply`) |
 | Claude's `--json-schema` refuses a schema that names draft 2020-12 in `$schema` | `claude` 2.1.289 | the `$schema` key is removed before the call |
 | A schema transaction cites no evidence: EKR holds `transaction.evidence` to the evidence its assertions cite, and a schema change travels alone, so a non-empty set is `evidence-set-mismatch` | EKR 0.0.31 `docs/cli.md` ("Evolve the schema"); measured on 2026-10-06 | `cortex schema` records each change's facts and evidence in `schema/<stamp>/proposals.jsonl` beside its transaction |
-| `ess generate --kind docs` titles the domain page with the domain's display name (`Instances`), which equals a view's name, and Docusaurus then moves that view's anchor | ESS 0.59.0, `spec/domains/instance.yaml` `naming.display` | `cortex-docs` drops the page's level-one heading; the front-matter title heads the page |
+| `ess generate --kind docs` titles the domain page with the domain's display name (`Instances`), which equals a view's name, and Docusaurus then moves that view's anchor | ESS 0.59.0 through 0.77.0 (`generated/docs/docs/domains/cortex-instance.md` heads `# Instances` and holds the view heading `Instances`), `spec/domains/instance.yaml` `naming.display` | `cortex-docs` drops the page's level-one heading; the front-matter title heads the page |
 
 ## Build and verify
 
 - `task check` is the gate (see [Commands](#commands)); `STATUS.md` records its last result.
 - Format with `cargo fmt -p cortex-cli -p cortex-docs`. `cargo fmt --all` also rewrites the
   generated crates, which are path dependencies, and `task drift` then fails.
-- `tests/conformance.rs` runs every scenario of `spec/suite.json` (115) in process; `tests/e2e.rs`
+- `tests/conformance.rs` runs every scenario of `spec/suite.json` (124) in process; `tests/e2e.rs`
   drives the binary end to end; the clap ⇔ spec test in `src/main.rs` holds the command line to
   the commands, inputs and views `spec/` puts on it.
 - Build into this tree's own `target/` (leave `CARGO_TARGET_DIR` unset), and end each tree with
@@ -240,6 +264,8 @@ the build host's Cargo registry paths.
    - the tagger: `git for-each-ref refs/tags/v<version> --format='%(objecttype) %(taggername)'`
      prints `tag b10x-bot[bot]`;
    - the author: `git log -1 --format='%an' 'v<version>^{commit}'` prints `b10x-bot[bot]`.
+7. Reset `spec/compat-ack.json` and `spec/compat-ack.md` against the new tag in the next change
+   to `main` ([The specification comes first](#the-specification-comes-first)).
 
 The workflow never overwrites an asset (`gh release upload` without `--clobber`). After a partial
 upload, delete the stray asset through the bot

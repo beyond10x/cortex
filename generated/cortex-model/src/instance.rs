@@ -1,11 +1,11 @@
 // generated from cortex v1
-// model digest 7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d
-// contract digest 45be6012d6ca07f5842ea4b833a0421e5880da4b6a06706d61c0d0abe43f7aab
+// model digest dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7
+// contract digest 857182a81f324b2743cfc95ae1fab53d1e8a5a7f0c41dbd9fcda27ed70b7ed9d
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
 //!
-//! Instances of a knowledge brain and the data sources that feed them. An instance owns one EKR store, created from the instance spec's seed. A source fetches documents on its own schedule, keeps those that are new or changed, has a model extract them into an EKR extraction document and applies it to the instance's store.
+//! Knowledge instances and the data sources that feed them. An instance owns one EKR store, created from the instance spec's seed. A source fetches documents on its own schedule, keeps those that are new or changed, has a model extract them into an EKR extraction document and applies it to the instance's store.
 //!
 //! Everything this bounded context declares that the synthesis plan marks generated.
 
@@ -29,6 +29,10 @@ pub struct ChildCall {
     pub records: String,
     /// `paging` — `Optional<cortex.instance.Paging>`.
     pub paging: Option<Paging>,
+    /// `text` — `Optional<List<String>>`.
+    pub text: Option<Vec<String>>,
+    /// `follow` — `Optional<cortex.instance.FollowRule>`.
+    pub follow: Option<FollowRule>,
 }
 
 /// CompareLink — `cortex.instance.CompareLink`.
@@ -89,6 +93,8 @@ pub struct ConnectorsSource {
     pub records: String,
     /// `id` — `String`.
     pub id: String,
+    /// `key` — `Optional<String>`.
+    pub key: Option<String>,
     /// `time` — `Optional<String>`.
     pub time: Option<String>,
     /// `text` — `List<String>`.
@@ -281,6 +287,48 @@ pub struct FilesSource {
     pub records: Option<FileRecords>,
 }
 
+/// FollowAtLeast — `cortex.instance.FollowAtLeast`.
+///
+/// Every value satisfies `number > 0` — declared here, enforced by whatever behaviour constructs one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FollowAtLeast {
+    /// `field` — `String`.
+    pub field: String,
+    /// `number` — `Integer`.
+    pub number: i64,
+}
+
+/// FollowEquals — `cortex.instance.FollowEquals`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FollowEquals {
+    /// `field` — `String`.
+    pub field: String,
+    /// `value` — `Json`.
+    pub value: crate::json::Value,
+}
+
+/// FollowRule — `cortex.instance.FollowRule`: one of a fixed set of shapes, tagged on the wire by `rule`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FollowRule {
+    /// Tagged `at_least` — `cortex.instance.FollowAtLeast`.
+    AtLeast(FollowAtLeast),
+    /// Tagged `equals` — `cortex.instance.FollowEquals`.
+    Equals(FollowEquals),
+    /// Tagged `within_days` — `cortex.instance.FollowWithinDays`.
+    WithinDays(FollowWithinDays),
+}
+
+/// FollowWithinDays — `cortex.instance.FollowWithinDays`.
+///
+/// Every value satisfies `days > 0` — declared here, enforced by whatever behaviour constructs one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FollowWithinDays {
+    /// `field` — `String`.
+    pub field: String,
+    /// `days` — `Integer`.
+    pub days: i64,
+}
+
 /// GateCheck — `cortex.instance.GateCheck`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GateCheck {
@@ -344,6 +392,8 @@ pub struct InstanceSpec {
     pub redaction: Option<RedactionPolicy>,
     /// `snapshots` — `Optional<cortex.instance.SnapshotPolicy>`.
     pub snapshots: Option<SnapshotPolicy>,
+    /// `runs` — `Optional<cortex.instance.RunsPolicy>`.
+    pub runs: Option<RunsPolicy>,
     /// `gate` — `Optional<cortex.instance.RunGate>`.
     pub gate: Option<RunGate>,
     /// `monitoring` — `Optional<cortex.instance.MonitoringSpec>`.
@@ -605,6 +655,8 @@ pub struct RecordMapping {
     pub relations: Vec<RelationMapping>,
     /// `alias_templates` — `Optional<List<String>>`.
     pub alias_templates: Option<Vec<String>>,
+    /// `store_lookup` — `Optional<cortex.instance.StoreLookup>`.
+    pub store_lookup: Option<StoreLookup>,
 }
 
 /// RedactionClass — `cortex.instance.RedactionClass`: one of a closed set of names.
@@ -702,6 +754,13 @@ pub enum RunOutcome {
     ModelUnavailable,
     /// `disabled`.
     Disabled,
+}
+
+/// RunsPolicy — `cortex.instance.RunsPolicy`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunsPolicy {
+    /// `keep_days` — `Integer`.
+    pub keep_days: i64,
 }
 
 /// SchemaCardinality — `cortex.instance.SchemaCardinality`: one of a closed set of names.
@@ -966,6 +1025,15 @@ pub struct SqliteStore {
     pub path: Option<String>,
 }
 
+/// StoreLookup — `cortex.instance.StoreLookup`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StoreLookup {
+    /// `OwnType`.
+    OwnType,
+    /// `AnyType`.
+    AnyType,
+}
+
 /// StoreSpec — `cortex.instance.StoreSpec`: one of a fixed set of shapes, tagged on the wire by `backend`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StoreSpec {
@@ -994,6 +1062,8 @@ pub struct StructuredChild {
     pub time: Option<String>,
     /// `parent` — `String`.
     pub parent: String,
+    /// `follow` — `Optional<cortex.instance.FollowRule>`.
+    pub follow: Option<FollowRule>,
 }
 
 /// StructuredConnectors — `cortex.instance.StructuredConnectors`.
@@ -2023,16 +2093,16 @@ pub enum ApplySchemaProposalsOutcome {
         /// Why it was refused: `cortex.instance.SchemaGateFailed`.
         error: SchemaGateFailed,
     },
-    /// `apply-failed` — externally decided (EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction).
+    /// `apply-failed` — externally decided (EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction, or, after the publish, read the store's head, or `proposals.jsonl` cannot be written).
     ///
-    /// Nothing was published; every approved proposal is still `approved`.
+    /// Before the publish, nothing was published and every approved proposal is still `approved`. After it, when a proposal was applied, the changes are in the store and the reason says so, naming the revision: the head the stage was published at (`postgres`) or the last committed one (`sqlite`); when none was, the reason says no change was committed. When only the head could not be read, every decision is written to `proposals.jsonl`; when `proposals.jsonl` could not be written, it still lists every approved proposal `approved`.
     ApplyFailed {
         /// Why it was refused: `cortex.instance.SchemaApplyFailed`.
         error: SchemaApplyFailed,
     },
     /// `store-outcome-unknown` — externally decided (EKR cannot say whether the stage's begin or publish took effect).
     ///
-    /// Every approved proposal is still `approved`. The stage is kept in `stage.json`, and the next run of a source settles it.
+    /// Every approved proposal is still `approved`. The stage is kept in `stage.json`, and the next run of a source settles it. `cortex schema apply` exits 4, as `cortex run` does for this outcome.
     StoreOutcomeUnknown {
         /// Why it was refused: `cortex.instance.StoreOutcomeUnknown`.
         error: StoreOutcomeUnknown,
@@ -2284,12 +2354,19 @@ pub enum ProposeSchemaChangesOutcome {
         /// Why it was refused: `cortex.instance.SampleFailed`.
         error: SampleFailed,
     },
-    /// `propose-failed` — externally decided (A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology).
+    /// `propose-failed` — externally decided (A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, EKR cannot read the ontology, or `proposals.jsonl` cannot be written).
     ///
-    /// Nothing was applied and no `proposals.jsonl` was written.
+    /// Nothing was applied and no proposal was recorded, except when a line of `proposals.jsonl` could not be written after earlier proposals were applied: those stay applied and the lines before it stay written; the reason names how many of each.
     ProposeFailed {
         /// Why it was refused: `cortex.instance.ProposeFailed`.
         error: ProposeFailed,
+    },
+    /// `store-outcome-unknown` — externally decided (Applying, EKR cannot say whether a proposal's schema transaction took effect (`ekr commit` answers that the publication outcome is unknown)).
+    ///
+    /// The round stops at that proposal and asks EKR for no later one. The proposals before it stay decided and recorded in `proposals.jsonl`; it and every later one are not recorded. The reason names the proposal; `ekr ontology` answers whether its change took effect. `cortex schema` exits 4, as `cortex run` does for this outcome.
+    StoreOutcomeUnknown {
+        /// Why it was refused: `cortex.instance.StoreOutcomeUnknown`.
+        error: StoreOutcomeUnknown,
     },
     /// `proposed` — when `dry_run`.
     ///
@@ -2503,7 +2580,7 @@ pub enum RestoreSnapshotOutcome {
     },
     /// `restored` — otherwise.
     ///
-    /// The store and the instance state were snapshotted as `<ms>-before-restore`, then put back to the snapshot's copies: every source's seen state and the known entity names included, so the next runs apply again what the undone runs applied. A viewer that was running was stopped first and started again after.
+    /// The store and the instance state were snapshotted as `<ms>-before-restore`, then the store was put back to the snapshot's copy, and after it the instance state: every source's seen state and the known entity names included, so the next runs apply again what the undone runs applied. A state copy that could not be written back leaves the store restored and the state as it was, reported as `state_restored: false` with the reason in `state_failed`. A viewer that was running was stopped first and started again after.
     Restored {
         /// The `cortex.instance.SnapshotRestored` this outcome publishes.
         snapshot_restored: SnapshotRestored,
@@ -2717,6 +2794,13 @@ pub enum UpdateInstanceOutcome {
     NotActive {
         /// Why it was refused: `cortex.instance.InstanceNotActive`.
         error: InstanceNotActive,
+    },
+    /// `rekey-refused` — externally decided (A source the frozen spec and the new one both name, whose `state/<source>.json` holds a seen document, changes a field its documents are keyed by: its `kind`; a `connectors` source's `adapter`, `operation` or `id`; a `files` source's `records` format (no `records` and `WholeFile` are one), with a per-record format their `records.id`, or a root of its `paths` that reaches a seen file under another spelling (`docs` and `./docs`; adding, removing or reordering roots is not one); a `structured` source's `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths` or `glob` as written, or its `mapping.id`. A record path is compared as it is read (`key` and `$.key` are one path)).
+    ///
+    /// Nothing changed; the frozen spec and every source's seen state are as they were.
+    RekeyRefused {
+        /// Why it was refused: `cortex.instance.RekeyRefused`.
+        error: RekeyRefused,
     },
     /// `updated` — otherwise.
     ///
@@ -2984,6 +3068,8 @@ pub struct SourceRan {
     pub documents_new: i64,
     /// `documents_applied` — `Integer`.
     pub documents_applied: i64,
+    /// `facts_reapplied` — `Integer`.
+    pub facts_reapplied: i64,
     /// `cost_usd` — `Optional<Decimal>`.
     pub cost_usd: Option<crate::primitives::Decimal>,
     /// `cost_counted` — `Boolean`.
@@ -3187,11 +3273,24 @@ pub struct NameTaken {
 
 /// The declared error `cortex.instance.ProposeFailed`.
 ///
-/// A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+/// A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology, or `proposals.jsonl` could not be written. Nothing was applied and no proposal was recorded, except when a line of `proposals.jsonl` could not be written after earlier proposals were applied: those stay applied, the lines before stay written, and the reason names both counts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProposeFailed {
     /// `reason` — `String`.
     pub reason: String,
+}
+
+/// The declared error `cortex.instance.RekeyRefused`.
+///
+/// An update may not change how a source keys its documents while the source has seen documents: its seen state would no longer match, and every document would be extracted again. To re-key on purpose, remove the source's `state/<source>.json` first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RekeyRefused {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `source` — `String`.
+    pub source: String,
+    /// `field` — `String`.
+    pub field: String,
 }
 
 /// The declared error `cortex.instance.RestoreUnsupported`.
@@ -3205,7 +3304,7 @@ pub struct RestoreUnsupported {
 
 /// The declared error `cortex.instance.RunTerminated`.
 ///
-/// The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended, and stopped at the next safe point: a model call in flight was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about the source was wrong: the failure is not counted against it.
+/// The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended, and stopped at the next safe point: a fetch, a model call or a read of the store in flight was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about the source was wrong: the failure is not counted against it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunTerminated {
     /// `reason` — `String`.
@@ -3223,7 +3322,7 @@ pub struct SampleFailed {
 
 /// The declared error `cortex.instance.SchemaApplyFailed`.
 ///
-/// EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction. Nothing was published: the stage was abandoned, or on `sqlite` the snapshot taken before was restored; every approved proposal is still `approved`.
+/// EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction: nothing was published, the stage was abandoned, or on `sqlite` the snapshot taken before was restored, and every approved proposal is still `approved`. Or, after the changes were published, EKR could not read the store's head or `proposals.jsonl` could not be written: the changes stay in the store, and the reason says so and names the revision (on `postgres`, the head the stage was published at; on `sqlite`, the last committed one), or, when no proposal was applied, says no change was committed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SchemaApplyFailed {
     /// `reason` — `String`.
@@ -3342,7 +3441,7 @@ pub struct StoreHeld {
 
 /// The declared error `cortex.instance.StoreOutcomeUnknown`.
 ///
-/// EKR could not say whether a store write of the run took effect (`ekr stage begin`, `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage, or extracts the batch again.
+/// EKR could not say whether a store write of the run took effect (`ekr stage begin`, `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage, or extracts the batch again. For `cortex schema`, the write is a proposal's schema transaction (`ekr commit`) or the stage of `cortex schema apply`; the reason names it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreOutcomeUnknown {
     /// `reason` — `String`.

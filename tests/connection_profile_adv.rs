@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 
 /// A stand-in `connectors`: `connections list --adapter <a>` answers `<root>/list-<a>.json`;
 /// every argument list goes to `<root>/connectors-argv.log`, every invocation to
-/// `<root>/invocations.log` and answers `<root>/answer-<adapter>.json`; `connections launch`
+/// `<root>/invocations.log` and answers `<root>/answer-<connector>.json`; `connections launch`
 /// opens `<state>/<connection>.json` on descriptor 3 and runs `ekr` with the `--args` array.
 const CONNECTORS: &str = r#"R="@ROOT@"; STATE="@STATE@"; EKR="@EKR@"
 printf '%s\n' "$*" >> "$R/connectors-argv.log"
@@ -20,10 +20,9 @@ case "$1 $2" in
   "connections list")
     printf '{"ok":true,"result":{"connections":[%s]}}' "$(cat "$R/list-$4.json" 2>/dev/null)" ;;
   "connections revalidate") echo '{"ok":true,"result":{}}' ;;
-  "operations describe") echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
-  "operations invoke")
+  "invoke "*)
     printf '%s\n' "$*" >> "$R/invocations.log"
-    cat "$R/answer-$4.json" ;;
+    cat "$R/answer-${2%%/*}.json" ;;
   "connections launch")
     shift 2; C=""; CONSUMER=""; ARGS="[]"
     while [ $# -gt 0 ]; do
@@ -70,7 +69,7 @@ fn list(w: &World, adapter: &str, entries: &[(&str, &str, &str)]) {
     let entries: Vec<String> = entries
         .iter()
         .map(|(id, profile, state)| {
-            json!({"adapter": adapter, "instance_id": "local", "connection": id,
+            json!({"adapter": adapter, "connector": adapter, "instance": "main", "instance_id": "local", "connection": id,
                 "profile": profile, "revision": "rev1", "state": state})
             .to_string()
         })
@@ -575,7 +574,7 @@ fn adv_a_web_source_resolves_among_its_own_adapters_connections() {
     assert!(!invocations.is_empty());
     for line in &invocations {
         assert!(
-            line.contains("--adapter exa ") && line.contains("--connection conn_X "),
+            line.contains("invoke exa/main ") && line.contains("--connection conn_X "),
             "{line}"
         );
     }

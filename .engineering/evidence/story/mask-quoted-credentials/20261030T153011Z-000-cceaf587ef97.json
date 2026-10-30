@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-30T15:30:11Z",
+  "actor": "human:timo",
+  "artifact": "story:mask-quoted-credentials",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check",
+    "reference": "wave/20261030a at 004e8d51: task check exit 0, 1241 passed, 0 failed, 13 ignored"
+  }
+}

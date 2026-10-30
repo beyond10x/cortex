@@ -25,13 +25,14 @@ and `README.md` in a directory of the same name, and `SHA256SUMS`, the tarball's
 Download both, check the tarball against the checksum, and put the binary on your `PATH`:
 
 ```sh
-version=0.6.1
+version=0.7.0
 base=https://github.com/beyond10x/cortex/releases/download/v$version
 curl -fsSLO "$base/cortex-$version-x86_64-unknown-linux-gnu.tar.gz"
 curl -fsSLO "$base/SHA256SUMS"
 sha256sum --check --strict SHA256SUMS
 tar -xzf "cortex-$version-x86_64-unknown-linux-gnu.tar.gz"
-install -m 755 "cortex-$version-x86_64-unknown-linux-gnu/cortex" ~/.local/bin/cortex
+install -m 755 "cortex-$version-x86_64-unknown-linux-gnu/cortex" \
+  ~/.local/bin/cortex
 cortex --version
 cortex setup
 ```
@@ -62,7 +63,8 @@ Web sources read websites through a Connectors adapter that implements
 id it lists:
 
 ```sh
-connectors connections connect --adapter tavily --profile <the provider's API-key profile> --credential-prompt
+connectors connections connect --adapter tavily \
+  --profile <the provider's API-key profile> --credential-prompt
 connectors connections list --adapter tavily
 ```
 

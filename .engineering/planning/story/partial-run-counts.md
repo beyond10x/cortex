@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:partial-run-counts
 kind: story
-status: draft
+status: active
 title: Documents applied and tokens spent count for every run outcome
 summary: metrics.prom adds a partial run's documents and tokens, not only ran
 relations:
 - serves: vision:self-updating-instances
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-18T00:28:45Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-18T00:28:45Z", actor: "human:timo", revision: 3}
 ---
 ## Outcome
 

@@ -11,12 +11,14 @@
 //! [`PgRecords`] is the [`RecordStore`] over either: the records process, or a connection of this
 //! process ([`PgRecords::connect`], for tests).
 
+use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 use cortex_model::ask as ma;
 use cortex_model::instance as m;
@@ -31,6 +33,12 @@ use super::{
 /// The name of the `[consumers]` entry in the operator's Connectors configuration that pins the
 /// `cortex` binary the records process runs. It needs no variable passed (`pass_env = []`).
 pub const CONSUMER: &str = "cortex-records";
+
+/// The deadline of each wait of a record call: for earlier calls, for a start of the records
+/// process and for its answer to a statement; and each statement's `statement_timeout` in that
+/// process. A call past it fails (`store-failed`); a process that did not start or answer by then
+/// is stopped, and started again for the next call.
+pub const DEADLINE: Duration = Duration::from_secs(30);
 
 /// The schema of the records, one step per version as for `ask.sqlite`: step `i` takes version
 /// `i` to `i + 1`, and the one row of `schema_version` holds the version a schema is at.
@@ -284,9 +292,13 @@ impl Local {
             .connect(tls.clone())
             .map_err(|e| format!("ask.records: cannot connect: {}", db_error(e).message))?;
         // Every statement after this names its tables unqualified, and they resolve in the
-        // records schema alone: a missing schema is an error, never another schema.
+        // records schema alone: a missing schema is an error, never another schema. No statement
+        // runs past the call's deadline ([`DEADLINE`]), so a stalled database ends it here too.
         client
-            .batch_execute(&format!("SET search_path TO \"{schema}\""))
+            .batch_execute(&format!(
+                "SET search_path TO \"{schema}\"; SET statement_timeout = {}",
+                DEADLINE.as_millis()
+            ))
             .map_err(|e| db_error(e).message)?;
         Ok(client)
     }
@@ -429,6 +441,8 @@ pub struct Launch {
     pub ca_file: Option<String>,
     /// Variables the records process must not inherit: the gateway's token among them.
     pub remove: Vec<String>,
+    /// The deadline of each wait of a call of the records process: [`DEADLINE`].
+    pub deadline: Duration,
 }
 
 impl Launch {
@@ -464,7 +478,9 @@ impl Launch {
         .arg(Value::from(self.args()).to_string())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit());
+        // Read line by line into the service's masked log ([`crate::ask::serve::log`]): what
+        // Connectors or the records process writes there can carry a connection string.
+        .stderr(Stdio::piped());
         for key in &self.remove {
             cmd.env_remove(key);
         }
@@ -472,10 +488,34 @@ impl Launch {
     }
 }
 
+/// A running records process. Its standard input belongs to a writer thread and its standard
+/// output to a reader thread, so a process that stops reading or answering blocks those threads,
+/// never a call, whose deadline the wait for the answer keeps.
 struct Proc {
     child: Child,
-    stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    requests: Sender<String>,
+    lines: Receiver<String>,
+}
+
+impl Proc {
+    /// The next line the records process prints, by `deadline`.
+    fn line(&self, deadline: Instant) -> Result<String, RecvTimeoutError> {
+        self.lines
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+    }
+
+    /// How the process ended, waited for until `deadline` and killed past it.
+    fn ended_by(&mut self, deadline: Instant) -> Option<ExitStatus> {
+        loop {
+            match self.child.try_wait() {
+                Ok(Some(status)) => return Some(status),
+                Ok(None) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(10))
+                }
+                _ => return None,
+            }
+        }
+    }
 }
 
 impl Drop for Proc {
@@ -485,25 +525,112 @@ impl Drop for Proc {
     }
 }
 
+/// The calls waiting for the records process, served one at a time in the order they arrived.
+/// A call takes a ticket and waits, at most until a deadline, until its ticket is first and no
+/// call is served; a call that gave up removes its ticket.
+#[derive(Default)]
+struct Queue {
+    line: Mutex<Line>,
+    turn: Condvar,
+}
+
+#[derive(Default)]
+struct Line {
+    next: u64,
+    waiting: VecDeque<u64>,
+    serving: bool,
+}
+
+/// A call's turn with the records process; the next call's starts when it is dropped.
+struct Turn<'q> {
+    queue: &'q Queue,
+    ticket: u64,
+}
+
+impl Drop for Turn<'_> {
+    fn drop(&mut self) {
+        self.queue.line().serving = false;
+        self.queue.turn.notify_all();
+    }
+}
+
+impl Queue {
+    fn line(&self) -> std::sync::MutexGuard<'_, Line> {
+        self.line
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// The ticket the next call to arrive takes: every call with a smaller one arrived before.
+    fn issued(&self) -> u64 {
+        self.line().next
+    }
+
+    /// The caller's turn, after every call that arrived before it; `None` when `until` came
+    /// first, its ticket removed.
+    fn wait(&self, until: Instant) -> Option<Turn<'_>> {
+        let mut line = self.line();
+        let ticket = line.next;
+        line.next += 1;
+        line.waiting.push_back(ticket);
+        loop {
+            if !line.serving && line.waiting.front() == Some(&ticket) {
+                line.waiting.pop_front();
+                line.serving = true;
+                return Some(Turn {
+                    queue: self,
+                    ticket,
+                });
+            }
+            let left = until.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                line.waiting.retain(|t| *t != ticket);
+                drop(line);
+                // The call behind this one may be first now.
+                self.turn.notify_all();
+                return None;
+            }
+            line = self
+                .turn
+                .wait_timeout(line, left)
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .0;
+        }
+    }
+}
+
 /// The records process, started through Connectors: one statement at a time, one JSON line each
-/// way. A process that ended, or answered no line, is started again for the next statement.
+/// way, the calls served in the order they arrived. The launch's deadline bounds three waits of
+/// a call, each on its own: for earlier calls (a call past it fails and leaves the process
+/// alone), for a start of the process, and for the answer, timed from the statement's sending. A
+/// process that ended, answered no line or did not answer by then is stopped, and started again
+/// for the next statement. A start that fails fails every call that arrived before it failed, at
+/// once; only a call that arrived after it starts the process again.
 pub struct Remote {
     launch: Launch,
+    queue: Queue,
+    /// Taken only by the call whose [`Turn`] it is, so never waited for.
     process: Mutex<Option<Proc>>,
+    /// The last start that failed, while no start has succeeded since: the ticket the next call
+    /// to arrive took when it failed, and its refusal. Taken only by the call whose turn it is.
+    failed_start: Mutex<Option<(u64, String)>>,
 }
 
 impl Remote {
-    /// Starts the records process and waits for its ready line, after its migration: its refusal
-    /// (a schema at a newer version, a connection that fails) is the `Err`.
+    /// Starts the records process and waits for its ready line, after its migration, until the
+    /// launch's deadline: its refusal (a schema at a newer version, a connection that fails) is
+    /// the `Err`.
     pub fn start(launch: Launch) -> Result<Self, String> {
-        let process = Self::spawn(&launch)?;
+        let process = Self::spawn(&launch, Instant::now() + launch.deadline)?;
         Ok(Self {
             launch,
+            queue: Queue::default(),
             process: Mutex::new(Some(process)),
+            failed_start: Mutex::new(None),
         })
     }
 
-    fn spawn(launch: &Launch) -> Result<Proc, String> {
+    fn spawn(launch: &Launch, deadline: Instant) -> Result<Proc, String> {
         let mut child = launch.command().spawn().map_err(|e| {
             format!(
                 "ask.records: cannot run {}: {e}",
@@ -511,22 +638,59 @@ impl Remote {
             )
         })?;
         let stdin = child.stdin.take().expect("piped");
-        let mut stdout = BufReader::new(child.stdout.take().expect("piped"));
-        let mut line = String::new();
-        let read = stdout.read_line(&mut line);
+        let stdout = child.stdout.take().expect("piped");
+        if let Some(stderr) = child.stderr.take() {
+            // Read to its end, a line that is not UTF-8 too, so the process never blocks on it.
+            std::thread::spawn(move || {
+                let mut stderr = BufReader::new(stderr);
+                let mut line = Vec::new();
+                while stderr.read_until(b'\n', &mut line).is_ok_and(|n| n > 0) {
+                    crate::ask::serve::log(String::from_utf8_lossy(&line).trim_end());
+                    line.clear();
+                }
+            });
+        }
+        let (tx, lines) = mpsc::channel();
+        std::thread::spawn(move || {
+            for line in BufReader::new(stdout).lines() {
+                let Ok(line) = line else { return };
+                if tx.send(line).is_err() {
+                    return;
+                }
+            }
+        });
+        let (requests, queue) = mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            let mut stdin = stdin;
+            for line in queue {
+                if writeln!(stdin, "{line}")
+                    .and_then(|()| stdin.flush())
+                    .is_err()
+                {
+                    return;
+                }
+            }
+        });
         let mut process = Proc {
             child,
-            stdin,
-            stdout,
+            requests,
+            lines,
         };
-        let answer: Value = match read {
-            Ok(n) if n > 0 => serde_json::from_str(line.trim()).unwrap_or(Value::Null),
-            _ => Value::Null,
+        let answer: Value = match process.line(deadline) {
+            Ok(line) => serde_json::from_str(line.trim()).unwrap_or(Value::Null),
+            Err(RecvTimeoutError::Timeout) => {
+                return Err(format!(
+                    "ask.records: the records process launched through {}:{} did not start \
+                     within {:?}",
+                    launch.adapter, launch.connection, launch.deadline
+                ))
+            }
+            Err(RecvTimeoutError::Disconnected) => Value::Null,
         };
         if answer.get("ready").is_some() {
             return Ok(process);
         }
-        let status = process.child.wait().ok();
+        let status = process.ended_by(deadline);
         Err(match answer.get("err").and_then(Value::as_str) {
             Some(err) => err.to_string(),
             None => format!(
@@ -541,21 +705,62 @@ impl Remote {
     }
 
     fn call(&self, request: Value) -> Result<Value, SqlError> {
+        let deadline = self.launch.deadline;
+        // A call that spent its deadline waiting for earlier ones fails without touching the
+        // process: a queue is no stall, and the process and its statement in flight are kept.
+        let Some(turn) = self.queue.wait(Instant::now() + deadline) else {
+            return Err(format!(
+                "ask.records: the record call waited {deadline:?} behind earlier ones"
+            )
+            .into());
+        };
         let mut process = self
             .process
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         if process.is_none() {
-            *process = Some(Self::spawn(&self.launch)?);
+            let mut failed = self
+                .failed_start
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            // A call that waited through a failed start fails with it: one outage costs one
+            // start, not one per call queued behind it.
+            if let Some((before, why)) = failed.as_ref() {
+                if turn.ticket < *before {
+                    return Err(why.clone().into());
+                }
+            }
+            // A start has a deadline of its own, never what is left of the caller's: a start cut
+            // short would be paid again by the next caller. The process it starts is kept.
+            match Self::spawn(&self.launch, Instant::now() + deadline) {
+                Ok(started) => {
+                    *process = Some(started);
+                    *failed = None;
+                }
+                Err(why) => {
+                    *failed = Some((self.queue.issued(), why.clone()));
+                    return Err(why.into());
+                }
+            }
         }
         let p = process.as_mut().expect("started");
-        let mut line = String::new();
-        let exchanged = writeln!(p.stdin, "{request}")
-            .and_then(|()| p.stdin.flush())
-            .and_then(|()| p.stdout.read_line(&mut line));
+        // The exchange is timed from the statement's sending: only a process that takes longer
+        // than the deadline to answer it is stalled.
+        let exchanged = match p.requests.send(request.to_string()) {
+            Ok(()) => p.line(Instant::now() + deadline),
+            Err(_) => Err(RecvTimeoutError::Disconnected),
+        };
         let answer = match exchanged {
-            Ok(n) if n > 0 => serde_json::from_str::<Value>(line.trim()).ok(),
-            _ => None,
+            Ok(line) => serde_json::from_str::<Value>(line.trim()).ok(),
+            Err(RecvTimeoutError::Timeout) => {
+                // Stalled: the process is stopped, and the next statement starts another.
+                *process = None;
+                return Err(format!(
+                    "ask.records: the records process did not answer within {deadline:?}"
+                )
+                .into());
+            }
+            Err(RecvTimeoutError::Disconnected) => None,
         };
         let Some(answer) = answer else {
             // The process is gone or out of step: the next statement starts another.
@@ -778,6 +983,7 @@ pub fn launch_of(spec: &m::InstanceSpec, records: &ma::PostgresRecords) -> Resul
         schema: records.schema.clone(),
         ca_file: records.ca_file.clone(),
         remove,
+        deadline: DEADLINE,
     })
 }
 
@@ -1261,6 +1467,7 @@ mod tests {
             schema: "cortex_ask".into(),
             ca_file: Some("/etc/ca.pem".into()),
             remove: vec!["GW_TOKEN".into()],
+            deadline: DEADLINE,
         };
         let cmd = launch.command();
         let args: Vec<String> = cmd

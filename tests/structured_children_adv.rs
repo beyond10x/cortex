@@ -17,20 +17,21 @@ use serde_json::{json, Value};
 /// `events-<project>.json`, the project taken from the input's `"project"`. An operation answers
 /// `forbidden` for a project whose file `forbidden-<operation>-<project>` exists.
 const CONNECTORS: &str = r#"R="@ROOT@"
-P=$(printf '%s\n' "$*" | sed -n 's/.*"project":"\([^"]*\)".*/\1/p')
-answer() { printf '{"ok":true,"result":{"adapter":"forge","operation":"%s","revision":"r","result":%s}}\n' "$1" "$(cat "$2")"; }
+# Connectors 0.60.0 reads an invoke's input from standard input: A is the argv and that input.
+IN=""; if [ "$1" = invoke ]; then IN=$(cat); fi; A="$* $IN"
+P=$(printf '%s\n' "$A" | sed -n 's/.*"project":"\([^"]*\)".*/\1/p')
+answer() { printf '{"ok":true,"result":{"connector":"forge","instance":"main","operation":"%s","revision":"r","result":%s}}\n' "$1" "$(cat "$2")"; }
 child() {
   echo "$1 $P" >> "$R/invocations.log"
   if [ -e "$R/forbidden-$1-$P" ]; then echo '{"ok":false,"error":{"code":"failure","data":{"code":"forbidden","stage":"execution"}}}'; exit 1; fi
   answer "$1" "$R/$2-$P.json"
 }
-case "$*" in
-  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"forge","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
+case "$A" in
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"forge","connector":"forge","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
   *"connections revalidate"*) echo '{"ok":true,"result":{}}' ;;
-  *"operations describe"*) echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
-  *"--operation projects.list"*) echo "projects.list" >> "$R/invocations.log"; answer projects.list "$R/projects.json" ;;
-  *"--operation tags.list"*) child tags.list tags ;;
-  *"--operation events.list"*) child events.list events ;;
+  "invoke "*" projects.list "*) echo "projects.list" >> "$R/invocations.log"; answer projects.list "$R/projects.json" ;;
+  "invoke "*" tags.list "*) child tags.list tags ;;
+  "invoke "*" events.list "*) child events.list events ;;
   *) echo '{"ok":false}'; exit 2 ;;
 esac
 "#;
@@ -580,8 +581,8 @@ fn adv_a_child_call_failing_for_every_parent_holds_only_that_operation() {
 }
 
 /// A child call that fails for another reason than `forbidden` (an answer with no array at
-/// `records`, a result that is not JSON) does not fail the run either: the parent and its other
-/// children are applied and `skipped` names the parent and the operation.
+/// `records`, a result that is no JSON object) does not fail the run either: the parent and its
+/// other children are applied and `skipped` names the parent and the operation.
 #[test]
 fn adv_a_child_answer_without_records_or_not_json_is_skipped_not_fatal() {
     let w = world(&[("1", "alpha"), ("2", "beta")]);
@@ -597,7 +598,7 @@ fn adv_a_child_answer_without_records_or_not_json_is_skipped_not_fatal() {
         && l.contains("no array")));
     assert!(lines.iter().any(|l| l.contains("tags.list")
         && l.contains(&format!("{PROJECT}2:"))
-        && l.contains("not JSON")));
+        && l.contains("the result is a string, not an object")));
     let s = store(&w, "j");
     assert!(s.of(TAG).is_empty());
     assert_linked(&s, EVENT, "forge:projects.list:1");

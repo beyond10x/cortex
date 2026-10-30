@@ -41,22 +41,28 @@
       }
     },
     "latency_ms": {
-      "type": "integer"
+      "type": "integer",
+      "minimum": 0
     },
     "input_tokens": {
-      "type": "integer"
+      "type": "integer",
+      "minimum": 0
     },
     "output_tokens": {
-      "type": "integer"
+      "type": "integer",
+      "minimum": 0
     },
     "cached_tokens": {
-      "type": "integer"
+      "type": "integer",
+      "minimum": 0
     },
     "context_tokens": {
-      "type": "integer"
+      "type": "integer",
+      "minimum": 0
     },
     "steps": {
-      "type": "integer"
+      "type": "integer",
+      "minimum": 0
     },
     "at": {
       "type": "string",
@@ -83,11 +89,19 @@
     "state"
   ],
   "additionalProperties": false,
+  "x-ess-invariants": [
+    "latency_ms >= 0",
+    "input_tokens >= 0",
+    "output_tokens >= 0",
+    "cached_tokens >= 0",
+    "context_tokens >= 0",
+    "steps >= 0"
+  ],
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d",
-    "contract_digest": "slice-sha256/2:fa2da41ed34c618d58ca31f74908515836bd2b73ac33d6bdab7a54a07a382098",
+    "source_digest": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
+    "contract_digest": "slice-sha256/2:4a51b4979d46501dc2f075ffa4f7846bfaae8698bb86231e3e11ade969cb3521",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -105,7 +119,9 @@
       "enum": [
         "answered",
         "failed",
-        "limited"
+        "limited",
+        "client-closed",
+        "cut-off"
       ]
     },
     "cortex.ask.AnswerRecord.State": {

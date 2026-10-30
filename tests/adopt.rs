@@ -1210,3 +1210,64 @@ fn adv_every_record_seen_by_key_alone_asks_no_model_and_hashes_all_three() {
     assert!(again["detail"].get("hashed").is_none(), "{again}");
     assert!(w.lines("claude-calls.log").is_empty());
 }
+
+/// An adoption that fails after it recorded the instance (its meta cannot be saved) leaves no
+/// registry entry and no instance directory, and the store it read as it was; a retry adopts.
+#[test]
+fn an_adoption_that_fails_after_recording_the_instance_leaves_no_registry_entry() {
+    let w = World::new();
+    let legacy = Legacy::new(&w);
+    let before = files(&legacy.dir);
+    // The spec's `ekr`, while `break-meta` exists, makes the instance's `meta.json` a directory.
+    let wrapper = w.bin.join("ekr-breaking-meta");
+    common::executable(
+        &wrapper,
+        &format!(
+            "if [ -e \"{root}/break-meta\" ]; then mkdir -p \"{home}/instances/brain/meta.json/x\"; fi\nexec \"{ekr}\" \"$@\"\n",
+            root = w.root.display(),
+            home = w.home.display(),
+            ekr = ekr().display()
+        ),
+    );
+    let spec = spec(&w, "brain", SCHEMA);
+    let text = std::fs::read_to_string(&spec)
+        .unwrap()
+        .replace(&ekr().display().to_string(), &wrapper.display().to_string());
+    std::fs::write(&spec, text).unwrap();
+    std::fs::write(w.root.join("break-meta"), "").unwrap();
+
+    let host = legacy.host();
+    let store = legacy.store();
+    let args = [
+        "adopt",
+        "--spec",
+        spec.to_str().unwrap(),
+        "--store",
+        store.to_str().unwrap(),
+        "--host",
+        host.to_str().unwrap(),
+        "--no-units",
+    ];
+    let out = Command::new(env!("CARGO_BIN_EXE_cortex"))
+        .args(args)
+        .env("CORTEX_HOME", &w.home)
+        .env("CORTEX_CONNECTORS", w.bin.join("connectors"))
+        .env("CORTEX_CLAUDE", w.bin.join("claude"))
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(2), "{stderr}");
+    assert!(stderr.contains("meta.json"), "{stderr}");
+    assert_eq!(registered(&w), Vec::<String>::new());
+    assert!(!w.home.join("instances/brain").exists());
+    only_sqlite_side_files_added(&before, &files(&legacy.dir));
+
+    std::fs::remove_file(w.root.join("break-meta")).unwrap();
+    let (code, adopted) = w.cortex(&args);
+    assert_eq!(
+        (code, adopted["outcome"].as_str()),
+        (0, Some("adopted")),
+        "the retry: {adopted}"
+    );
+    assert_eq!(registered(&w), ["\"brain\""]);
+}

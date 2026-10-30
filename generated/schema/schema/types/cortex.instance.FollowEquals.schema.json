@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.FollowEquals",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
+    "contract_digest": "slice-sha256/2:8ba68a34b5a45fb43df7b6d85dfe0bdf36e31e6d04447a0f1e82b19a6c87288d",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.FollowEquals": {
+      "title": "FollowEquals",
+      "x-ess-name": "cortex.instance.FollowEquals",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "value": {}
+      },
+      "required": [
+        "field",
+        "value"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

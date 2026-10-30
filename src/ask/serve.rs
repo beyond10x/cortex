@@ -11,6 +11,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::body::Bytes;
 use axum::extract::rejection::BytesRejection;
+use axum::extract::DefaultBodyLimit;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::sse::{Event, Sse};
@@ -19,6 +20,7 @@ use axum::routing::{get, post};
 use axum::Router;
 use cortex_model::ask as ma;
 use serde_json::{json, Value};
+use tokio::sync::Semaphore;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_stream::StreamExt;
 
@@ -29,6 +31,8 @@ use super::{answer, final_event, Settings};
 struct Service {
     settings: Settings,
     limiter: Mutex<RateLimiter>,
+    /// One permit per answer in flight, over every identity (`ask.max_in_flight`).
+    in_flight: Arc<Semaphore>,
     keeper: Keeper,
 }
 
@@ -75,9 +79,29 @@ fn unidentified(service: &Service) -> Response {
     )
 }
 
-fn store_failed(reason: String) -> Response {
-    eprintln!("cortex: answer records: {reason}");
-    json_error(StatusCode::INTERNAL_SERVER_ERROR, "store-failed", reason)
+/// Writes `line` to the service's standard error with every credential shape masked
+/// (`crate::mask`). A line can carry text from outside: a gateway's error body, a store's error
+/// (a connection string). Every log line of the ask service goes through here; a test of this
+/// module holds that no other line is written.
+pub(crate) fn log(line: &str) {
+    eprintln!("{}", crate::mask::mask(line).0);
+}
+
+/// A failure of the records: 500 `store-failed` with a new request id and a fixed message. The
+/// detail (a database path, SQL text) goes to standard error under that id, never to the client.
+fn store_failed(detail: String) -> Response {
+    let request = uuid::Uuid::now_v7().to_string();
+    log(&format!(
+        "cortex: answer records: request {request}: {detail}"
+    ));
+    json_response(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        json!({
+            "error": "store-failed",
+            "message": "the answer records could not be read or written",
+            "request_id": request,
+        }),
+    )
 }
 
 /// Runs `work` on the blocking pool: the records are SQLite.
@@ -134,6 +158,49 @@ fn bad_request(message: &str) -> Response {
 /// The most bytes of a request body: a question is text, and a body above this is refused.
 const BODY_LIMIT: usize = 1024 * 1024;
 
+/// The most bytes of a body of the record routes (a vote, a close): a body above this is refused
+/// with 413.
+const RECORD_BODY_LIMIT: usize = 64 * 1024;
+
+/// The body of a record route, or its refusal: 413 above [`RECORD_BODY_LIMIT`], 400 when it
+/// cannot be read.
+fn record_body(body: Result<Bytes, BytesRejection>) -> Result<Bytes, Box<Response>> {
+    match body {
+        Ok(body) => Ok(body),
+        Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+            Err(Box::new(json_error(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "bad-request",
+                format!("the body is above {RECORD_BODY_LIMIT} bytes"),
+            )))
+        }
+        Err(_) => Err(Box::new(json_error(
+            StatusCode::BAD_REQUEST,
+            "bad-request",
+            "the body cannot be read",
+        ))),
+    }
+}
+
+/// The stream of one answer: its events to the reader, and the tool calls made for its record.
+struct Events {
+    tx: tokio::sync::mpsc::UnboundedSender<ma::AskEvent>,
+    tool_calls: Vec<ma::AskTool>,
+}
+
+impl super::Stream for Events {
+    fn emit(&mut self, event: ma::AskEvent) -> bool {
+        if let ma::AskEvent::Tool(tool) = &event {
+            self.tool_calls.push(tool.clone());
+        }
+        self.tx.send(event).is_ok()
+    }
+
+    fn gone(&self) -> bool {
+        self.tx.is_closed()
+    }
+}
+
 async fn ask(
     State(service): State<Arc<Service>>,
     headers: HeaderMap,
@@ -176,6 +243,20 @@ async fn ask(
     if let Some(why) = super::question_refused(&service.settings, &question) {
         return bad_request(&why);
     }
+    // Past `max_in_flight` answers the question is refused at once, before it spends a question
+    // of the minute. The permit lives exactly as long as the answer's blocking thread: an answer
+    // whose reader left still holds its `ekr mcp` reader and its model call until that call
+    // replies or `max_seconds` passes, so it keeps its slot until then.
+    let Ok(permit) = service.in_flight.clone().try_acquire_owned() else {
+        return refusal(
+            StatusCode::TOO_MANY_REQUESTS,
+            final_event(&ma::AskOutcome::Busy {
+                error: ma::Busy {
+                    max_in_flight: service.settings.max_in_flight() as i64,
+                },
+            }),
+        );
+    };
     let admitted = service
         .limiter
         .lock()
@@ -196,20 +277,31 @@ async fn ask(
     let service = service.clone();
     let (started, at_ms) = (Instant::now(), now_ms());
     tokio::task::spawn_blocking(move || {
+        // Owned by this thread and nothing else, so no path gives the slot back before the
+        // answer's reader is killed and its model call has ended.
+        let _permit = permit;
         let answer_id = uuid::Uuid::now_v7().to_string();
-        let mut tool_calls = Vec::new();
+        let mut stream = Events {
+            tx,
+            tool_calls: Vec::new(),
+        };
         let outcome = answer(
             &service.settings,
             &answer_id,
             &identity,
             &question,
-            &mut |event| {
-                if let ma::AskEvent::Tool(tool) = &event {
-                    tool_calls.push(tool.clone());
-                }
-                tx.send(event).is_ok()
-            },
+            &mut stream,
         );
+        let Events { tx, tool_calls } = stream;
+        // The answer's id is its request id: the detail of a failure (a gateway's body, a program
+        // path) goes to standard error under it, masked, and the client's `error` names it.
+        if let Some(detail) = super::detail(&outcome) {
+            log(&format!("cortex: ask: request {answer_id}: {detail}"));
+        }
+        let mut last = final_event(&outcome);
+        if let ma::AskEvent::Error(e) = &mut last {
+            e.message.push_str(&format!(" (request {answer_id})"));
+        }
         let asked = Asked {
             answer_id,
             identity,
@@ -219,10 +311,11 @@ async fn ask(
             at_ms,
         };
         // The record is kept before the last event, so a reader who saw it can vote on it.
+        let request = asked.answer_id.clone();
         if let Err(e) = service.keeper.record(asked, &outcome) {
-            eprintln!("cortex: answer records: {e}");
+            log(&format!("cortex: answer records: request {request}: {e}"));
         }
-        let _ = tx.send(final_event(&outcome));
+        let _ = tx.send(last);
     });
     let stream = UnboundedReceiverStream::new(rx).map(|event| Ok::<_, Infallible>(sse(&event)));
     Sse::new(stream).into_response()
@@ -233,10 +326,14 @@ async fn vote(
     State(service): State<Arc<Service>>,
     Path(answer_id): Path<String>,
     headers: HeaderMap,
-    body: Bytes,
+    body: Result<Bytes, BytesRejection>,
 ) -> Response {
     let Some(identity) = identity_of(&service, &headers) else {
         return unidentified(&service);
+    };
+    let body = match record_body(body) {
+        Ok(body) => body,
+        Err(refused) => return *refused,
     };
     let Ok(body) = serde_json::from_slice::<Value>(&body) else {
         return json_error(
@@ -342,11 +439,15 @@ async fn close(
     State(service): State<Arc<Service>>,
     Path(review_id): Path<String>,
     headers: HeaderMap,
-    body: Bytes,
+    body: Result<Bytes, BytesRejection>,
 ) -> Response {
     if identity_of(&service, &headers).is_none() {
         return unidentified(&service);
     }
+    let body = match record_body(body) {
+        Ok(body) => body,
+        Err(refused) => return *refused,
+    };
     let body = serde_json::from_slice::<Value>(&body).ok();
     let expected = body.as_ref().map(|b| {
         expectations(b, "expect_facts")
@@ -408,6 +509,13 @@ async fn close(
             "no-such-review",
             "no review item carries that id",
         ),
+        // The route answers these itself; the store never forces them.
+        (ma::CloseReviewOutcome::BadRequest { error }, _) => {
+            json_error(StatusCode::BAD_REQUEST, "bad-request", error.message)
+        }
+        (ma::CloseReviewOutcome::StoreFailed { .. }, _) => {
+            store_failed("a refusal of the close route reached the store".into())
+        }
     }
 }
 
@@ -435,9 +543,11 @@ pub fn serve(settings: Settings, keeper: Keeper) -> Result<(), String> {
             .local_addr()
             .map_err(|e| format!("ask.listen: {e}"))?;
         let per_minute = settings.ask.limits.per_identity_per_minute as usize;
+        let in_flight = Arc::new(Semaphore::new(settings.max_in_flight()));
         let service = Arc::new(Service {
             settings,
             limiter: Mutex::new(RateLimiter::new(per_minute)),
+            in_flight,
             keeper,
         });
         let keeper = service.keeper.clone();
@@ -449,21 +559,79 @@ pub fn serve(settings: Settings, keeper: Keeper) -> Result<(), String> {
                 let keeper = keeper.clone();
                 match tokio::task::spawn_blocking(move || keeper.purge(now_ms())).await {
                     Ok(Ok(_)) => {}
-                    Ok(Err(e)) => eprintln!("cortex: answer records: the purge failed: {e}"),
-                    Err(e) => eprintln!("cortex: answer records: the purge stopped: {e}"),
+                    Ok(Err(e)) => log(&format!("cortex: answer records: the purge failed: {e}")),
+                    Err(e) => log(&format!("cortex: answer records: the purge stopped: {e}")),
                 }
             }
         });
+        let record_limit = || DefaultBodyLimit::max(RECORD_BODY_LIMIT);
         let app = Router::new()
             .route("/ask", post(ask))
-            .route("/ask/{answer_id}/vote", post(vote))
-            .route("/review", get(review))
-            .route("/review/{review_id}/close", post(close))
-            .layer(axum::extract::DefaultBodyLimit::max(BODY_LIMIT))
+            .route("/ask/{answer_id}/vote", post(vote).layer(record_limit()))
+            .route("/review", get(review).layer(record_limit()))
+            .route(
+                "/review/{review_id}/close",
+                post(close).layer(record_limit()),
+            )
+            .layer(DefaultBodyLimit::max(BODY_LIMIT))
             .with_state(service);
         println!("{}", json!({"listening": address.to_string()}));
         axum::serve(listener, app)
             .await
             .map_err(|e| format!("the service stopped: {e}"))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    /// Every `.rs` file under `dir`, with its text.
+    fn sources(dir: &Path, into: &mut Vec<(String, String)>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                sources(&path, into);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                let text = std::fs::read_to_string(&path).unwrap();
+                into.push((path.display().to_string(), text));
+            }
+        }
+    }
+
+    /// The class of the security review's finding at `serve.rs:296`: a line the ask service
+    /// writes to standard error can carry a gateway's body or a store's error, and must be
+    /// masked. So the one write to standard error under `src/ask/` is [`super::log`]'s, which
+    /// masks; a new log line written any other way fails here.
+    #[test]
+    fn every_log_line_of_the_ask_service_goes_through_the_mask() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ask");
+        let mut files = Vec::new();
+        sources(&dir, &mut files);
+        assert!(files.len() > 5, "src/ask/ was not read: {files:?}");
+        // Split, so this test's own text is not a match.
+        let writes = [concat!("eprint", "ln!("), concat!("eprint", "!(")];
+        let found: Vec<(String, usize)> = files
+            .iter()
+            .flat_map(|(path, text)| {
+                text.lines()
+                    .enumerate()
+                    .filter(|(_, line)| writes.iter().any(|w| line.contains(w)))
+                    .map(move |(n, _)| (path.clone(), n + 1))
+            })
+            .collect();
+        let serve = &files
+            .iter()
+            .find(|(p, _)| p.ends_with("serve.rs"))
+            .unwrap()
+            .1;
+        let masked = format!(
+            "fn log(line: &str) {{\n    {}\"{{}}\", crate::mask::mask(line).0);",
+            writes[0]
+        );
+        assert!(
+            found.len() == 1 && serve.contains(&masked),
+            "a line goes to standard error without `log`'s mask: {found:?}"
+        );
+    }
 }

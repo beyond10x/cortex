@@ -9,6 +9,12 @@ use crate::model_map;
 
 pub const FORMAT: &str = "cortex.instance/1";
 
+/// The largest `refresh_after_days` a source policy may give: 100 years.
+pub const MAX_REFRESH_AFTER_DAYS: i64 = 36_500;
+
+/// The largest `monitoring.hook.timeout_s`: one day.
+pub const MAX_HOOK_TIMEOUT_S: i64 = 86_400;
+
 /// The `store` forms a spec may write, for the refusal of any other.
 const STORE_FORMS: &str = "use `backend: sqlite` with an optional `value: {path}`, \
                            or `backend: postgres` with `value: {config}`";
@@ -52,12 +58,26 @@ pub fn load(path: &Path) -> Result<Loaded, String> {
 /// alone, so an instance created before the rule keeps loading and can be updated to a new name.
 ///
 /// A spec it accepts with a dollar limit behind a model gateway gets one warning line on stderr
-/// ([`dollar_limits_warning`]).
+/// ([`dollar_limits_warning`]). A number out of range is refused here ([`bounds_refusal`]), where
+/// a spec is written, and nowhere a spec is only run.
 pub fn load_given(path: &Path) -> Result<Loaded, String> {
+    given(path, true)
+}
+
+/// Reads the spec file `cortex ask serve` runs over: what [`load_given`] refuses, but for the
+/// numbers [`bounds_refusal`] holds. The spec is an existing instance's, which 0.6.1 served with
+/// any of them, and the answer service reads none of them; a run saturates or caps them where it
+/// reads them.
+pub fn load_served(path: &Path) -> Result<Loaded, String> {
+    given(path, false)
+}
+
+fn given(path: &Path, bounded: bool) -> Result<Loaded, String> {
     let loaded = load(path)?;
     if let Some(reason) = reserved_refusal(&loaded.model)
         .or_else(|| infinite_refusal(&loaded.model))
         .or_else(|| gateway_refusal(&loaded.model))
+        .or_else(|| bounded.then(|| bounds_refusal(&loaded.model)).flatten())
     {
         return Err(format!("{}: {reason}", path.display()));
     }
@@ -215,6 +235,9 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
     if let Some(reason) = alias_template_refusal(spec) {
         return Err(reason);
     }
+    if let Some(reason) = key_template_refusal(spec) {
+        return Err(reason);
+    }
     // A `connectors` source cites a record as `record:<adapter>:<operation>:<id>`, as a structured
     // source does, so a structured source that ends what it no longer lists would claim the
     // values the model extracted from that operation's records.
@@ -239,6 +262,33 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
                  extracted from them; use dropped: Keep, or read another operation",
                 source.name, c.adapter, c.operation, other.name
             ));
+        }
+    }
+    // Two structured sources whose records get one identity prefix (`structured::prefix`: the
+    // same adapter and operation, or the same paths and glob) own each other's records, so one
+    // that ends what it no longer lists would end the values the other asserted.
+    let structured: Vec<(&m::SourceSpec, &m::StructuredSource)> = spec
+        .sources
+        .iter()
+        .filter_map(|s| match &s.settings {
+            m::SourceSettings::Structured(st) => Some((s, st)),
+            _ => None,
+        })
+        .collect();
+    for (i, (first, a)) in structured.iter().enumerate() {
+        for (second, b) in &structured[i + 1..] {
+            let supersede = [a, b]
+                .iter()
+                .any(|st| st.dropped == Some(m::DropPolicy::Supersede));
+            let prefix = crate::structured::prefix(a);
+            if supersede && prefix == crate::structured::prefix(b) {
+                return Err(format!(
+                    "sources {:?} and {:?} both read {prefix}, so their records are one \
+                     identity set, and with dropped: Supersede one would end the values the \
+                     other asserted; use dropped: Keep on both, or read another source",
+                    first.name, second.name
+                ));
+            }
         }
     }
     // A child record's identity names its child by the operation (`structured::child_key`), so the
@@ -316,6 +366,9 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
     if spec.model.timeout_s <= 0 {
         return Err("model.timeout_s must be above 0".into());
     }
+    if spec.runs.as_ref().is_some_and(|r| r.keep_days < 1) {
+        return Err("runs.keep_days must be at least 1".into());
+    }
     for (i, check) in spec.gate.iter().flat_map(|g| g.checks.iter()).enumerate() {
         for (bound, value) in [("min", &check.min), ("max", &check.max)] {
             if let Some(value) = value {
@@ -374,6 +427,40 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
     Ok(())
 }
 
+/// Why a number of `spec` is out of range: a `refresh_after_days` above
+/// [`MAX_REFRESH_AFTER_DAYS`], a `monitoring.hook.timeout_s` above [`MAX_HOOK_TIMEOUT_S`] or a
+/// `serve.view_port` that is no port (0 lets the viewer take a free one). Held for `create`,
+/// `update` and `adopt` ([`load_given`]); an instance's frozen copy, read with [`load`], and the
+/// spec `cortex ask serve` is given, read with [`load_served`], are not held to it, so one
+/// created before the rule keeps running: a run saturates the refresh window and caps the hook's
+/// time ([`crate::status`]), the port is read only when an instance is made, and the answer
+/// service reads none of the three.
+pub fn bounds_refusal(spec: &m::InstanceSpec) -> Option<String> {
+    if let Some(source) = spec
+        .sources
+        .iter()
+        .find(|s| s.policy.refresh_after_days > MAX_REFRESH_AFTER_DAYS)
+    {
+        return Some(format!(
+            "sources.{}.policy.refresh_after_days: {}: use 0 to {MAX_REFRESH_AFTER_DAYS} days",
+            source.name, source.policy.refresh_after_days
+        ));
+    }
+    let timeout = spec
+        .monitoring
+        .as_ref()
+        .and_then(|o| o.hook.as_ref())
+        .and_then(|h| h.timeout_s);
+    if let Some(t) = timeout.filter(|t| *t > MAX_HOOK_TIMEOUT_S) {
+        return Some(format!(
+            "monitoring.hook.timeout_s: {t}: use 1 to {MAX_HOOK_TIMEOUT_S} seconds"
+        ));
+    }
+    let port = spec.serve.view_port;
+    port.filter(|p| u16::try_from(*p).is_err())
+        .map(|port| format!("serve.view_port: {port}: use a port from 0 to {}", u16::MAX))
+}
+
 /// Why an alias template of a structured mapping (`alias_templates`, the source's own mapping or a
 /// child's) is no alias template ([`crate::structured::template_refusal`]): the specification
 /// cannot state the grammar of a String; this is its `UNMAPPED:` rule. Names the place and the
@@ -405,6 +492,48 @@ fn alias_template_refusal(spec: &m::InstanceSpec) -> Option<String> {
         }
     }
     None
+}
+
+/// Why a `connectors` source's `key` is no template: it is rendered by the grammar of an alias
+/// template ([`crate::structured::template_refusal`]), so an empty key, one without a `{field}`
+/// placeholder, or one with an unclosed `{` or a stray `}` is refused here, naming the place and
+/// the key. So is an `{input.…}` placeholder on a source without inputs, or one that some input
+/// does not hold as a text, number or boolean, naming the placeholder and the input. This is the
+/// `UNMAPPED:` rule of `cortex.instance.ConnectorsSource.key`.
+fn key_template_refusal(spec: &m::InstanceSpec) -> Option<String> {
+    spec.sources.iter().find_map(|source| {
+        let m::SourceSettings::Connectors(c) = &source.settings else {
+            return None;
+        };
+        let key = c.key.as_deref()?;
+        let at = format!("sources.{}.settings.value.key: {key:?}", source.name);
+        if let Some(why) = crate::structured::template_refusal(key) {
+            return Some(format!("{at}: {why}"));
+        }
+        // An `{input.…}` placeholder is rendered from the spec's own inputs (a run fills in only
+        // their window values), so one that some input does not hold as a scalar is known now.
+        let fields = crate::structured::template_input_fields(key);
+        let first = fields.first()?;
+        if c.inputs.is_empty() {
+            return Some(format!(
+                "{at}: the placeholder {{{first}}} names an input, and the source has no inputs"
+            ));
+        }
+        c.inputs.iter().enumerate().find_map(|(n, input)| {
+            let rendered =
+                crate::structured::input_projection(key, &crate::model_map::to_serde(input));
+            fields
+                .iter()
+                .zip(rendered)
+                .find(|(_, text)| text.is_none())
+                .map(|(field, _)| {
+                    format!(
+                        "{at}: the placeholder {{{field}}} names no text, number or boolean in \
+                         inputs[{n}]"
+                    )
+                })
+        })
+    })
 }
 
 /// Why a connection the spec names cannot be used: it names both an id (`connection`) and a

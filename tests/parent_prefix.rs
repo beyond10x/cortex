@@ -18,10 +18,9 @@ use serde_json::{json, Value};
 /// `conn_vault` of adapter `vault-secret`, whose every operation answers `people.json`.
 const CONNECTORS: &str = r#"R="@ROOT@"
 case "$*" in
-  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"dir","connection":"conn_test","state":"ready","revision":"rev1"},{"adapter":"vault-secret","connection":"conn_vault","state":"ready","revision":"rev1"}]}}' ;;
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"dir","connector":"dir","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"},{"adapter":"vault-secret","connector":"vault-secret","instance":"main","connection":"conn_vault","state":"ready","revision":"rev1"}]}}' ;;
   *"connections revalidate"*) echo '{"ok":true,"result":{}}' ;;
-  *"operations describe"*) echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
-  *"--operation "*) printf '{"ok":true,"result":{"adapter":"dir","operation":"op","revision":"r","result":%s}}\n' "$(cat "$R/people.json")" ;;
+  "invoke "*) printf '{"ok":true,"result":{"connector":"dir","instance":"main","operation":"op","revision":"r","result":%s}}\n' "$(cat "$R/people.json")" ;;
   *) echo '{"ok":false}'; exit 2 ;;
 esac
 "#;

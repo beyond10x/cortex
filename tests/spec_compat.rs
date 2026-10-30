@@ -16,7 +16,8 @@
 //! gained its model calls and token counts (`story:run-cost-split`); the fixture's run and log
 //! entries carry them as the stand-in `claude` makes them (one call, no `usage`), and nothing else
 //! in it changed. They have since also gained the batch size the run used, `batch_chars` (60,000
-//! for this spec), and, in the result, its `splits` (`story:batch-fits-model-window`).
+//! for this spec), and, in the result, its `splits` (`story:batch-fits-model-window`), and, in
+//! the result, `facts_reapplied` (`story:replacement-applied-as-assertion`).
 
 mod common;
 

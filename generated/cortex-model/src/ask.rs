@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d
-// contract digest 45be6012d6ca07f5842ea4b833a0421e5880da4b6a06706d61c0d0abe43f7aab
+// model digest dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7
+// contract digest 857182a81f324b2743cfc95ae1fab53d1e8a5a7f0c41dbd9fcda27ed70b7ed9d
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Answers — `cortex.ask`.
@@ -22,6 +22,10 @@ pub enum AnswerOutcome {
     Failed,
     /// `limited`.
     Limited,
+    /// `client-closed`.
+    ClientClosed,
+    /// `cut-off`.
+    CutOff,
 }
 
 /// The states of `cortex.ask.AnswerRecord`, as runtime values.
@@ -112,6 +116,8 @@ pub struct AskLimits {
     pub max_seconds: i64,
     /// `per_identity_per_minute` — `Integer`.
     pub per_identity_per_minute: i64,
+    /// `max_tool_calls` — `Optional<Integer>`.
+    pub max_tool_calls: Option<i64>,
 }
 
 /// AskSpec — `cortex.ask.AskSpec`.
@@ -133,6 +139,8 @@ pub struct AskSpec {
     pub slow_after_ms: Option<i64>,
     /// `records` — `Optional<cortex.ask.PostgresRecords>`.
     pub records: Option<PostgresRecords>,
+    /// `max_in_flight` — `Optional<Integer>`.
+    pub max_in_flight: Option<i64>,
 }
 
 /// AskStatus — `cortex.ask.AskStatus`.
@@ -850,6 +858,13 @@ pub enum AskOutcome {
         /// Why it was refused: `cortex.ask.RateLimited`.
         error: RateLimited,
     },
+    /// `busy` — externally decided (The service is working on its most answers at once).
+    ///
+    /// It answers 429 with an `error` event whose `reason` is `busy`; no model was asked.
+    Busy {
+        /// Why it was refused: `cortex.ask.Busy`.
+        error: Busy,
+    },
     /// `limit-reached` — externally decided (The model still asks for a tool at the step limit, or the time limit passes).
     ///
     /// The stream ends with an `error` event naming the limit, and no `done`.
@@ -870,6 +885,20 @@ pub enum AskOutcome {
     ReaderFailed {
         /// Why it was refused: `cortex.ask.ReaderFailed`.
         error: ReaderFailed,
+    },
+    /// `cut-off` — externally decided (The model's reply ends because of its token limit or a content filter).
+    ///
+    /// The stream ends with an `error` event whose `reason` is `cut-off`, and no `done`.
+    CutOff {
+        /// Why it was refused: `cortex.ask.CutOff`.
+        error: CutOff,
+    },
+    /// `client-closed` — externally decided (The reader closes the stream before its last event).
+    ///
+    /// The answer stops; nobody reads its last event.
+    ClientClosed {
+        /// Why it was refused: `cortex.ask.ClientClosed`.
+        error: ClientClosed,
     },
     /// `answered` — otherwise.
     ///
@@ -910,6 +939,20 @@ pub enum CastVoteOutcome {
     Unidentified {
         /// Why it was refused: `cortex.ask.Unidentified`.
         error: Unidentified,
+    },
+    /// `bad-request` — externally decided (The body is above 64 KiB or is not a vote's body).
+    ///
+    /// It answers 413 for a body above 64 KiB, else 400; nothing was cast.
+    BadRequest {
+        /// Why it was refused: `cortex.ask.BadRequest`.
+        error: BadRequest,
+    },
+    /// `store-failed` — externally decided (The answer records cannot be read or written).
+    ///
+    /// It answers 500; the detail goes only to the service's standard error.
+    StoreFailed {
+        /// Why it was refused: `cortex.ask.StoreFailed`.
+        error: StoreFailed,
     },
     /// `no-such-answer` — externally decided (No answer record carries `answer_id`).
     ///
@@ -956,6 +999,20 @@ pub struct CloseReview {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CloseReviewOutcome {
+    /// `bad-request` — externally decided (The body is above 64 KiB or is not a close's body).
+    ///
+    /// It answers 413 for a body above 64 KiB, else 400; nothing changed.
+    BadRequest {
+        /// Why it was refused: `cortex.ask.BadRequest`.
+        error: BadRequest,
+    },
+    /// `store-failed` — externally decided (The answer records cannot be read or written).
+    ///
+    /// It answers 500; the detail goes only to the service's standard error.
+    StoreFailed {
+        /// Why it was refused: `cortex.ask.StoreFailed`.
+        error: StoreFailed,
+    },
     /// `closed` — otherwise.
     ///
     /// The item leaves the review queue with its reason.
@@ -1164,6 +1221,60 @@ pub struct AnswerNotFound {
     pub answer_id: AnswerId,
 }
 
+/// The declared error `cortex.ask.BadRequest`.
+///
+/// The body of a record route is above 64 KiB, which answers 413, or is not the body the route takes, which answers 400; `message` says why, for a person.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BadRequest {
+    /// `message` — `String`.
+    pub message: String,
+}
+
+/// The declared error `cortex.ask.Busy`.
+///
+/// The service is working on `max_in_flight` answers already; it answers 429 at once, asks no model and spends no question of the minute. Ask again later.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Busy {
+    /// `max_in_flight` — `Integer`.
+    pub max_in_flight: i64,
+}
+
+/// The declared error `cortex.ask.ClientClosed`.
+///
+/// The reader closed the stream before its last event; no further model or tool call is made, and the answer opens no review item. A model call in flight when the reader left runs to its reply or `max_seconds`, and the answer keeps its `max_in_flight` slot until it ends. `steps` counts the model calls made, and the token counts add up their `usage` as `cortex.ask.AskDone` does; `context_tokens` is the prompt tokens of the last one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientClosed {
+    /// `steps` — `Integer`.
+    pub steps: i64,
+    /// `input_tokens` — `Integer`.
+    pub input_tokens: i64,
+    /// `output_tokens` — `Integer`.
+    pub output_tokens: i64,
+    /// `cached_tokens` — `Integer`.
+    pub cached_tokens: i64,
+    /// `context_tokens` — `Integer`.
+    pub context_tokens: i64,
+}
+
+/// The declared error `cortex.ask.CutOff`.
+///
+/// The model's reply ended because of its token limit (`finish_reason` `length`) or a content filter (`content_filter`), so its text is no answer and is not streamed. `finish_reason` is the one the gateway gave; `steps` and the token counts are those of the model calls made, as for `cortex.ask.ClientClosed`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CutOff {
+    /// `finish_reason` — `String`.
+    pub finish_reason: String,
+    /// `steps` — `Integer`.
+    pub steps: i64,
+    /// `input_tokens` — `Integer`.
+    pub input_tokens: i64,
+    /// `output_tokens` — `Integer`.
+    pub output_tokens: i64,
+    /// `cached_tokens` — `Integer`.
+    pub cached_tokens: i64,
+    /// `context_tokens` — `Integer`.
+    pub context_tokens: i64,
+}
+
 /// The declared error `cortex.ask.FigureInvalid`.
 ///
 /// The figure holds a value it cannot be drawn from: a negative bar count, a timeline instant that is not RFC 3339, a node id given twice, or an edge to a node the graph does not have; nothing is drawn. `field` names the value, `reason` says why, for a person.
@@ -1251,6 +1362,15 @@ pub struct ReviewNotFound {
 pub struct ReviewNotOpen {
     /// `review_id` — `cortex.ask.ReviewId`.
     pub review_id: ReviewId,
+}
+
+/// The declared error `cortex.ask.StoreFailed`.
+///
+/// The answer records could not be read or written; it answers 500 with a fixed message and `request_id`. The detail (a database path, SQL text) goes only to the service's standard error, on a line naming that `request_id`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreFailed {
+    /// `request_id` — `String`.
+    pub request_id: String,
 }
 
 /// The declared error `cortex.ask.Unidentified`.

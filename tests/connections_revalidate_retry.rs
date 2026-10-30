@@ -11,7 +11,7 @@
 //! - `fail-always`: `connections revalidate` answers the retryable failure on every call.
 //! - `refuse`: `connections revalidate` answers the envelope the file holds.
 //! - `ready`: the connection is listed `ready` (else `pending` until a revalidation succeeds).
-//! - `lapse-second`: the second `operations invoke` answers `not_granted` at admission.
+//! - `lapse-second`: the second `invoke` answers `not_granted` at admission.
 
 mod common;
 
@@ -44,7 +44,7 @@ case "$*" in
     echo "$*" >> "$R/lists.log"
     if [ -s "$R/list-fail" ]; then sed -i '1d' "$R/list-fail"; echo "$RETRYABLE" >&2; exit 1; fi
     if [ -e "$R/revalidated" ] || [ -e "$R/ready" ]; then S=ready; else S=pending; fi
-    printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily","connection":"conn_test","state":"%s","revision":"rev1"}}]}}}}' "$S" ;;
+    printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily","connector":"tavily","instance":"main","connection":"conn_test","state":"%s","revision":"rev1"}}]}}}}' "$S" ;;
   *"connections revalidate"*)
     date +%s%N >> "$R/revalidations.log"
     if [ -e "$R/refuse" ]; then cat "$R/refuse" >&2; exit 1; fi
@@ -53,8 +53,7 @@ case "$*" in
     touch "$R/revalidated"
     echo '{{"ok":true,"result":{{}}}}' ;;
   *"connections status"*) printf '{{"ok":true,"result":{{"connection":{{"summary":{{"state":"ready"}}}}}}}}' ;;
-  *"operations describe"*) echo '{{"ok":true,"result":{{"schema":"s","revision":"r"}}}}' ;;
-  *"operations invoke"*)
+  "invoke "*)
     echo "$*" >> "$R/invocations.log"
     if [ -e "$R/lapse-second" ] && [ "$(wc -l < "$R/invocations.log")" -eq 2 ]; then
       echo '{NOT_GRANTED}' >&2; exit 1
