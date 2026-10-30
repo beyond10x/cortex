@@ -1138,3 +1138,145 @@ fn a_gateway_body_above_four_mib_fails_the_answer() {
     assert_eq!(name, "error", "{}", answer.names().len());
     assert_eq!(error["reason"], "model-failed", "{error}");
 }
+
+// ---------------------------------------------------------------------------------------------
+// Adversary, wave 20261030a, unit `ask`
+
+/// Posts a question as `identity` on a raw connection, reads the stream until `marker` is in it,
+/// and closes the connection.
+fn leave_after(service: &Service, identity: &str, marker: &str) {
+    let body = json!({"question": "Leave?"}).to_string();
+    let mut stream = TcpStream::connect(&service.addr).unwrap();
+    write!(
+        stream,
+        "POST /ask HTTP/1.1\r\nhost: x\r\n{HEADER}: {identity}\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{body}",
+        body.len()
+    )
+    .unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    let mut seen = Vec::new();
+    let mut buf = [0; 4096];
+    while !String::from_utf8_lossy(&seen).contains(marker) {
+        let n = stream.read(&mut buf).unwrap();
+        assert!(n > 0, "the stream ended before {marker:?}");
+        seen.extend_from_slice(&buf[..n]);
+    }
+    drop(stream);
+}
+
+/// The review causes of `answer_id`, read after the keeper had a second to open them.
+fn causes_after_a_second(store: &Records, answer_id: &str) -> Vec<&'static str> {
+    std::thread::sleep(Duration::from_secs(1));
+    store
+        .reviews(answer_id)
+        .unwrap()
+        .into_iter()
+        .map(|r| records::cause_name(r.data.cause))
+        .collect()
+}
+
+/// The story's decision: "A `client-closed` answer records its tokens and steps and opens no
+/// review item"; the spec's `cortex.ask.ClientClosed`, the CHANGELOG and the site say the same.
+/// With `slow_after_ms` set, a reader who leaves after it still opens a `slow` item.
+#[test]
+#[ignore = "adversary: a client-closed answer past slow_after_ms opens a `slow` review item; the decision says none"]
+fn adversary_a_client_closed_answer_past_slow_after_ms_opens_no_review_item() {
+    let gateway = Gateway::start(vec![tool_reply(1, SEARCH)], Duration::from_millis(300));
+    let service = serve(
+        &gateway,
+        Setup {
+            limits: "{max_steps: 50, max_result_bytes: 4096, max_seconds: 60, \
+                     per_identity_per_minute: 10}",
+            ask_extra: "  slow_after_ms: 1",
+            ..Setup::default()
+        },
+    );
+    leave_after(&service, "dana", "event: tool");
+    let (store, answers) = kept(&service, 1);
+    let record = &answers[0];
+    assert_eq!(
+        records::outcome_name(record.outcome),
+        "client-closed",
+        "{record:?}"
+    );
+    let causes = causes_after_a_second(&store, &record.answer_id.0);
+    assert!(
+        causes.is_empty(),
+        "a client-closed answer opened review items {causes:?}"
+    );
+}
+
+/// A reader who leaves while a model call is in flight holds its `max_in_flight` slot until the
+/// gateway answers, though the spec (`cortex.ask.ClientClosed`: "the answer stops at once") and
+/// the site ("stops the answer at once") say the answer stops at once: with `max_in_flight: 1`,
+/// the next asker is refused `busy` by an answer nobody reads.
+#[test]
+#[ignore = "adversary: a departed reader holds its max_in_flight slot until the in-flight model call returns; the next question is refused busy"]
+fn adversary_a_departed_reader_frees_its_in_flight_slot_at_once() {
+    let gateway = Gateway::start(vec![text_reply("Yes [node:n-1].")], Duration::from_secs(5));
+    let service = serve(
+        &gateway,
+        Setup {
+            limits: "{max_steps: 4, max_result_bytes: 4096, max_seconds: 30, \
+                     per_identity_per_minute: 10}",
+            ask_extra: "  max_in_flight: 1",
+            ..Setup::default()
+        },
+    );
+    leave_after(&service, "ann", "asking the model");
+    let started = Instant::now();
+    while gateway.asked() < 1 {
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "ann's answer asked no model"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    std::thread::sleep(Duration::from_millis(300));
+    let next = ask(&service, "ben", "My turn?");
+    assert_ne!(
+        next.status, 429,
+        "ann left; her abandoned answer still holds the only slot: {:?}",
+        next.events
+    );
+}
+
+/// A reader who leaves while the model is asked: the reply's tool call is still made against the
+/// store before the loop notices, though no one reads the answer and the site says a closed
+/// stream "stops the answer at once".
+#[test]
+#[ignore = "adversary: a tool call is made after the reader left, when the reply carries no thinking text"]
+fn adversary_a_reader_gone_during_a_model_call_makes_no_tool_call() {
+    let reply = json!({
+        "choices": [{"index": 0, "finish_reason": "tool_calls",
+            "message": {"role": "assistant", "content": null, "tool_calls": [{
+                "id": "call-1", "type": "function",
+                "function": {"name": "search", "arguments": SEARCH}}]}}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 1}
+    });
+    let gateway = Gateway::start(vec![reply], Duration::from_secs(2));
+    let service = serve(
+        &gateway,
+        Setup {
+            limits: "{max_steps: 50, max_result_bytes: 4096, max_seconds: 60, \
+                     per_identity_per_minute: 10}",
+            ..Setup::default()
+        },
+    );
+    leave_after(&service, "dana", "asking the model");
+    let (_, answers) = kept(&service, 1);
+    let record = &answers[0];
+    assert_eq!(
+        records::outcome_name(record.outcome),
+        "client-closed",
+        "{record:?}"
+    );
+    assert_eq!((record.steps, record.input_tokens), (1, 10), "{record:?}");
+    let calls = std::fs::read_to_string(service.root.join("mcp-calls.log")).unwrap_or_default();
+    assert!(
+        calls.is_empty(),
+        "a tool call was made for a reader who had left: {calls}"
+    );
+}
