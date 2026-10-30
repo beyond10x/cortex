@@ -75,16 +75,17 @@ fn run(w: &World, user: &Path, source: &str) -> Value {
     out
 }
 
-/// The `--input-json` of every `operations invoke` of `operation` the stand-in recorded; the
-/// global `--output json` follows it.
+/// The input of every `invoke` of `operation` the stand-in recorded: its argv is a line of
+/// `invocations.log` and its standard input the same line of `inputs.log`.
 fn inputs(w: &World, operation: &str) -> Vec<Value> {
-    w.lines("invocations.log")
-        .iter()
-        .filter(|line| line.contains(&format!("--operation {operation} ")))
-        .map(|line| {
-            let (_, input) = line.split_once("--input-json ").unwrap();
-            let input = input.strip_suffix(" --output json").unwrap_or(input);
-            serde_json::from_str(input).unwrap_or_else(|e| panic!("{e}: {line}"))
+    let argv = w.lines("invocations.log");
+    let stdin = w.lines("inputs.log");
+    assert_eq!(argv.len(), stdin.len(), "{argv:?} {stdin:?}");
+    argv.iter()
+        .zip(&stdin)
+        .filter(|(line, _)| line.contains(&format!("/main {operation} ")))
+        .map(|(line, input)| {
+            serde_json::from_str(input).unwrap_or_else(|e| panic!("{e}: {line} {input}"))
         })
         .collect()
 }

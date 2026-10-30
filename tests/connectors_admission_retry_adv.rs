@@ -1,6 +1,6 @@
 //! Adversary cases for the admission-timeout retry: what is not a timeout at admission is not
 //! retried, and the timeout retry composes with the renew-on-lapse retry in at most three
-//! invocations. The stand-in `connectors` answers each `operations invoke` by the next line of the
+//! invocations. The stand-in `connectors` answers each `invoke` by the next line of the
 //! file `script` (`lapsed`, `timeout`, `provider-timeout`), or with a result once it is empty.
 
 mod common;
@@ -15,11 +15,10 @@ fn world() -> World {
         &format!(
             r#"R="{root}"
 case "$*" in
-  *"connections list"*) printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily","connection":"conn_test","state":"ready","revision":"rev1"}}]}}}}' ;;
+  *"connections list"*) printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily","connector":"tavily","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}}]}}}}' ;;
   *"connections revalidate"*) echo "$*" >> "$R/revalidations.log"; echo '{{"ok":true,"result":{{}}}}' ;;
   *"connections status"*) printf '{{"ok":true,"result":{{"connection":{{"summary":{{"state":"ready"}}}}}}}}' ;;
-  *"operations describe"*) echo '{{"ok":true,"result":{{"schema":"s","revision":"r"}}}}' ;;
-  *"operations invoke"*)
+  "invoke "*)
     echo "$*" >> "$R/invocations.log"
     next=""
     if [ -s "$R/script" ]; then next=$(head -n1 "$R/script"); sed -i '1d' "$R/script"; fi

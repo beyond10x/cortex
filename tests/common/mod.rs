@@ -43,10 +43,16 @@ pub fn executable(path: &Path, body: &str) {
     assert!(status.success(), "cannot write {}", path.display());
 }
 
-/// The CLI's envelope around an adapter answer: `result.result` is the answer as a JSON string.
+/// The connector and instance a stand-in's `connections list` entry names beside its adapter, as
+/// Connectors 0.60.0 lists them; `invoke` is called on `<connector>/<instance>`.
+pub const LISTED: &str = r#""connector":"tavily","instance":"main""#;
+
+/// Connectors 0.60.0's `InvokeResult` envelope around an adapter answer: `result.result` is the
+/// answer `pages`, a JSON text, as the JSON value it holds.
 pub fn answer(pages: &str) -> String {
-    serde_json::json!({"ok": true, "result": {"adapter": "tavily", "operation": "websearch.search",
-        "revision": "r", "result": pages}})
+    let pages: Value = serde_json::from_str(pages).expect("the pages are JSON");
+    serde_json::json!({"ok": true, "result": {"connector": "tavily", "instance": "main",
+        "operation": "websearch.search", "revision": "r", "result": pages}})
     .to_string()
 }
 
@@ -77,30 +83,32 @@ impl World {
         let bin = root.join("bin");
         std::fs::create_dir_all(&bin).unwrap();
         std::fs::write(root.join("answer.json"), answer(PAGES)).unwrap();
-        // connectors: one tavily connection, `conn_test` or the id in the file `connection`,
-        // pending until revalidated; `invoke` answers answer.json, or fails when the file `fail`
-        // exists.
+        // connectors (0.60.0): one tavily connection of `tavily/main`, `conn_test` or the id in the
+        // file `connection`, pending until revalidated; `invoke` logs its argv to invocations.log
+        // and its standard input to inputs.log, and answers answer.json, or fails when the file
+        // `fail` exists. Any other command line, `operations …` included, is refused with exit 2:
+        // 0.60.0 removed the `operations` invoke, and cortex calls no other `operations` command.
         executable(
             &bin.join("connectors"),
             &format!(
                 r#"R="{root}"
 case "$*" in
-  *"connections list"*) if [ -e "$R/revalidated" ]; then S=ready; else S=pending; fi; C=conn_test; if [ -e "$R/connection" ]; then C=$(cat "$R/connection"); fi; printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily","connection":"%s","state":"%s","revision":"rev1"}}]}}}}' "$C" "$S" ;;
+  *"connections list"*) if [ -e "$R/revalidated" ]; then S=ready; else S=pending; fi; C=conn_test; if [ -e "$R/connection" ]; then C=$(cat "$R/connection"); fi; printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily",{listed},"connection":"%s","state":"%s","revision":"rev1"}}]}}}}' "$C" "$S" ;;
   *"connections revalidate"*)
     echo "$*" >> "$R/revalidations.log"; touch "$R/revalidated"
     if [ -e "$R/unknown" ]; then echo '{{"ok":false,"error":{{"code":"failure","data":{{"code":"outcome_unknown","kind":"operational","next_action":"retry_status","stage":"publication"}}}}}}' >&2; exit 1; fi
     echo '{{"ok":true,"result":{{}}}}' ;;
   *"connections status"*) echo "$*" >> "$R/status.log"; if [ -e "$R/revalidated" ] && [ ! -e "$R/stays-pending" ]; then S=ready; else S=pending; fi; printf '{{"ok":true,"result":{{"connection":{{"summary":{{"state":"%s"}}}}}}}}' "$S" ;;
-  *"operations describe"*) echo '{{"ok":true,"result":{{"schema":"s","revision":"r"}}}}' ;;
-  *"operations invoke"*)
-    echo "$*" >> "$R/invocations.log"
+  "invoke tavily/main "*)
+    echo "$*" >> "$R/invocations.log"; cat >> "$R/inputs.log"; echo >> "$R/inputs.log"
     if [ -e "$R/lapse" ]; then rm "$R/lapse"; echo '{{"ok":false,"error":{{"code":"failure","data":{{"code":"not_granted","stage":"admission"}}}}}}' >&2; exit 1; fi
     if [ -e "$R/fail" ]; then echo '{{"ok":false,"error":{{"code":"failure","data":{{"code":"unavailable","stage":"execution"}}}}}}'; exit 1; fi
     cat "$R/answer.json" ;;
   *) echo '{{"ok":false}}'; exit 2 ;;
 esac
 "#,
-                root = root.display()
+                root = root.display(),
+                listed = LISTED,
             ),
         );
         // claude: records its arguments and whether ANTHROPIC_API_KEY reached it, then answers

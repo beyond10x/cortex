@@ -240,11 +240,10 @@ fn adv24_a_cut_inside_a_grapheme_cluster_cuts_the_model_text_at_the_same_byte() 
 fn structured_world(people: &Value) -> World {
     const CONNECTORS: &str = r#"R="@ROOT@"
 case "$*" in
-  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"directory","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"directory","connector":"directory","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
   *"connections revalidate"*) echo '{"ok":true,"result":{}}' ;;
-  *"operations describe"*) echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
-  *"--operation people.list"*)
-    printf '{"ok":true,"result":{"adapter":"directory","operation":"people.list","revision":"r","result":{"people":%s}}}\n' "$(cat "$R/people.json")" ;;
+  "invoke "*" people.list "*)
+    printf '{"ok":true,"result":{"connector":"directory","instance":"main","operation":"people.list","revision":"r","result":{"people":%s}}}\n' "$(cat "$R/people.json")" ;;
   *) echo '{"ok":false}'; exit 2 ;;
 esac
 "#;

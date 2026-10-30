@@ -33,7 +33,7 @@ relations:
 - specifies: story:window-relative-placeholders
 - specifies: story:runs-retention
 - specifies: story:small-robustness
-revision: 3
+revision: 6
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 3}
@@ -67,19 +67,20 @@ its stage opens, so it starts from every unit merged before it.
 
 | unit | stories, in order | after | stage |
 |---|---|---|---|
-| w18a | the four stories of wave 20261018a | — | to merge |
-| conn | `connectors-invoke-0-60` | w18a | planned |
-| read | `one-store-read-per-run`, `idle-supersede-source-cheap` | w18a | planned |
-| cost | `run-cost-counted-on-refusal`, `replacement-applied-as-assertion` | w18a | planned |
-| ask | `ask-outcome-truthful`, `ask-service-bounds`, `ask-error-text` | w18a | planned |
+| w18a | the four stories of wave 20261018a | — | merged `7a217da7` |
+| conn | `connectors-invoke-0-60` | w18a | merged |
+| read | `one-store-read-per-run`, `idle-supersede-source-cheap` | w18a | implementing |
+| cost | `run-cost-counted-on-refusal`, `replacement-applied-as-assertion` | w18a | implementing |
+| ask | `ask-outcome-truthful`, `ask-service-bounds`, `ask-error-text` | w18a | implementing |
 | redact | `redaction-patterns-hold`, `mask-quoted-credentials` | w18a | planned |
 | outcome | `update-refuses-rekey`, `schema-apply-outcome-unknown` | w18a | planned |
 | cli | `unit-names-unique`, `spec-integer-bounds`, `durable-home-writes` | w18a | planned |
-| askio | `ask-records-deadline`, `eval-proxy-bounds` | w18a | planned |
+| askio | `ask-records-deadline`, `eval-proxy-bounds` | ask | planned |
 | fail | `poison-document-skipped`, `window-advances-past-applied` | cost | planned |
 | shapes | `structured-children-follow-rule`, `record-key-template`, `child-text-and-filter` | conn, outcome | planned |
 | session | `ekr-session-per-run` | read, fail | planned |
 | tail | `connectors-call-deadline`, `window-relative-placeholders`, `runs-retention`, `small-robustness` | conn, shapes | planned |
+| ess | move the `ess` pin in `spec/ess-inputs.yaml` from 0.60.0 to the newest ESS release and regenerate | every unit above | planned |
 
 Every story serves `vision:self-updating-instances`. Each story's `## Scope` was written by
 `aep:story-scoper` on 2026-10-30 and its entries are recorded with `aep plan artifact scope`, cited
@@ -150,7 +151,11 @@ directory `w30a/<unit>/`.
 
 | unit | branch | head | worktree | build | scratch |
 |---|---|---|---|---|---|
-| int | `wave/20261030a` | b61a56c8 | `cortex-plan-reconcile-20261030` | `<tree>/target` | `w30a/int` |
+| int | `wave/20261030a` | 7a217da7 | `cortex-plan-reconcile-20261030` | `<tree>/target` | `w30a/int` |
+| conn | `unit/w30a-conn` | 7a217da7 | `cortex-w30a-conn` | `<tree>/target` | `w30a/conn` |
+| read | `unit/w30a-read` | 7a217da7 | `cortex-w30a-read` | `<tree>/target` | `w30a/read` |
+| cost | `unit/w30a-cost` | 7a217da7 | `cortex-w30a-cost` | `<tree>/target` | `w30a/cost` |
+| ask | `unit/w30a-ask` | 7a217da7 | `cortex-w30a-ask` | `<tree>/target` | `w30a/ask` |
 
 Unit rows are added as each tree is created.
 

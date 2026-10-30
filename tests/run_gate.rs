@@ -385,11 +385,10 @@ fn a_measure_equal_to_its_min_or_max_passes() {
 
 const STRUCTURED_CONNECTORS: &str = r#"R="@ROOT@"
 case "$*" in
-  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"directory","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"directory","connector":"directory","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
   *"connections revalidate"*) echo '{"ok":true,"result":{}}' ;;
-  *"operations describe"*) echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
-  *"--operation people.list"*)
-    printf '{"ok":true,"result":{"adapter":"directory","operation":"people.list","revision":"r","result":{"people":%s}}}\n' "$(cat "$R/people.json")" ;;
+  "invoke "*" people.list "*)
+    printf '{"ok":true,"result":{"connector":"directory","instance":"main","operation":"people.list","revision":"r","result":{"people":%s}}}\n' "$(cat "$R/people.json")" ;;
   *) echo '{"ok":false}'; exit 2 ;;
 esac
 "#;

@@ -18,15 +18,16 @@ use serde_json::Value;
 /// `forbidden` for a project whose file `forbidden-events-<project>` exists. Every invocation is
 /// logged to `invocations.log`.
 const CONNECTORS: &str = r#"R="@ROOT@"
-P=$(printf '%s\n' "$*" | sed -n 's/.*"project":"\([^"]*\)".*/\1/p')
-answer() { printf '{"ok":true,"result":{"adapter":"forge","operation":"%s","revision":"r","result":%s}}\n' "$1" "$(cat "$2")"; }
-case "$*" in
-  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"forge","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
+# Connectors 0.60.0 reads an invoke's input from standard input: A is the argv and that input.
+IN=""; if [ "$1" = invoke ]; then IN=$(cat); fi; A="$* $IN"
+P=$(printf '%s\n' "$A" | sed -n 's/.*"project":"\([^"]*\)".*/\1/p')
+answer() { printf '{"ok":true,"result":{"connector":"forge","instance":"main","operation":"%s","revision":"r","result":%s}}\n' "$1" "$(cat "$2")"; }
+case "$A" in
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"forge","connector":"forge","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
   *"connections revalidate"*) echo '{"ok":true,"result":{}}' ;;
-  *"operations describe"*) echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
-  *"--operation projects.list"*) echo "projects.list" >> "$R/invocations.log"; answer projects.list "$R/projects.json" ;;
-  *"--operation tags.list"*) echo "tags.list $P" >> "$R/invocations.log"; answer tags.list "$R/tags-$P.json" ;;
-  *"--operation events.list"*)
+  "invoke "*" projects.list "*) echo "projects.list" >> "$R/invocations.log"; answer projects.list "$R/projects.json" ;;
+  "invoke "*" tags.list "*) echo "tags.list $P" >> "$R/invocations.log"; answer tags.list "$R/tags-$P.json" ;;
+  "invoke "*" events.list "*)
     echo "events.list $P" >> "$R/invocations.log"
     if [ -e "$R/forbidden-events-$P" ]; then echo '{"ok":false,"error":{"code":"failure","data":{"code":"forbidden","stage":"execution"}}}'; exit 1; fi
     answer events.list "$R/events-$P.json" ;;
