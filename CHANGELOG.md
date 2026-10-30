@@ -36,6 +36,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Fixed
+
+- Across two homes, an instance whose unit name is another instance's (instance `a-b` with source
+  `c` and instance `a` with source `b-c` both name `cortex-a-b-c`) took over the other home's live
+  unit, and that home's source stopped running. `create`, `update` and `adopt` now refuse before
+  changing anything, naming the unit, the home that holds it and its source or viewer there. A unit
+  whose home no longer holds the instance it belongs to is still taken over (`units.taken_over`).
+
 ## 0.7.0 — 2026-10-30
 
 0.7.0 needs Connectors 0.60.0 or newer: a Connectors source refuses an older one, naming the version.
