@@ -17,6 +17,8 @@ use std::time::{Duration, Instant};
 
 use serde_json::json;
 
+mod common;
+
 const TOKEN_ENV: &str = "W30A_SEC_GATEWAY_TOKEN";
 const HEADER: &str = "x-asker";
 
@@ -75,12 +77,6 @@ fn drain_request(stream: &TcpStream) {
     let _ = reader.read_exact(&mut body);
 }
 
-fn executable(path: &Path, body: &str) {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::write(path, format!("#!/bin/sh\n{body}")).unwrap();
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
-}
-
 /// A stand-in `ekr mcp`: answers `initialize` and `tools/list`, and records its pid.
 fn stand_in_ekr(root: &Path) -> PathBuf {
     let path = root.join("bin/ekr");
@@ -96,7 +92,7 @@ while IFS= read -r line; do
 done
 "#
     .replace("@ROOT@", &root.display().to_string());
-    executable(&path, body.as_str());
+    common::executable(&path, body.as_str());
     path
 }
 
