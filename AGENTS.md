@@ -37,9 +37,10 @@ A change here that moves none of these is a question for the operator, not a tas
 
 | command | does |
 |---|---|
-| `task check` | the gate: spec validity, generated-code drift, fmt, clippy (`-D warnings`), every test, documentation drift |
+| `task check` | the gate: spec validity, generated-code drift, spec compatibility, fmt, clippy (`-D warnings`), every test, documentation drift |
 | `task generate` | regenerate `generated/`, `spec/suite.json` and the derived site files from `spec/` |
 | `task drift` | fail when `generated/` or `spec/suite.json` differ from what `spec/` generates |
+| `task compat` | fail when `spec/` changes in a breaking or unknown way against `spec/` at the newest release tag and `spec/compat-ack.json` does not acknowledge the change |
 | `task docs-generate` | regenerate the derived site files (`cortex-docs generate`) |
 | `task docs-check` | fail when a derived site file is missing, stale or edited by hand |
 | `task website` | build the site (`npm ci`, `npm run build` in `website/`), as CI does |
@@ -53,6 +54,20 @@ the source of truth for every noun, command, outcome, error and event.
 
 - Change `spec/`, then run `task generate`. Never edit anything under `generated/` or
   `spec/suite.json` by hand; `task drift` fails when they differ from what `spec/` generates.
+- `task compat` compares `spec/` with `spec/` at the newest release tag (`git describe --tags
+  --abbrev=0 --match 'v[0-9]*'`, so CI checks out with `fetch-depth: 0`) through
+  `ess verify diff --fail-on breaking-or-unknown`, and exits 4 on a breaking or unknown change
+  that `spec/compat-ack.json` does not acknowledge. Review each such change, add its id to
+  `compat-ack.json` and its reason as a row of `spec/compat-ack.md` (`tests/compat_ack.rs` holds
+  the two files to each other). The acknowledgements are bound to the spec digests of both sides,
+  so every change to `spec/` also rewrites `after` in `compat-ack.json`: `task compat` refuses a
+  stale one with exit 1 and names the digest it compared. Never acknowledge a change you have not
+  reviewed to make the gate pass.
+- **Reset the acknowledgements after each release.** Once the tag `v<version>` is pushed, the next
+  change to `main` sets `before` and `after` in `spec/compat-ack.json` to the digests `ess verify
+  diff --from <spec at the tag> --to spec --format json` prints, empties `acknowledged`, and
+  empties the table of `spec/compat-ack.md`. Until then `task compat` refuses the old file with
+  exit 1.
 - `generated/cortex-model` (`ess generate synthesize --target rust --layout crate`) holds the
   model types and the command behaviours. Two behaviours are obligations the code implements:
   `RunSource` and `RecordFailure` (`generated/cortex-model/PLAN.md`).
@@ -240,6 +255,8 @@ the build host's Cargo registry paths.
    - the tagger: `git for-each-ref refs/tags/v<version> --format='%(objecttype) %(taggername)'`
      prints `tag b10x-bot[bot]`;
    - the author: `git log -1 --format='%an' 'v<version>^{commit}'` prints `b10x-bot[bot]`.
+7. Reset `spec/compat-ack.json` and `spec/compat-ack.md` against the new tag in the next change
+   to `main` ([The specification comes first](#the-specification-comes-first)).
 
 The workflow never overwrites an asset (`gh release upload` without `--clobber`). After a partial
 upload, delete the stray asset through the bot

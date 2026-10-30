@@ -71,6 +71,9 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   `cortex.ask.CloseReview` name the record routes' `bad-request` (413 above 64 KiB, else 400) and
   `store-failed` (500) answers as `cortex.ask.BadRequest` and `cortex.ask.StoreFailed`. The
   reference pages under `docs/reference/ess` show them.
+- `task check` runs `task compat`, which fails when the specification changes in a breaking or
+  unknown way against the newest release tag and `spec/compat-ack.json` does not acknowledge the
+  change; each acknowledged change has its reason in `spec/compat-ack.md`.
 
 ### Fixed
 

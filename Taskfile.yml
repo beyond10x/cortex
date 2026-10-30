@@ -34,6 +34,18 @@ tasks:
         cmp spec/suite.json "$tmp/suite.json"
         echo "generated/ and spec/suite.json match spec/"
 
+  compat:
+    desc: Fail when spec/ changes incompatibly against the newest release tag and spec/compat-ack.json does not acknowledge it
+    cmds:
+      - |
+        set -eu
+        tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*')
+        tmp=$(mktemp -d "${TMPDIR:-$HOME/.cache}/cortex-compat.XXXXXX")
+        trap 'rm -rf "$tmp"' EXIT
+        git archive "$tag" spec | tar -x -C "$tmp"
+        echo "spec/ against $tag"
+        {{.ESS}} verify diff --from "$tmp/spec" --to spec --fail-on breaking-or-unknown --acknowledgements spec/compat-ack.json
+
   build:
     desc: Build the cortex binary
     cmds:
@@ -45,10 +57,11 @@ tasks:
       - '{{.CARGO}} test --locked --workspace'
 
   check:
-    desc: The gate — spec validity, generated-code drift, fmt, clippy, tests
+    desc: The gate — spec validity, generated-code drift, spec compatibility, fmt, clippy, tests
     cmds:
       - '{{.ESS}} specify validate --path spec --strict-requires'
       - task: drift
+      - task: compat
       - '{{.CARGO}} fmt -p cortex-cli -p cortex-docs -- --check'
       - '{{.CARGO}} clippy --locked --workspace --all-targets -- -D warnings'
       - task: test
