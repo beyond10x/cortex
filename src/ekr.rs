@@ -884,6 +884,11 @@ impl Pipe {
 
     /// Ends the input, so the session writes its replay checkpoint and exits, and waits for it.
     fn end(self) -> Result<(), String> {
+        self.finish().1
+    }
+
+    /// [`Pipe::end`], with the exit status it waited for, when it could.
+    fn finish(self) -> (Option<std::process::ExitStatus>, Result<(), String>) {
         let Pipe {
             mut child,
             stdin,
@@ -901,11 +906,40 @@ impl Pipe {
             .trim()
             .to_string();
         match status {
-            Ok(status) if status.success() => Ok(()),
-            Ok(status) => Err(format!("ekr session ended with {status}: {said}")),
-            Err(e) => Err(format!("cannot wait for ekr session: {e}")),
+            Ok(status) if status.success() => (Some(status), Ok(())),
+            Ok(status) => (
+                Some(status),
+                Err(format!("ekr session ended with {status}: {said}")),
+            ),
+            Err(e) => (None, Err(format!("cannot wait for ekr session: {e}"))),
         }
     }
+}
+
+/// How long a session that a signal ended may precede the run's own SIGTERM: a stop of the whole
+/// unit (`systemctl stop`) signals the run and its session at once, and the session's end can be
+/// read before the run's signal handler ran.
+const SIGNAL_SKEW: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// Whether a session that ended with `status` ended because the run was sent SIGTERM: the run was
+/// sent it, as `src/terminate.rs` holds for any child that ends after it, also when the session's
+/// end, by a signal, is seen up to [`SIGNAL_SKEW`] before the run's own SIGTERM is.
+fn ended_by_sigterm(status: Option<std::process::ExitStatus>) -> bool {
+    use std::os::unix::process::ExitStatusExt;
+    if crate::terminate::requested() {
+        return true;
+    }
+    if status.and_then(|s| s.signal()).is_none() {
+        return false;
+    }
+    let until = std::time::Instant::now() + SIGNAL_SKEW;
+    while std::time::Instant::now() < until {
+        if crate::terminate::requested() {
+            return true;
+        }
+        std::thread::sleep(LOOK);
+    }
+    crate::terminate::requested()
 }
 
 /// One answer of an `ekr session`: what the one-shot verb exits with, prints (as its JSON
@@ -976,6 +1010,12 @@ impl Session {
         line.push(b'\n');
         let mut slot = self.pipe.borrow_mut();
         let Some(pipe) = slot.as_mut() else {
+            if self.terminated.get() || crate::terminate::requested() {
+                self.terminated.set(true);
+                return Err(format!(
+                    "{SESSION_TERMINATED} to answer `{what}`; the session had ended"
+                ));
+            }
             return Err(format!(
                 "ekr {what} failed: the run's ekr session has ended"
             ));
@@ -1000,8 +1040,19 @@ impl Session {
             Ok(answer) if answer.exit == 0 => Ok(answer.stdout),
             Ok(answer) => Err(format!("ekr {what} failed: {}", answer.stderr.trim())),
             Err(Unread::Malformed(e)) => Err(format!("ekr {what} printed no JSON: {e}")),
+            // A session whose output ended (end of file, a failed read or write, or a process a
+            // signal ended) while the run was sent SIGTERM ended because of it, a stop of the
+            // whole unit (`systemctl stop`): the request, a read or a write, fails as the run's
+            // SIGTERM ([`SESSION_TERMINATED`]), as one the run ended itself does.
             Err(Unread::Ended(e)) => {
-                let ended = slot.take().expect("matched above").end().err();
+                let (status, ended) = slot.take().expect("matched above").finish();
+                if ended_by_sigterm(status) {
+                    self.terminated.set(true);
+                    return Err(format!(
+                        "{SESSION_TERMINATED} to answer `{what}`; the session ended with it ({e})"
+                    ));
+                }
+                let ended = ended.err();
                 Err(format!(
                     "ekr {what} failed: the run's ekr session ended ({e}){}",
                     ended.map(|why| format!(": {why}")).unwrap_or_default()

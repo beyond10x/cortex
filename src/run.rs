@@ -2453,6 +2453,9 @@ fn end_dropped(
         let path = r.run_dir.join(format!("ends-{n}.yaml"));
         match r.store.transact(&path, r.operator, chunk) {
             Ok(_) => before.committed(),
+            // The session the run's SIGTERM ended (a stop of its unit) stops the run, undone
+            // when gated ([`settle`]).
+            Err(e) if crate::ekr::is_terminated(&e) => return Err(Failure::Terminated(e)),
             Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown_write(e, before)),
             Err(e) if !before.applied => return Err(Failure::Apply(e)),
             Err(e) => {

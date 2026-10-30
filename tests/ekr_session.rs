@@ -27,13 +27,27 @@ EOF
 /// The stand-in `ekr`: logs the stage it was started in (`EKR_STAGE`, or `-`) and its arguments,
 /// `<stage>|<args>`, one process per line, to `ekr-argv.log`. A `postgres` store is answered from a
 /// SQLite file through the real `ekr`, whose stages work on SQLite too. A session's requests are
-/// logged as they are sent, one per line, to `ekr-session.log`.
+/// logged as they are sent, one per line, to `ekr-session.log`. While `unit-stop` exists, an
+/// `apply-extraction` that ran writes `applied`, and the session, at its first request after it,
+/// sends the run (its parent) SIGTERM and SIGTERM to its own process group, as `systemctl stop`
+/// signals every process of the run's unit.
 const EKR: &str = r#"R="@ROOT@"; EKR="@EKR@"; DB="$R/pg-as-sqlite.sqlite"
 printf '%s|%s\n' "${EKR_STAGE:--}" "$*" >> "$R/ekr-argv.log"
 if [ "$1" = postgres-schema ]; then echo '{"format":"ekr.postgres-schema/1","ready":true}'; exit 0; fi
 if [ "$EKR_BACKEND" = postgres ]; then
   if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "the lineage has no seed" >&2; exit 1; fi
   EKR_BACKEND=sqlite; EKR_STORE="$DB"; export EKR_BACKEND EKR_STORE
+fi
+if [ -e "$R/unit-stop" ] && [ "$1" = apply-extraction ]; then
+  "$EKR" "$@"; s=$?; touch "$R/applied"; exit $s
+fi
+if [ -e "$R/unit-stop" ] && [ "$1" = session ]; then
+  RUN=$PPID
+  while IFS= read -r l; do
+    if [ -e "$R/applied" ]; then kill -TERM "$RUN"; kill -TERM 0; exit 0; fi
+    printf '%s\n' "$l"
+  done | "$EKR" "$@"
+  exit 0
 fi
 if [ "$1" = session ]; then tee -a "$R/ekr-session.log" | "$EKR" "$@"; exit $?; fi
 exec "$EKR" "$@"
@@ -290,6 +304,35 @@ fn a_launched_staged_run_launches_one_session_in_its_stage_and_checks_readiness_
         1,
         "one readiness check for the run's {} launches: {connectors:#?}",
         launches.len()
+    );
+}
+
+/// D23 on a staged run (a launched `postgres` store, held to a gate): a stop of the run's unit
+/// while it waits on its session's read after a batch was applied ends the run `terminated` and
+/// abandons its stage (`settle` in `src/run.rs`), instead of publishing what it applied as a part-way
+/// `apply-refused` would.
+#[test]
+fn a_staged_run_whose_unit_is_stopped_during_a_session_read_abandons_its_stage() {
+    let w = world(
+        launched_store,
+        "gate:\n  checks:\n    - {measure: assertions.active, min: \"0\"}\n",
+    );
+    std::fs::write(w.root.join("unit-stop"), "").unwrap();
+    let (code, ran) = w.cortex(&["run", "s/repos"]);
+    assert_eq!(
+        (code, ran["outcome"].as_str()),
+        (8, Some("terminated")),
+        "{ran}"
+    );
+    assert!(w.root.join("applied").exists(), "a batch was applied first");
+    let ekrs = ekrs(&w);
+    assert!(
+        ekrs.iter().any(|(_, _, a)| a.starts_with("stage abandon ")),
+        "the stage is abandoned: {ekrs:#?}"
+    );
+    assert!(
+        !ekrs.iter().any(|(_, _, a)| a.starts_with("stage publish ")),
+        "nothing of the run is published: {ekrs:#?}"
     );
 }
 

@@ -131,6 +131,8 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   session's output into the fields cortex uses, skipping the rest as it is read, instead of being
   held whole as a JSON document. A run sent SIGTERM while it waits for its session to answer a read
   ends the session and stops `terminated`, undone when gated; a write in flight is waited for. A
+  stop of the run's unit (`systemctl stop`), whose SIGTERM ends the session too, ends the run the
+  same way: a staged run abandons its stage instead of publishing what it applied. A
   store that does not open when a run starts still fails it as `apply-refused`, not
   `extraction-failed`.
 - A `dropped: Supersede` source whose run selects nothing, and whose listing, held-back records
