@@ -87,6 +87,21 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   `proposals.jsonl` could not be written after earlier proposals were applied. Its reason now
   names the proposal, how many proposals are applied and how many lines are written, and the
   summary says so.
+- `cortex ask serve` with PostgreSQL answer records waited without bound on a records process
+  whose database stalled, holding every later ask, vote and review behind it until a restart.
+  Record calls are now served in the order they arrive, and a call waits at most 30 seconds for
+  the calls before it, for a start of the records process and for the answer to its statement;
+  the records process runs each statement with a `statement_timeout` of 30 seconds. A call past
+  one of them answers `store-failed`. A process that did not answer in time is stopped and the
+  next call starts another; a call that only waited behind others leaves the process alone, and a
+  start that fails fails the calls that waited through it instead of each starting another.
+- The redacting MCP server of the eval `mcp` runner kept every connection it accepted open until
+  the case ended, so a client making many short requests held one descriptor per request, and at
+  the descriptor limit the server stopped accepting. A connection now leaves its open list once it
+  is answered. It also read request and header lines without a cap: the head is now read up to 64
+  KiB, before the bearer check, and a line that reaches the cap is answered 431 with nothing more
+  read. Its documentation no longer says it cuts tool results as the ask service does; it passes
+  each redacted result whole.
 - A run sent SIGTERM during its fetch ran the fetch out before it stopped. The fetch is now a safe
   point: the `connectors` call in flight is ended with its process group (SIGKILL after 5
   seconds), a paged or `files` read stops between pages and files, and the run ends `terminated`,

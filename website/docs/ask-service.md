@@ -254,6 +254,15 @@ one JSON line each way on its standard input and output. A schema at a newer ver
 (the service exits 1). Only the records process reads the password; the service, its output and
 the instance directory never see it.
 
+Record calls are served one at a time in the order they arrive. A call waits at most 30 seconds
+for the calls before it, for a start of the records process and for the answer to its statement,
+and the records process runs each statement with a `statement_timeout` of 30 seconds. While the
+database stalls, a vote, `GET /review` or a close answers `store-failed` (500), and an answer
+whose record cannot be kept still ends, its record logged as not kept. A records process that did
+not answer in time is stopped and the next call starts another; a call that only waited behind
+others fails without stopping it, and a start that fails fails the calls that waited through it
+instead of each starting another.
+
 The operator, once per deployment:
 
 1. Creates the records role, and either grants it `CREATE` on the database or creates the schema
