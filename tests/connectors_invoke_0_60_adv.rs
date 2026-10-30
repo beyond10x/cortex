@@ -42,7 +42,6 @@ esac
 /// `instance`, which no Connectors from 0.54.0 on writes, and `envelope` reads only
 /// `error.data.code`, which a parse refusal leaves empty.
 #[test]
-#[ignore = "adversary: against Connectors 0.54.0-0.59.x the 0.60.0 guard never fires and the reason is `unknown at unknown`"]
 fn adv_a_connectors_older_than_0_60_that_lists_connector_and_instance_is_named_in_the_reason() {
     let w = world();
     let spec = w.spec("old", "conn_test");

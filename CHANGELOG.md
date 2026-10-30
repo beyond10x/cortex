@@ -46,10 +46,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A Connectors source failed every run against Connectors 0.60.0, which removed `operations
   invoke`. cortex now calls `connectors invoke <connector>/<instance> <operation> --connection
   <id> --input-stdin`, with the connector and instance read from the connection's `connections
-  list` entry, and needs Connectors 0.60.0 or newer: an entry without them fails the run naming
-  the connection and that version. The input goes on standard input, so no record field or
-  cursor is in the process list, and each call is one `invoke`, without a description read
-  before it. A `result` that is not a JSON object fails the call naming its JSON type.
+  list` entry, which carries them from Connectors 0.54.0 on, and needs Connectors 0.60.0 or newer.
+  An older one fails the run naming that version: from 0.54.0 to 0.59.x by its parse refusal of
+  the `invoke` command line, before 0.54.0 by the list entry without a connector and instance,
+  naming the connection. A failure envelope that carries its code only in `error.code`, as a
+  parse refusal does, is now named by that code instead of "unknown at unknown". The input goes
+  on standard input, so no record field or cursor is in the process list, and each call is one
+  `invoke`, without a description read before it. A `result` that is not a JSON object fails the
+  call naming its JSON type.
 
 ## 0.6.1 — 2026-10-17
 

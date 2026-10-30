@@ -1,9 +1,10 @@
 //! `story:connectors-invoke-0-60`: a Connectors source runs against Connectors 0.60.0, which
 //! removed the `operations` form of an invocation (now a parse refusal, exit 2) for
-//! `invoke <connector>[/<instance>] <operation>`. The stand-in `connectors` here behaves as 0.60.0
-//! does: every `operations` command is refused with exit 2, `invoke` answers an `InvokeResult`
-//! (`connector`, `instance`, `operation`, `revision`, `result` as a JSON value), and the input is
-//! read from standard input only.
+//! `invoke <connector>[/<instance>] <operation>`. The stand-in `connectors` here answers as 0.60.0
+//! does: `invoke` answers an `InvokeResult` (`connector`, `instance`, `operation`, `revision`,
+//! `result` as a JSON value), and the input is read from standard input only. It refuses every
+//! `operations` command with exit 2: the invoke as 0.60.0 does, and `operations describe`, which
+//! 0.60.0 still has, so that a call that reads a description first is seen.
 
 mod common;
 

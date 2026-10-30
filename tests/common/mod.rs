@@ -86,7 +86,8 @@ impl World {
         // connectors (0.60.0): one tavily connection of `tavily/main`, `conn_test` or the id in the
         // file `connection`, pending until revalidated; `invoke` logs its argv to invocations.log
         // and its standard input to inputs.log, and answers answer.json, or fails when the file
-        // `fail` exists. `operations …` is a parse refusal, exit 2, as in 0.60.0.
+        // `fail` exists. Any other command line, `operations …` included, is refused with exit 2:
+        // 0.60.0 removed the `operations` invoke, and cortex calls no other `operations` command.
         executable(
             &bin.join("connectors"),
             &format!(

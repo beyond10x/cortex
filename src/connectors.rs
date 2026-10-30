@@ -141,13 +141,21 @@ impl std::fmt::Display for InvokeError {
 /// deadline ran out. The operation is a read, so repeating it costs at most one more provider call.
 const TIMEOUT_AT_ADMISSION: &str = ": timeout at admission";
 
+/// The code of a failure envelope: `error.data.code`, else `error.code`, which is all an
+/// `ess-cli/1` parse refusal carries (`{"error":{"code":"cli_parse","data":{}},"ok":false}`).
+fn failure_code(doc: &Value) -> Option<&str> {
+    let error = &doc["error"];
+    error["data"]["code"]
+        .as_str()
+        .or_else(|| error["code"].as_str())
+}
+
 fn envelope(doc: Value, what: &str) -> Result<Value, InvokeError> {
     if doc["ok"] == Value::Bool(true) {
         return Ok(doc["result"].clone());
     }
-    let data = &doc["error"]["data"];
-    let code = data["code"].as_str().unwrap_or("unknown");
-    let stage = data["stage"].as_str().unwrap_or("unknown");
+    let code = failure_code(&doc).unwrap_or("unknown");
+    let stage = doc["error"]["data"]["stage"].as_str().unwrap_or("unknown");
     let message = format!("{what}: {code} at {stage}");
     if code == "not_granted" && stage == "admission" {
         return Err(InvokeError::Lapsed(message));
@@ -530,13 +538,29 @@ impl Connectors {
             Some(input),
             &what,
         )?;
-        envelope(doc, &what)
+        invoked(doc, &what)
+    }
+}
+
+/// [`envelope`] of an `invoke` answer. A parse refusal (`cli_parse`) of that command line is a
+/// Connectors older than 0.60.0, which has no `invoke <connector>/<instance> <operation>`: it is
+/// refused naming the version cortex needs.
+fn invoked(doc: Value, what: &str) -> Result<Value, InvokeError> {
+    let parse = doc["ok"] != Value::Bool(true) && failure_code(&doc) == Some("cli_parse");
+    match envelope(doc, what) {
+        Err(InvokeError::Failed(message)) if parse => Err(InvokeError::Failed(format!(
+            "{message}; connectors does not know the invoke command line: cortex needs \
+             Connectors 0.60.0 or newer"
+        ))),
+        other => other,
     }
 }
 
 /// The `invoke` target `<connector>/<instance>` of a `connections list` entry, which carries
-/// `connector` and `instance` beside `adapter` from Connectors 0.60.0 on. An entry without them is
-/// an older Connectors, whose removed invoke form cortex no longer calls: refused naming the entry.
+/// `connector` and `instance` beside `adapter` from Connectors 0.54.0 on. An entry without them is
+/// a Connectors older than 0.54.0, which has no `invoke` either: refused naming the entry. A
+/// Connectors from 0.54.0 to 0.59.x lists both and refuses the `invoke` command line instead
+/// ([`invoked`]).
 fn target(adapter: &str, connection: &str, entry: &Value) -> Result<String, InvokeError> {
     let field = |name: &str| entry[name].as_str().filter(|v| !v.is_empty());
     match (field("connector"), field("instance")) {
@@ -722,6 +746,31 @@ mod tests {
                 assert!(why.contains(part), "{part:?} in {why}");
             }
         }
+    }
+
+    /// A parse refusal carries its code in `error.code` and an empty `data`: the reason names it,
+    /// not "unknown"; and an `invoke` refused so names the Connectors version cortex needs.
+    #[test]
+    fn a_parse_refusal_is_named_and_on_invoke_names_connectors_0_60() {
+        let parse = json!({"error": {"code": "cli_parse", "data": {}}, "ok": false});
+        let why = envelope(parse.clone(), "tavily.op")
+            .unwrap_err()
+            .to_string();
+        assert!(why.contains("tavily.op: cli_parse at unknown"), "{why}");
+        let why = invoked(parse, "tavily.op").unwrap_err().to_string();
+        for part in ["cli_parse", "Connectors 0.60.0 or newer"] {
+            assert!(why.contains(part), "{part:?} in {why}");
+        }
+        let lapsed = json!({"ok": false, "error": {"code": "failure",
+            "data": {"code": "not_granted", "stage": "admission"}}});
+        assert!(matches!(
+            invoked(lapsed, "tavily.op"),
+            Err(InvokeError::Lapsed(_))
+        ));
+        let other = json!({"ok": false, "error": {"code": "failure",
+            "data": {"code": "unavailable", "stage": "dispatch"}}});
+        let why = invoked(other, "tavily.op").unwrap_err().to_string();
+        assert!(!why.contains("0.60.0"), "{why}");
     }
 
     /// R3-10: an object `result` is the answer; any other JSON type is refused naming it.
