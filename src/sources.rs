@@ -193,7 +193,8 @@ fn since_minutes_ago(input: &Value, since_ms: i64, at_ms: i64) -> Value {
 
 /// `input`, its pages' too, as each call is made with it: `{since_minutes_ago}` filled from the
 /// window's start to the time of the call, so a call made after the run's start (a later input,
-/// a later page) still asks from no later than `{since}`.
+/// a later page, a retry after a renewal: [`Connectors::invoke_filled`]) still asks from no later
+/// than `{since}`.
 fn at_call(input: &Value, since_ms: i64) -> Value {
     since_minutes_ago(input, since_ms, crate::instance::now_ms())
 }
@@ -775,10 +776,13 @@ fn fetch_structured(
         let operation = operation.to_string();
         move |input: &Value| Ok(connectors.invoke(&c.adapter, connection, &operation, input)?)
     };
+    // An input's own calls fill `{since_minutes_ago}` as each attempt is made ([`at_call`]).
+    let fill = |input: &Value| at_call(input, window.since_ms);
     for input in &c.inputs {
-        let call = invoker(&c.operation);
         let records = walk(
-            &mut |input: &Value| call(&at_call(input, window.since_ms)),
+            &mut |input: &Value| {
+                Ok(connectors.invoke_filled(&c.adapter, connection, &c.operation, input, &fill)?)
+            },
             &format!("{}.{}", c.adapter, c.operation),
             &window_for_call(&to_serde(input), window),
             &st.records,
@@ -1216,11 +1220,13 @@ fn fetch_records(
     // Records left out for want of a key, counted by reason.
     let mut unkeyed: BTreeMap<String, usize> = BTreeMap::new();
     for input in &c.inputs {
-        // Each call fills `{since_minutes_ago}` at its own time ([`at_call`]); a record's `{input.…}`
-        // reads the input as the run's start filled it.
-        let mut call = invoker(connectors, c, connection, &c.operation);
+        // Each attempt of a call fills `{since_minutes_ago}` at its own time ([`at_call`]); a
+        // record's `{input.…}` reads the input as the run's start filled it.
+        let fill = |input: &Value| at_call(input, window.since_ms);
         let records = walk_until(
-            &mut |input: &Value| call(&at_call(input, window.since_ms)),
+            &mut |input: &Value| {
+                Ok(connectors.invoke_filled(&c.adapter, connection, &c.operation, input, &fill)?)
+            },
             &what,
             &window_for_call(&to_serde(input), window),
             &c.records,

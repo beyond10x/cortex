@@ -364,9 +364,9 @@ inputs:
 ```
 
 `{since_minutes_ago}` is the whole minutes from `{since}` to the moment each call is made (each
-input, each page), rounded up from the milliseconds, so a call made after the run's start still
-asks from no later than `{since}` and the window is never narrowed. It is for a query language
-that takes a relative date, such as an issue tracker's:
+input, each page, each retry after a renewal), rounded up from the milliseconds, so a call made
+after the run's start still asks from no later than `{since}` and the window is never narrowed. It
+is for a query language that takes a relative date, such as an issue tracker's:
 
 ```yaml
 inputs:

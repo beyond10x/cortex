@@ -488,16 +488,29 @@ impl Connectors {
         operation: &str,
         input: &Value,
     ) -> Result<Value, InvokeError> {
+        self.invoke_filled(adapter, connection, operation, input, &Value::clone)
+    }
+
+    /// [`Self::invoke`], with `input` passed through `fill` as each attempt is made: a retry after
+    /// a renewal or a timeout at admission is filled at its own time (`{since_minutes_ago}`).
+    pub fn invoke_filled(
+        &self,
+        adapter: &str,
+        connection: &str,
+        operation: &str,
+        input: &Value,
+        fill: &dyn Fn(&Value) -> Value,
+    ) -> Result<Value, InvokeError> {
         let entry = self
             .revalidate(adapter, connection, false)
             .map_err(|e| self.after_fetch(e))?;
         let target = target(adapter, connection, &entry)?;
-        let input = serde_json::to_vec(input).expect("plain JSON");
         // Evidence listed as ready can lapse before the read is admitted; renew once and retry.
         // A timeout at admission is Connectors' deadline running out on a read; retry that once
         // too. Each retry is spent at most once, so the loop runs at most three invocations.
         let (mut renew, mut timeout) = (true, true);
         let answer = loop {
+            let input = serde_json::to_vec(&fill(input)).expect("plain JSON");
             match self.invoke_once(adapter, &target, connection, operation, &input) {
                 Err(InvokeError::Lapsed(_)) if renew => {
                     renew = false;

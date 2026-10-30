@@ -39,9 +39,9 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 ### Added
 
 - An input of a `connectors` or `structured` source may use `{since_minutes_ago}`: the whole
-  minutes from the window's start to the time of each call (each input, each page), rounded up
-  (`updated >= -{since_minutes_ago}m`), for a query language that takes relative dates rather than
-  RFC 3339.
+  minutes from the window's start to the time of each call (each input, each page, each retry
+  after a renewal), rounded up (`updated >= -{since_minutes_ago}m`), for a query language that
+  takes relative dates rather than RFC 3339.
 - A spec may give `runs: {keep_days: <n>}` (at least 1). At the end of each run, the run
   directories under `runs/` older than that are removed; the current one, and any other name or
   file, are kept. `runs/` belongs to cortex: a directory there named like a run directory is
@@ -76,7 +76,8 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   waited for at most `CORTEX_CONNECTORS_TIMEOUT_S` seconds (default 120); past it the call is
   killed and fails as `timeout`, which fails the run as `fetch-failed`. The bound holds for the
   whole call: a process the call left holding its output is killed at the deadline with the
-  call's process group. A setting too large for the clock sets no bound instead of panicking.
+  call's process group, and so it is at once when the run is sent SIGTERM. A setting too large for
+  the clock sets no bound instead of panicking.
 - A `files` source read every file whole, however large, and left out a file it could not read
   or that was not UTF-8 text without a word. A file over 16 MiB, unreadable or not UTF-8 text is
   now named in the run's `skipped` with the reason. A `structured` source's file over 16 MiB fails
@@ -88,10 +89,12 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - What `ekr` wrote to stderr when a store verb failed reached the run's report, `cortex.log` and
   the source's status unmasked; it is now masked for credential shapes, and an unknown
   publication outcome still reads as `store-outcome-unknown`. An `ekr session`'s stderr is masked
-  before it is cut to its last 16 KiB, so a cut cannot part a credential from its name. The same
-  holds for `cortex quality`, the `schema apply` gate and `adopt`; the ask service's `postgres`
-  answer records now log their launch's stderr through the masked log instead of inheriting it,
-  and a monitoring hook's stderr is masked before it is cut.
+  before it is cut to its last 16 KiB, so a cut cannot part a credential from its name. Lines
+  dropped from the 1 MiB it holds stay as the context the kept ones are masked in, so a private
+  key whose `BEGIN` line was dropped is still masked. The same holds for `cortex quality`, the
+  `schema apply` gate and `adopt`; the ask service's `postgres` answer records now log their
+  launch's stderr through the masked log instead of inheriting it, and a monitoring hook's stderr
+  is masked before it is cut.
 - A store `ekr` cortex starts itself (no Connectors launch) inherited every `EKR_*` variable of
   cortex's environment but `EKR_STAGE`, such as `EKR_FULL_REPLAY` from the operator's shell; it
   now gets only the ones cortex sets, as a launched one already did. So does the ask service's

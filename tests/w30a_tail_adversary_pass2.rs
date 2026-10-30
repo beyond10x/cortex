@@ -335,11 +335,9 @@ fn adv2_a_private_key_whose_begin_line_is_dropped_from_the_hold_is_not_kept_unma
         printed == 0 && files.is_empty(),
         "the private key's lines are kept unmasked: {printed} of 3 printed, the first written to \
          {files:?}; the answer ends {:?}",
-        said.lines()
-            .find(|l| l.contains("session ended"))
-            .map(|l| {
-                let tail: Vec<char> = l.chars().rev().take(300).collect();
-                tail.into_iter().rev().collect::<String>()
-            })
+        said.lines().find(|l| l.contains("session ended")).map(|l| {
+            let tail: Vec<char> = l.chars().rev().take(300).collect();
+            tail.into_iter().rev().collect::<String>()
+        })
     );
 }

@@ -799,6 +799,10 @@ const STDERR_KEPT: usize = 16 * 1024;
 /// whole lines, masked and cut to [`STDERR_KEPT`] when it ends ([`window`]).
 const STDERR_READ: usize = 1024 * 1024;
 
+/// How much of what [`keep_read`] dropped is held as the context the kept lines are masked in: a
+/// private key's `BEGIN` line, or a name whose value is on the next line, marks lines after it.
+const STDERR_CONTEXT: usize = 16 * 1024;
+
 /// What an `ekr session` wrote to its own stderr, as [`keep_read`] holds it.
 #[derive(Default)]
 struct Kept {
@@ -808,19 +812,30 @@ struct Kept {
     cut: bool,
     /// The line being written is dropped up to its end: its start was.
     in_dropped_line: bool,
+    /// The end of what was dropped, raw, up to [`STDERR_CONTEXT`] bytes: masked with the kept
+    /// lines, never shown ([`window`]).
+    dropped: Vec<u8>,
+}
+
+/// Adds `gone` to what `dropped` holds, its front cut to [`STDERR_CONTEXT`] bytes.
+fn drop_into(dropped: &mut Vec<u8>, gone: &[u8]) {
+    dropped.extend_from_slice(gone);
+    let over = dropped.len().saturating_sub(STDERR_CONTEXT);
+    dropped.drain(..over);
 }
 
 /// Adds `read` to `kept`, dropping whole lines from the front past [`STDERR_READ`]. A line is
-/// dropped whole, never cut, so no credential shape loses the name that marks it before it is
-/// masked.
+/// dropped whole, never cut, and the end of what was dropped stays as context, so no credential
+/// shape loses the name or line that marks it before it is masked.
 fn keep_read(kept: &mut Kept, mut read: &[u8]) {
     if kept.in_dropped_line {
         match read.iter().position(|b| *b == b'\n') {
             Some(end) => {
                 kept.in_dropped_line = false;
+                drop_into(&mut kept.dropped, &read[..=end]);
                 read = &read[end + 1..];
             }
-            None => return,
+            None => return drop_into(&mut kept.dropped, read),
         }
     }
     kept.bytes.extend_from_slice(read);
@@ -829,9 +844,11 @@ fn keep_read(kept: &mut Kept, mut read: &[u8]) {
         kept.cut = true;
         match kept.bytes[over..].iter().position(|b| *b == b'\n') {
             Some(end) => {
-                kept.bytes.drain(..over + end + 1);
+                drop_into(&mut kept.dropped, &kept.bytes[..=over + end]);
+                kept.bytes.drain(..=over + end);
             }
             None => {
+                drop_into(&mut kept.dropped, &kept.bytes);
                 kept.bytes.clear();
                 kept.in_dropped_line = true;
             }
@@ -841,9 +858,21 @@ fn keep_read(kept: &mut Kept, mut read: &[u8]) {
 
 /// What `kept` holds, masked ([`said`]) and then cut to its last [`STDERR_KEPT`] bytes, at a line's
 /// start where the cut leaves one: masked first, so a cut cannot part a credential from the name
-/// that marks it.
+/// that marks it. Lines kept after dropped ones are masked behind the dropped context, whose lines
+/// are then left out; where a mask joined lines across that seam, more is left out, never less.
 fn window(kept: &Kept) -> String {
-    let masked = said(&kept.bytes);
+    let masked = if kept.dropped.is_empty() {
+        said(&kept.bytes)
+    } else {
+        // A line still being dropped (no newline yet) is one more line to leave out.
+        let lines = kept.dropped.iter().filter(|b| **b == b'\n').count()
+            + usize::from(!kept.dropped.ends_with(b"\n"));
+        let whole = said(&[kept.dropped.as_slice(), &kept.bytes].concat());
+        whole
+            .match_indices('\n')
+            .nth(lines.saturating_sub(1))
+            .map_or_else(String::new, |(at, _)| whole[at + 1..].to_string())
+    };
     if masked.len() <= STDERR_KEPT && !kept.cut {
         return masked;
     }
@@ -2053,6 +2082,18 @@ mod tests {
         keep_read(&mut long, b"yyy\nlast line\n");
         assert!(long.cut && !long.in_dropped_line);
         assert_eq!(window(&long), "…last line");
+
+        // D49: a private key whose `BEGIN` line was dropped for length is masked behind it.
+        let body = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo0123456789abcdefghijklmnopqrst";
+        let mut key = Kept::default();
+        keep_read(&mut key, "x".repeat(STDERR_READ).as_bytes());
+        keep_read(
+            &mut key,
+            format!(" -----BEGIN RSA PRIVATE {}-----\n", "KEY").as_bytes(),
+        );
+        keep_read(&mut key, format!("{body}\n{body}\n").as_bytes());
+        assert!(key.cut && key.bytes.starts_with(body.as_bytes()));
+        assert!(!window(&key).contains(body), "{}", window(&key));
     }
 
     #[test]

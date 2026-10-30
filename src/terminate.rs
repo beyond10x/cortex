@@ -78,7 +78,8 @@ pub fn wait_within(
 }
 
 /// How long the readers of a child's output are waited for once its process group was killed at
-/// the deadline: the pipes close as the group dies, unless a process outside it holds them.
+/// the deadline or the run's SIGTERM: the pipes close as the group dies, unless a process outside
+/// it holds them.
 const AFTER_KILL: Duration = Duration::from_secs(1);
 
 /// [`wait`], except that a child found already exited when the run's SIGTERM is seen is read,
@@ -160,24 +161,36 @@ fn wait_with(
             }
         }
     };
-    // What the child started may hold its pipes past its exit: the deadline bounds that wait too.
-    // At the deadline its process group is killed, so the pipes close.
-    if let Some(deadline) = deadline {
+    // What the child started may hold its pipes past its exit: the deadline bounds that wait too,
+    // and the run's SIGTERM ends it as it ends the wait for the child. Either kills the child's
+    // process group, so the pipes close.
+    {
         let read = || {
             stdout.is_finished()
                 && stderr.is_finished()
                 && writer.as_ref().is_none_or(|w| w.is_finished())
         };
-        let until = |at: Instant| {
-            while !read() && Instant::now() < at {
+        let until = |at: Option<Instant>, seen: bool| {
+            while !read() && at.is_none_or(|at| Instant::now() < at) && (seen || !requested()) {
                 std::thread::sleep(Duration::from_millis(20));
             }
             read()
         };
-        if !until(deadline) {
+        if !until(deadline, seen) {
             kill_group(child);
-            if !until(Instant::now() + AFTER_KILL) {
-                return (Waited::TimedOut, seen);
+            if !seen && requested() {
+                if !keep_finished {
+                    return (Waited::Terminated, false);
+                }
+                seen = true;
+            }
+            if !until(Some(Instant::now() + AFTER_KILL), true) {
+                let waited = if seen {
+                    Waited::Terminated
+                } else {
+                    Waited::TimedOut
+                };
+                return (waited, seen);
             }
         }
     }
