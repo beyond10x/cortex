@@ -29,6 +29,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
         with:
@@ -49,8 +50,8 @@ jobs:
 
       - name: Install pinned specification and planning tools
         env:
-          ESS_VERSION: "0.60.0"
-          ESS_SHA256: 89980809ffcb2cfe7e94efb662bdbd5387a9733e1fc5a69c2743045c753a5730
+          ESS_VERSION: "0.77.0"
+          ESS_SHA256: dd31b828bf6c6d9976f339b0a25dabcf0fa7fbb33c2856c49a1e3b71a5c00089
           AEP_VERSION: "0.75.0"
           AEP_SHA256: 5e32c6e284d4ca2bb11cecd5dac470b841acb36635c76a7a54a5687a6c2f275f
         run: |

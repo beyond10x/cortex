@@ -509,6 +509,13 @@ async fn close(
             "no-such-review",
             "no review item carries that id",
         ),
+        // The route answers these itself; the store never forces them.
+        (ma::CloseReviewOutcome::BadRequest { error }, _) => {
+            json_error(StatusCode::BAD_REQUEST, "bad-request", error.message)
+        }
+        (ma::CloseReviewOutcome::StoreFailed { .. }, _) => {
+            store_failed("a refusal of the close route reached the store".into())
+        }
     }
 }
 

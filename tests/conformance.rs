@@ -229,6 +229,7 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "source_id": e.source_id.0,
                 "documents_new": e.documents_new,
                 "documents_applied": e.documents_applied,
+                "facts_reapplied": e.facts_reapplied,
                 "cost_usd": e.cost_usd.map(|c| c.0),
                 "cost_counted": e.cost_counted,
                 "daily_ceiling_reached": e.daily_ceiling_reached,
@@ -1192,6 +1193,17 @@ impl Scenario {
                             json!({"answer_id": error.answer_id.0}),
                         )),
                     ),
+                    ma::CastVoteOutcome::BadRequest { error } => (
+                        "bad-request",
+                        Some(("cortex.ask.BadRequest", json!({"message": error.message}))),
+                    ),
+                    ma::CastVoteOutcome::StoreFailed { error } => (
+                        "store-failed",
+                        Some((
+                            "cortex.ask.StoreFailed",
+                            json!({"request_id": error.request_id}),
+                        )),
+                    ),
                 }
             }
             "cortex.ask.OpenReview" => {
@@ -1239,6 +1251,17 @@ impl Scenario {
                     Some((
                         "cortex.ask.ReviewNotFound",
                         json!({"review_id": error.review_id.0}),
+                    )),
+                ),
+                ma::CloseReviewOutcome::BadRequest { error } => (
+                    "bad-request",
+                    Some(("cortex.ask.BadRequest", json!({"message": error.message}))),
+                ),
+                ma::CloseReviewOutcome::StoreFailed { error } => (
+                    "store-failed",
+                    Some((
+                        "cortex.ask.StoreFailed",
+                        json!({"request_id": error.request_id}),
                     )),
                 ),
             },
@@ -1582,7 +1605,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        120,
+        124,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

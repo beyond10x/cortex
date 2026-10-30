@@ -1071,6 +1071,12 @@ impl Keeper {
                     "an unidentified vote reached the store".into(),
                 ))
             }
+            // The route answers these before or around the store; the store never forces them.
+            ma::CastVoteOutcome::BadRequest { .. } | ma::CastVoteOutcome::StoreFailed { .. } => {
+                return Err(VoteRefused::Store(
+                    "a refusal of the vote route reached the store".into(),
+                ))
+            }
             ma::CastVoteOutcome::Cast { .. } | ma::CastVoteOutcome::Changed { .. } => {}
         }
         if value == ma::VoteValue::Down {

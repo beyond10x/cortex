@@ -2239,6 +2239,7 @@ commands:
             source_id: input.source_id
             documents_new: {generated: true}
             documents_applied: {generated: true}
+            facts_reapplied: {generated: true}
             cost_usd: {generated: true}
             cost_counted: {generated: true}
             daily_ceiling_reached: {generated: true}
@@ -3064,11 +3065,15 @@ events:
   # one extraction request (`cortex.instance.ModelSpec.batch_chars`, given or derived); `splits`
   # counts the batches it split in two because a request was too long for the model's window or
   # its answer was cut off.
+  # `facts_reapplied` counts the facts marked `replaces: true` that EKR rejected because nothing
+  # active was there to replace, applied again as plain assertions and stored; they are not
+  # among the parts EKR rejected.
   - name: cortex.instance.SourceRan
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: documents_new, type: Integer}
       - {name: documents_applied, type: Integer}
+      - {name: facts_reapplied, type: Integer}
       - {name: cost_usd, type: Optional<Decimal>}
       - {name: cost_counted, type: Boolean}
       - {name: daily_ceiling_reached, type: Boolean}

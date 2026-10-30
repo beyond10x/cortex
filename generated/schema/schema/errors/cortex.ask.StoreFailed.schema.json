@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StoreFailed payload",
+  "description": "The answer records could not be read or written; it answers 500 with a fixed message and `request_id`. The detail (a database path, SQL text) goes only to the service's standard error, on a line naming that `request_id`.",
+  "x-ess-name": "cortex.ask.StoreFailed",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "454ae2cdefe42498de39f694543a1a07725b9d4b16d1a2caf6ef6fa1a9fbb502",
+    "contract_digest": "slice-sha256/2:15459da08e92c75d6debd0518732f493dab56baa5301d301fa12d893175da1e5",
+    "regenerate": "ess generate"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BadRequest payload",
+  "description": "The body of a record route is above 64 KiB, which answers 413, or is not the body the route takes, which answers 400; `message` says why, for a person.",
+  "x-ess-name": "cortex.ask.BadRequest",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "message"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "454ae2cdefe42498de39f694543a1a07725b9d4b16d1a2caf6ef6fa1a9fbb502",
+    "contract_digest": "slice-sha256/2:f99c5505c4822b1c6caed6638c01b1628c166fb8cc99ac6addb9f0204ba110bd",
+    "regenerate": "ess generate"
+  }
+}

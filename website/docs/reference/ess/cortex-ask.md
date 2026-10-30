@@ -395,9 +395,13 @@ It takes:
 - `value` — `cortex.ask.VoteValue`
 - `comment` — `Optional<String>`, which may be absent
 
-It has four outcomes.
+It has six outcomes.
 
 **`unidentified`** — It answers 401; nothing was cast. Decided outside the input: The request carries no identity in the header the spec names. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.Unidentified`, carrying `header`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`bad-request`** — It answers 413 for a body above 64 KiB, else 400; nothing was cast. Decided outside the input: The body is above 64 KiB or is not a vote's body. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.BadRequest`, carrying `message`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`store-failed`** — It answers 500; the detail goes only to the service's standard error. Decided outside the input: The answer records cannot be read or written. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.StoreFailed`, carrying `request_id`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`no-such-answer`** — It answers 404; nothing was cast. Decided outside the input: No answer record carries `answer_id`. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.AnswerNotFound`, carrying `answer_id`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
@@ -416,7 +420,11 @@ It takes:
 - `expect_facts` — `List<String>`
 - `expect_nodes` — `List<String>`
 
-It has three outcomes.
+It has five outcomes.
+
+**`bad-request`** — It answers 413 for a body above 64 KiB, else 400; nothing changed. Decided outside the input: The body is above 64 KiB or is not a close's body. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.BadRequest`, carrying `message`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`store-failed`** — It answers 500; the detail goes only to the service's standard error. Decided outside the input: The answer records cannot be read or written. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.StoreFailed`, carrying `request_id`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`closed`** — The item leaves the review queue with its reason. The default branch, taken when no other outcome's condition matched. It moves a `cortex.ask.ReviewItem` from `Open` to `Closed`, along the declared move `close`. The instance is the one named by the input field `review_id`. It emits `cortex.ask.ReviewClosed`. It sets `close_reason` from `input.reason`, `closed_at` from `implementation-generated`, `expect_facts` from `input.expect_facts` and `expect_nodes` from `input.expect_nodes`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -574,6 +582,18 @@ It carries:
 
 Reported by `cortex.ask.CastVote` on its `no-such-answer` outcome.
 
+### `BadRequest`
+
+The body of a record route is above 64 KiB, which answers 413, or is not the body the route takes, which answers 400; `message` says why, for a person.
+
+It carries:
+
+- `message` — `String`
+
+Reported by `cortex.ask.CastVote` on its `bad-request` outcome.
+
+Reported by `cortex.ask.CloseReview` on its `bad-request` outcome.
+
 ### `Busy`
 
 The service is working on `max_in_flight` answers already; it answers 429 at once, asks no model and spends no question of the minute. Ask again later.
@@ -707,6 +727,18 @@ It carries:
 
 Reported by `cortex.ask.CloseReview` on its `wrong-state` outcome.
 
+### `StoreFailed`
+
+The answer records could not be read or written; it answers 500 with a fixed message and `request_id`. The detail (a database path, SQL text) goes only to the service's standard error, on a line naming that `request_id`.
+
+It carries:
+
+- `request_id` — `String`
+
+Reported by `cortex.ask.CastVote` on its `store-failed` outcome.
+
+Reported by `cortex.ask.CloseReview` on its `store-failed` outcome.
+
 ### `Unidentified`
 
 The request carries no identity in the header the spec names; it answers 401.
@@ -744,4 +776,4 @@ It may invoke [`OpenReview`](#openreview), [`PurgeExpired`](#purgeexpired) and [
 
 ---
 
-Generated from cortex v1 · model digest `c62105bd24d5d4a0d650b895b9c576a8e7066038a9961c9f0fcba15ca1d8b9f3` · contract digest `slice-sha256/2:09198d8cf5567d69d02f9743574bf22bfd93e7ecb8c521f15ddef46ff0781694`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `454ae2cdefe42498de39f694543a1a07725b9d4b16d1a2caf6ef6fa1a9fbb502` · contract digest `slice-sha256/2:1e52bd29ba462c1de922ed6dbb35d18c8717378c02f845b86003fbe2997c1001`. Do not edit this file; change the specification and regenerate it with `task generate`.

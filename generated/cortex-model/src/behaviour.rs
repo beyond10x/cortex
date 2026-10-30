@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest c62105bd24d5d4a0d650b895b9c576a8e7066038a9961c9f0fcba15ca1d8b9f3
-// contract digest 1ad5072384a73590b57279a68f9f5499ad318a5cce767e782321013bc5c8c638
+// model digest 454ae2cdefe42498de39f694543a1a07725b9d4b16d1a2caf6ef6fa1a9fbb502
+// contract digest c75c17e5eb6aa81c48b081736bc63dd7442f26133a33121f93755de3becaa515
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -107,6 +107,8 @@ pub enum ExternalCommand<'a> {
     CortexAskAsk(&'a crate::ask::Ask),
     /// The executing `cortex.ask.CastVote` input.
     CortexAskCastVote(&'a crate::ask::CastVote),
+    /// The executing `cortex.ask.CloseReview` input.
+    CortexAskCloseReview(&'a crate::ask::CloseReview),
     /// The executing `cortex.instance.AddEvalCase` input.
     CortexInstanceAddEvalCase(&'a crate::instance::AddEvalCase),
     /// The executing `cortex.instance.AdoptInstance` input.
@@ -137,6 +139,7 @@ impl ExternalCommand<'_> {
         match self {
             Self::CortexAskAsk(_) => "cortex.ask.Ask",
             Self::CortexAskCastVote(_) => "cortex.ask.CastVote",
+            Self::CortexAskCloseReview(_) => "cortex.ask.CloseReview",
             Self::CortexInstanceAddEvalCase(_) => "cortex.instance.AddEvalCase",
             Self::CortexInstanceAdoptInstance(_) => "cortex.instance.AdoptInstance",
             Self::CortexInstanceApplySchemaProposals(_) => "cortex.instance.ApplySchemaProposals",
@@ -321,6 +324,14 @@ where
         if self.ports.try_external(ExternalCommand::CortexAskCastVote(&input), "unidentified")? {
             return Ok(crate::ask::CastVoteOutcome::Unidentified { error: crate::ask::Unidentified { header: self.ports.try_generate_string()? } });
         }
+        // `bad-request`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskCastVote(&input), "bad-request")? {
+            return Ok(crate::ask::CastVoteOutcome::BadRequest { error: crate::ask::BadRequest { message: self.ports.try_generate_string()? } });
+        }
+        // `store-failed`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskCastVote(&input), "store-failed")? {
+            return Ok(crate::ask::CastVoteOutcome::StoreFailed { error: crate::ask::StoreFailed { request_id: self.ports.try_generate_string()? } });
+        }
         // `no-such-answer`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexAskCastVote(&input), "no-such-answer")? {
             return Ok(crate::ask::CastVoteOutcome::NoSuchAnswer { error: crate::ask::AnswerNotFound { answer_id: input.answer_id.clone() } });
@@ -358,6 +369,14 @@ where
 {
     fn close_review(&mut self, input: crate::ask::CloseReview) -> Result<crate::ask::CloseReviewOutcome, UnmetObligation> {
         let _ = &input;
+        // `bad-request`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskCloseReview(&input), "bad-request")? {
+            return Ok(crate::ask::CloseReviewOutcome::BadRequest { error: crate::ask::BadRequest { message: self.ports.try_generate_string()? } });
+        }
+        // `store-failed`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskCloseReview(&input), "store-failed")? {
+            return Ok(crate::ask::CloseReviewOutcome::StoreFailed { error: crate::ask::StoreFailed { request_id: self.ports.try_generate_string()? } });
+        }
         // `closed`: the default.
         let Some(held) = ReviewItemStorage::get(&self.ports, &input.review_id) else {
             return Ok(crate::ask::CloseReviewOutcome::NoSuchReview { error: crate::ask::ReviewNotFound { review_id: input.review_id.clone() } });
