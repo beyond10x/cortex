@@ -225,6 +225,13 @@ types:
       # or as blank text; no `<adapter>:<operation>:null` key is written. ESS has no construct for
       # the rendering of a String from a record; src/sources.rs holds it and
       # tests/connectors_walks.rs tests it.
+      # UNMAPPED: the spec check refuses (exit 2, naming the source and the key, for `create`,
+      # `update`, `adopt` and a run alike) a `key` that is no template by the grammar of
+      # `cortex.instance.RecordMapping.alias_templates`: empty, naming no field, or with an
+      # unclosed `{` or a stray `}`. `cortex update` refuses a change of `key` on a source with
+      # seen documents as a re-key, and, while `key` names an `{input.…}` field, a change of
+      # `inputs` too. ESS has no construct for the grammar of a String; `spec::check` and
+      # `src/main.rs` hold it, tests/w30a_shapes_adversary.rs and tests/connectors_walks.rs test it.
       - {name: key, type: Optional<String>}
       - {name: time, type: Optional<String>}
       - {name: text, type: List<String>}

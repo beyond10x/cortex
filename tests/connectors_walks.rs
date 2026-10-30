@@ -1604,6 +1604,49 @@ fn an_update_that_changes_the_key_template_is_refused_as_a_rekey() {
     assert_eq!(out["detail"]["field"], "key", "{out}");
 }
 
+/// Updates instance `name` with channel C1 of its spec renamed C3, as [`create_channels`] wrote it.
+fn update_renaming_channel(w: &World, name: &str) -> (i32, Value) {
+    let path = w.root.join(format!("{name}.yaml"));
+    let written = std::fs::read_to_string(&path).unwrap();
+    let text = written.replace("{channel: C1}", "{channel: C3}");
+    assert_ne!(text, written, "the spec names channel C1");
+    std::fs::write(&path, text).unwrap();
+    w.cortex(&[
+        "update",
+        name,
+        "--spec",
+        path.to_str().unwrap(),
+        "--no-units",
+    ])
+}
+
+/// D24-D26 (adversary pass 1): under a key template with an `{input.…}` placeholder the inputs
+/// are part of every key, so changing an input value on a source with seen documents is refused
+/// as a re-key; under a plain `id` key the inputs key nothing and the change is accepted.
+#[test]
+fn an_input_change_is_a_rekey_only_under_a_key_template_that_names_the_input() {
+    let w = world_with(CHANNELS);
+    create_channels(&w, "inputkey", Some("{input.channel}:{ts}"));
+    run(&w, "inputkey");
+    let (code, out) = update_renaming_channel(&w, "inputkey");
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("rekey-refused")),
+        "{out}"
+    );
+    assert_eq!(out["detail"]["field"], "inputs", "{out}");
+
+    let w = world_with(CHANNELS);
+    create_channels(&w, "inputplain", None);
+    run(&w, "inputplain");
+    let (code, out) = update_renaming_channel(&w, "inputplain");
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("updated")),
+        "{out}"
+    );
+}
+
 /// `issues.list` answers I-1 with no replies, I-2 with three and I-3 with no `reply_count`;
 /// `comments.list` answers two comments by their author, time and body for the `issue` it is
 /// given.

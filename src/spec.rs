@@ -222,6 +222,9 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
     if let Some(reason) = alias_template_refusal(spec) {
         return Err(reason);
     }
+    if let Some(reason) = key_template_refusal(spec) {
+        return Err(reason);
+    }
     // A `connectors` source cites a record as `record:<adapter>:<operation>:<id>`, as a structured
     // source does, so a structured source that ends what it no longer lists would claim the
     // values the model extracted from that operation's records.
@@ -445,6 +448,21 @@ fn alias_template_refusal(spec: &m::InstanceSpec) -> Option<String> {
         }
     }
     None
+}
+
+/// Why a `connectors` source's `key` is no template: it is rendered by the grammar of an alias
+/// template ([`crate::structured::template_refusal`]), so an empty key, one without a `{field}`
+/// placeholder, or one with an unclosed `{` or a stray `}` is refused here, naming the place and
+/// the key. This is the `UNMAPPED:` rule of `cortex.instance.ConnectorsSource.key`.
+fn key_template_refusal(spec: &m::InstanceSpec) -> Option<String> {
+    spec.sources.iter().find_map(|source| {
+        let m::SourceSettings::Connectors(c) = &source.settings else {
+            return None;
+        };
+        let key = c.key.as_deref()?;
+        crate::structured::template_refusal(key)
+            .map(|why| format!("sources.{}.settings.value.key: {key:?}: {why}", source.name))
+    })
 }
 
 /// Why a connection the spec names cannot be used: it names both an id (`connection`) and a

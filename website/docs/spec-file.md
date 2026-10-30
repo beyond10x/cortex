@@ -337,8 +337,10 @@ A document's key is `<adapter>:<operation>:<id>`, or `<adapter>:<operation>:<ren
 whose `key` placeholders names a field it (or its input) lacks, holds as no scalar or as blank
 text, is left out and counted in the run's `skipped` by operation and reason
 (`` tracker.issues.list: 2 records skipped: no value at id `key` ``); no key ends in `null`. A record
-whose text is empty is skipped. Adding, removing or changing `key` re-keys the source: `cortex
-update` refuses it while the source has seen documents.
+whose text is empty is skipped. A `key` that is not a template (empty, without a placeholder, or
+with an unclosed `{` or a stray `}`) is refused when the spec is read. Adding, removing or
+changing `key` re-keys the source, and so does changing `inputs` while `key` names an
+`{input.…}`: `cortex update` refuses it while the source has seen documents.
 
 **The window.** `{since}` and `{until}` are instants in RFC 3339, in UTC and to the second
 (`2026-10-05T12:34:56Z`). `{until}` is the start of this run. `{since}` is 5 minutes before the
@@ -754,7 +756,7 @@ rule matches; `field` is a dotted path into the parent record, as `{a.b}` placeh
 
 | `follow` | the parent matches when |
 |---|---|
-| `{rule: equals, value: {field: archived, value: false}}` | the value at `field` equals `value`, of the same JSON kind: `false` is not `"false"`; numbers compare by value |
+| `{rule: equals, value: {field: archived, value: false}}` | the value at `field` equals `value`, of the same JSON kind: `false` is not `"false"`; numbers compare by value, whole numbers exactly |
 | `{rule: within_days, value: {field: last_activity_at, days: 30}}` | the value at `field` is a text holding an RFC 3339 instant, a date alone (midnight UTC) or epoch seconds, no earlier than `days` days before the run's start; `days` above 0 |
 | `{rule: at_least, value: {field: star_count, number: 1}}` | the value at `field` is a JSON number no less than `number`; `number` above 0 |
 

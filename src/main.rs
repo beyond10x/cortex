@@ -1604,12 +1604,22 @@ fn keyed_by(settings: &m::SourceSettings) -> Vec<(&'static str, String)> {
     };
     let mut fields = vec![("kind", kind.to_string())];
     match settings {
-        m::SourceSettings::Connectors(c) => fields.extend([
-            ("adapter", c.adapter.clone()),
-            ("operation", c.operation.clone()),
-            ("id", record_path(&c.id)),
-            ("key", c.key.clone().unwrap_or_default()),
-        ]),
+        m::SourceSettings::Connectors(c) => {
+            fields.extend([
+                ("adapter", c.adapter.clone()),
+                ("operation", c.operation.clone()),
+                ("id", record_path(&c.id)),
+                ("key", format!("{:?}", c.key)),
+            ]);
+            // An `{input.…}` placeholder puts the input's values in every key.
+            if c.key
+                .as_deref()
+                .is_some_and(cortex_cli::structured::template_names_input)
+            {
+                let inputs = c.inputs.iter().map(model_map::to_serde).collect();
+                fields.push(("inputs", serde_json::Value::Array(inputs).to_string()));
+            }
+        }
         m::SourceSettings::Files(f) => match &f.records {
             Some(r) if r.format != m::RecordFormat::WholeFile => fields.extend([
                 ("records", format!("{:?}", r.format)),

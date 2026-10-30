@@ -631,6 +631,21 @@ pub fn template_refusal(template: &str) -> Option<String> {
     template_parts(template).err()
 }
 
+/// Whether `template` has a placeholder under `input` (`{input.channel}`, `{$.input.channel}`):
+/// a `connectors` source's `key` that does takes part of each key from the input a record was read
+/// with.
+pub fn template_names_input(template: &str) -> bool {
+    template_parts(template).is_ok_and(|parts| {
+        parts.iter().any(|p| match p {
+            TemplatePart::Field(path) => {
+                let path = path.strip_prefix("$.").unwrap_or(path);
+                path == "input" || path.starts_with("input.")
+            }
+            TemplatePart::Text(_) => false,
+        })
+    })
+}
+
 /// One structured source as a run maps it: its identity prefix, its mapping, its child operations
 /// and the instance's redaction policy.
 pub struct Source<'a> {

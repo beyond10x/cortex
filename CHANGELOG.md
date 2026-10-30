@@ -41,13 +41,17 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A `structured` source's child may carry a `follow` rule (`equals`, `within_days` or
   `at_least` on a field of the parent record), and the run calls that child only for the parents
   the rule matches. A parent it does not match is still applied as a node; its children of that
-  operation are not asked for, and none of its earlier ones is ended. The run's `skipped` counts
+  operation are not asked for, and none of its earlier ones is ended. `equals` and `at_least`
+  compare whole numbers exactly, also above 2^53. The run's `skipped` counts
   those parents per child operation. A child without `follow` is called for every parent, as
   before.
 - A `connectors` source may give a `key` template (`{input.channel}:{ts}`) that a document's key
   is rendered from instead of `id`, with `{input.…}` naming the input the record was read with, so
   two records with one id in two inputs are both applied; before, the second was dropped.
-  `cortex update` refuses a change of `key` while the source has seen documents (`rekey-refused`).
+  `cortex update` refuses a change of `key` while the source has seen documents (`rekey-refused`),
+  including adding `key` where none was, and, while `key` names an `{input.…}`, a change of
+  `inputs`. A `key` that is not a template (empty, without a placeholder, or with an unclosed `{`
+  or a stray `}`) is refused when the spec is read, as an alias template is.
 - A `connectors` source's `child` may give `text` templates, and each child record is then added
   to the parent's text as its rendered lines instead of raw JSON, so more children fit under
   `max_chars_per_document`. It may also carry a `follow` rule, the one `structured` children take

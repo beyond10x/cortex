@@ -111,13 +111,19 @@ fn adding_an_empty_key_to_a_source_with_seen_documents_is_refused() {
 /// one the template "renders nothing for", blaming the records for a typo in the spec.
 #[test]
 fn a_key_that_is_no_template_is_refused_when_the_spec_is_read() {
-    for (n, key) in ["{input.channel}:{ts", "{ts}}", "channel"].iter().enumerate() {
+    for (n, key) in ["{input.channel}:{ts", "{ts}}", "channel"]
+        .iter()
+        .enumerate()
+    {
         let w = world();
         let name = format!("typo{n}");
         let path = w.root.join(format!("{name}.yaml"));
-        std::fs::write(&path, spec_text(&name, &format!("        key: \"{key}\"\n"))).unwrap();
-        let (code, created) =
-            w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+        std::fs::write(
+            &path,
+            spec_text(&name, &format!("        key: \"{key}\"\n")),
+        )
+        .unwrap();
+        let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
         let ran = if code == 0 {
             w.cortex(&["run", &format!("{name}/chat")]).1
         } else {

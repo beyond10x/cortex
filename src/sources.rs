@@ -1557,20 +1557,17 @@ fn passes(f: &m::RecordFilter, record: &Value) -> bool {
 /// field is of the rule's JSON kind and equal to it, numbers by value. `within_days`: it is a text
 /// read as a document's time is ([`instant`]), no earlier than `days` days before `start_ms`.
 /// `at_least`: it is a JSON number no less than `number`. A missing field, or a value of another
-/// kind, does not match. No rule matches every parent.
+/// kind, does not match. No rule matches every parent. Two integers compare exactly, however
+/// large; only a number that is not an integer is compared as `f64` ([`Num`]).
 pub fn follows(rule: Option<&m::FollowRule>, record: &Value, start_ms: i64) -> bool {
     let Some(rule) = rule else {
         return true;
     };
-    let number = |v: &Value| match v {
-        Value::Number(n) => n.as_f64(),
-        _ => None,
-    };
     match rule {
         m::FollowRule::Equals(r) => {
             let want = to_serde(&r.value);
-            at(record, &r.field).is_some_and(|got| match (number(got), number(&want)) {
-                (Some(a), Some(b)) => a == b,
+            at(record, &r.field).is_some_and(|got| match (Num::of(got), Num::of(&want)) {
+                (Some(a), Some(b)) => a.compare(b) == Some(std::cmp::Ordering::Equal),
                 _ => *got == want,
             })
         }
@@ -1579,8 +1576,45 @@ pub fn follows(rule: Option<&m::FollowRule>, record: &Value, start_ms: i64) -> b
             .and_then(instant)
             .is_some_and(|t| t >= start_ms.saturating_sub(r.days.saturating_mul(86_400_000))),
         m::FollowRule::AtLeast(r) => at(record, &r.field)
-            .and_then(number)
-            .is_some_and(|n| n >= r.number as f64),
+            .and_then(Num::of)
+            .and_then(|n| n.compare(Num::Int(i128::from(r.number))))
+            .is_some_and(|o| o != std::cmp::Ordering::Less),
+    }
+}
+
+/// A JSON number as a `follow` rule compares it: an integer exactly (any `i64` or `u64`), anything
+/// else as `f64`.
+#[derive(Clone, Copy)]
+enum Num {
+    Int(i128),
+    Float(f64),
+}
+
+impl Num {
+    fn of(v: &Value) -> Option<Self> {
+        let Value::Number(n) = v else {
+            return None;
+        };
+        n.as_i64()
+            .map(i128::from)
+            .or_else(|| n.as_u64().map(i128::from))
+            .map(Num::Int)
+            .or_else(|| n.as_f64().map(Num::Float))
+    }
+
+    /// Exact between two integers; by `f64` when either is not one.
+    fn compare(self, other: Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (Num::Int(a), Num::Int(b)) => Some(a.cmp(&b)),
+            (a, b) => a.float().partial_cmp(&b.float()),
+        }
+    }
+
+    fn float(self) -> f64 {
+        match self {
+            Num::Int(n) => n as f64,
+            Num::Float(f) => f,
+        }
     }
 }
 
@@ -1782,6 +1816,35 @@ mod tests {
         assert!(!follows(Some(&stars), &json!({"stars": "5"}), START));
 
         assert!(follows(None, &json!({}), START));
+    }
+
+    /// D25: integers compare exactly, above 2^53 too, in `equals` and `at_least`; a number that
+    /// is not an integer still compares by value.
+    #[test]
+    fn a_follow_rule_compares_large_integers_exactly() {
+        let big: Value = serde_json::from_str(r#"{"n": 9007199254740993}"#).unwrap();
+        let below: Value = serde_json::from_str(r#"{"n": 9007199254740992}"#).unwrap();
+        let equals = m::FollowRule::Equals(m::FollowEquals {
+            field: "n".into(),
+            value: mj_value::Value::Number("9007199254740993".into()),
+        });
+        assert!(follows(Some(&equals), &big, START));
+        assert!(!follows(Some(&equals), &below, START));
+        let huge = m::FollowRule::Equals(m::FollowEquals {
+            field: "n".into(),
+            value: mj_value::Value::Number("18446744073709551615".into()),
+        });
+        let max: Value = serde_json::from_str(r#"{"n": 18446744073709551615}"#).unwrap();
+        assert!(follows(Some(&huge), &max, START));
+        assert!(!follows(Some(&huge), &big, START));
+        let at_least = m::FollowRule::AtLeast(m::FollowAtLeast {
+            field: "n".into(),
+            number: 9_007_199_254_740_993,
+        });
+        assert!(follows(Some(&at_least), &big, START));
+        assert!(!follows(Some(&at_least), &below, START));
+        let decimal: Value = serde_json::from_str(r#"{"n": 9007199254740993.5}"#).unwrap();
+        assert!(follows(Some(&at_least), &decimal, START));
     }
 
     use cortex_model::json as mj_value;
