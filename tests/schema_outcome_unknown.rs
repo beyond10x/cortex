@@ -373,3 +373,57 @@ fn a_postgres_apply_whose_head_cannot_be_read_after_the_publish_names_the_stage_
     let dir = w.home.join("instances/pg/schema").join(&stamp);
     assert_eq!(lines(&dir)[0]["status"], "applied", "{:?}", lines(&dir));
 }
+
+/// Adversary: two review runs propose the same node type; the first is applied, so the second's
+/// approved proposal is planned `invalid` and its stage commits nothing. When the head then cannot
+/// be read after the (empty) publish, `apply-failed` must not say the changes are in the store.
+#[test]
+#[ignore = "adversary: apply-failed after an empty postgres publish says the changes are in the store although nothing was committed"]
+fn a_postgres_apply_that_committed_nothing_does_not_say_changes_are_in_the_store() {
+    let (w, db) = pg_instance();
+    std::fs::write(
+        w.root.join("proposals.json"),
+        json!([node_type("Maker")]).to_string(),
+    )
+    .unwrap();
+    let mut stamps = Vec::new();
+    for _ in 0..2 {
+        let (code, out) = w.cortex(&["schema", "pg", "--sample", "5", "--review"]);
+        assert_eq!(
+            (code, out["outcome"].as_str()),
+            (0, Some("reviewed")),
+            "{out}"
+        );
+        let stamp = out["detail"]["stamp"].as_str().unwrap().to_string();
+        let (code, out) = w.cortex(&["schema", "approve", "pg", &stamp]);
+        assert_eq!(code, 0, "{out}");
+        stamps.push(stamp);
+    }
+    let (code, out) = w.cortex(&["schema", "apply", "pg", &stamps[0]]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("applied")),
+        "{out}"
+    );
+    let head = pg_store(&w, &db, &["head"])["revision"].as_i64().unwrap();
+    std::fs::write(w.root.join("fail-head-after-publish"), "").unwrap();
+
+    let (code, out) = w.cortex(&["schema", "apply", "pg", &stamps[1]]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("apply-failed")),
+        "{out}"
+    );
+    let dir = w.home.join("instances/pg/schema").join(&stamps[1]);
+    assert_eq!(lines(&dir)[0]["status"], "invalid", "{:?}", lines(&dir));
+    assert_eq!(
+        pg_store(&w, &db, &["head"])["revision"].as_i64().unwrap(),
+        head,
+        "the second apply committed something"
+    );
+    let reason = out["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(
+        !reason.contains("the changes are in the store"),
+        "nothing was committed, yet: {reason}"
+    );
+}
