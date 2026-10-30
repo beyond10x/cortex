@@ -6,14 +6,14 @@
 //! ([`Origin::FileRecord`]), which is delivered again as soon as it changed, or a structured
 //! source's change whose text changed only in its links ([`SeenState::unlinked`]).
 
-use std::collections::BTreeMap;
-use std::path::Path;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
 
 use cortex_model::instance as m;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::sources::{Document, Origin};
+use crate::sources::{Document, Origin, Window, DOCUMENT_FAILURE_LIMIT, OVERLAP_MS};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Seen {
@@ -282,6 +282,202 @@ impl SeenState {
                 unlinked_hash,
             },
         );
+    }
+
+    /// Whether `wanted`, as this run fetched it, is seen with its text: applied by this run, since
+    /// a wanted document's key is new or seen with other text.
+    fn holds_text(&self, wanted: &Wanted) -> bool {
+        self.documents
+            .get(&wanted.key)
+            .and_then(|seen| seen.hash.as_ref())
+            == Some(&wanted.hash)
+    }
+
+    /// The `pending_since` a windowed run that did not succeed leaves, after what it applied: the
+    /// earliest record time of a document it wanted and did not apply, less [`OVERLAP_MS`], when
+    /// its fetch read every record of the window and that time is readable for every such
+    /// document; the window's start otherwise, and when it left no wanted document unapplied. It
+    /// is never before the window's start nor after its end, and never after the `held_since` the
+    /// run computed, so a run that fails before it records `held_since` leaves no held change
+    /// behind its window.
+    pub fn pending_after(&self, backlog: &Backlog, window: Window) -> i64 {
+        let pending = self.unapplied_since(backlog, window);
+        backlog.held_since.map_or(pending, |held| pending.min(held))
+    }
+
+    fn unapplied_since(&self, backlog: &Backlog, window: Window) -> i64 {
+        if !backlog.complete {
+            return window.since_ms;
+        }
+        let mut earliest: Option<i64> = None;
+        for wanted in backlog.wanted.iter().filter(|w| !self.holds_text(w)) {
+            let Some(at) = wanted.time_ms else {
+                return window.since_ms;
+            };
+            earliest = Some(earliest.map_or(at, |e| e.min(at)));
+        }
+        earliest.map_or(window.since_ms, |at| {
+            at.saturating_sub(OVERLAP_MS)
+                .clamp(window.since_ms, window.until_ms.max(window.since_ms))
+        })
+    }
+}
+
+/// What a windowed run wanted of its fetch, for the window it leaves ([`SeenState::pending_after`]).
+/// Kept with the run's report, so a run that failed, or was undone, leaves its window by the
+/// same rule.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Backlog {
+    /// Whether the fetch read every record of the window: no page or child call left unread.
+    pub complete: bool,
+    /// Every document the run wanted, as it fetched it; a document skipped after failing on
+    /// [`DOCUMENT_FAILURE_LIMIT`] consecutive runs is not one of them.
+    pub wanted: Vec<Wanted>,
+    /// The earliest applied time, less the overlap, of a document the run holds back by
+    /// `refresh_after_days`, as `held_since` records it.
+    pub held_since: Option<i64>,
+}
+
+/// A document a windowed run wanted: its key, its hash ([`doc_hash`]) and its record time
+/// ([`crate::evidence::document_time_ms`]), `None` when that cannot be read.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Wanted {
+    pub key: String,
+    pub hash: String,
+    pub time_ms: Option<i64>,
+}
+
+impl Wanted {
+    pub fn of(doc: &Document) -> Self {
+        Self {
+            key: doc.key.clone(),
+            hash: doc_hash(doc),
+            time_ms: crate::evidence::document_time_ms(doc),
+        }
+    }
+}
+
+/// The format of a failures file.
+pub const FAILURES_FORMAT: &str = "cortex.failures/1";
+
+/// `<instance>/failures/<source>.json`: the source's [`Failures`], outside `state/`, so neither a
+/// snapshot nor a rewind of `state/` takes it back.
+pub fn failures_path(instance_dir: &Path, source: &str) -> PathBuf {
+    instance_dir.join("failures").join(format!("{source}.json"))
+}
+
+/// Consecutive runs whose extraction of a document failed with the document alone in its
+/// request, per key: the hash of the text that last failed, the count, and the last reason. A
+/// document of a batch of several that failed is marked with a count of `0`
+/// ([`Failures::failed_in_batch`]), so a later run asks it alone ([`Failures::marked`]). The count
+/// is kept per key across text changes; an applied document drops its entry. From
+/// [`DOCUMENT_FAILURE_LIMIT`] on, a run leaves the document out while its text is the one that
+/// last failed ([`Failures::skips`]): a changed text is asked once more alone, and a failure
+/// leaves it out again.
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct Failures {
+    pub format: String,
+    #[serde(default)]
+    pub documents: BTreeMap<String, Failed>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Failed {
+    pub hash: String,
+    pub runs: u32,
+    pub reason: String,
+}
+
+impl Failures {
+    /// The failures file at `path`; a missing one holds none. A key that still holds a
+    /// credential is dropped, as [`SeenState::load`] drops it.
+    pub fn load(path: &Path) -> Result<Self, String> {
+        match std::fs::read(path) {
+            Ok(bytes) => {
+                let mut failures: Self = serde_json::from_slice(&bytes)
+                    .map_err(|e| format!("{}: {e}", path.display()))?;
+                failures
+                    .documents
+                    .retain(|k, _| crate::mask::mask_key(k).1 == 0);
+                Ok(failures)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self {
+                format: FAILURES_FORMAT.into(),
+                documents: BTreeMap::new(),
+            }),
+            Err(e) => Err(format!("cannot read {}: {e}", path.display())),
+        }
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), String> {
+        let text = serde_json::to_string_pretty(self).expect("plain JSON");
+        crate::home::write_atomic(path, text.as_bytes())
+    }
+
+    /// The entry that leaves `doc` out of a run: it failed alone on [`DOCUMENT_FAILURE_LIMIT`] or
+    /// more consecutive runs, the last with the text it has now.
+    pub fn skips(&self, doc: &Document) -> Option<&Failed> {
+        self.documents
+            .get(&doc.key)
+            .filter(|f| f.runs >= DOCUMENT_FAILURE_LIMIT && f.hash == doc_hash(doc))
+    }
+
+    /// Counts one more failure of `doc` alone, for `reason`, with its text now, and answers the
+    /// count: one more than before, whatever text failed before.
+    pub fn failed(&mut self, doc: &Document, reason: &str) -> u32 {
+        let hash = doc_hash(doc);
+        let runs = self
+            .documents
+            .get(&doc.key)
+            .map_or(1, |f| f.runs.saturating_add(1));
+        self.documents.insert(
+            doc.key.clone(),
+            Failed {
+                hash,
+                runs,
+                reason: reason.to_string(),
+            },
+        );
+        runs
+    }
+
+    /// Marks `doc`, of a batch of several documents that failed, for `reason`: a count of `0`,
+    /// unless it already has one.
+    pub fn failed_in_batch(&mut self, doc: &Document, reason: &str) {
+        if self.documents.contains_key(&doc.key) {
+            return;
+        }
+        self.documents.insert(
+            doc.key.clone(),
+            Failed {
+                hash: doc_hash(doc),
+                runs: 0,
+                reason: reason.to_string(),
+            },
+        );
+    }
+
+    /// Whether `doc` failed before, alone or in a batch, with any text: a run asks it alone.
+    pub fn marked(&self, doc: &Document) -> bool {
+        self.documents.contains_key(&doc.key)
+    }
+
+    /// How many consecutive runs `doc` failed alone: `0` when it did not.
+    pub fn runs(&self, doc: &Document) -> u32 {
+        self.documents.get(&doc.key).map_or(0, |f| f.runs)
+    }
+
+    /// Drops the entries of documents the source no longer lists, `listed` being every key it
+    /// lists; answers whether one was dropped.
+    pub fn listed_only(&mut self, listed: &BTreeSet<&str>) -> bool {
+        let before = self.documents.len();
+        self.documents.retain(|k, _| listed.contains(k.as_str()));
+        self.documents.len() != before
+    }
+
+    /// Drops the count of an applied document; answers whether it had one.
+    pub fn applied(&mut self, key: &str) -> bool {
+        self.documents.remove(key).is_some()
     }
 }
 
@@ -617,5 +813,220 @@ mod tests {
             ]
         );
         assert!(rows.iter().all(|r| r.broken_invariant().is_none()));
+    }
+
+    fn timed(key: &str, text: &str, published: Option<&str>) -> Document {
+        Document {
+            published: published.map(str::to_string),
+            ..doc(key, text)
+        }
+    }
+
+    const WINDOW: Window = Window {
+        since_ms: 1_000_000_000_000,
+        until_ms: 1_000_900_000_000,
+    };
+
+    /// `story:window-advances-past-applied`: the window moves to the earliest wanted document left
+    /// unapplied, less the overlap; applied documents, however early, do not hold it.
+    #[test]
+    fn the_pending_window_is_the_earliest_unapplied_record_time_less_the_overlap() {
+        // 2001-09-09T01:46:40Z is 1_000_000_000_000 ms; the two records come a day and two later.
+        let (a, b, c) = (
+            timed("a", "one", Some("2001-09-10T01:46:40Z")),
+            timed("b", "two", Some("2001-09-11T01:46:40Z")),
+            timed("c", "three", Some("2001-09-09T01:50:00Z")),
+        );
+        let backlog = Backlog {
+            complete: true,
+            held_since: None,
+            wanted: [&a, &b, &c].into_iter().map(Wanted::of).collect(),
+        };
+        let mut state = SeenState::default();
+        state.record(&c, 1);
+        assert_eq!(
+            state.pending_after(&backlog, WINDOW),
+            1_000_086_400_000 - OVERLAP_MS,
+            "a, the earliest left unapplied"
+        );
+        state.record(&a, 1);
+        assert_eq!(
+            state.pending_after(&backlog, WINDOW),
+            1_000_172_800_000 - OVERLAP_MS
+        );
+        // c applied earlier with other text is wanted again, and holds the window at its time
+        // less the overlap, which is before the window's start: the start, then.
+        state.record(&timed("c", "older", None), 1);
+        assert_eq!(state.pending_after(&backlog, WINDOW), WINDOW.since_ms);
+    }
+
+    /// The window keeps its start when records were left unread, when a document left unapplied
+    /// has no readable time, and when no wanted document is left unapplied.
+    #[test]
+    fn the_pending_window_keeps_its_start_when_it_cannot_tell() {
+        let a = timed("a", "one", Some("2001-09-10T01:46:40Z"));
+        let untimed = timed("u", "two", Some("last week"));
+        let state = SeenState::default();
+        let unread = Backlog {
+            complete: false,
+            held_since: None,
+            wanted: vec![Wanted::of(&a)],
+        };
+        assert_eq!(state.pending_after(&unread, WINDOW), WINDOW.since_ms);
+        let unreadable = Backlog {
+            complete: true,
+            held_since: None,
+            wanted: vec![Wanted::of(&a), Wanted::of(&untimed)],
+        };
+        assert_eq!(state.pending_after(&unreadable, WINDOW), WINDOW.since_ms);
+        assert_eq!(
+            state.pending_after(&Backlog::default(), WINDOW),
+            WINDOW.since_ms
+        );
+        let none_left = Backlog {
+            complete: true,
+            held_since: None,
+            wanted: vec![],
+        };
+        assert_eq!(state.pending_after(&none_left, WINDOW), WINDOW.since_ms);
+        // A record time after the window's end moves it no further than the end.
+        let late = timed("l", "three", Some("2030-01-01"));
+        let ahead = Backlog {
+            complete: true,
+            held_since: None,
+            wanted: vec![Wanted::of(&late)],
+        };
+        assert_eq!(state.pending_after(&ahead, WINDOW), WINDOW.until_ms);
+    }
+
+    /// A change the run held back by `refresh_after_days` keeps the window no later than its
+    /// `held_since`, so a run that fails before it records `held_since` leaves the change ahead.
+    #[test]
+    fn the_pending_window_is_never_after_a_change_the_run_held_back() {
+        let a = timed("a", "one", Some("2001-09-11T01:46:40Z"));
+        let held = WINDOW.since_ms + 3_600_000;
+        let backlog = Backlog {
+            complete: true,
+            held_since: Some(held),
+            wanted: vec![Wanted::of(&a)],
+        };
+        let state = SeenState::default();
+        assert_eq!(state.pending_after(&backlog, WINDOW), held);
+        let earlier = Backlog {
+            held_since: Some(WINDOW.since_ms - 1),
+            ..backlog.clone()
+        };
+        assert_eq!(state.pending_after(&earlier, WINDOW), WINDOW.since_ms - 1);
+        let later = Backlog {
+            held_since: Some(WINDOW.until_ms),
+            ..backlog
+        };
+        assert_eq!(
+            state.pending_after(&later, WINDOW),
+            1_000_172_800_000 - OVERLAP_MS
+        );
+    }
+
+    /// `story:poison-document-skipped`: a document is skipped from its third consecutive failure
+    /// alone while its text is the one that last failed; a changed text is asked once more and
+    /// keeps the count; an applied document drops it.
+    #[test]
+    fn a_document_is_skipped_from_its_limit_th_failure_with_the_same_text() {
+        let x = doc("https://example.org/x", "poison");
+        let mut failures = Failures::default();
+        for n in 1..DOCUMENT_FAILURE_LIMIT {
+            assert_eq!(failures.failed(&x, "refused"), n);
+            assert!(failures.skips(&x).is_none());
+        }
+        assert_eq!(failures.failed(&x, "refused again"), DOCUMENT_FAILURE_LIMIT);
+        let failed = failures.skips(&x).expect("skipped at the limit");
+        assert_eq!(
+            (failed.runs, failed.reason.as_str()),
+            (DOCUMENT_FAILURE_LIMIT, "refused again")
+        );
+        let changed = doc("https://example.org/x", "poison, edited");
+        assert!(
+            failures.skips(&changed).is_none(),
+            "a changed text is asked"
+        );
+        assert!(failures.marked(&changed), "alone");
+        assert_eq!(
+            failures.failed(&changed, "refused"),
+            DOCUMENT_FAILURE_LIMIT + 1
+        );
+        assert!(failures.skips(&changed).is_some(), "and left out again");
+        assert!(
+            failures.skips(&x).is_none(),
+            "the text that failed is now the changed one"
+        );
+        assert!(failures.applied(&changed.key));
+        assert!(!failures.applied(&changed.key));
+        assert!(failures.documents.is_empty());
+    }
+
+    /// A document of a failed batch of several is marked with no count; a mark keeps a count the
+    /// document already has, whatever its text, and the next failure alone counts one.
+    #[test]
+    fn a_document_of_a_failed_batch_is_marked_and_keeps_its_count() {
+        let x = doc("https://example.org/x", "poison");
+        let mut failures = Failures::default();
+        assert!(!failures.marked(&x));
+        failures.failed_in_batch(&x, "batch refused");
+        assert!(failures.marked(&x));
+        assert_eq!(failures.documents[&x.key].runs, 0);
+        assert_eq!(failures.failed(&x, "refused"), 1);
+        assert_eq!(failures.failed(&x, "refused"), 2);
+        failures.failed_in_batch(&x, "batch refused");
+        assert_eq!(failures.documents[&x.key].runs, 2);
+        let changed = doc("https://example.org/x", "poison, edited");
+        failures.failed_in_batch(&changed, "batch refused");
+        assert_eq!(failures.documents[&x.key].runs, 2);
+        assert!(failures.marked(&changed) && failures.marked(&x));
+        assert_eq!(failures.runs(&changed), 2);
+        assert_eq!(failures.runs(&doc("https://example.org/y", "fine")), 0);
+    }
+
+    /// With the source's full listing, the entries of documents it no longer lists are dropped.
+    #[test]
+    fn entries_of_documents_no_longer_listed_are_dropped() {
+        let mut failures = Failures::default();
+        failures.failed(&doc("https://example.org/x", "poison"), "refused");
+        failures.failed_in_batch(&doc("https://example.org/y", "fine"), "refused");
+        let listed = BTreeSet::from(["https://example.org/x", "https://example.org/y"]);
+        assert!(!failures.listed_only(&listed));
+        assert!(failures.listed_only(&BTreeSet::from(["https://example.org/y"])));
+        assert_eq!(
+            failures.documents.keys().collect::<Vec<_>>(),
+            ["https://example.org/y"]
+        );
+    }
+
+    /// The failures file lives beside `state/`, not in it; a missing one holds none, and a key
+    /// that still holds a credential is dropped on load.
+    #[test]
+    fn the_failures_file_lives_outside_state_and_drops_credential_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = failures_path(dir.path(), "news");
+        assert_eq!(path, dir.path().join("failures/news.json"));
+        let empty = Failures::load(&path).unwrap();
+        assert_eq!(empty.format, FAILURES_FORMAT);
+        assert!(empty.documents.is_empty());
+
+        let token = format!("Zr4{}", "p0".repeat(8));
+        let mut failures = Failures::load(&path).unwrap();
+        failures.failed(&doc("https://example.org/x", "poison"), "refused");
+        failures.failed(
+            &doc(
+                &format!("https://example.org/y?access_token={token}"),
+                "poison",
+            ),
+            "refused",
+        );
+        failures.save(&path).unwrap();
+        let loaded = Failures::load(&path).unwrap();
+        assert_eq!(
+            loaded.documents.keys().collect::<Vec<_>>(),
+            ["https://example.org/x"]
+        );
     }
 }

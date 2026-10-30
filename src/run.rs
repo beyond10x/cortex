@@ -18,7 +18,7 @@ use crate::schedule::Systemd;
 use crate::snapshot::{self, BeforeApply, RestoreError};
 use crate::sources::{self, FetchError, Window};
 use crate::spend;
-use crate::state::{text_hash, SeenState};
+use crate::state::{text_hash, Backlog, Failures, SeenState, Wanted};
 use crate::structured;
 
 pub struct Tools {
@@ -89,9 +89,14 @@ pub struct Report {
     /// Documents the model was shown cut at the policy's `max_chars_per_document`.
     pub truncated: usize,
     /// Parents left out without holding the window: their child call failed on
-    /// [`sources::CHILD_FAILURE_LIMIT`] or more consecutive runs; and structured records refused
-    /// because their mapped values alone are over EKR's evidence bound.
+    /// [`sources::CHILD_FAILURE_LIMIT`] or more consecutive runs; structured records refused
+    /// because their mapped values alone are over EKR's evidence bound; and documents whose
+    /// extraction failed with the document alone on [`sources::DOCUMENT_FAILURE_LIMIT`] or more
+    /// consecutive runs, each with its count and the last reason ([`Failures`]).
     pub skipped: Vec<String>,
+    /// What the run wanted of its fetch, for the window it leaves ([`SeenState::pending_after`]):
+    /// a run that failed leaves its window by it too ([`run`]).
+    pub backlog: Backlog,
     /// Applied documents a part EKR rejected belongs to, each with EKR's refusal, and structured
     /// records refused before their batch because they meet store nodes of more than one type
     /// (`store_lookup: AnyType`), each with that refusal.
@@ -195,6 +200,7 @@ impl Default for Report {
             stopped: None,
             truncated: 0,
             skipped: Vec::new(),
+            backlog: Backlog::default(),
             rejected: Vec::new(),
             unconverted: Vec::new(),
             superseded: 0,
@@ -479,15 +485,13 @@ pub fn run(
         )
     });
     if ran.is_err() {
-        // A failed run reads nothing it can be trusted to have read: the next run's `{since}` is
-        // no later than this one's. The failure is the run's answer; a state that cannot be
-        // written leaves the window as the last run left it.
+        // A failed run leaves its window as a run that stopped does, against the state as it
+        // stands now (put back, when the run was undone): the earliest record time of a document
+        // it wanted and did not apply, less the overlap, when it read every record and each such
+        // time is readable; else this run's `{since}`. The failure is the run's answer; a state
+        // that cannot be written leaves the window as the last run left it.
         if let Ok(mut state) = SeenState::load(&seen_path) {
-            state.pending_since = Some(
-                state
-                    .pending_since
-                    .map_or(window.since_ms, |p| p.min(window.since_ms)),
-            );
+            state.pending_since = Some(state.pending_after(&partial.backlog, window));
             let _ = state.save(&seen_path);
         }
     }
@@ -555,7 +559,9 @@ fn seed_documents(layout: &Layout, tools: &Tools, undoable: bool) -> Result<Repo
 /// source's state as the start of its last successful run once every document the run wanted is
 /// applied and every record was read: a run that stopped early, left records unread (a
 /// `max_pages`, an empty page that named a next one, a failed child call), or left documents
-/// beyond `max_documents_per_run` keeps its window's start as `pending_since`, so what it did not
+/// beyond `max_documents_per_run` records `pending_since` ([`SeenState::pending_after`]: the
+/// earliest record time of a wanted document it did not apply, less the overlap, when it read
+/// every record and each such time is readable; else its window's start), so what it did not
 /// apply is asked for again. `held_since` is recomputed from the documents this run holds back by
 /// `refresh_after_days`. A windowed run records its window's end as each applied document's
 /// `applied_at`, so a later change to it is inside a window that starts there.
@@ -799,7 +805,7 @@ fn process_in(
     // A document adopted by its key alone is seen with the text fetched now, and not extracted;
     // its hash is written with the rest of the run's state, so a run that is undone puts it back.
     report.hashed = seen.hash_unhashed(&docs);
-    let wanted = docs
+    let mut wanted = docs
         .iter()
         .filter(|d| seen.wants(d, started, policy.refresh_after_days))
         .count();
@@ -834,6 +840,47 @@ fn process_in(
             .collect();
         return Ok(std::mem::take(report));
     }
+    // A document whose text failed with it alone in its request on
+    // `DOCUMENT_FAILURE_LIMIT` consecutive runs is left out until its text changes: named in
+    // `skipped` with its count and reason, and not wanted, so it holds no window. The counts live
+    // outside `state/`, so a run that is undone does not reset them.
+    let failures_path = crate::state::failures_path(&layout.dir, label);
+    let mut failures = Failures::load(&failures_path).map_err(Failure::Fetch)?;
+    // A run that read the source's whole listing (no window, nothing unread) drops the counts of
+    // documents the source no longer lists.
+    if window.is_none() && fetched.unread.is_empty() {
+        let keys: BTreeSet<&str> = docs.iter().map(|d| d.key.as_str()).collect();
+        if failures.listed_only(&keys) {
+            failures.save(&failures_path).map_err(Failure::Apply)?;
+        }
+    }
+    let refresh = policy.refresh_after_days;
+    let docs: Vec<_> = docs
+        .into_iter()
+        .filter(|d| {
+            let Some(failed) = failures
+                .skips(d)
+                .filter(|_| seen.wants(d, started, refresh))
+            else {
+                return true;
+            };
+            report.skipped.push(masked_key(
+                redactor.as_ref(),
+                &skipped_after_failures(&d.key, failed.runs, &failed.reason),
+            ));
+            wanted = wanted.saturating_sub(1);
+            false
+        })
+        .collect();
+    report.backlog = Backlog {
+        complete: fetched.unread.is_empty(),
+        wanted: docs
+            .iter()
+            .filter(|d| seen.wants(d, started, refresh))
+            .map(Wanted::of)
+            .collect(),
+        held_since,
+    };
     let selected = seen.select(
         docs,
         started,
@@ -1019,6 +1066,23 @@ fn process_in(
     // Why the run ended `model-unavailable`, when the model could not be reached.
     let mut unreachable: Option<(extract::Unavailable, String)> = None;
     while let Some((batch, depth)) = queue.pop_front() {
+        // A batch that holds a document of a batch that failed before is not asked whole again:
+        // its other documents are asked together first, then each such document alone, those
+        // that failed alone on fewer runs first. So a document that fails every time is counted
+        // and stops no other, and a failing call that spends the run's budget still leaves the
+        // next run one document further.
+        if batch.len() > 1 && batch.iter().any(|i| failures.marked(&i.doc)) {
+            let (mut marked, rest): (Vec<_>, Vec<_>) =
+                batch.into_iter().partition(|i| failures.marked(&i.doc));
+            marked.sort_by_key(|i| failures.runs(&i.doc));
+            for issued in marked.into_iter().rev() {
+                queue.push_front((vec![issued], depth));
+            }
+            if !rest.is_empty() {
+                queue.push_front((rest, depth));
+            }
+            continue;
+        }
         stop_point(&format!("before batch {n}"))?;
         // Behind a gateway no dollar amount bounds the call, and none is passed to `claude`.
         let remaining = match budget {
@@ -1204,6 +1268,56 @@ fn process_in(
                 ));
                 break;
             }
+            // The model answered that it failed on a batch of several documents, none of which
+            // failed before: its documents are marked, so a later run asks each alone, and the
+            // run stops at it as at any failed batch. Only an answer marks or counts: an error
+            // answer that cost nothing came before any model was asked (a sign-in or a usage
+            // limit), and a call that timed out, crashed or left no JSON says nothing of the
+            // documents, as an unreachable model does not.
+            Err(refused) if refused.model_failed_on_request() && batch.len() > 1 => {
+                let reason = masked_key(redactor.as_ref(), &refused.message);
+                for issued in &batch {
+                    failures.failed_in_batch(&issued.doc, &reason);
+                }
+                failures.save(&failures_path).map_err(Failure::Apply)?;
+                if report.documents_applied == 0 {
+                    return Err(Failure::Extract(refused.message));
+                }
+                report.stopped = Some(refused.message);
+                break;
+            }
+            // A document that failed alone is counted, outside `state/`; from its
+            // `DOCUMENT_FAILURE_LIMIT`th consecutive run on it is skipped, holds no window, and
+            // the batches after it run. Below that, the run stops at it, as at any failed batch.
+            Err(refused) if refused.model_failed_on_request() => {
+                let doc = &batch[0].doc;
+                let reason = masked_key(redactor.as_ref(), &refused.message);
+                let runs = failures.failed(doc, &reason);
+                failures.save(&failures_path).map_err(Failure::Apply)?;
+                if runs >= sources::DOCUMENT_FAILURE_LIMIT {
+                    report.skipped.push(masked_key(
+                        redactor.as_ref(),
+                        &skipped_after_failures(&doc.key, runs, &reason),
+                    ));
+                    wanted = wanted.saturating_sub(1);
+                    report.backlog.wanted.retain(|w| w.key != doc.key);
+                    continue;
+                }
+                let why = masked_key(
+                    redactor.as_ref(),
+                    &format!(
+                        "{reason}; {} failed alone on {runs} consecutive run(s), and from the \
+                         {}th it is skipped until its text changes",
+                        doc.key,
+                        sources::DOCUMENT_FAILURE_LIMIT
+                    ),
+                );
+                if report.documents_applied == 0 {
+                    return Err(Failure::Extract(why));
+                }
+                report.stopped = Some(why);
+                break;
+            }
             Err(refused) if report.documents_applied == 0 => {
                 return Err(Failure::Extract(refused.message))
             }
@@ -1319,6 +1433,8 @@ fn process_in(
         for (id, refusals) in rejected_again {
             rejected.entry(id).or_default().extend(refusals);
         }
+        // An applied document's failure count, if it had one, ends.
+        let mut recovered = false;
         for issued in &batch {
             if let Some(refusals) = rejected.get(&issued.id) {
                 report
@@ -1329,7 +1445,11 @@ fn process_in(
                 continue;
             }
             seen.record(&issued.doc, applied_at);
+            recovered |= failures.applied(&issued.doc.key);
             report.documents_applied += 1;
+        }
+        if recovered {
+            failures.save(&failures_path).map_err(Failure::Apply)?;
         }
         for (ty, name) in extract::entity_names(&restored) {
             let names = entities.entry(ty).or_default();
@@ -2414,9 +2534,11 @@ fn unread(report: &mut Report, unread: &[String], redactor: Option<&Redactor>) {
 }
 
 /// Records what a windowed run leaves for the next: its window's end as the start of the last
-/// successful run when it applied every one of the `wanted` documents and read every record, its
-/// window's start as `pending_since` when it did not; `held_since` as this run computed it; and
-/// the child call failure counts.
+/// successful run when it applied every one of the `wanted` documents and read every record; when
+/// it did not, `pending_since` by [`SeenState::pending_after`] (the earliest record time of a
+/// wanted document it did not apply, less the overlap, when every record was read and each such
+/// time is readable; else its window's start); `held_since` as this run computed it; and the
+/// child call failure counts.
 fn finish(
     seen: &mut SeenState,
     path: &std::path::Path,
@@ -2435,12 +2557,18 @@ fn finish(
         seen.last_success_started_at = Some(window.until_ms);
         seen.pending_since = None;
     } else {
-        seen.pending_since = Some(
-            seen.pending_since
-                .map_or(window.since_ms, |p| p.min(window.since_ms)),
-        );
+        seen.pending_since = Some(seen.pending_after(&report.backlog, window));
     }
     seen.save(path).map_err(Failure::Apply)
+}
+
+/// The `skipped` line of a document whose extraction failed with it alone on `runs` consecutive
+/// runs, the last for `reason`.
+fn skipped_after_failures(key: &str, runs: u32, reason: &str) -> String {
+    format!(
+        "{key}: extraction failed with the document alone on {runs} consecutive runs ({reason}); \
+         skipped until its text changes"
+    )
 }
 
 fn log(layout: &Layout, label: &str, report: &Report, started: i64) {

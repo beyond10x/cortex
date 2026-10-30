@@ -1740,6 +1740,35 @@ commands:
       # effect that creates or updates one record per element of a collection (`instances:` is
       # refused on `creates:`, `affects:` only updates), so the per-source state file holds it and
       # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.
+      # UNMAPPED: a batch of several documents the model answered it failed on (an error answer
+      # that cost more than zero and is not unfit for its window, or an answer with no structured
+      # output; not `model-unavailable`, not a timeout, crash or call that left no JSON answer,
+      # and not an error answer that cost zero, which came before any model was asked) ends the
+      # run as any failed batch does and marks its documents, kept per key in
+      # `failures/<source>.json` beside `state/`, so a run that is undone keeps them. A later run
+      # does not ask a batch that holds a marked document whole: its other documents together
+      # first, then each marked document alone, those with the lowest count first. A document the
+      # model answers it failed on alone adds one to its count of consecutive failed runs, kept
+      # per key with the hash of the text and the last reason; an applied document drops its
+      # count, and a run that read the source's whole listing (no window, nothing unread) drops
+      # the counts of documents the source no longer lists. Below 3 the run stops at it
+      # (`extraction-failed` when nothing was applied, else `ran` with `stopped` naming it and its
+      # count). From 3 on, while its text is the one that last failed, the document is skipped:
+      # named in the run's `skipped` with its count and reason, not sent to the model, not marked
+      # seen, wanted no longer for the run's success or its window, and the batches after it run.
+      # A changed text keeps the count and is asked once more alone; a failure skips it again.
+      # ESS has no per-element record effect (beyond10x/ess#459); src/state.rs, src/extract.rs
+      # and src/run.rs hold it and tests/poison_document.rs tests it.
+      # UNMAPPED: the window a run leaves for the next. A run that applied every document it
+      # wanted and read every record records its window's end as `last_success_started_at`. Any
+      # other run, `ran` with `stopped` or a failure, sets `pending_since`, the next run's
+      # `{since}` until one succeeds: when the fetch read every record and every wanted document
+      # left unapplied has a readable record time (`time`), the earliest of those times less 5
+      # minutes, between the run's `{since}` and `{until}`; else the run's `{since}`; and never
+      # after the `held_since` the run computed, so a run that fails while it holds back a change
+      # by `refresh_after_days` leaves the change in the next window. A document skipped after 3
+      # failures is not wanted. ESS models no window over a source's records; src/state.rs, src/sources.rs
+      # and src/run.rs hold it and tests/connectors_walks.rs tests it.
       # UNMAPPED: after every outcome that names a source, the instance's `monitoring` reports it:
       # `metrics.prom` is rewritten with the source's run counted under its outcome, its duration,
       # and for `ran`, or any outcome reached after a batch was applied, its documents and model

@@ -30,6 +30,7 @@ run of the source writes it again, with its counts starting from zero.
 | `instances/<name>/meta.json` | the viewer's port and the directory the spec was created from |
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
 | `instances/<name>/state/entities.json` | entity names from earlier runs, offered to the model so it reuses them |
+| `instances/<name>/failures/<source>.json` | documents whose extraction failed (`cortex.failures/1`): each key's text hash, its consecutive runs failed with the document alone (`0` for one marked by a failed batch of several) and the last reason; outside `state/`, so undoing a run keeps it (see [What one run does](#what-one-run-does)) |
 | `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report, or claude's error text (`claude/error.txt`) |
 | `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
@@ -187,7 +188,9 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    of these, or lies before 1970 or after the run's start, and a document with no time, are
    observed at the run's start. EKR dates each fact from the earliest observed time of the
    evidence it cites, so a fact is valid from when its source said it. Which documents a run
-   keeps, and its window, still go by the run's own times.
+   keeps, and its window, still go by the run's own times, except that a run that leaves wanted
+   documents unapplied moves its window to the earliest of their record times (see
+   [the spec file](./spec-file.md#kind-connectors)).
 5. **Extract** in batches of up to `model.batch_chars` characters (UTF-8 bytes), 60,000 unless the spec gives a
    size or a gateway's window sets one (see [The batch size](./spec-file.md#the-batch-size)); a
    batch too long for the model's window is split and asked again. Each batch is one `claude -p` call that
@@ -275,9 +278,28 @@ the UTC day reaches `model.daily_ceiling_usd` (see
 calls have used `model.budget_tokens`, when the instance's tokens of the UTC day reach
 `model.daily_ceiling_tokens`, or when an answer reported no `usage` or a count in it below 0, so
 its tokens could not be counted (see [the spec file](./spec-file.md#limits-in-tokens)). Each stop is checked before a
-batch, keeps the batches before it applied, and names the limit in `stopped`. When a batch fails after an earlier
-one was applied, the run ends as `ran` with `stopped` set; when the first batch fails, nothing was
-applied and the run fails.
+batch, keeps the batches before it applied, and names the limit in `stopped`.
+
+When the model answers that it failed on a batch of several documents (an error answer, or an
+answer with no structured output), the run stops there as at any failed batch (after one call),
+and the batch's documents are marked. A later run does not ask that batch whole again: it asks
+its unmarked documents together, then each marked document alone, those that failed alone fewer
+times first, so one document that fails every time does not stop the others, and a failing call
+that spends the run's `budget_usd` still leaves the next run a document further. Only an answer
+marks or counts a document: an error answer that cost nothing came before any model was asked (a
+sign-in or a usage limit), and a call that timed out, crashed or left no JSON answer says nothing
+about the documents; neither marks nor counts one. A document that fails alone is counted in
+`failures/<source>.json` in the instance directory, beside `state/` and not in it, so a run its
+gate undoes keeps the count. Below 3 consecutive failures the run stops at that document: when an
+earlier document was applied, the run ends as `ran` with `stopped` set, naming the document and its
+count; when none was, nothing was applied and the run fails as `extraction-failed`. From the third
+consecutive failure on, while its text is the one that last failed, the document is skipped: it
+is named in `skipped` (`<key>: extraction failed with the document alone on 3 consecutive runs
+(<reason>); skipped until its text changes`), in the run's result and in `cortex.log`, it is not
+sent to the model, it holds no window, and the batches after it run. A changed text keeps the
+count and is asked once more alone: applied, it drops the count; failed, it is skipped again. A
+run that read the source's whole listing (no window, nothing left unread) drops the counts of
+documents the source no longer lists.
 
 ### Counting what a run would extract
 

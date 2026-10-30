@@ -94,11 +94,13 @@ pub struct Window {
 }
 
 impl Window {
-    /// The window of a run that starts at `start_ms`. It reaches back [`OVERLAP_MS`] before the start
-    /// of the source's last successful run, or, before the first, `refresh_after_days` before
-    /// `start_ms`; and never later than `held_since_ms`, which covers every change the last run
-    /// held back, or `pending_since_ms`, the `{since}` of a run since the last successful one that
-    /// did not succeed.
+    /// The window of a run that starts at `start_ms`. It starts at `pending_since_ms`, which a run
+    /// since the last successful one that did not succeed left (`SeenState::pending_after`: that
+    /// run's `{since}`, or the earliest record time it wanted and did not apply, less the
+    /// overlap, every record before it read and applied); without one, [`OVERLAP_MS`] before the
+    /// start of the source's last successful run, or, before the first, `refresh_after_days`
+    /// before `start_ms`. It is never later than `held_since_ms`, which covers every change the
+    /// last run held back.
     pub fn of_run(
         start_ms: i64,
         last_success_ms: Option<i64>,
@@ -106,15 +108,14 @@ impl Window {
         pending_since_ms: Option<i64>,
         refresh_after_days: i64,
     ) -> Self {
-        let since = last_success_ms.map_or(
-            start_ms.saturating_sub(refresh_after_days.saturating_mul(86_400_000)),
-            |last| last - OVERLAP_MS,
-        );
+        let since = pending_since_ms.unwrap_or_else(|| {
+            last_success_ms.map_or(
+                start_ms.saturating_sub(refresh_after_days.saturating_mul(86_400_000)),
+                |last| last - OVERLAP_MS,
+            )
+        });
         Self {
-            since_ms: [held_since_ms, pending_since_ms]
-                .into_iter()
-                .flatten()
-                .fold(since, i64::min),
+            since_ms: held_since_ms.into_iter().fold(since, i64::min),
             until_ms: start_ms,
         }
     }
@@ -446,6 +447,11 @@ pub struct LinkFailure {
 /// Consecutive runs a parent's child call may fail and still hold the window; from this many on,
 /// the parent is skipped.
 pub const CHILD_FAILURE_LIMIT: u32 = 3;
+
+/// Consecutive runs a document's extraction may fail with the document alone in its request and
+/// still be asked again; from this many on, it is skipped until its text changes
+/// (`crate::state::Failures`).
+pub const DOCUMENT_FAILURE_LIMIT: u32 = 3;
 
 /// The documents of one source. `window` fills `{since}` and `{until}` in a `connectors`
 /// source's inputs, and `child_failures` counts the consecutive runs each parent's child call
@@ -1760,6 +1766,14 @@ mod tests {
         assert_eq!((held.since_ms, held.until_ms), (100, 1_000_000));
         let pending = Window::of_run(1_000_000, None, Some(500), Some(200), 0);
         assert_eq!(pending.since_ms, 200);
+        // A window a run moved past what it applied starts there, after the last successful run's
+        // start or `refresh_after_days` back; a held change still reaches it back.
+        let advanced = Window::of_run(1_000_000, Some(400_000), None, Some(700_000), 7);
+        assert_eq!(advanced.since_ms, 700_000);
+        let before_a_success = Window::of_run(1_000_000_000, None, None, Some(900_000_000), 3);
+        assert_eq!(before_a_success.since_ms, 900_000_000);
+        let held = Window::of_run(1_000_000, Some(400_000), Some(600_000), Some(700_000), 7);
+        assert_eq!(held.since_ms, 600_000);
     }
 }
 

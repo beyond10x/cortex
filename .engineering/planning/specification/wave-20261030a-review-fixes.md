@@ -33,7 +33,7 @@ relations:
 - specifies: story:window-relative-placeholders
 - specifies: story:runs-retention
 - specifies: story:small-robustness
-revision: 9
+revision: 10
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 3}
@@ -74,7 +74,7 @@ its stage opens, so it starts from every unit merged before it.
 | ask | `ask-outcome-truthful`, `ask-service-bounds`, `ask-error-text` | w18a | merged |
 | redact | `redaction-patterns-hold`, `mask-quoted-credentials` | w18a | merged |
 | outcome | `update-refuses-rekey`, `schema-apply-outcome-unknown` | w18a | implementing |
-| cli | `unit-names-unique`, `spec-integer-bounds`, `durable-home-writes` | w18a | implementing |
+| cli | `unit-names-unique`, `spec-integer-bounds`, `durable-home-writes` | w18a | merged |
 | askio | `ask-records-deadline`, `eval-proxy-bounds` | ask | implementing |
 | fail | `poison-document-skipped`, `window-advances-past-applied` | cost | implementing |
 | shapes | `structured-children-follow-rule`, `record-key-template`, `child-text-and-filter` | conn, outcome | planned |
