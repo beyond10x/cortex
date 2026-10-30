@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "3cb764fa6058c327300de7d63b53b82b3ed86189c61ff97550848ad850d64bcf",
-    "contract_digest": "5daf559cd61a381fbf6ce9233bce2e7d477c4713ee671105b36029ab93dc414a",
+    "spec_digest": "427380fdb0fd63ec80516983202c1bf3e63d3ab0984514104cfc2ab4ee1c4aa4",
+    "contract_digest": "19b1d7e629d64c70fa03c2817003c7027a2ab9b6e646533c2127d2a273409b83",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
@@ -288,6 +288,257 @@
         {
           "kind": "event",
           "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.ask.Asker"
+        }
+      ]
+    },
+    "cortex.ask.Ask/outcome/busy": {
+      "purpose": "`cortex.ask.Ask` answers `busy` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.ask.Ask",
+            "outcome": "busy"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.ask.Ask",
+          "actor": "cortex.ask.Asker",
+          "input": {
+            "identity": {
+              "kind": "literal",
+              "value": "identity"
+            },
+            "question": {
+              "kind": "literal",
+              "value": "question"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.ask.Ask",
+            "outcome": "busy"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.ask.Busy"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.AnswerRecorded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Purged"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.ReviewClosed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.ReviewOpened"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Voted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalCaseAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "command",
+          "name": "cortex.ask.Ask"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.ask.Ask",
+            "outcome": "busy"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.AnswerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Purged"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.ReviewClosed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.ReviewOpened"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Voted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalCaseAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.ask.Busy"
         },
         {
           "kind": "actor",
@@ -2093,6 +2344,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -2100,6 +2352,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -2647,6 +2900,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -2654,6 +2908,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -3802,6 +4057,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -3809,6 +4065,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -4222,6 +4479,7 @@
                     "max_result_bytes": 2.0,
                     "max_seconds": 2.0,
                     "max_steps": 2.0,
+                    "max_tool_calls": 2.0,
                     "per_identity_per_minute": 2.0
                   },
                   "link_templates": {
@@ -4229,6 +4487,7 @@
                     "node": "spec.ask.link_templates.node-1"
                   },
                   "listen": "spec.ask.listen-1",
+                  "max_in_flight": 2.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file-1",
                     "connection": {
@@ -4492,6 +4751,7 @@
                     "max_result_bytes": 3.0,
                     "max_seconds": 3.0,
                     "max_steps": 3.0,
+                    "max_tool_calls": 3.0,
                     "per_identity_per_minute": 3.0
                   },
                   "link_templates": {
@@ -4499,6 +4759,7 @@
                     "node": "spec.ask.link_templates.node-2"
                   },
                   "listen": "spec.ask.listen-2",
+                  "max_in_flight": 3.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file-2",
                     "connection": {
@@ -5223,6 +5484,7 @@
                     "max_result_bytes": 1048595.0,
                     "max_seconds": 1048595.0,
                     "max_steps": 1048595.0,
+                    "max_tool_calls": 1048595.0,
                     "per_identity_per_minute": 1048595.0
                   },
                   "link_templates": {
@@ -5230,6 +5492,7 @@
                     "node": "spec.ask.link_templates.node-1048594"
                   },
                   "listen": "spec.ask.listen-1048594",
+                  "max_in_flight": 1048595.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file-1048594",
                     "connection": {
@@ -5842,6 +6105,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -5849,6 +6113,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -6233,6 +6498,7 @@
                     "max_result_bytes": 2.0,
                     "max_seconds": 2.0,
                     "max_steps": 2.0,
+                    "max_tool_calls": 2.0,
                     "per_identity_per_minute": 2.0
                   },
                   "link_templates": {
@@ -6240,6 +6506,7 @@
                     "node": "spec.ask.link_templates.node-1"
                   },
                   "listen": "spec.ask.listen-1",
+                  "max_in_flight": 2.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file-1",
                     "connection": {
@@ -6960,6 +7227,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -6967,6 +7235,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -7459,6 +7728,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -7466,6 +7736,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -7879,6 +8150,7 @@
                     "max_result_bytes": 2.0,
                     "max_seconds": 2.0,
                     "max_steps": 2.0,
+                    "max_tool_calls": 2.0,
                     "per_identity_per_minute": 2.0
                   },
                   "link_templates": {
@@ -7886,6 +8158,7 @@
                     "node": "spec.ask.link_templates.node-1"
                   },
                   "listen": "spec.ask.listen-1",
+                  "max_in_flight": 2.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file-1",
                     "connection": {
@@ -8149,6 +8422,7 @@
                     "max_result_bytes": 3.0,
                     "max_seconds": 3.0,
                     "max_steps": 3.0,
+                    "max_tool_calls": 3.0,
                     "per_identity_per_minute": 3.0
                   },
                   "link_templates": {
@@ -8156,6 +8430,7 @@
                     "node": "spec.ask.link_templates.node-2"
                   },
                   "listen": "spec.ask.listen-2",
+                  "max_in_flight": 3.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file-2",
                     "connection": {
@@ -8617,6 +8892,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -8624,6 +8900,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -10685,6 +10962,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -10692,6 +10970,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -11176,6 +11455,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -11183,6 +11463,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -11827,6 +12108,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -11834,6 +12116,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -12416,6 +12699,7 @@
                     "max_result_bytes": 1048595.0,
                     "max_seconds": 1048595.0,
                     "max_steps": 1048595.0,
+                    "max_tool_calls": 1048595.0,
                     "per_identity_per_minute": 1048595.0
                   },
                   "link_templates": {
@@ -12423,6 +12707,7 @@
                     "node": "spec.ask.link_templates.node-1048594"
                   },
                   "listen": "spec.ask.listen-1048594",
+                  "max_in_flight": 1048595.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file-1048594",
                     "connection": {
@@ -12618,6 +12903,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -12625,6 +12911,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -13012,6 +13299,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -13019,6 +13307,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -13608,6 +13897,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -13615,6 +13905,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -14204,6 +14495,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -14211,6 +14503,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -14793,6 +15086,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -14800,6 +15094,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -16804,6 +17099,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -16811,6 +17107,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -18081,6 +18378,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -18088,6 +18386,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -18666,6 +18965,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -18673,6 +18973,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -19309,6 +19610,7 @@
                     "max_result_bytes": 1048595.0,
                     "max_seconds": 1048595.0,
                     "max_steps": 1048595.0,
+                    "max_tool_calls": 1048595.0,
                     "per_identity_per_minute": 1048595.0
                   },
                   "link_templates": {
@@ -19316,6 +19618,7 @@
                     "node": "spec.ask.link_templates.node-1048594"
                   },
                   "listen": "spec.ask.listen-1048594",
+                  "max_in_flight": 1048595.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file-1048594",
                     "connection": {
@@ -19507,6 +19810,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -19514,6 +19818,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -19753,6 +20058,7 @@
                     "max_result_bytes": 1048596.0,
                     "max_seconds": 1048596.0,
                     "max_steps": 1048596.0,
+                    "max_tool_calls": 1048596.0,
                     "per_identity_per_minute": 1048596.0
                   },
                   "link_templates": {
@@ -19760,6 +20066,7 @@
                     "node": "spec.ask.link_templates.node-1048595"
                   },
                   "listen": "spec.ask.listen-1048595",
+                  "max_in_flight": 1048596.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file-1048595",
                     "connection": {
@@ -19951,6 +20258,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -19958,6 +20266,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -20348,6 +20657,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -20355,6 +20665,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -20991,6 +21302,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -20998,6 +21310,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -21576,6 +21889,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -21583,6 +21897,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -22451,6 +22766,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -22458,6 +22774,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -22948,6 +23265,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -22955,6 +23273,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -23653,6 +23972,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -23660,6 +23980,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -24655,6 +24976,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -24662,6 +24984,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -25680,6 +26003,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -25687,6 +26011,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -26183,6 +26508,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -26190,6 +26516,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -26949,6 +27276,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -26956,6 +27284,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -27528,6 +27857,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -27535,6 +27865,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -29215,6 +29546,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -29222,6 +29554,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -29948,6 +30281,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -29955,6 +30289,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -31420,6 +31755,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -31427,6 +31763,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -31882,6 +32219,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -31889,6 +32227,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -33200,6 +33539,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -33207,6 +33547,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -33746,6 +34087,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -33753,6 +34095,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -34292,6 +34635,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -34299,6 +34643,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -34838,6 +35183,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -34845,6 +35191,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -35520,6 +35867,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -35527,6 +35875,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -36066,6 +36415,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -36073,6 +36423,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -36612,6 +36963,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -36619,6 +36971,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -37219,6 +37572,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -37226,6 +37580,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -37924,6 +38279,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -37931,6 +38287,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -38725,6 +39082,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -38732,6 +39090,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -39356,6 +39715,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -39363,6 +39723,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -39902,6 +40263,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -39909,6 +40271,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -40448,6 +40811,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -40455,6 +40819,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -40709,6 +41074,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -40716,6 +41082,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -41120,6 +41487,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -41127,6 +41495,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -41449,6 +41818,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -41456,6 +41826,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -41835,6 +42206,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -41842,6 +42214,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -42164,6 +42537,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -42171,6 +42545,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -42493,6 +42868,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -42500,6 +42876,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -42822,6 +43199,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -42829,6 +43207,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -43279,6 +43658,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -43286,6 +43666,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -43608,6 +43989,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -43615,6 +43997,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -43937,6 +44320,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -43944,6 +44328,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -44394,6 +44779,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -44401,6 +44787,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -44723,6 +45110,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -44730,6 +45118,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -45066,6 +45455,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -45073,6 +45463,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -45395,6 +45786,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -45402,6 +45794,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -45724,6 +46117,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -45731,6 +46125,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -46418,6 +46813,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -46425,6 +46821,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -46997,6 +47394,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -47004,6 +47402,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -47633,6 +48032,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -47640,6 +48040,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -48257,6 +48658,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -48264,6 +48666,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -48617,6 +49020,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -48624,6 +49028,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -48858,6 +49263,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -48865,6 +49271,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -49043,6 +49450,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -49050,6 +49458,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -49679,6 +50088,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -49686,6 +50096,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -49920,6 +50331,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -49927,6 +50339,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {
@@ -50087,6 +50500,7 @@
                     "max_result_bytes": 2.0,
                     "max_seconds": 2.0,
                     "max_steps": 2.0,
+                    "max_tool_calls": 2.0,
                     "per_identity_per_minute": 2.0
                   },
                   "link_templates": {
@@ -50094,6 +50508,7 @@
                     "node": "spec.ask.link_templates.node-1"
                   },
                   "listen": "spec.ask.listen-1",
+                  "max_in_flight": 2.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file-1",
                     "connection": {
@@ -50712,6 +51127,7 @@
                     "max_result_bytes": 2.0,
                     "max_seconds": 2.0,
                     "max_steps": 2.0,
+                    "max_tool_calls": 2.0,
                     "per_identity_per_minute": 2.0
                   },
                   "link_templates": {
@@ -50719,6 +51135,7 @@
                     "node": "spec.ask.link_templates.node-1"
                   },
                   "listen": "spec.ask.listen-1",
+                  "max_in_flight": 2.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file-1",
                     "connection": {
@@ -50879,6 +51296,7 @@
                     "max_result_bytes": 1.0,
                     "max_seconds": 1.0,
                     "max_steps": 1.0,
+                    "max_tool_calls": 1.0,
                     "per_identity_per_minute": 1.0
                   },
                   "link_templates": {
@@ -50886,6 +51304,7 @@
                     "node": "spec.ask.link_templates.node"
                   },
                   "listen": "spec.ask.listen",
+                  "max_in_flight": 1.0,
                   "records": {
                     "ca_file": "spec.ask.records.ca_file",
                     "connection": {

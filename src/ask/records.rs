@@ -972,9 +972,9 @@ impl Keeper {
                 Some("cut-off".into()),
             ),
             // A refusal before the answer starts is no answer and leaves no record.
-            ma::AskOutcome::Unidentified { .. } | ma::AskOutcome::RateLimited { .. } => {
-                return Ok(())
-            }
+            ma::AskOutcome::Unidentified { .. }
+            | ma::AskOutcome::RateLimited { .. }
+            | ma::AskOutcome::Busy { .. } => return Ok(()),
         };
         let input = ma::RecordAnswer {
             answer_id: ma::AnswerId(asked.answer_id.clone()),

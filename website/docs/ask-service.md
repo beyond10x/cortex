@@ -29,7 +29,8 @@ model:
 ask:
   listen: "127.0.0.1:8088"
   identity_header: x-asker
-  limits: {max_steps: 8, max_result_bytes: 16384, max_seconds: 120, per_identity_per_minute: 10}
+  limits: {max_steps: 8, max_result_bytes: 16384, max_seconds: 120, per_identity_per_minute: 10, max_tool_calls: 16}
+  max_in_flight: 8
   link_templates: {node: "https://view.example/node/{id}", evidence: "https://view.example/evidence/{id}"}
   guidance: Answer in English, in at most five sentences.
   retention_days: 90
@@ -44,6 +45,8 @@ ask:
 | `limits.max_result_bytes` | the most bytes of one tool result the model is shown |
 | `limits.max_seconds` | the most seconds one answer takes, every model and tool call included |
 | `limits.per_identity_per_minute` | the most questions of one identity in a sliding minute |
+| `limits.max_tool_calls` | optional: the most tool calls one step makes (default 16); the calls past it are not made, the model is told so for each, and a second `status` event of the step says how many were not made |
+| `max_in_flight` | optional: the most answers the service works on at once, over every identity (default 8); a question past it answers 429 `busy` at once |
 | `link_templates` | optional: the URL of a cited node or evidence, `{id}` replaced by its percent-encoded id |
 | `guidance` | optional: text added to the service's system prompt |
 | `retention_days` | optional: how many days an answer record is kept, with its votes and review items (default 90) |
@@ -51,7 +54,7 @@ ask:
 | `records` | required on a `postgres` store, refused on a `sqlite` one: the PostgreSQL schema of the answer records ([Records on a PostgreSQL store](#records-on-a-postgresql-store)) |
 
 `cortex ask serve` refuses to start (exit 2, naming the field) a spec with no `ask` section, no
-`model.gateway`, a limit, `retention_days` or `slow_after_ms` of 0 or less, an `identity_header`
+`model.gateway`, a limit, `retention_days`, `slow_after_ms` or `max_in_flight` of 0 or less, an `identity_header`
 that is no header name, or `ask.records` that does not fit the store (see
 [Records on a PostgreSQL store](#records-on-a-postgresql-store)). It then opens its records
 (exit 1 when it cannot) and purges the expired ones. Once bound it prints one line,
@@ -70,7 +73,12 @@ The gateway is spoken to as an OpenAI-compatible endpoint: `POST <base_url>/v1/c
 variable `token_env` names as a bearer token, read when an answer starts. A missing or empty token
 fails the answer with `model-failed`, naming the variable. The reader does not inherit that
 variable, nor any other `ANTHROPIC_*` or `CLAUDE_*` variable: it reads a store and gets no model
-credential. A `max_seconds` above ten years counts as ten years.
+credential. A `max_seconds` above ten years counts as ten years. A gateway answer above 4 MiB is
+not read past that and fails the answer with `model-failed`.
+
+Each answer starts its own reader and kills it when the answer ends; readers are not pooled, so
+no answer inherits a reader another answer left stuck or mid-call. At most `max_in_flight`
+readers run at once.
 
 ## The event contract
 
@@ -80,7 +88,7 @@ the event's name and its `data:` line the event as one JSON object, `{"event": <
 
 | event | fields | when |
 |---|---|---|
-| `status` | `format` (`cortex.ask-events/1`), `step`, `message` | first, then before each model call |
+| `status` | `format` (`cortex.ask-events/1`), `step`, `message` | first, then before each model call, and after a reply whose tool calls were cut to `max_tool_calls` |
 | `tool` | `step`, `name`, `arguments`, `result_bytes`, `truncated`, `failed`, `withheld` | after each tool call the model asked for |
 | `delta` | `text` | a piece of the model's text, in order |
 | `discard` | `step` | withdraws the `delta`s since the last `discard`: text before a tool call, not the answer |
@@ -100,6 +108,7 @@ answer's UUIDv7, the id its record and its votes carry.
 |---|---|---|
 | `unidentified` | 401 | no identity header; no model was asked |
 | `rate-limit` | 429 | the identity's questions of the minute are spent; `retry_after` (also the `Retry-After` header) is the whole seconds until the oldest leaves the window |
+| `busy` | 429 | the service is working on `max_in_flight` answers already; no model was asked and no question of the minute was spent |
 | `bad-request` | 400, or 413 | the body is not JSON with a non-empty `question`, or is above 1 MiB (413), or the question still holds a class `refuse_if_left` names (400); a refused body spends no question of the minute |
 | `step-limit` | 200 | the model still asked for a tool at `max_steps` |
 | `time-limit` | 200 | the answer passed `max_seconds` |
@@ -174,7 +183,8 @@ whatever the instance's
 `redaction` policy; the mask is irreversible.
 
 The record routes need the identity header too (401 without it) and answer JSON; a refusal is
-`{"error": <reason>, "message": <text>}`.
+`{"error": <reason>, "message": <text>}`. A body above 64 KiB is refused with 413
+`bad-request`.
 
 | route | body | answers |
 |---|---|---|

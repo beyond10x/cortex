@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 3cb764fa6058c327300de7d63b53b82b3ed86189c61ff97550848ad850d64bcf
-  contract digest 5daf559cd61a381fbf6ce9233bce2e7d477c4713ee671105b36029ab93dc414a
+  model digest 427380fdb0fd63ec80516983202c1bf3e63d3ab0984514104cfc2ab4ee1c4aa4
+  contract digest 19b1d7e629d64c70fa03c2817003c7027a2ab9b6e646533c2127d2a273409b83
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-254 capabilities: **246 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+255 capabilities: **247 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -203,6 +203,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | event type | `cortex.instance.SourceFetched` |
 | event type | `cortex.instance.SourceRan` |
 | error type | `cortex.ask.AnswerNotFound` |
+| error type | `cortex.ask.Busy` |
 | error type | `cortex.ask.ClientClosed` |
 | error type | `cortex.ask.CutOff` |
 | error type | `cortex.ask.FigureInvalid` |

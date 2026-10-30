@@ -25,7 +25,10 @@ types:
   # `time-limit`. `per_identity_per_minute` is the most questions one identity asks in a minute (a
   # sliding window of 60 seconds); the next answers 429 with an `error` event whose `reason` is
   # `rate-limit` and whose `retry_after` is the whole seconds until the oldest question of the
-  # window leaves it, at least 1. Each is an Integer above 0.
+  # window leaves it, at least 1. `max_tool_calls` is the most tool calls one step makes (absent
+  # means 16): the calls a model asks for past it are not made, the model is given a tool error
+  # for each saying so, and the step's second `status` event says how many were not made. Each is
+  # an Integer above 0.
   # UNMAPPED: the refusal of a limit of 0 or less (the service does not start, exit 2, naming the
   # field) is a check on an Integer the specification has no construct for; `ask::check` holds it
   # and `tests/ask_service.rs` tests it.
@@ -36,6 +39,7 @@ types:
       - {name: max_result_bytes, type: Integer}
       - {name: max_seconds, type: Integer}
       - {name: per_identity_per_minute, type: Integer}
+      - {name: max_tool_calls, type: Optional<Integer>}
 
   # How a citation in an answer becomes a link. The model cites a node as `[node:<id>]` and an
   # evidence as `[evidence:<id>]`; the service replaces each marker in the answer by a Markdown link
@@ -61,12 +65,16 @@ types:
   # votes and review items: the service purges older ones when it starts and every 24 hours after
   # (`cortex.ask.PurgeExpired`); absent means 90. `slow_after_ms` is the latency in milliseconds
   # past which an answer is slow and opens a review item (`cortex.ask.ReviewCause` `slow`); absent
-  # means no answer is slow. Each is an Integer above 0. A `retention_days` too large to count in
+  # means no answer is slow. `max_in_flight` is the most answers the service works on at once,
+  # over every identity (absent means 8): a question past it answers 429 at once with an `error`
+  # event whose `reason` is `busy` (`cortex.ask.Busy`), asks no model and spends no question of
+  # the minute. Each is an Integer above 0. A `retention_days` too large to count in
   # milliseconds before now keeps every record: the purge's `before` stops at the earliest instant
   # a Timestamp writes (0001-01-01T00:00:00Z) and never wraps into the future.
-  # UNMAPPED: the refusal of a `retention_days` or `slow_after_ms` of 0 or less (the service does
-  # not start, exit 2, naming the field) is a check on an Integer the specification has no
-  # construct for; `ask::check` holds it and `tests/answer_records.rs` tests it.
+  # UNMAPPED: the refusal of a `retention_days`, `slow_after_ms` or `max_in_flight` of 0 or less
+  # (the service does not start, exit 2, naming the field) is a check on an Integer the
+  # specification has no construct for; `ask::check` holds it and `tests/answer_records.rs` and
+  # `tests/ask_service.rs` test it.
   # For an instance whose store is `sqlite`, the records live in `ask.sqlite` in the instance
   # directory and `records` is absent. For an instance whose store is `postgres`, they live in a
   # schema of their own, never EKR's, named by `records` (`cortex.ask.PostgresRecords`), which such
@@ -88,6 +96,7 @@ types:
       - {name: retention_days, type: Optional<Integer>}
       - {name: slow_after_ms, type: Optional<Integer>}
       - {name: records, type: Optional<cortex.ask.PostgresRecords>}
+      - {name: max_in_flight, type: Optional<Integer>}
 
   # Where the answer records of an instance on a `postgres` store live: the tables `answers`,
   # `votes`, `reviews` and `schema_version` in the PostgreSQL schema `schema`, which is never the
@@ -156,7 +165,9 @@ types:
     kind: enum
     variants: [voted-down, failed, slow]
 
-  # The first event of every answer, and one per step after it. `format` is the event contract,
+  # The first event of every answer, and one per step after it; a step whose tool calls were cut
+  # to `max_tool_calls` has a second one, after the reply, saying how many were not made. `format`
+  # is the event contract,
   # `cortex.ask-events/1`; `step` the model call about to be made, 0 before the first; `message`
   # a short text for a person.
   - name: cortex.ask.AskStatus
@@ -227,7 +238,7 @@ types:
       - {name: unrestored, type: Integer}
 
   # The last event of an answer that has none. `reason` is one of `unidentified`, `rate-limit`,
-  # `step-limit`, `time-limit`, `model-failed`, `reader-failed`, `cut-off`, `client-closed` and
+  # `busy`, `step-limit`, `time-limit`, `model-failed`, `reader-failed`, `cut-off`, `client-closed` and
   # `bad-request`; `message` says more, for a person; `retry_after` is given with `rate-limit`
   # only, in whole seconds. `client-closed` is the reason an answer is recorded with when its
   # reader left; nobody is left to read its event.
@@ -482,6 +493,13 @@ errors:
       - {name: identity, type: String}
       - {name: retry_after, type: Integer}
 
+  - name: cortex.ask.Busy
+    summary: >-
+      The service is working on `max_in_flight` answers already; it answers 429 at once, asks no
+      model and spends no question of the minute. Ask again later.
+    fields:
+      - {name: max_in_flight, type: Integer}
+
   - name: cortex.ask.LimitReached
     summary: The answer reached the spec's step or time limit before the model answered.
     fields:
@@ -592,6 +610,14 @@ commands:
             identity: input.identity
             retry_after: {generated: true}
         summary: It answers 429 with an `error` event carrying `retry_after`; no model was asked.
+
+      - name: busy
+        external: The service is working on its most answers at once
+        error: cortex.ask.Busy
+        payload:
+          cortex.ask.Busy:
+            max_in_flight: {generated: true}
+        summary: It answers 429 with an `error` event whose `reason` is `busy`; no model was asked.
 
       - name: limit-reached
         external: The model still asks for a tool at the step limit, or the time limit passes

@@ -779,3 +779,48 @@ fn a_close_keeps_the_reviewers_expected_facts_and_nodes() {
         (Some(&[][..]), Some(&[][..]))
     );
 }
+
+/// A vote or a close whose body is above 64 KiB is refused with 413 and a JSON refusal, and
+/// nothing is cast or closed; a body under it still is (`story:ask-service-bounds`, R1-05).
+#[test]
+fn a_vote_or_close_body_above_64_kib_is_refused_with_413() {
+    let world = World::new();
+    let url = gateway(vec![(0, broken_reply())]);
+    let spec = world.spec(&url, "", "");
+    let service = serve(&world, &spec);
+    let (name, _) = service.ask("alice", "Fails?");
+    assert_eq!(name, "error");
+    let id = world.records().answers().unwrap()[0].answer_id.0.clone();
+    let big = "c".repeat(64 * 1024 + 1);
+    let (status, body) = service.call(
+        "POST",
+        &format!("/ask/{id}/vote"),
+        Some("alice"),
+        Some(json!({"value": "down", "comment": big})),
+    );
+    assert_eq!(status, 413, "{body}");
+    assert_eq!(body["error"], "bad-request", "{body}");
+    let review = format!("{id}:failed");
+    let (status, body) = service.call(
+        "POST",
+        &format!("/review/{review}/close"),
+        Some("reviewer"),
+        Some(json!({"reason": big})),
+    );
+    assert_eq!(status, 413, "{body}");
+    assert_eq!(body["error"], "bad-request", "{body}");
+    assert_eq!(
+        causes_of(&service.reviews(), &id),
+        ["failed"],
+        "the refused vote opened nothing and the refused close closed nothing"
+    );
+    let (status, body) = service.vote(&id, "alice", "up");
+    assert_eq!(status, 200, "{body}");
+    let (status, body) = service.call(
+        "POST",
+        &format!("/review/{review}/close"),
+        Some("reviewer"),
+        Some(json!({"reason": "c".repeat(1000)})),
+    );
+    assert_eq!(status, 200, "{body}");
+}

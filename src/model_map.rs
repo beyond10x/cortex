@@ -183,6 +183,10 @@ fn ask_spec(a: &s::CortexAskAskSpec) -> Result<ma::AskSpec, MapError> {
                 &a.limits.per_identity_per_minute,
                 "ask.limits.per_identity_per_minute",
             )?,
+            max_tool_calls: match &a.limits.max_tool_calls {
+                EssPresence::Absent => None,
+                EssPresence::Present(n) => Some(int(n, "ask.limits.max_tool_calls")?),
+            },
         },
         link_templates: match &a.link_templates {
             EssPresence::Absent => None,
@@ -208,6 +212,10 @@ fn ask_spec(a: &s::CortexAskAskSpec) -> Result<ma::AskSpec, MapError> {
                 ca_file: opt(&r.ca_file),
                 connection: connection_ref(&r.connection),
             }),
+        },
+        max_in_flight: match &a.max_in_flight {
+            EssPresence::Absent => None,
+            EssPresence::Present(n) => Some(int(n, "ask.max_in_flight")?),
         },
     })
 }

@@ -11,6 +11,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::body::Bytes;
 use axum::extract::rejection::BytesRejection;
+use axum::extract::DefaultBodyLimit;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::sse::{Event, Sse};
@@ -19,6 +20,7 @@ use axum::routing::{get, post};
 use axum::Router;
 use cortex_model::ask as ma;
 use serde_json::{json, Value};
+use tokio::sync::Semaphore;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_stream::StreamExt;
 
@@ -29,6 +31,8 @@ use super::{answer, final_event, Settings};
 struct Service {
     settings: Settings,
     limiter: Mutex<RateLimiter>,
+    /// One permit per answer in flight, over every identity (`ask.max_in_flight`).
+    in_flight: Arc<Semaphore>,
     keeper: Keeper,
 }
 
@@ -134,6 +138,28 @@ fn bad_request(message: &str) -> Response {
 /// The most bytes of a request body: a question is text, and a body above this is refused.
 const BODY_LIMIT: usize = 1024 * 1024;
 
+/// The most bytes of a body of the record routes (a vote, a close): a body above this is refused
+/// with 413.
+const RECORD_BODY_LIMIT: usize = 64 * 1024;
+
+/// The body of a record route, or its refusal: 413 above [`RECORD_BODY_LIMIT`], 400 when it
+/// cannot be read.
+fn record_body(body: Result<Bytes, BytesRejection>) -> Result<Bytes, Response> {
+    match body {
+        Ok(body) => Ok(body),
+        Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => Err(json_error(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "bad-request",
+            format!("the body is above {RECORD_BODY_LIMIT} bytes"),
+        )),
+        Err(_) => Err(json_error(
+            StatusCode::BAD_REQUEST,
+            "bad-request",
+            "the body cannot be read",
+        )),
+    }
+}
+
 async fn ask(
     State(service): State<Arc<Service>>,
     headers: HeaderMap,
@@ -176,6 +202,18 @@ async fn ask(
     if let Some(why) = super::question_refused(&service.settings, &question) {
         return bad_request(&why);
     }
+    // Past `max_in_flight` answers the question is refused at once, before it spends a question
+    // of the minute. The permit lives as long as the answer's blocking thread.
+    let Ok(permit) = service.in_flight.clone().try_acquire_owned() else {
+        return refusal(
+            StatusCode::TOO_MANY_REQUESTS,
+            final_event(&ma::AskOutcome::Busy {
+                error: ma::Busy {
+                    max_in_flight: service.settings.max_in_flight() as i64,
+                },
+            }),
+        );
+    };
     let admitted = service
         .limiter
         .lock()
@@ -196,6 +234,7 @@ async fn ask(
     let service = service.clone();
     let (started, at_ms) = (Instant::now(), now_ms());
     tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         let answer_id = uuid::Uuid::now_v7().to_string();
         let mut tool_calls = Vec::new();
         let outcome = answer(
@@ -233,10 +272,14 @@ async fn vote(
     State(service): State<Arc<Service>>,
     Path(answer_id): Path<String>,
     headers: HeaderMap,
-    body: Bytes,
+    body: Result<Bytes, BytesRejection>,
 ) -> Response {
     let Some(identity) = identity_of(&service, &headers) else {
         return unidentified(&service);
+    };
+    let body = match record_body(body) {
+        Ok(body) => body,
+        Err(refused) => return refused,
     };
     let Ok(body) = serde_json::from_slice::<Value>(&body) else {
         return json_error(
@@ -342,11 +385,15 @@ async fn close(
     State(service): State<Arc<Service>>,
     Path(review_id): Path<String>,
     headers: HeaderMap,
-    body: Bytes,
+    body: Result<Bytes, BytesRejection>,
 ) -> Response {
     if identity_of(&service, &headers).is_none() {
         return unidentified(&service);
     }
+    let body = match record_body(body) {
+        Ok(body) => body,
+        Err(refused) => return refused,
+    };
     let body = serde_json::from_slice::<Value>(&body).ok();
     let expected = body.as_ref().map(|b| {
         expectations(b, "expect_facts")
@@ -435,9 +482,11 @@ pub fn serve(settings: Settings, keeper: Keeper) -> Result<(), String> {
             .local_addr()
             .map_err(|e| format!("ask.listen: {e}"))?;
         let per_minute = settings.ask.limits.per_identity_per_minute as usize;
+        let in_flight = Arc::new(Semaphore::new(settings.max_in_flight()));
         let service = Arc::new(Service {
             settings,
             limiter: Mutex::new(RateLimiter::new(per_minute)),
+            in_flight,
             keeper,
         });
         let keeper = service.keeper.clone();
@@ -454,12 +503,16 @@ pub fn serve(settings: Settings, keeper: Keeper) -> Result<(), String> {
                 }
             }
         });
+        let record_limit = || DefaultBodyLimit::max(RECORD_BODY_LIMIT);
         let app = Router::new()
             .route("/ask", post(ask))
-            .route("/ask/{answer_id}/vote", post(vote))
-            .route("/review", get(review))
-            .route("/review/{review_id}/close", post(close))
-            .layer(axum::extract::DefaultBodyLimit::max(BODY_LIMIT))
+            .route("/ask/{answer_id}/vote", post(vote).layer(record_limit()))
+            .route("/review", get(review).layer(record_limit()))
+            .route(
+                "/review/{review_id}/close",
+                post(close).layer(record_limit()),
+            )
+            .layer(DefaultBodyLimit::max(BODY_LIMIT))
             .with_state(service);
         println!("{}", json!({"listening": address.to_string()}));
         axum::serve(listener, app)

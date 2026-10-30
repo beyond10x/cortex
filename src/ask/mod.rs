@@ -22,6 +22,7 @@ pub mod serve;
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use cortex_model::ask as ma;
@@ -30,7 +31,7 @@ use serde_json::{json, Value};
 
 use crate::home::Home;
 use crate::instance::Layout;
-use crate::redact::Batch;
+use crate::redact::{Batch, Redactor};
 
 /// The event contract `cortex.ask.AskStatus.format` names.
 pub const EVENTS_FORMAT: &str = "cortex.ask-events/1";
@@ -110,8 +111,10 @@ pub fn check(spec: &m::InstanceSpec) -> Result<&ma::AskSpec, String> {
         }
     }
     for (field, value) in [
+        ("ask.limits.max_tool_calls", limits.max_tool_calls),
         ("ask.retention_days", ask.retention_days),
         ("ask.slow_after_ms", ask.slow_after_ms),
+        ("ask.max_in_flight", ask.max_in_flight),
     ] {
         if let Some(value) = value.filter(|v| *v <= 0) {
             return Err(format!("{field}: {value} is not above 0"));
@@ -192,23 +195,59 @@ impl ReaderCommand {
     }
 }
 
+/// The most tool calls one step makes when the spec names no `ask.limits.max_tool_calls`.
+pub const DEFAULT_MAX_TOOL_CALLS: i64 = 16;
+
+/// The most answers in flight when the spec names no `ask.max_in_flight`.
+pub const DEFAULT_MAX_IN_FLIGHT: i64 = 8;
+
 /// Everything one answer needs, fixed when the service starts.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Settings {
     pub ask: ma::AskSpec,
     pub model: model::Route,
     pub reader: ReaderCommand,
     /// The system prompt: how to use the tools and cite, then the spec's `guidance`.
     pub system: String,
-    /// The instance's `redaction` policy, which [`Settings::of`] checked compiles.
-    pub redaction: Option<m::RedactionPolicy>,
+    /// The instance's `redaction` policy, compiled once by [`Settings::of`]; every answer and
+    /// every question check takes its batch from it.
+    pub redactor: Option<Arc<Redactor>>,
+}
+
+impl std::fmt::Debug for Settings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Settings")
+            .field("ask", &self.ask)
+            .field("model", &self.model)
+            .field("reader", &self.reader)
+            .field("system", &self.system)
+            .field("redactor", &self.redactor.as_ref().map(|_| "compiled"))
+            .finish()
+    }
 }
 
 impl Settings {
+    /// The most tool calls one step makes.
+    pub fn max_tool_calls(&self) -> usize {
+        self.ask
+            .limits
+            .max_tool_calls
+            .unwrap_or(DEFAULT_MAX_TOOL_CALLS)
+            .max(1) as usize
+    }
+
+    /// The most answers in flight at once.
+    pub fn max_in_flight(&self) -> usize {
+        self.ask
+            .max_in_flight
+            .unwrap_or(DEFAULT_MAX_IN_FLIGHT)
+            .clamp(1, tokio::sync::Semaphore::MAX_PERMITS as i64) as usize
+    }
+
     /// The settings of a spec [`check`] accepted.
     pub fn of(home: &Home, spec: &m::InstanceSpec) -> Result<Self, String> {
         let ask = check(spec)?.clone();
-        crate::redact::compile(spec.redaction.as_ref())?;
+        let redactor = crate::redact::compile(spec.redaction.as_ref())?.map(Arc::new);
         let gateway = spec.model.gateway.as_ref().expect("checked");
         let mut system = format!(
             "You answer questions over the knowledge brain `{name}`: {description}\n\
@@ -231,7 +270,7 @@ impl Settings {
             reader: ReaderCommand::of(home, spec)?,
             system,
             ask,
-            redaction: spec.redaction.clone(),
+            redactor,
         })
     }
 }
@@ -304,8 +343,7 @@ pub fn refused(left: &BTreeSet<&str>) -> String {
 /// The reason `question` is refused under the settings' redaction policy, when a class its
 /// `refuse_if_left` names is still detected in it as the model would be shown it.
 pub fn question_refused(settings: &Settings, question: &str) -> Option<String> {
-    let redactor = crate::redact::compile(settings.redaction.as_ref()).ok()??;
-    let mut batch = redactor.batch();
+    let mut batch = settings.redactor.as_ref()?.batch();
     batch.reserve(question);
     let shown = batch.replace(question);
     let left = batch.left(&shown);
@@ -374,6 +412,14 @@ pub fn final_event(outcome: &ma::AskOutcome) -> ma::AskEvent {
                 e.retry_after
             ),
             Some(e.retry_after),
+        ),
+        ma::AskOutcome::Busy { error: e } => error(
+            "busy",
+            format!(
+                "the service is working on its most answers at once ({}); ask again later",
+                e.max_in_flight
+            ),
+            None,
         ),
         ma::AskOutcome::LimitReached { error: e } => error(
             &e.limit,
@@ -489,11 +535,7 @@ pub fn answer(
         })
     };
     // One question is one redaction batch: one placeholder mapping, in memory, for this answer.
-    let redactor = match crate::redact::compile(settings.redaction.as_ref()) {
-        Ok(r) => r,
-        Err(reason) => return model_failed(reason),
-    };
-    let mut batch = redactor.as_ref().map(|r| r.batch());
+    let mut batch = settings.redactor.as_ref().map(|r| r.batch());
     let question = match batch.as_mut() {
         Some(batch) => {
             batch.reserve(question);
@@ -612,7 +654,22 @@ pub fn answer(
             return limit("step-limit");
         }
         messages.push(reply.message.clone());
-        for call in &reply.tool_calls {
+        // At most `max_tool_calls` calls of a step are made. Every call the model asked for still
+        // gets its tool message, so the conversation stays well formed; those past the cap say
+        // they were not made.
+        let cap = settings.max_tool_calls();
+        let (made, over) = reply.tool_calls.split_at(reply.tool_calls.len().min(cap));
+        if !over.is_empty() {
+            let message = format!(
+                "the model asked for {} tool calls; {} were not made (max_tool_calls {cap})",
+                reply.tool_calls.len(),
+                over.len()
+            );
+            if !emit(status(step, &message)) {
+                return client_closed(&spent);
+            }
+        }
+        for call in made {
             let (text, failed) = match serde_json::from_str::<Value>(&call.arguments) {
                 Ok(arguments) => match reader.call(&call.name, arguments, deadline) {
                     Ok(result) => compact(&result),
@@ -634,6 +691,16 @@ pub fn answer(
                 return client_closed(&spent);
             }
             messages.push(json!({"role": "tool", "tool_call_id": call.id, "content": shown}));
+        }
+        for call in over {
+            messages.push(json!({
+                "role": "tool",
+                "tool_call_id": call.id,
+                "content": format!(
+                    "This tool call was not made: a step makes at most {cap} tool calls \
+                     (max_tool_calls). Ask for fewer at once."
+                ),
+            }));
         }
     }
     limit("step-limit")

@@ -219,6 +219,8 @@ struct Setup<'a> {
     tool_result: &'a str,
     reader: Reader,
     env: Vec<(&'a str, &'a str)>,
+    /// Lines added under `ask:`, each indented by two spaces.
+    ask_extra: &'a str,
 }
 
 impl Default for Setup<'_> {
@@ -228,6 +230,7 @@ impl Default for Setup<'_> {
             tool_result: "a result",
             reader: Reader::default(),
             env: vec![],
+            ask_extra: "",
         }
     }
 }
@@ -269,10 +272,12 @@ ask:
   listen: "127.0.0.1:0"
   identity_header: {HEADER}
   limits: {limits}
+{extra}
 "#,
             ekr = ekr.display(),
             url = gateway.url,
             limits = setup.limits,
+            extra = setup.ask_extra,
         ),
     )
     .unwrap();
@@ -989,4 +994,147 @@ fn a_body_above_the_body_limit_is_refused_inside_the_event_contract() {
             "error"
         }
     );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Bounds of the service (`story:ask-service-bounds`)
+
+/// With `ask.max_in_flight: 2`, a third question while two answers are in flight is refused at
+/// once with 429 `busy`, asks no model and spends no question of the minute; once an answer
+/// ends, a question is admitted again (R1-03).
+#[test]
+fn a_question_past_max_in_flight_is_refused_busy_at_once() {
+    let gateway = Gateway::start(vec![text_reply("Yes [node:n-1].")], Duration::from_secs(2));
+    let service = Arc::new(serve(
+        &gateway,
+        Setup {
+            limits: "{max_steps: 4, max_result_bytes: 4096, max_seconds: 30, \
+                     per_identity_per_minute: 1}",
+            ask_extra: "  max_in_flight: 2",
+            ..Setup::default()
+        },
+    ));
+    let running: Vec<_> = ["ann", "ben"]
+        .into_iter()
+        .map(|identity| {
+            let service = service.clone();
+            std::thread::spawn(move || {
+                let answer = ask(&service, identity, "Busy?");
+                (answer.status, answer.terminal().clone())
+            })
+        })
+        .collect();
+    let started = Instant::now();
+    while gateway.asked() < 2 {
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "two answers did not start"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let asked = Instant::now();
+    let third = ask(&service, "cid", "Me too?");
+    assert!(
+        asked.elapsed() < Duration::from_millis(1500),
+        "the refusal waited {:?}",
+        asked.elapsed()
+    );
+    assert_eq!(third.status, 429, "{:?}", third.events);
+    assert_eq!(third.terminal().1["reason"], "busy", "{:?}", third.events);
+    assert_eq!(gateway.asked(), 2, "a busy question asked the model");
+    for handle in running {
+        let (status, (name, _)) = handle.join().unwrap();
+        assert_eq!((status, name.as_str()), (200, "done"));
+    }
+    // The busy refusal spent no question of `cid`'s minute (its limit is 1).
+    let again = ask(&service, "cid", "Now?");
+    assert_eq!(again.status, 200, "{:?}", again.events);
+    assert_eq!(again.terminal().0, "done");
+}
+
+/// A chat completion that asks for `n` tool calls at once.
+fn many_tool_reply(n: usize) -> Value {
+    let calls: Vec<Value> = (1..=n)
+        .map(|i| {
+            json!({
+                "id": format!("call-{i}"),
+                "type": "function",
+                "function": {"name": "search", "arguments": format!("{{\"query\":\"q{i}\"}}")}
+            })
+        })
+        .collect();
+    json!({
+        "choices": [{"index": 0, "finish_reason": "tool_calls",
+            "message": {"role": "assistant", "content": null, "tool_calls": calls}}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 1}
+    })
+}
+
+/// A step asking for more tool calls than `limits.max_tool_calls` makes only that many: the
+/// reader is called that often, the stream says how many were not made, and the model is told
+/// each one it asked for past the cap was not made (R1-06).
+#[test]
+fn a_step_past_max_tool_calls_is_cut_to_the_cap_and_says_so() {
+    let gateway = Gateway::start(
+        vec![many_tool_reply(5), text_reply("Done [node:n-1].")],
+        Duration::ZERO,
+    );
+    let service = serve(
+        &gateway,
+        Setup {
+            limits: "{max_steps: 4, max_result_bytes: 4096, max_seconds: 30, \
+                     per_identity_per_minute: 10, max_tool_calls: 2}",
+            ..Setup::default()
+        },
+    );
+    let answer = ask(&service, "alice", "Many?");
+    assert_eq!(answer.terminal().0, "done", "{:?}", answer.events);
+    let tools = answer.events.iter().filter(|(n, _)| n == "tool").count();
+    assert_eq!(tools, 2, "{:?}", answer.events);
+    let calls = std::fs::read_to_string(service.root.join("mcp-calls.log")).unwrap_or_default();
+    assert_eq!(calls.lines().count(), 2, "{calls}");
+    let said = answer.events.iter().any(|(n, v)| {
+        n == "status"
+            && v["step"] == 1
+            && v["message"]
+                .as_str()
+                .is_some_and(|m| m.contains("max_tool_calls") && m.contains('3'))
+    });
+    assert!(said, "no status says calls were cut: {:?}", answer.events);
+    let requests = gateway.requests.lock().unwrap().clone();
+    let results: Vec<String> = requests[1]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|m| m["role"] == "tool")
+        .map(|m| m["content"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        results.len(),
+        5,
+        "every call the model asked for is answered"
+    );
+    assert_eq!(
+        results
+            .iter()
+            .filter(|r| r.contains("not made") && r.contains("max_tool_calls"))
+            .count(),
+        3,
+        "{results:?}"
+    );
+}
+
+/// A gateway answering a body above 4 MiB fails the answer with `model-failed`; the body is not
+/// read past the cap (R1-06).
+#[test]
+fn a_gateway_body_above_four_mib_fails_the_answer() {
+    let gateway = Gateway::start(
+        vec![text_reply(&"x".repeat(5 * 1024 * 1024))],
+        Duration::ZERO,
+    );
+    let service = serve(&gateway, Setup::default());
+    let answer = ask(&service, "alice", "Huge?");
+    let (name, error) = answer.terminal();
+    assert_eq!(name, "error", "{}", answer.names().len());
+    assert_eq!(error["reason"], "model-failed", "{error}");
 }

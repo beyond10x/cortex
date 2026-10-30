@@ -237,6 +237,9 @@
         "max_steps": {
           "type": "integer"
         },
+        "max_tool_calls": {
+          "type": "integer"
+        },
         "per_identity_per_minute": {
           "type": "integer"
         }
@@ -269,6 +272,9 @@
         },
         "listen": {
           "type": "string"
+        },
+        "max_in_flight": {
+          "type": "integer"
         },
         "records": {
           "$ref": "#/$defs/cortex.ask.PostgresRecords"
@@ -1849,8 +1855,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:99e3e8c3fe3afb9a79c0c0a0464bd5d0249b01c225f6f68d28afe1273642a446",
-    "source_digest": "3cb764fa6058c327300de7d63b53b82b3ed86189c61ff97550848ad850d64bcf",
+    "contract_digest": "slice-sha256/2:61d360c8dc4ac8e600745e002505e23f3dd0ed5e5b5f749b8688ae02d3bb0c59",
+    "source_digest": "427380fdb0fd63ec80516983202c1bf3e63d3ab0984514104cfc2ab4ee1c4aa4",
     "specification_version": "v1",
     "system": "cortex"
   }

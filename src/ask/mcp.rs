@@ -1,5 +1,12 @@
 //! The EKR MCP reader (`ekr mcp`), spoken to over its stdio: one JSON-RPC message per line. One
 //! reader is started per answer and killed when the answer ends.
+//!
+//! The reader is not pooled across answers, on purpose: an answer that ends at a limit, fails or
+//! loses its client may leave its reader mid-call, stuck or holding state, and only killing it
+//! guarantees the next answer does not inherit it. `tests/ask_adversary.rs` holds that every
+//! reader an answer started is gone when its stream ends, and that a closed request stops its
+//! reader. The cost is one start (and one store open) per question, bounded by
+//! `ask.max_in_flight` readers at once.
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};

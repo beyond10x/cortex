@@ -51,6 +51,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   ends the stream with an `error` event, reason `cut-off`, is recorded with the outcome `cut-off`
   and its tokens, and opens a `failed` review item. An older cortex cannot read a record with
   either new outcome.
+- `cortex ask serve` had no bound on answers in flight, tool calls per step, the gateway's
+  answer, or the bodies of votes and review closes. `ask.max_in_flight` (default 8) caps the
+  answers worked on at once: a question past it answers 429 `busy` at once and spends no question
+  of the minute. `ask.limits.max_tool_calls` (default 16) caps the tool calls one step makes; the
+  calls past it are not made, the model is told so, and a `status` event says how many. A gateway
+  answer above 4 MiB fails the answer with `model-failed`, and a vote or close body above 64 KiB
+  answers 413. The redaction policy is compiled once when the service starts, not twice per
+  question. Readers stay one per question, killed when the answer ends.
 
 ## 0.6.1 — 2026-10-17
 

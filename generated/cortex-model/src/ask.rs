@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 3cb764fa6058c327300de7d63b53b82b3ed86189c61ff97550848ad850d64bcf
-// contract digest 5daf559cd61a381fbf6ce9233bce2e7d477c4713ee671105b36029ab93dc414a
+// model digest 427380fdb0fd63ec80516983202c1bf3e63d3ab0984514104cfc2ab4ee1c4aa4
+// contract digest 19b1d7e629d64c70fa03c2817003c7027a2ab9b6e646533c2127d2a273409b83
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Answers — `cortex.ask`.
@@ -116,6 +116,8 @@ pub struct AskLimits {
     pub max_seconds: i64,
     /// `per_identity_per_minute` — `Integer`.
     pub per_identity_per_minute: i64,
+    /// `max_tool_calls` — `Optional<Integer>`.
+    pub max_tool_calls: Option<i64>,
 }
 
 /// AskSpec — `cortex.ask.AskSpec`.
@@ -137,6 +139,8 @@ pub struct AskSpec {
     pub slow_after_ms: Option<i64>,
     /// `records` — `Optional<cortex.ask.PostgresRecords>`.
     pub records: Option<PostgresRecords>,
+    /// `max_in_flight` — `Optional<Integer>`.
+    pub max_in_flight: Option<i64>,
 }
 
 /// AskStatus — `cortex.ask.AskStatus`.
@@ -854,6 +858,13 @@ pub enum AskOutcome {
         /// Why it was refused: `cortex.ask.RateLimited`.
         error: RateLimited,
     },
+    /// `busy` — externally decided (The service is working on its most answers at once).
+    ///
+    /// It answers 429 with an `error` event whose `reason` is `busy`; no model was asked.
+    Busy {
+        /// Why it was refused: `cortex.ask.Busy`.
+        error: Busy,
+    },
     /// `limit-reached` — externally decided (The model still asks for a tool at the step limit, or the time limit passes).
     ///
     /// The stream ends with an `error` event naming the limit, and no `done`.
@@ -1180,6 +1191,15 @@ pub struct Voted {
 pub struct AnswerNotFound {
     /// `answer_id` — `cortex.ask.AnswerId`.
     pub answer_id: AnswerId,
+}
+
+/// The declared error `cortex.ask.Busy`.
+///
+/// The service is working on `max_in_flight` answers already; it answers 429 at once, asks no model and spends no question of the minute. Ask again later.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Busy {
+    /// `max_in_flight` — `Integer`.
+    pub max_in_flight: i64,
 }
 
 /// The declared error `cortex.ask.ClientClosed`.

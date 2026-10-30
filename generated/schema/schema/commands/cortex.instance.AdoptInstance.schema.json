@@ -40,8 +40,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "3cb764fa6058c327300de7d63b53b82b3ed86189c61ff97550848ad850d64bcf",
-    "contract_digest": "slice-sha256/2:aab2d75fb7c58d9bf3f4d1cbcbdeab9d96d1e3bd14b04b74b95d08da551ba752",
+    "source_digest": "427380fdb0fd63ec80516983202c1bf3e63d3ab0984514104cfc2ab4ee1c4aa4",
+    "contract_digest": "slice-sha256/2:4bdc0d74c8259b9aefdc917a03d8dbb82c1901a36e043dfbc7e2f37cb18b31c8",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -61,6 +61,9 @@
           "type": "integer"
         },
         "per_identity_per_minute": {
+          "type": "integer"
+        },
+        "max_tool_calls": {
           "type": "integer"
         }
       },
@@ -101,6 +104,9 @@
         },
         "records": {
           "$ref": "#/$defs/cortex.ask.PostgresRecords"
+        },
+        "max_in_flight": {
+          "type": "integer"
         }
       },
       "required": [

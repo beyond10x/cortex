@@ -1071,6 +1071,13 @@ impl Scenario {
                     "reader-failed",
                     Some(("cortex.ask.ReaderFailed", json!({"reason": error.reason}))),
                 ),
+                ma::AskOutcome::Busy { error } => (
+                    "busy",
+                    Some((
+                        "cortex.ask.Busy",
+                        json!({"max_in_flight": error.max_in_flight}),
+                    )),
+                ),
                 ma::AskOutcome::CutOff { error } => (
                     "cut-off",
                     Some((
@@ -1564,7 +1571,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        117,
+        118,
         "the suite's scenario count moved; update this floor"
     );
     assert!(
