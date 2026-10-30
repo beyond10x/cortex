@@ -13,7 +13,7 @@ use cortex_model::instance as m;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::sources::{Document, Origin, DOCUMENT_FAILURE_LIMIT};
+use crate::sources::{Document, Origin, Window, DOCUMENT_FAILURE_LIMIT, OVERLAP_MS};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Seen {
@@ -272,6 +272,68 @@ impl SeenState {
                 unlinked_hash,
             },
         );
+    }
+
+    /// Whether `wanted`, as this run fetched it, is seen with its text: applied by this run, since
+    /// a wanted document's key is new or seen with other text.
+    fn holds_text(&self, wanted: &Wanted) -> bool {
+        self.documents
+            .get(&wanted.key)
+            .and_then(|seen| seen.hash.as_ref())
+            == Some(&wanted.hash)
+    }
+
+    /// The `pending_since` a windowed run that did not succeed leaves, after what it applied: the
+    /// earliest record time of a document it wanted and did not apply, less [`OVERLAP_MS`], when
+    /// its fetch read every record of the window and that time is readable for every such
+    /// document; the window's start otherwise, and when it left no wanted document unapplied. It
+    /// is never before the window's start nor after its end.
+    pub fn pending_after(&self, backlog: &Backlog, window: Window) -> i64 {
+        if !backlog.complete {
+            return window.since_ms;
+        }
+        let mut earliest: Option<i64> = None;
+        for wanted in backlog.wanted.iter().filter(|w| !self.holds_text(w)) {
+            let Some(at) = wanted.time_ms else {
+                return window.since_ms;
+            };
+            earliest = Some(earliest.map_or(at, |e| e.min(at)));
+        }
+        earliest.map_or(window.since_ms, |at| {
+            at.saturating_sub(OVERLAP_MS)
+                .clamp(window.since_ms, window.until_ms.max(window.since_ms))
+        })
+    }
+}
+
+/// What a windowed run wanted of its fetch, for the window it leaves ([`SeenState::pending_after`]).
+/// Kept with the run's report, so a run that failed, or was undone, leaves its window by the
+/// same rule.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Backlog {
+    /// Whether the fetch read every record of the window: no page or child call left unread.
+    pub complete: bool,
+    /// Every document the run wanted, as it fetched it; a document skipped after failing on
+    /// [`DOCUMENT_FAILURE_LIMIT`] consecutive runs is not one of them.
+    pub wanted: Vec<Wanted>,
+}
+
+/// A document a windowed run wanted: its key, its hash ([`doc_hash`]) and its record time
+/// ([`crate::evidence::document_time_ms`]), `None` when that cannot be read.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Wanted {
+    pub key: String,
+    pub hash: String,
+    pub time_ms: Option<i64>,
+}
+
+impl Wanted {
+    pub fn of(doc: &Document) -> Self {
+        Self {
+            key: doc.key.clone(),
+            hash: doc_hash(doc),
+            time_ms: crate::evidence::document_time_ms(doc),
+        }
     }
 }
 
@@ -720,6 +782,85 @@ mod tests {
             ]
         );
         assert!(rows.iter().all(|r| r.broken_invariant().is_none()));
+    }
+
+    fn timed(key: &str, text: &str, published: Option<&str>) -> Document {
+        Document {
+            published: published.map(str::to_string),
+            ..doc(key, text)
+        }
+    }
+
+    const WINDOW: Window = Window {
+        since_ms: 1_000_000_000_000,
+        until_ms: 1_000_900_000_000,
+    };
+
+    /// `story:window-advances-past-applied`: the window moves to the earliest wanted document left
+    /// unapplied, less the overlap; applied documents, however early, do not hold it.
+    #[test]
+    fn the_pending_window_is_the_earliest_unapplied_record_time_less_the_overlap() {
+        // 2001-09-09T01:46:40Z is 1_000_000_000_000 ms; the two records come a day and two later.
+        let (a, b, c) = (
+            timed("a", "one", Some("2001-09-10T01:46:40Z")),
+            timed("b", "two", Some("2001-09-11T01:46:40Z")),
+            timed("c", "three", Some("2001-09-09T01:50:00Z")),
+        );
+        let backlog = Backlog {
+            complete: true,
+            wanted: [&a, &b, &c].into_iter().map(Wanted::of).collect(),
+        };
+        let mut state = SeenState::default();
+        state.record(&c, 1);
+        assert_eq!(
+            state.pending_after(&backlog, WINDOW),
+            1_000_086_400_000 - OVERLAP_MS,
+            "a, the earliest left unapplied"
+        );
+        state.record(&a, 1);
+        assert_eq!(
+            state.pending_after(&backlog, WINDOW),
+            1_000_172_800_000 - OVERLAP_MS
+        );
+        // c applied earlier with other text is wanted again, and holds the window at its time
+        // less the overlap, which is before the window's start: the start, then.
+        state.record(&timed("c", "older", None), 1);
+        assert_eq!(state.pending_after(&backlog, WINDOW), WINDOW.since_ms);
+    }
+
+    /// The window keeps its start when records were left unread, when a document left unapplied
+    /// has no readable time, and when no wanted document is left unapplied.
+    #[test]
+    fn the_pending_window_keeps_its_start_when_it_cannot_tell() {
+        let a = timed("a", "one", Some("2001-09-10T01:46:40Z"));
+        let untimed = timed("u", "two", Some("last week"));
+        let state = SeenState::default();
+        let unread = Backlog {
+            complete: false,
+            wanted: vec![Wanted::of(&a)],
+        };
+        assert_eq!(state.pending_after(&unread, WINDOW), WINDOW.since_ms);
+        let unreadable = Backlog {
+            complete: true,
+            wanted: vec![Wanted::of(&a), Wanted::of(&untimed)],
+        };
+        assert_eq!(state.pending_after(&unreadable, WINDOW), WINDOW.since_ms);
+        assert_eq!(
+            state.pending_after(&Backlog::default(), WINDOW),
+            WINDOW.since_ms
+        );
+        let none_left = Backlog {
+            complete: true,
+            wanted: vec![],
+        };
+        assert_eq!(state.pending_after(&none_left, WINDOW), WINDOW.since_ms);
+        // A record time after the window's end moves it no further than the end.
+        let late = timed("l", "three", Some("2030-01-01"));
+        let ahead = Backlog {
+            complete: true,
+            wanted: vec![Wanted::of(&late)],
+        };
+        assert_eq!(state.pending_after(&ahead, WINDOW), WINDOW.until_ms);
     }
 
     /// `story:poison-document-skipped`: a document is skipped from its third consecutive failure

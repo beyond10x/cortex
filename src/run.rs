@@ -18,7 +18,7 @@ use crate::schedule::Systemd;
 use crate::snapshot::{self, BeforeApply, RestoreError};
 use crate::sources::{self, FetchError, Window};
 use crate::spend;
-use crate::state::{text_hash, Failures, SeenState};
+use crate::state::{text_hash, Backlog, Failures, SeenState, Wanted};
 use crate::structured;
 
 pub struct Tools {
@@ -94,6 +94,9 @@ pub struct Report {
     /// extraction failed with the document alone on [`sources::DOCUMENT_FAILURE_LIMIT`] or more
     /// consecutive runs, each with its count and the last reason ([`Failures`]).
     pub skipped: Vec<String>,
+    /// What the run wanted of its fetch, for the window it leaves ([`SeenState::pending_after`]):
+    /// a run that failed leaves its window by it too ([`run`]).
+    pub backlog: Backlog,
     /// Applied documents a part EKR rejected belongs to, each with EKR's refusal, and structured
     /// records refused before their batch because they meet store nodes of more than one type
     /// (`store_lookup: AnyType`), each with that refusal.
@@ -197,6 +200,7 @@ impl Default for Report {
             stopped: None,
             truncated: 0,
             skipped: Vec::new(),
+            backlog: Backlog::default(),
             rejected: Vec::new(),
             unconverted: Vec::new(),
             superseded: 0,
@@ -481,15 +485,13 @@ pub fn run(
         )
     });
     if ran.is_err() {
-        // A failed run reads nothing it can be trusted to have read: the next run's `{since}` is
-        // no later than this one's. The failure is the run's answer; a state that cannot be
-        // written leaves the window as the last run left it.
+        // A failed run leaves its window as a run that stopped does, against the state as it
+        // stands now (put back, when the run was undone): the earliest record time of a document
+        // it wanted and did not apply, less the overlap, when it read every record and each such
+        // time is readable; else this run's `{since}`. The failure is the run's answer; a state
+        // that cannot be written leaves the window as the last run left it.
         if let Ok(mut state) = SeenState::load(&seen_path) {
-            state.pending_since = Some(
-                state
-                    .pending_since
-                    .map_or(window.since_ms, |p| p.min(window.since_ms)),
-            );
+            state.pending_since = Some(state.pending_after(&partial.backlog, window));
             let _ = state.save(&seen_path);
         }
     }
@@ -557,7 +559,9 @@ fn seed_documents(layout: &Layout, tools: &Tools, undoable: bool) -> Result<Repo
 /// source's state as the start of its last successful run once every document the run wanted is
 /// applied and every record was read: a run that stopped early, left records unread (a
 /// `max_pages`, an empty page that named a next one, a failed child call), or left documents
-/// beyond `max_documents_per_run` keeps its window's start as `pending_since`, so what it did not
+/// beyond `max_documents_per_run` records `pending_since` ([`SeenState::pending_after`]: the
+/// earliest record time of a wanted document it did not apply, less the overlap, when it read
+/// every record and each such time is readable; else its window's start), so what it did not
 /// apply is asked for again. `held_since` is recomputed from the documents this run holds back by
 /// `refresh_after_days`. A windowed run records its window's end as each applied document's
 /// `applied_at`, so a later change to it is inside a window that starts there.
@@ -860,6 +864,14 @@ fn process_in(
             false
         })
         .collect();
+    report.backlog = Backlog {
+        complete: fetched.unread.is_empty(),
+        wanted: docs
+            .iter()
+            .filter(|d| seen.wants(d, started, refresh))
+            .map(Wanted::of)
+            .collect(),
+    };
     let selected = seen.select(
         docs,
         started,
@@ -1225,6 +1237,7 @@ fn process_in(
                         &skipped_after_failures(&doc.key, runs, &reason),
                     ));
                     wanted = wanted.saturating_sub(1);
+                    report.backlog.wanted.retain(|w| w.key != doc.key);
                     continue;
                 }
                 let why = masked_key(
@@ -2417,9 +2430,11 @@ fn unread(report: &mut Report, unread: &[String], redactor: Option<&Redactor>) {
 }
 
 /// Records what a windowed run leaves for the next: its window's end as the start of the last
-/// successful run when it applied every one of the `wanted` documents and read every record, its
-/// window's start as `pending_since` when it did not; `held_since` as this run computed it; and
-/// the child call failure counts.
+/// successful run when it applied every one of the `wanted` documents and read every record; when
+/// it did not, `pending_since` by [`SeenState::pending_after`] (the earliest record time of a
+/// wanted document it did not apply, less the overlap, when every record was read and each such
+/// time is readable; else its window's start); `held_since` as this run computed it; and the
+/// child call failure counts.
 fn finish(
     seen: &mut SeenState,
     path: &std::path::Path,
@@ -2438,10 +2453,7 @@ fn finish(
         seen.last_success_started_at = Some(window.until_ms);
         seen.pending_since = None;
     } else {
-        seen.pending_since = Some(
-            seen.pending_since
-                .map_or(window.since_ms, |p| p.min(window.since_ms)),
-        );
+        seen.pending_since = Some(seen.pending_after(&report.backlog, window));
     }
     seen.save(path).map_err(Failure::Apply)
 }

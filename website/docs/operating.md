@@ -173,7 +173,9 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    of these, or lies before 1970 or after the run's start, and a document with no time, are
    observed at the run's start. EKR dates each fact from the earliest observed time of the
    evidence it cites, so a fact is valid from when its source said it. Which documents a run
-   keeps, and its window, still go by the run's own times.
+   keeps, and its window, still go by the run's own times, except that a run that leaves wanted
+   documents unapplied moves its window to the earliest of their record times (see
+   [the spec file](./spec-file.md#kind-connectors)).
 5. **Extract** in batches of up to `model.batch_chars` characters (UTF-8 bytes), 60,000 unless the spec gives a
    size or a gateway's window sets one (see [The batch size](./spec-file.md#the-batch-size)); a
    batch too long for the model's window is split and asked again. Each batch is one `claude -p` call that

@@ -47,6 +47,13 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   `skipped` with its count and the reason, not sent to the model, and the batches after it run.
   A changed text is asked again. An error answer that cost nothing (a sign-in or a usage limit)
   is neither split nor counted.
+- Under a backlog, a source's window stayed at its start for good: one document that kept failing
+  held every later run's `{since}` there, also before the first successful run. A run that does
+  not succeed now moves `pending_since` to the earliest record time of a wanted document it did
+  not apply, less 5 minutes, when it read every record and each such time is readable, and the
+  next run asks from there; a failed run follows the same rule. A run that left records unread or
+  a document without a readable `time` keeps its `{since}` as before, and a document skipped
+  after failing alone holds no window.
 - A run sent SIGTERM during its fetch ran the fetch out before it stopped. The fetch is now a safe
   point: the `connectors` call in flight is ended with its process group (SIGKILL after 5
   seconds), a paged or `files` read stops between pages and files, and the run ends `terminated`,

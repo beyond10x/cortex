@@ -69,7 +69,8 @@ const TAIL: &str = r#"  *) echo '{"ok":false}'; exit 2 ;;
 esac
 "#;
 
-/// A provider that answers `issues.list` from `db` (lines `stamp<TAB>key<TAB>summary`), sorted by
+/// A provider that answers `issues.list` from `db` (lines `stamp<TAB>key<TAB>summary`, each record
+/// carrying its stamp as `updated`), sorted by
 /// stamp then key, keeping the lines with `updated_since <= stamp < updated_until`, in pages of
 /// `pagesize` lines (all of them when absent) by `page` number. When the file
 /// `move-after-first-page` exists, serving page 1 updates I-1 (new stamp, " moved" summary), as a
@@ -82,7 +83,7 @@ const FILTERING: &str = r#"  "invoke "*" issues.list "*)
     SIZE=$(cat "$R/pagesize" 2>/dev/null || echo 1000)
     FIRST=$(( (PAGE - 1) * SIZE + 1 )); LAST=$(( PAGE * SIZE ))
     ITEMS=$(sort "$R/db" | awk -F'\t' -v s="$SINCE" -v u="$UNTIL" -v f="$FIRST" -v l="$LAST" '
-      ($1 "" >= s "") && (u == "" || $1 "" < u "") { n++; if (n >= f && n <= l) { printf "%s{\"key\":\"%s\",\"summary\":\"%s\"}", (c++ ? "," : ""), $2, $3 } }')
+      ($1 "" >= s "") && (u == "" || $1 "" < u "") { n++; if (n >= f && n <= l) { printf "%s{\"key\":\"%s\",\"summary\":\"%s\",\"updated\":\"%s\"}", (c++ ? "," : ""), $2, $3, $1 } }')
     if [ -e "$R/move-after-first-page" ] && [ "$PAGE" = 1 ]; then
       rm "$R/move-after-first-page"
       NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -1251,4 +1252,161 @@ fn the_stop_rule_on_a_source_without_time_is_refused_at_load() {
         "{stderr}"
     );
     assert!(!w.home.join("instances/untimed").exists());
+}
+
+/// The stand-in `claude` wrapped: a prompt holding `POISON` is answered with an error that cost
+/// something; anything else as `tests/common`'s stand-in answers it.
+const FAILS_ON_POISON: &str = r#"R="@ROOT@"
+cat > "$R/req.txt"
+if grep -q POISON "$R/req.txt"; then
+  echo '{"type":"result","subtype":"success","is_error":true,"result":"The model could not answer this batch.","total_cost_usd":0.01}'
+  exit 1
+fi
+exec "@INNER@" "$@" < "$R/req.txt"
+"#;
+
+/// `story:window-advances-past-applied`: under a backlog in which one document keeps failing, the
+/// window moves to the earliest record time not applied less the overlap, on a run that fails and
+/// on one that stops, and each next run's `{since}` moves forward; once the document is skipped
+/// (`story:poison-document-skipped`) it holds the window no longer, and the run succeeds.
+#[test]
+fn the_window_advances_to_the_earliest_document_not_applied() {
+    let w = world_with(FILTERING);
+    let wrapped = w.bin.join("claude-wrapped");
+    executable(
+        &wrapped,
+        &FAILS_ON_POISON
+            .replace("@ROOT@", &w.root.display().to_string())
+            .replace("@INNER@", &w.bin.join("claude").display().to_string()),
+    );
+    let now = now_ms();
+    let poison_at = now - DAY_MS;
+    write_rows(
+        &w,
+        &[
+            (now - 2 * DAY_MS, "I-1", "issue".to_string()),
+            (poison_at, "I-2", "POISON issue".to_string()),
+            (now - DAY_MS / 2, "I-3", "issue".to_string()),
+        ],
+    );
+    let timed = WINDOWED.replace("id: key\n", "id: key\n        time: updated\n");
+    assert!(timed.contains("time: updated"), "{timed}");
+    create_source(&w, "advance", &timed, 3, 5000, 50);
+    let run_wrapped = || {
+        w.cortex(&[
+            "--claude",
+            wrapped.to_str().unwrap(),
+            "run",
+            "advance/tracker",
+        ])
+    };
+    // Each record time as the provider writes it, to the second, less the overlap.
+    let less_overlap = |at: i64| at.div_euclid(1000) * 1000 - OVERLAP_MS;
+    let expected = less_overlap(poison_at);
+
+    // Run 1: the batch of three fails for the first time and nothing is applied. Every record
+    // was read, so the failed run's window moves to the earliest of them, I-1.
+    let (code, ran) = run_wrapped();
+    assert_eq!(
+        (code, ran["outcome"].as_str()),
+        (1, Some("extraction-failed")),
+        "{ran}"
+    );
+    let first = field(&w.lines("issues.log")[0], "updated_since");
+    let seen = state(&w, "advance");
+    assert!(seen.get("last_success_started_at").is_none(), "{seen}");
+    assert_eq!(
+        seen["pending_since"],
+        less_overlap(now - 2 * DAY_MS),
+        "{seen}"
+    );
+
+    // Run 2 asks from there, splits the batch, applies I-1 and stops at I-2, which fails alone:
+    // the window moves to I-2's time.
+    sleep_past_a_second();
+    let (code, ran) = run_wrapped();
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
+    let second = field(w.lines("issues.log").last().unwrap(), "updated_since");
+    assert_eq!(second, rfc3339(less_overlap(now - 2 * DAY_MS)));
+    assert!(second > first, "{second} > {first}");
+    let seen = state(&w, "advance");
+    assert!(seen.get("last_success_started_at").is_none(), "{seen}");
+    assert_eq!(seen["pending_since"], expected, "{seen}");
+
+    // Run 3 asks from there, fails at I-2 before anything is applied, and leaves the same window.
+    sleep_past_a_second();
+    let (code, ran) = run_wrapped();
+    assert_eq!(
+        (code, ran["outcome"].as_str()),
+        (1, Some("extraction-failed")),
+        "{ran}"
+    );
+    let third = field(w.lines("issues.log").last().unwrap(), "updated_since");
+    assert_eq!(third, rfc3339(expected));
+    assert!(third > second, "{third} > {second}");
+    assert_eq!(state(&w, "advance")["pending_since"], expected);
+
+    // Run 4: I-2 fails a third time and is skipped; it holds the window no longer.
+    sleep_past_a_second();
+    let (code, ran) = run_wrapped();
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
+    assert!(ran["detail"]["stopped"].is_null(), "{ran}");
+    let seen = state(&w, "advance");
+    assert!(seen.get("pending_since").is_none(), "{seen}");
+    assert!(seen["last_success_started_at"].as_i64().is_some(), "{seen}");
+}
+
+/// A record whose time cannot be read gives the window no instant to move to: a run that leaves
+/// it unapplied keeps its window's start.
+#[test]
+fn a_document_not_applied_whose_time_cannot_be_read_keeps_the_window_start() {
+    let w = world_with(FILTERING);
+    let wrapped = w.bin.join("claude-wrapped");
+    executable(
+        &wrapped,
+        &FAILS_ON_POISON
+            .replace("@ROOT@", &w.root.display().to_string())
+            .replace("@INNER@", &w.bin.join("claude").display().to_string()),
+    );
+    let now = now_ms();
+    write_rows(
+        &w,
+        &[
+            (now - 2 * DAY_MS, "I-1", "issue".to_string()),
+            (now - DAY_MS, "I-2", "POISON issue".to_string()),
+        ],
+    );
+    // `time` names a field the records do not carry.
+    let timed = WINDOWED.replace("id: key\n", "id: key\n        time: created\n");
+    create_source(&w, "untimed-advance", &timed, 3, 5000, 50);
+    let run_wrapped = || {
+        w.cortex(&[
+            "--claude",
+            wrapped.to_str().unwrap(),
+            "run",
+            "untimed-advance/tracker",
+        ])
+    };
+    let before = now_ms();
+    // A run that fails, then one that applies I-1 and stops at I-2: both keep the first `{since}`.
+    let (code, ran) = run_wrapped();
+    assert_eq!(
+        (code, ran["outcome"].as_str()),
+        (1, Some("extraction-failed")),
+        "{ran}"
+    );
+    let pending = state(&w, "untimed-advance")["pending_since"]
+        .as_i64()
+        .unwrap_or_else(|| panic!("no pending_since: {}", state(&w, "untimed-advance")));
+    assert!(
+        (before - 3 * DAY_MS..=now_ms() - 3 * DAY_MS).contains(&pending),
+        "pending_since {pending} is not the run's since"
+    );
+    sleep_past_a_second();
+    let (code, ran) = run_wrapped();
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
+    assert_eq!(state(&w, "untimed-advance")["pending_since"], pending);
 }

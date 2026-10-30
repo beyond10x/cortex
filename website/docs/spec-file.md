@@ -358,9 +358,14 @@ more to read that much history on the first run.
 
 A run is successful when it applied every new or changed document it fetched and read every
 record. A run that is not successful (it stopped early, failed, left documents beyond
-`max_documents_per_run`, or left records unread) keeps its `{since}` as the lower bound of every
-later run until one succeeds, so the next run asks for them again. That holds before the first
-successful run too: the window does not slide with the clock. Records are left unread by a walk
+`max_documents_per_run`, or left records unread) sets the `{since}` of every later run until one
+succeeds, so the next run asks again for what it did not apply. When the run read every record
+and every new or changed document it did not apply has a readable `time`, that `{since}` is the
+earliest of those times less 5 minutes, never before the run's own `{since}`: under a backlog
+the window moves forward past what was applied, and one document that keeps failing holds it
+only at its own time. Otherwise it is the run's own `{since}`. That holds before the first
+successful run too: the window does not slide with the clock. A document skipped after failing
+alone on 3 consecutive runs (see [Operating](./operating.md#what-one-run-does)) holds no window. Records are left unread by a walk
 that reaches `max_pages` with pages left, by an empty page that still names a next one, by a
 `NextLink` link without its parameter, and by a child call that fails for a record, which leaves
 that record out of the run. Each of these says so in `stopped`, in the run's result and in

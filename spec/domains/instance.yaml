@@ -1735,6 +1735,15 @@ commands:
       # model, not marked seen, wanted no longer for the run's success or its window, and the
       # batches after it run. ESS has no per-element record effect (beyond10x/ess#459);
       # src/state.rs and src/run.rs hold it and tests/poison_document.rs tests it.
+      # UNMAPPED: the window a run leaves for the next. A run that applied every document it
+      # wanted and read every record records its window's end as `last_success_started_at`. Any
+      # other run, `ran` with `stopped` or a failure, sets `pending_since`, the next run's
+      # `{since}` until one succeeds: when the fetch read every record and every wanted document
+      # left unapplied has a readable record time (`time`), the earliest of those times less 5
+      # minutes, between the run's `{since}` and `{until}`; else the run's `{since}`. A document
+      # skipped after 3 failures is not wanted. A `held_since` earlier than it still reaches the
+      # window back. ESS models no window over a source's records; src/state.rs, src/sources.rs
+      # and src/run.rs hold it and tests/connectors_walks.rs tests it.
       # UNMAPPED: after every outcome that names a source, the instance's `monitoring` reports it:
       # `metrics.prom` is rewritten with the source's run counted under its outcome, its duration,
       # and for `ran`, or any outcome reached after a batch was applied, its documents and model
