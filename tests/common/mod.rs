@@ -25,6 +25,32 @@ pub fn ekr() -> PathBuf {
     bin
 }
 
+/// Lines that make a `/bin/sh` stand-in `ekr` serve `ekr session` itself: each request line
+/// `{"argv":[…]}` runs the stand-in again as the one-shot `ekr <argv>`, its standard input closed,
+/// and is answered `{"exit":…,"stdout":…,"stderr":…}`, as the real `ekr session` answers. A
+/// stand-in that logs or fails verbs by its arguments then sees each verb a run sends its session as
+/// one process of its own. Put them where the stand-in should see `session` itself: first, to log
+/// only the verbs, or after its own log line, to log the session too. An argument holding `"` or a
+/// line break is not supported; the stdout of a verb answered through it must be JSON.
+pub const EKR_SESSION_SHIM: &str = r#"if [ "$1" = session ]; then
+  E=$(mktemp "${0%/*}/.ekr-session-stderr.XXXXXX") || exit 1
+  while IFS= read -r REQ; do
+    L=$(printf '%s' "$REQ" | sed -e 's/^{"argv":\["//' -e 's/"\]}$//' -e 's/","/\n/g')
+    set --
+    while IFS= read -r A; do set -- "$@" "$A"; done <<EOF_ARGV
+$L
+EOF_ARGV
+    O=$("$0" "$@" < /dev/null 2> "$E"); X=$?
+    O=$(printf '%s' "$O" | tr '\n' ' ')
+    case "$O" in *[![:space:]]*) ;; *) O=null ;; esac
+    S=$(sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' "$E" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/\\n/g')
+    printf '{"exit":%s,"stdout":%s,"stderr":"%s"}\n' "$X" "$O" "$S"
+  done
+  rm -f "$E"
+  exit 0
+fi
+"#;
+
 /// Writes a `/bin/sh` stand-in at `path` and makes it executable.
 ///
 /// A child shell writes the file, never this process: a descriptor open for writing here would be

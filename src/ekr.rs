@@ -1,9 +1,18 @@
 //! The pinned `ekr` binary: seed, ontology, apply-extraction, and the formats cortex reads from it.
+//!
+//! A run sends its reads and transactions through one `ekr session` ([`Session`]); every other
+//! caller, and a run's `apply-extraction` and `ekr stage` verbs, start one `ekr` per verb.
 
+use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::{Arc, Mutex};
 
+use serde::de::{DeserializeOwned, IgnoredAny};
+use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
 /// An empty ontology and an empty graph at revision 0: what `apply-extraction` grows a store from.
@@ -133,23 +142,30 @@ impl Binary {
     /// and without `$schema`, which `claude --json-schema` refuses for draft 2020-12.
     pub fn model_schema(&self) -> Result<Value, String> {
         let mut cmd = Command::new(&self.0);
-        cmd.args(["schema", "ekr.extraction-document/1"]);
-        let mut schema = json(&run(cmd, "schema")?, "schema")?;
-        let obj = schema
-            .as_object_mut()
-            .ok_or("ekr schema is not an object")?;
-        obj.remove("$schema");
-        if let Some(props) = obj.get_mut("properties").and_then(Value::as_object_mut) {
-            props.remove("evidence");
-        }
-        if let Some(req) = obj.get_mut("required").and_then(Value::as_array_mut) {
-            req.retain(|r| r != "evidence");
-        }
-        if let Some(defs) = obj.get_mut("$defs").and_then(Value::as_object_mut) {
-            defs.remove("ExtractionEvidence");
-        }
-        Ok(schema)
+        cmd.args(MODEL_SCHEMA);
+        model_schema(json(&run(cmd, "schema")?, "schema")?)
     }
+}
+
+/// The argument list of `ekr schema` for the document the model answers in.
+const MODEL_SCHEMA: [&str; 2] = ["schema", "ekr.extraction-document/1"];
+
+/// [`Binary::model_schema`] of `schema`, the document `ekr schema ekr.extraction-document/1` prints.
+fn model_schema(mut schema: Value) -> Result<Value, String> {
+    let obj = schema
+        .as_object_mut()
+        .ok_or("ekr schema is not an object")?;
+    obj.remove("$schema");
+    if let Some(props) = obj.get_mut("properties").and_then(Value::as_object_mut) {
+        props.remove("evidence");
+    }
+    if let Some(req) = obj.get_mut("required").and_then(Value::as_array_mut) {
+        req.retain(|r| r != "evidence");
+    }
+    if let Some(defs) = obj.get_mut("$defs").and_then(Value::as_object_mut) {
+        defs.remove("ExtractionEvidence");
+    }
+    Ok(schema)
 }
 
 /// The EKR provider a store lives on (`EKR_BACKEND`).
@@ -444,10 +460,49 @@ impl Store {
 
     /// The revision `ekr head` answers: the store's, or its stage's when it is in one.
     pub fn head(&self) -> Result<i64, String> {
-        let head = json(&run(self.command(&[OsStr::new("head")])?, "head")?, "head")?;
-        head["revision"]
-            .as_i64()
-            .ok_or_else(|| format!("ekr head answered no revision: {head}"))
+        head(self)
+    }
+
+    /// One `ekr session` on this store, in its stage when it is in one: started as every verb of
+    /// the store is ([`Store::command`]), so a launched store's connection is made ready once, for
+    /// the session, and not again for its requests.
+    pub fn session(&self) -> Result<Session, String> {
+        let mut cmd = self.command(&[OsStr::new("session")])?;
+        cmd.stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| format!("cannot run ekr session: {e}"))?;
+        let stdin = child.stdin.take().expect("piped");
+        let stdout = BufReader::new(child.stdout.take().expect("piped"));
+        let mut from = child.stderr.take().expect("piped");
+        // A request's own diagnostics travel in its answer; what the session itself writes to
+        // stderr (why it could not start, or ended) is read as it comes, its end kept.
+        let stderr = Arc::new(Mutex::new(Vec::new()));
+        let kept = Arc::clone(&stderr);
+        let drain = std::thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            while let Ok(n) = from.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                let mut kept = kept.lock().expect("not poisoned");
+                kept.extend_from_slice(&buf[..n]);
+                let over = kept.len().saturating_sub(STDERR_KEPT);
+                kept.drain(..over);
+            }
+        });
+        Ok(Session {
+            store: self.clone(),
+            pipe: RefCell::new(Some(Pipe {
+                child,
+                stdin,
+                stdout,
+                stderr,
+                drain: Some(drain),
+            })),
+        })
     }
 
     /// Whether the store's lineage holds a seed: `ekr head` answers a head, or says "the lineage
@@ -486,16 +541,7 @@ impl Store {
     }
 
     pub fn ontology(&self) -> Result<Value, String> {
-        let cmd = self.command(&[OsStr::new("ontology")])?;
-        json(&run(cmd, "ontology")?, "ontology")
-    }
-
-    /// The graph at the head (`ekr snapshot`): `graph.graph` holds `nodes`, `edges`, `assertions`
-    /// and `evidence`, each a map keyed by id, every assertion with its `lifecycle`, retracted and
-    /// superseded ones included (EKR 0.0.31 `docs/cli.md`, `ekr snapshot`).
-    pub fn snapshot(&self) -> Result<Value, String> {
-        let cmd = self.command(&[OsStr::new("snapshot")])?;
-        json(&run(cmd, "snapshot")?, "snapshot")
+        self.json(&[OsStr::new("ontology")], "ontology")
     }
 
     /// Writes one `ekr.transaction-document/2` of `operations`, proposed by `proposer` (the host
@@ -508,32 +554,13 @@ impl Store {
         proposer: &str,
         operations: &[Operation],
     ) -> Result<i64, String> {
-        match self.submit(path, proposer, operations, None)? {
-            Ok(revision) => Ok(revision),
-            Err(rejected) => {
-                let issues: Vec<String> = rejected
-                    .issues
-                    .iter()
-                    .map(|i| format!("{}: {}", i.code, i.message))
-                    .collect();
-                Err(format!(
-                    "ekr validate rejected transaction {}: {}",
-                    rejected.transaction,
-                    issues.join("; ")
-                ))
-            }
-        }
+        transact(self, path, proposer, operations)
     }
 
     /// A fresh id of `kind` (`ekr mint <kind>`): `transaction`, `type`, `property`,
     /// `schema-version`, ….
     pub fn mint(&self, kind: &str) -> Result<String, String> {
-        let mint = self.command(&[OsStr::new("mint"), OsStr::new(kind)])?;
-        let minted = json(&run(mint, "mint")?, "mint")?;
-        minted["id"]
-            .as_str()
-            .map(str::to_string)
-            .ok_or_else(|| "ekr mint answered no id".to_string())
+        mint(self, kind)
     }
 
     /// [`Store::transact`], answering a transaction validation rejects as its issues instead of an
@@ -545,44 +572,502 @@ impl Store {
         operations: &[Operation],
         schema_version: Option<&str>,
     ) -> Result<Result<i64, Rejected>, String> {
-        let id = self.mint("transaction")?;
-        std::fs::write(
-            path,
-            transaction_document(&id, proposer, operations, schema_version),
-        )
-        .map_err(|e| format!("{}: {e}", path.display()))?;
-        let propose = self.command(&[OsStr::new("propose"), path.as_os_str()])?;
-        run(propose, "propose")?;
-        let validate = self.command(&[OsStr::new("validate"), OsStr::new(&id)])?;
-        let validated = json(&run(validate, "validate")?, "validate")?;
-        if validated["kind"] != "Validated" {
-            let issues = validated["issues"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .map(|i| Issue {
-                    code: i["code"].as_str().unwrap_or("?").to_string(),
-                    message: i["message"].as_str().unwrap_or_default().to_string(),
-                })
+        submit(self, path, proposer, operations, schema_version)
+    }
+}
+
+/// What answers a store verb: one `ekr` per verb ([`Store`]), or a request to a run's
+/// [`Session`]. Either answers a verb that failed as `ekr <what> failed: <what it wrote to
+/// stderr>`, so a caller tells an unknown outcome ([`outcome_unknown`]) the same way from both.
+trait Verbs {
+    /// The JSON document the verb `args` prints.
+    fn json(&self, args: &[&OsStr], what: &str) -> Result<Value, String>;
+
+    /// The verb `args`, whatever it prints.
+    fn ok(&self, args: &[&OsStr], what: &str) -> Result<(), String>;
+}
+
+impl Verbs for Store {
+    fn json(&self, args: &[&OsStr], what: &str) -> Result<Value, String> {
+        json(&run(self.command(args)?, what)?, what)
+    }
+
+    fn ok(&self, args: &[&OsStr], what: &str) -> Result<(), String> {
+        run(self.command(args)?, what).map(drop)
+    }
+}
+
+/// [`Store::head`] through `verbs`.
+fn head(verbs: &impl Verbs) -> Result<i64, String> {
+    let head = verbs.json(&[OsStr::new("head")], "head")?;
+    head["revision"]
+        .as_i64()
+        .ok_or_else(|| format!("ekr head answered no revision: {head}"))
+}
+
+/// [`Store::mint`] through `verbs`.
+fn mint(verbs: &impl Verbs, kind: &str) -> Result<String, String> {
+    let minted = verbs.json(&[OsStr::new("mint"), OsStr::new(kind)], "mint")?;
+    minted["id"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| "ekr mint answered no id".to_string())
+}
+
+/// [`Store::transact`] through `verbs`.
+fn transact(
+    verbs: &impl Verbs,
+    path: &Path,
+    proposer: &str,
+    operations: &[Operation],
+) -> Result<i64, String> {
+    match submit(verbs, path, proposer, operations, None)? {
+        Ok(revision) => Ok(revision),
+        Err(rejected) => {
+            let issues: Vec<String> = rejected
+                .issues
+                .iter()
+                .map(|i| format!("{}: {}", i.code, i.message))
                 .collect();
-            return Ok(Err(Rejected {
-                transaction: id,
-                issues,
-            }));
-        }
-        let commit = self.command(&[OsStr::new("commit"), OsStr::new(&id)])?;
-        let committed = json(&run(commit, "commit")?, "commit")?;
-        match committed["kind"].as_str() {
-            Some("Committed") => committed["result"]["revision"]
-                .as_i64()
-                .map(Ok)
-                .ok_or_else(|| "ekr commit answered no revision".to_string()),
-            other => Err(format!(
-                "ekr commit of transaction {id} answered {}",
-                other.unwrap_or("nothing")
-            )),
+            Err(format!(
+                "ekr validate rejected transaction {}: {}",
+                rejected.transaction,
+                issues.join("; ")
+            ))
         }
     }
+}
+
+/// [`Store::submit`] through `verbs`.
+fn submit(
+    verbs: &impl Verbs,
+    path: &Path,
+    proposer: &str,
+    operations: &[Operation],
+    schema_version: Option<&str>,
+) -> Result<Result<i64, Rejected>, String> {
+    let id = mint(verbs, "transaction")?;
+    std::fs::write(
+        path,
+        transaction_document(&id, proposer, operations, schema_version),
+    )
+    .map_err(|e| format!("{}: {e}", path.display()))?;
+    verbs.ok(&[OsStr::new("propose"), path.as_os_str()], "propose")?;
+    let validated = verbs.json(&[OsStr::new("validate"), OsStr::new(&id)], "validate")?;
+    if validated["kind"] != "Validated" {
+        let issues = validated["issues"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|i| Issue {
+                code: i["code"].as_str().unwrap_or("?").to_string(),
+                message: i["message"].as_str().unwrap_or_default().to_string(),
+            })
+            .collect();
+        return Ok(Err(Rejected {
+            transaction: id,
+            issues,
+        }));
+    }
+    let committed = verbs.json(&[OsStr::new("commit"), OsStr::new(&id)], "commit")?;
+    match committed["kind"].as_str() {
+        Some("Committed") => committed["result"]["revision"]
+            .as_i64()
+            .map(Ok)
+            .ok_or_else(|| "ekr commit answered no revision".to_string()),
+        other => Err(format!(
+            "ekr commit of transaction {id} answered {}",
+            other.unwrap_or("nothing")
+        )),
+    }
+}
+
+/// How much of what an `ekr session` writes to its own stderr is kept, from its end.
+const STDERR_KEPT: usize = 16 * 1024;
+
+/// One `ekr session` on a store ([`Store::session`]): one process, opened once, that answers
+/// `ontology`, `snapshot`, `schema`, `head`, `mint`, `propose`, `validate`, `commit` and `quality`,
+/// one request at a time, each read against the store (or its stage) as it stands when the request
+/// is read, so it sees what a separate `apply-extraction` committed before it (EKR 0.0.34
+/// `docs/cli.md`, `ekr session`). The session does not serve `apply-extraction` or the `ekr stage`
+/// verbs (`session-verb-refused`): [`Session::apply`] runs one `ekr` of its own.
+///
+/// A run holds one session from the moment its stage, if any, is begun, and closes it before the
+/// stage is published or abandoned and before a snapshot is restored over a SQLite store, which
+/// EKR asks of every process holding the store. Dropping it closes it.
+pub struct Session {
+    store: Store,
+    /// The running process; none once it was closed or ended.
+    pipe: RefCell<Option<Pipe>>,
+}
+
+struct Pipe {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+    /// The end of what the session wrote to its own stderr ([`STDERR_KEPT`]).
+    stderr: Arc<Mutex<Vec<u8>>>,
+    drain: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Pipe {
+    /// Ends the input, so the session writes its replay checkpoint and exits, and waits for it.
+    fn end(self) -> Result<(), String> {
+        let Pipe {
+            mut child,
+            stdin,
+            stdout,
+            stderr,
+            drain,
+        } = self;
+        drop(stdin);
+        drop(stdout);
+        let status = child.wait();
+        if let Some(drain) = drain {
+            let _ = drain.join();
+        }
+        let said = String::from_utf8_lossy(&stderr.lock().expect("not poisoned"))
+            .trim()
+            .to_string();
+        match status {
+            Ok(status) if status.success() => Ok(()),
+            Ok(status) => Err(format!("ekr session ended with {status}: {said}")),
+            Err(e) => Err(format!("cannot wait for ekr session: {e}")),
+        }
+    }
+}
+
+/// One answer of an `ekr session`: what the one-shot verb exits with, prints (as its JSON
+/// document, read into `T`) and writes to stderr.
+#[derive(Deserialize)]
+#[serde(bound(deserialize = "T: Deserialize<'de>"))]
+struct Answer<T> {
+    exit: i32,
+    #[serde(default)]
+    stdout: Option<T>,
+    #[serde(default)]
+    stderr: String,
+}
+
+/// Why no answer was read.
+#[derive(Debug, PartialEq)]
+enum Unread {
+    /// The session's output ended or failed: it is gone.
+    Ended(String),
+    /// A line that is no answer, or whose document is not a `T`; the session reads on.
+    Malformed(String),
+}
+
+/// The next answer on `reader`, its document read into `T` from the pipe as it comes, without
+/// holding the line or a [`Value`] of it; then the rest of the line, its newline.
+fn read_answer<T: DeserializeOwned>(reader: &mut impl BufRead) -> Result<Answer<T>, Unread> {
+    let parsed = Answer::<T>::deserialize(&mut serde_json::Deserializer::from_reader(&mut *reader));
+    let mut rest = Vec::new();
+    match parsed {
+        Ok(answer) => {
+            reader
+                .read_until(b'\n', &mut rest)
+                .map_err(|e| Unread::Ended(e.to_string()))?;
+            Ok(answer)
+        }
+        Err(e) if e.is_eof() => Err(Unread::Ended("it closed its output".into())),
+        Err(e) if e.is_io() => Err(Unread::Ended(e.to_string())),
+        Err(e) => match reader.read_until(b'\n', &mut rest) {
+            Ok(0) | Err(_) => Err(Unread::Ended(format!("its output ended: {e}"))),
+            Ok(_) => Err(Unread::Malformed(e.to_string())),
+        },
+    }
+}
+
+impl Session {
+    /// The store the session is open on, for the verbs it does not serve.
+    pub fn store(&self) -> &Store {
+        &self.store
+    }
+
+    /// The verb `args` as one request, answering the document it printed (none when it printed
+    /// nothing), or `ekr <what> failed: <its stderr>` when it exited other than 0. A session that
+    /// ended is closed, and every request after it fails.
+    fn request<T: DeserializeOwned>(
+        &self,
+        args: &[&OsStr],
+        what: &str,
+    ) -> Result<Option<T>, String> {
+        let argv = args
+            .iter()
+            .map(|a| {
+                a.to_str()
+                    .ok_or_else(|| format!("an ekr argument is not UTF-8: {}", a.to_string_lossy()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut line =
+            serde_json::to_vec(&serde_json::json!({ "argv": argv })).expect("plain JSON");
+        line.push(b'\n');
+        let mut slot = self.pipe.borrow_mut();
+        let Some(pipe) = slot.as_mut() else {
+            return Err(format!(
+                "ekr {what} failed: the run's ekr session has ended"
+            ));
+        };
+        let answer = match pipe
+            .stdin
+            .write_all(&line)
+            .and_then(|()| pipe.stdin.flush())
+        {
+            Ok(()) => read_answer::<T>(&mut pipe.stdout),
+            Err(e) => Err(Unread::Ended(e.to_string())),
+        };
+        match answer {
+            Ok(answer) if answer.exit == 0 => Ok(answer.stdout),
+            Ok(answer) => Err(format!("ekr {what} failed: {}", answer.stderr.trim())),
+            Err(Unread::Malformed(e)) => Err(format!("ekr {what} printed no JSON: {e}")),
+            Err(Unread::Ended(e)) => {
+                let ended = slot.take().expect("matched above").end().err();
+                Err(format!(
+                    "ekr {what} failed: the run's ekr session ended ({e}){}",
+                    ended.map(|why| format!(": {why}")).unwrap_or_default()
+                ))
+            }
+        }
+    }
+
+    /// Ends the session: its input is closed, so it writes its replay checkpoint and exits. A
+    /// session that already ended is closed.
+    pub fn close(&self) -> Result<(), String> {
+        match self.pipe.borrow_mut().take() {
+            Some(pipe) => pipe.end(),
+            None => Ok(()),
+        }
+    }
+
+    /// [`Store::head`], as a request.
+    pub fn head(&self) -> Result<i64, String> {
+        head(self)
+    }
+
+    /// [`Store::ontology`], as a request.
+    pub fn ontology(&self) -> Result<Value, String> {
+        self.json(&[OsStr::new("ontology")], "ontology")
+    }
+
+    /// The graph at the head (`ekr snapshot`), read into a [`Snapshot`] as the answer arrives.
+    pub fn snapshot(&self) -> Result<Snapshot, String> {
+        self.request(&[OsStr::new("snapshot")], "snapshot")?
+            .ok_or_else(|| "ekr snapshot printed no JSON".to_string())
+    }
+
+    /// [`Binary::model_schema`], as a request.
+    pub fn model_schema(&self) -> Result<Value, String> {
+        let args = MODEL_SCHEMA.map(OsStr::new);
+        model_schema(self.json(&args, "schema")?)
+    }
+
+    /// `ekr quality`, the `ekr.store-quality/1` document of the store at its newest revision.
+    pub fn quality(&self) -> Result<Value, String> {
+        self.json(&[OsStr::new("quality")], "quality")
+    }
+
+    /// [`Store::mint`], as a request.
+    pub fn mint(&self, kind: &str) -> Result<String, String> {
+        mint(self, kind)
+    }
+
+    /// [`Store::transact`], as requests.
+    pub fn transact(
+        &self,
+        path: &Path,
+        proposer: &str,
+        operations: &[Operation],
+    ) -> Result<i64, String> {
+        transact(self, path, proposer, operations)
+    }
+
+    /// [`Store::submit`], as requests.
+    pub fn submit(
+        &self,
+        path: &Path,
+        proposer: &str,
+        operations: &[Operation],
+        schema_version: Option<&str>,
+    ) -> Result<Result<i64, Rejected>, String> {
+        submit(self, path, proposer, operations, schema_version)
+    }
+
+    /// [`Store::apply`]: one `ekr apply-extraction` of its own, which a session does not serve,
+    /// in the session's stage.
+    pub fn apply(&self, doc: &Path) -> Result<Value, String> {
+        self.store.apply(doc)
+    }
+}
+
+impl Verbs for Session {
+    fn json(&self, args: &[&OsStr], what: &str) -> Result<Value, String> {
+        self.request(args, what)?
+            .ok_or_else(|| format!("ekr {what} printed no JSON"))
+    }
+
+    fn ok(&self, args: &[&OsStr], what: &str) -> Result<(), String> {
+        self.request::<IgnoredAny>(args, what).map(drop)
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        if let Some(pipe) = self.pipe.get_mut().take() {
+            let _ = pipe.end();
+        }
+    }
+}
+
+/// The graph `ekr snapshot` prints, read into the fields cortex uses and no others: each node's
+/// type and names, each edge's ends, each assertion's lifecycle, cited evidence, subject,
+/// predicate, object and valid time, and each evidence item's source identity. The rest (payloads,
+/// properties, roots) is skipped as it is read. A field of another shape than EKR writes reads as
+/// absent, as it did from a [`Value`].
+#[derive(Debug, Default, Deserialize)]
+pub struct Snapshot {
+    #[serde(default)]
+    pub graph: SnapshotGraph,
+}
+
+/// `graph` of a [`Snapshot`]: the `ekr.graph-document/2`.
+#[derive(Debug, Default, Deserialize)]
+pub struct SnapshotGraph {
+    #[serde(default)]
+    pub graph: Graph,
+}
+
+/// The graph itself, each map keyed by id.
+#[derive(Debug, Default, Deserialize)]
+pub struct Graph {
+    #[serde(default)]
+    pub nodes: BTreeMap<String, Node>,
+    #[serde(default)]
+    pub edges: BTreeMap<String, Edge>,
+    #[serde(default)]
+    pub assertions: BTreeMap<String, Assertion>,
+    #[serde(default)]
+    pub evidence: BTreeMap<String, Evidence>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct Node {
+    #[serde(default, deserialize_with = "lenient")]
+    pub canonical_name: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub type_id: Option<String>,
+    /// Its aliases as EKR holds them, in its order.
+    #[serde(default, deserialize_with = "strings")]
+    pub aliases: Vec<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct Edge {
+    #[serde(default, deserialize_with = "lenient")]
+    pub id: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub source: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub type_id: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub target: Option<String>,
+}
+
+/// An assertion. Its subject, predicate, object and valid time are small tagged documents, kept as
+/// EKR writes them.
+#[derive(Debug, Default, Deserialize)]
+pub struct Assertion {
+    #[serde(default, deserialize_with = "lenient")]
+    pub id: Option<String>,
+    /// `Active`, or how it ended.
+    #[serde(default, deserialize_with = "lenient")]
+    pub lifecycle: Option<String>,
+    /// The ids of the evidence items it cites.
+    #[serde(default, deserialize_with = "strings")]
+    pub evidence: Vec<String>,
+    #[serde(default)]
+    pub subject: Value,
+    #[serde(default)]
+    pub predicate: Value,
+    #[serde(default)]
+    pub object: Value,
+    #[serde(default)]
+    pub valid_time: Value,
+}
+
+/// An evidence item: the identity of its `HumanStatement` source, the only kind cortex writes.
+#[derive(Debug, Default, Deserialize)]
+pub struct Evidence {
+    #[serde(default, deserialize_with = "lenient")]
+    pub source: Option<EvidenceSource>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct EvidenceSource {
+    #[serde(rename = "HumanStatement", default, deserialize_with = "lenient")]
+    pub human_statement: Option<Statement>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct Statement {
+    #[serde(default, deserialize_with = "lenient")]
+    pub identity: Option<String>,
+}
+
+impl Evidence {
+    /// The identity of its `HumanStatement` source, if it has one.
+    pub fn identity(&self) -> Option<&str> {
+        self.source
+            .as_ref()?
+            .human_statement
+            .as_ref()?
+            .identity
+            .as_deref()
+    }
+}
+
+impl Snapshot {
+    /// The snapshot `value` holds, an `ekr snapshot` document already read whole; one of another
+    /// shape holds nothing.
+    pub fn of(value: &Value) -> Self {
+        Self::deserialize(value).unwrap_or_default()
+    }
+}
+
+/// A `T`, or `T::default()` when the document holds another shape there.
+fn lenient<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Either<T> {
+        Is(T),
+        Other(IgnoredAny),
+    }
+    Ok(match Either::<T>::deserialize(d)? {
+        Either::Is(t) => t,
+        Either::Other(_) => T::default(),
+    })
+}
+
+/// The strings of a list, in order, its other items left out; none when it is no list.
+fn strings<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Item {
+        Text(String),
+        Other(IgnoredAny),
+    }
+    let items: Vec<Item> = lenient(d)?;
+    Ok(items
+        .into_iter()
+        .filter_map(|i| match i {
+            Item::Text(t) => Some(t),
+            Item::Other(_) => None,
+        })
+        .collect())
 }
 
 /// One issue of a rejected transaction, as `ekr validate` names it.
@@ -833,9 +1318,129 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{
-        outcome_unknown, remove_inherited_ekr, transaction_document, Backend, Connection, Launch,
-        Operation, PropertyDecl, Store,
+        outcome_unknown, read_answer, remove_inherited_ekr, transaction_document, Backend,
+        Connection, Launch, Operation, PropertyDecl, Snapshot, Store, Unread,
     };
+
+    /// Acceptance 3 of `story:ekr-session-per-run`: a session's `snapshot` answer is read into a
+    /// typed [`Snapshot`] straight from the pipe. Only the fields cortex uses are kept; payloads
+    /// and the rest are skipped as read, and the reader stops at the answer's newline, so the next
+    /// answer on the same pipe is read whole.
+    #[test]
+    fn a_snapshot_answer_is_read_typed_from_the_pipe_and_the_next_answer_follows() {
+        let payload: String = "x".repeat(100_000);
+        let snapshot = serde_json::json!({
+            "graph": {"format": "ekr.graph-document/2", "graph": {
+                "revision": 3,
+                "nodes": {"n-1": {"canonical_name": "Acme", "type_id": "t-1",
+                    "aliases": ["Acme", 7, "acme inc"], "properties": {"p": {"big": payload}}}},
+                "edges": {"e-1": {"id": "e-1", "source": "n-1", "type_id": "et-1",
+                    "target": "n-2"}},
+                "assertions": {"a-1": {"id": "a-1", "lifecycle": "Active", "evidence": ["ev-1"],
+                    "subject": {"Node": "n-1"}, "predicate": {"Property": "p-1"},
+                    "object": {"Value": {"value": 12345678901234567890u64}},
+                    "valid_time": {"from": 5, "to": null}}},
+                "evidence": {"ev-1": {"source": {"HumanStatement": {"identity": "record:r-1"}},
+                    "payload": payload}}}},
+            "evidence_payloads": {"ev-1": payload},
+            "root": {"knowledge_root": "abc"},
+        });
+        let first = serde_json::json!({"exit": 0, "stdout": snapshot, "stderr": ""});
+        let pipe = format!(
+            "{first}\n{}\n",
+            r#"{"exit":0,"stdout":{"revision":3},"stderr":""}"#
+        );
+        let mut reader = std::io::BufReader::new(pipe.as_bytes());
+
+        let answer = read_answer::<Snapshot>(&mut reader).expect("an answer");
+        assert_eq!(answer.exit, 0);
+        let graph = answer.stdout.expect("a snapshot").graph.graph;
+        let node = &graph.nodes["n-1"];
+        assert_eq!(node.canonical_name.as_deref(), Some("Acme"));
+        assert_eq!(node.type_id.as_deref(), Some("t-1"));
+        assert_eq!(
+            node.aliases,
+            ["Acme", "acme inc"],
+            "a non-string alias is left out"
+        );
+        assert_eq!(graph.edges["e-1"].target.as_deref(), Some("n-2"));
+        let a = &graph.assertions["a-1"];
+        assert_eq!(a.lifecycle.as_deref(), Some("Active"));
+        assert_eq!(a.evidence, ["ev-1"]);
+        assert_eq!(a.valid_time["from"].as_i64(), Some(5));
+        assert_eq!(
+            a.object["Value"]["value"].to_string(),
+            "12345678901234567890",
+            "a number keeps its digits"
+        );
+        assert_eq!(graph.evidence["ev-1"].identity(), Some("record:r-1"));
+
+        let next = read_answer::<serde_json::Value>(&mut reader).expect("the next answer");
+        assert_eq!(next.stdout.unwrap()["revision"], 3);
+        assert!(matches!(
+            read_answer::<serde_json::Value>(&mut reader),
+            Err(Unread::Ended(_))
+        ));
+    }
+
+    /// A refused request answers no document and its refusal; a line that is no answer is said as
+    /// such and the line after it is read; a session that closed its output has ended.
+    #[test]
+    fn a_refusal_a_malformed_line_and_an_ended_session_are_told_apart() {
+        let pipe = concat!(
+            r#"{"exit":2,"stdout":null,"stderr":"ekr: session-verb-refused: no\n"}"#,
+            "\n",
+            "not json at all\n",
+            r#"{"exit":0,"stdout":{"graph":{"graph":{"nodes":"no map"}}},"stderr":""}"#,
+            "\n",
+            r#"{"exit":0,"stdout":{"id":"m-1"},"stderr":""}"#,
+            "\n",
+            r#"{"exit":0,"stdout":{"#,
+        );
+        let mut reader = std::io::BufReader::new(pipe.as_bytes());
+        let refused = read_answer::<Snapshot>(&mut reader).expect("an answer");
+        assert_eq!(refused.exit, 2);
+        assert!(refused.stdout.is_none());
+        assert!(refused.stderr.contains("session-verb-refused"));
+        assert!(matches!(
+            read_answer::<Snapshot>(&mut reader),
+            Err(Unread::Malformed(_))
+        ));
+        // A document of another shape than a snapshot is malformed too, and the pipe reads on.
+        assert!(matches!(
+            read_answer::<Snapshot>(&mut reader),
+            Err(Unread::Malformed(_))
+        ));
+        let minted = read_answer::<serde_json::Value>(&mut reader).expect("an answer");
+        assert_eq!(minted.stdout.unwrap()["id"], "m-1");
+        assert!(matches!(
+            read_answer::<serde_json::Value>(&mut reader),
+            Err(Unread::Ended(_))
+        ));
+    }
+
+    /// The snapshot a caller read whole, as a [`serde_json::Value`], reads as the same typed
+    /// [`Snapshot`]; one of another shape holds nothing.
+    #[test]
+    fn a_snapshot_read_whole_reads_as_the_typed_one() {
+        let value = serde_json::json!({"graph": {"graph": {"nodes": {
+            "n-1": {"canonical_name": "Acme", "type_id": "t-1", "aliases": ["acme"]},
+            "n-2": {"canonical_name": null, "aliases": null}}}}});
+        let snapshot = Snapshot::of(&value);
+        assert_eq!(snapshot.graph.graph.nodes.len(), 2);
+        assert_eq!(snapshot.graph.graph.nodes["n-1"].aliases, ["acme"]);
+        assert_eq!(snapshot.graph.graph.nodes["n-2"].canonical_name, None);
+        assert!(Snapshot::of(&serde_json::json!({}))
+            .graph
+            .graph
+            .nodes
+            .is_empty());
+        assert!(Snapshot::of(&serde_json::json!([1, 2]))
+            .graph
+            .graph
+            .nodes
+            .is_empty());
+    }
 
     /// EKR 0.0.34 has no refusal name or exit status of its own for an unknown publication outcome
     /// (`StoreError::UnknownCommit` is a fault, exit 1): its message is what tells it apart.

@@ -919,14 +919,6 @@ fn process_in(
     }
 
     let mut store = layout.store_handle(spec);
-    // Each mapped property is written in the kind its mapping names, else the one the store
-    // declares; a mapping whose kind differs from the store's is refused before anything is
-    // written.
-    if let (Some(s), Some(st)) = (structured.as_mut(), structured_source) {
-        let ontology = store.ontology().map_err(Failure::Apply)?;
-        s.kinds = structured::kinds(st, &ontology)
-            .map_err(|e| Failure::Apply(format!("source {label}: {e}")))?;
-    }
     // A run into a live store copies the store and `state/` once, before its first
     // `apply-extraction`, and keeps the copy, named by the run's start and label, once that apply
     // commits; the seed of a new store takes none.
@@ -940,11 +932,23 @@ fn process_in(
     if undoable && gated(spec) {
         before.staged = Staged::begin(layout, &mut store)?;
     }
+    // The run's reads and transactions go through one `ekr session`, in its stage when it has
+    // one; `apply-extraction` and the stage verbs run as `ekr`s of their own. It is closed before
+    // the stage is settled or a snapshot restored ([`held_to_gate`]), and when the run returns.
+    let session = store.session().map_err(Failure::Apply)?;
+    // Each mapped property is written in the kind its mapping names, else the one the store
+    // declares; a mapping whose kind differs from the store's is refused before anything is
+    // written.
+    if let (Some(s), Some(st)) = (structured.as_mut(), structured_source) {
+        let ontology = session.ontology().map_err(Failure::Apply)?;
+        s.kinds = structured::kinds(st, &ontology)
+            .map_err(|e| Failure::Apply(format!("source {label}: {e}")))?;
+    }
     let host = std::fs::read_to_string(layout.host()).map_err(|e| Failure::Apply(e.to_string()))?;
     let operator = crate::ekr::operator(&host).map_err(Failure::Apply)?;
     if let Some(source) = &structured {
         let records = Records {
-            store: &store,
+            store: &session,
             operator: &operator,
             source,
             started,
@@ -969,7 +973,7 @@ fn process_in(
         }
         unread(report, &fetched.unread, redactor.as_ref());
         if undoable {
-            held_to_gate(layout, spec, &store, label, report, None, before, started)?;
+            held_to_gate(layout, spec, &session, label, report, None, before, started)?;
         }
         let failures = fetched.child_failures.clone();
         finish(
@@ -978,9 +982,7 @@ fn process_in(
         log(layout, label, report, started);
         return Ok(std::mem::take(report));
     }
-    let schema = crate::ekr::Binary(store.bin.clone())
-        .model_schema()
-        .map_err(Failure::Extract)?;
+    let schema = session.model_schema().map_err(Failure::Extract)?;
     let model = Model {
         backend: spec.model.backend.unwrap_or(m::ModelBackend::Claude),
         claude: tools.claude.clone(),
@@ -1015,7 +1017,7 @@ fn process_in(
     // own fixed part (its store hits' known-entity lines) is held to it before the batch is sent.
     let mut assumed: Option<usize> = None;
     let size = batch_size(&spec.model, || {
-        let ontology = store.ontology().map_err(Failure::Apply)?;
+        let ontology = session.ontology().map_err(Failure::Apply)?;
         let known = Known::from_ontology(&ontology, crate::known::merge(Vec::new(), &entities));
         let (_, fixed) =
             extract::prompt_split(&spec.description, instructions.as_deref(), &known, &[]);
@@ -1040,11 +1042,11 @@ fn process_in(
     // Batch 0 as the check pseudonymised it, which the loop sends unless it splits it first.
     let mut first = None;
     if let Some(r) = redactor.as_ref().filter(|r| r.refuses()) {
-        let ontology = &*held_ontology.insert(store.ontology().map_err(Failure::Apply)?);
+        let ontology = &*held_ontology.insert(session.ontology().map_err(Failure::Apply)?);
         for batch in &batches {
             let mut p = r.batch();
             let known = lookup
-                .for_batch(&store, ontology, batch, &entities)
+                .for_batch(&session, ontology, batch, &entities)
                 .map_err(Failure::Apply)?;
             let known = Known::from_ontology(ontology, known);
             let (shown, known) = pseudonymise(&mut p, batch, &uncut, &known);
@@ -1110,14 +1112,14 @@ fn process_in(
         // holds, as nothing was applied since.
         let checked = first.take();
         if held_ontology.is_none() {
-            held_ontology = Some(store.ontology().map_err(Failure::Apply)?);
+            held_ontology = Some(session.ontology().map_err(Failure::Apply)?);
         }
         let ontology = held_ontology.as_ref().expect("read above");
         // The store's nodes the batch names, of any type, then the run's own names.
         let known = match &checked {
             Some(_) => Vec::new(),
             None => lookup
-                .for_batch(&store, ontology, &batch, &entities)
+                .for_batch(&session, ontology, &batch, &entities)
                 .map_err(Failure::Apply)?,
         };
         // With the store's ontology names, masked and one-line.
@@ -1486,7 +1488,7 @@ fn process_in(
         held_to_gate(
             layout,
             spec,
-            &store,
+            &session,
             label,
             report,
             too_large
@@ -1953,11 +1955,14 @@ impl Staged {
 /// restored, and the failure's reason. A run that left a part unfit for the model's window (the
 /// documents in `report.too_large`, or `unfit`, why a part of several documents ended it) says so
 /// in that reason too; its counting is that of any run its gate refuses.
+///
+/// `ekr quality` is asked through the run's `session`, which is then closed, before the stage is
+/// published or abandoned or the snapshot restored.
 #[allow(clippy::too_many_arguments)]
 fn held_to_gate(
     layout: &Layout,
     spec: &m::InstanceSpec,
-    store: &crate::ekr::Store,
+    session: &crate::ekr::Session,
     label: &str,
     report: &Report,
     unfit: Option<&str>,
@@ -1970,7 +1975,10 @@ fn held_to_gate(
     if !before.applied {
         return Ok(());
     }
-    let failed = gate::evaluate(checks, report, || gate::quality(store));
+    let failed = gate::evaluate(checks, report, || session.quality());
+    if let Err(e) = session.close() {
+        eprintln!("cortex: the run's ekr session did not end cleanly: {e}");
+    }
     if failed.is_empty() {
         return match before.staged.take() {
             Some(staged) => staged.publish(),
@@ -2200,9 +2208,10 @@ fn batches(issued: Vec<evidence::Issued>, size: usize) -> Vec<Vec<evidence::Issu
     batches
 }
 
-/// What a structured run applies its records with.
+/// What a structured run applies its records with: the run's session, through which it reads and
+/// transacts, and which applies each batch with an `ekr` of its own.
 struct Records<'a> {
-    store: &'a crate::ekr::Store,
+    store: &'a crate::ekr::Session,
     operator: &'a str,
     source: &'a structured::Source<'a>,
     started: i64,
@@ -2389,7 +2398,7 @@ fn end_dropped(
     let unsettled = unsettled(r.source, listed, seen);
     let snapshot = r.store.snapshot().map_err(Failure::Apply)?;
     let ontology = r.store.ontology().map_err(Failure::Apply)?;
-    let ops = r.source.ended(
+    let ops = r.source.ended_in(
         &snapshot,
         &ontology,
         &r.source.listed(listed),

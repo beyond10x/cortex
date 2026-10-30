@@ -1106,7 +1106,12 @@ impl<'a> Source<'a> {
     /// record, naming the types; so does a mapped property that type declares in another kind
     /// than the mapping writes. No match, or matches of its own type only, leave the record as
     /// with `OwnType`, which EKR resolves.
-    pub fn lookup(&self, index: &Index, snapshot: &Value, ontology: &Value) -> Lookup {
+    pub fn lookup(
+        &self,
+        index: &Index,
+        snapshot: &crate::ekr::Snapshot,
+        ontology: &Value,
+    ) -> Lookup {
         use crate::known::fold;
         let mut types: BTreeMap<&str, &str> = BTreeMap::new();
         let mut declared: BTreeMap<(&str, &str), &str> = BTreeMap::new();
@@ -1125,19 +1130,14 @@ impl<'a> Source<'a> {
         }
         // Each folded name or alias, with the nodes it names: `(node id, type, canonical name)`.
         let mut names: BTreeMap<String, Vec<(&str, &str, &str)>> = BTreeMap::new();
-        for (id, node) in snapshot["graph"]["graph"]["nodes"]
-            .as_object()
-            .into_iter()
-            .flatten()
-        {
-            let Some(name) = node["canonical_name"].as_str() else {
+        for (id, node) in &snapshot.graph.graph.nodes {
+            let Some(name) = node.canonical_name.as_deref() else {
                 continue;
             };
-            let Some(ty) = node["type_id"].as_str().and_then(|t| types.get(t)) else {
+            let Some(ty) = node.type_id.as_deref().and_then(|t| types.get(t)) else {
                 continue;
             };
-            let aliases = node["aliases"].as_array().into_iter().flatten();
-            for n in std::iter::once(name).chain(aliases.filter_map(Value::as_str)) {
+            for n in std::iter::once(name).chain(node.aliases.iter().map(String::as_str)) {
                 let held = names.entry(fold(n)).or_default();
                 if !held.iter().any(|(i, _, _)| *i == id.as_str()) {
                     held.push((id.as_str(), ty, name));
@@ -1357,9 +1357,8 @@ impl<'a> Source<'a> {
 
     /// The record identity an evidence item of the store names, when it is one of this source's
     /// records: its `!HumanStatement` identity is `record:<identity>` (`evidence::identity`).
-    fn owner(&self, evidence: &Value) -> Option<String> {
-        let identity = evidence["source"]["HumanStatement"]["identity"].as_str()?;
-        let identity = identity.strip_prefix("record:")?;
+    fn owner(&self, evidence: &crate::ekr::Evidence) -> Option<String> {
+        let identity = evidence.identity()?.strip_prefix("record:")?;
         self.owns(identity).then(|| identity.to_string())
     }
 
@@ -1383,6 +1382,8 @@ impl<'a> Source<'a> {
     /// is gone, or no longer has the property — and a relation are retracted with `reason`, which
     /// names the record. An edge from the subject to the object of a retracted relation, of its
     /// type, is deleted when no active relation assertion that stays joins them.
+    ///
+    /// `snapshot` is the document read whole; a run reads it typed ([`Source::ended_in`]).
     pub fn ended(
         &self,
         snapshot: &Value,
@@ -1391,8 +1392,21 @@ impl<'a> Source<'a> {
         unsettled: &BTreeSet<String>,
         held: &[Held],
     ) -> Vec<crate::ekr::Operation> {
-        use crate::ekr::Operation;
-        let graph = &snapshot["graph"]["graph"];
+        let snapshot = crate::ekr::Snapshot::of(snapshot);
+        self.ended_in(&snapshot, ontology, listed, unsettled, held)
+    }
+
+    /// [`Source::ended`] of the store whose graph is `snapshot`.
+    pub fn ended_in(
+        &self,
+        snapshot: &crate::ekr::Snapshot,
+        ontology: &Value,
+        listed: &BTreeMap<String, Listed>,
+        unsettled: &BTreeSet<String>,
+        held: &[Held],
+    ) -> Vec<crate::ekr::Operation> {
+        use crate::ekr::{Assertion, Operation};
+        let graph = &snapshot.graph.graph;
         let mut properties: BTreeMap<&str, &str> = BTreeMap::new();
         for t in ontology["node_types"].as_array().into_iter().flatten() {
             for p in t["properties"].as_array().into_iter().flatten() {
@@ -1407,54 +1421,42 @@ impl<'a> Source<'a> {
             .flatten()
             .filter_map(|t| Some((t["id"].as_str()?, t["name"].as_str()?)))
             .collect();
-        let owners: BTreeMap<&str, String> = graph["evidence"]
-            .as_object()
-            .into_iter()
-            .flatten()
+        let owners: BTreeMap<&str, String> = graph
+            .evidence
+            .iter()
             .filter_map(|(id, e)| Some((id.as_str(), self.owner(e)?)))
             .collect();
         let node_names = |id: &str| -> BTreeSet<String> {
-            let node = &graph["nodes"][id];
-            node["aliases"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .chain(std::iter::once(&node["canonical_name"]))
-                .filter_map(Value::as_str)
-                .map(str::to_string)
+            let Some(node) = graph.nodes.get(id) else {
+                return BTreeSet::new();
+            };
+            node.aliases
+                .iter()
+                .chain(node.canonical_name.as_ref())
+                .cloned()
                 .collect()
         };
         // Each active assertion of this source, with the records it rests on and whether one of
         // them still lists its claim (or is unsettled, so keeps it).
         struct Mine<'g> {
-            a: &'g Value,
+            a: &'g Assertion,
             records: BTreeSet<String>,
             kept: bool,
         }
         let mut mine: Vec<Mine<'_>> = Vec::new();
-        for a in graph["assertions"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .map(|(_, a)| a)
-        {
-            if a["lifecycle"] != "Active" {
+        for a in graph.assertions.values() {
+            if a.lifecycle.as_deref() != Some("Active") {
                 continue;
             }
-            let cited: Vec<&str> = a["evidence"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .collect();
+            let cited: Vec<&str> = a.evidence.iter().map(String::as_str).collect();
             let records: Option<BTreeSet<String>> =
                 cited.iter().map(|e| owners.get(e).cloned()).collect();
             let Some(records) = records.filter(|r| !r.is_empty()) else {
                 continue;
             };
             let lists = |l: &Listed| -> bool {
-                if let Some(p) = a["predicate"]["Property"].as_str() {
-                    let value = scalar(&a["object"]["Value"]["value"]);
+                if let Some(p) = a.predicate["Property"].as_str() {
+                    let value = scalar(&a.object["Value"]["value"]);
                     return match (properties.get(p), value) {
                         (Some(name), Some(value)) => {
                             l.properties.contains(&(name.to_string(), value))
@@ -1462,9 +1464,8 @@ impl<'a> Source<'a> {
                         _ => true,
                     };
                 }
-                if let Some(e) = a["predicate"]["Relation"].as_str() {
-                    let (Some(name), Some(object)) =
-                        (edge_types.get(e), a["object"]["Node"].as_str())
+                if let Some(e) = a.predicate["Relation"].as_str() {
+                    let (Some(name), Some(object)) = (edge_types.get(e), a.object["Node"].as_str())
                     else {
                         return true;
                     };
@@ -1475,7 +1476,7 @@ impl<'a> Source<'a> {
                 }
                 true
             };
-            let relation = a["predicate"]["Relation"]
+            let relation = a.predicate["Relation"]
                 .as_str()
                 .and_then(|e| edge_types.get(e).copied());
             let holds = |h: &Held, r: &str| {
@@ -1508,37 +1509,33 @@ impl<'a> Source<'a> {
         if mine.iter().all(|m| m.kept) {
             return Vec::new();
         }
-        let from = |a: &Value| a["valid_time"]["from"].as_i64();
+        let from = |a: &Assertion| a.valid_time["from"].as_i64();
         // Each kept property assertion's valid start and id, by its records, subject and predicate:
         // the candidates to replace an ended one of the same three.
         type Claim<'m> = (&'m BTreeSet<String>, String, String);
         let mut replacements: BTreeMap<Claim<'_>, Vec<(i64, &str)>> = BTreeMap::new();
         for r in mine.iter().filter(|r| r.kept) {
-            if r.a["predicate"]["Property"].is_null() {
+            if r.a.predicate["Property"].is_null() {
                 continue;
             }
-            if let (Some(f), Some(id)) = (from(r.a), r.a["id"].as_str()) {
+            if let (Some(f), Some(id)) = (from(r.a), r.a.id.as_deref()) {
                 let claim = (
                     &r.records,
-                    r.a["subject"].to_string(),
-                    r.a["predicate"].to_string(),
+                    r.a.subject.to_string(),
+                    r.a.predicate.to_string(),
                 );
                 replacements.entry(claim).or_default().push((f, id));
             }
         }
         let mut ops = Vec::new();
-        let mut retracted: Vec<&Value> = Vec::new();
+        let mut retracted: Vec<&Assertion> = Vec::new();
         for m in mine.iter().filter(|m| !m.kept) {
             let a = m.a;
-            let id = a["id"].as_str().unwrap_or_default().to_string();
-            let replacement = a["predicate"]["Property"].as_str().and_then(|_| {
+            let id = a.id.as_deref().unwrap_or_default().to_string();
+            let replacement = a.predicate["Property"].as_str().and_then(|_| {
                 let start = from(a);
-                let end = a["valid_time"]["to"].as_i64();
-                let claim = (
-                    &m.records,
-                    a["subject"].to_string(),
-                    a["predicate"].to_string(),
-                );
+                let end = a.valid_time["to"].as_i64();
+                let claim = (&m.records, a.subject.to_string(), a.predicate.to_string());
                 replacements
                     .get(&claim)
                     .into_iter()
@@ -1571,11 +1568,11 @@ impl<'a> Source<'a> {
             return ops;
         }
         // The edges of retracted relations no active relation assertion that stays still joins.
-        let joins = |a: &Value| {
+        let joins = |a: &Assertion| {
             (
-                a["subject"]["Node"].as_str().map(str::to_string),
-                a["predicate"]["Relation"].as_str().map(str::to_string),
-                a["object"]["Node"].as_str().map(str::to_string),
+                a.subject["Node"].as_str().map(str::to_string),
+                a.predicate["Relation"].as_str().map(str::to_string),
+                a.object["Node"].as_str().map(str::to_string),
             )
         };
         let gone: BTreeSet<_> = retracted
@@ -1584,29 +1581,22 @@ impl<'a> Source<'a> {
             .filter(|(s, p, o)| s.is_some() && p.is_some() && o.is_some())
             .collect();
         let retracted_ids: BTreeSet<&str> =
-            retracted.iter().filter_map(|a| a["id"].as_str()).collect();
-        let staying: BTreeSet<_> = graph["assertions"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .map(|(_, a)| a)
-            .filter(|a| a["lifecycle"] == "Active")
-            .filter(|a| !a["id"].as_str().is_some_and(|i| retracted_ids.contains(i)))
+            retracted.iter().filter_map(|a| a.id.as_deref()).collect();
+        let staying: BTreeSet<_> = graph
+            .assertions
+            .values()
+            .filter(|a| a.lifecycle.as_deref() == Some("Active"))
+            .filter(|a| !a.id.as_deref().is_some_and(|i| retracted_ids.contains(i)))
             .map(joins)
             .collect();
-        for edge in graph["edges"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .map(|(_, e)| e)
-        {
+        for edge in graph.edges.values() {
             let key = (
-                edge["source"].as_str().map(str::to_string),
-                edge["type_id"].as_str().map(str::to_string),
-                edge["target"].as_str().map(str::to_string),
+                edge.source.clone(),
+                edge.type_id.clone(),
+                edge.target.clone(),
             );
             if gone.contains(&key) && !staying.contains(&key) {
-                if let Some(id) = edge["id"].as_str() {
+                if let Some(id) = &edge.id {
                     ops.push(Operation::DeleteEdge(id.to_string()));
                 }
             }

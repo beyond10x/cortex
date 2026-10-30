@@ -829,8 +829,8 @@ fn a_postgres_run_that_fails_its_gate_is_undone() {
         .unwrap_or_else(|| panic!("no abandoned stage: {listed}"));
     assert_eq!(undone["base"].as_i64(), Some(kept), "{listed}");
 
-    // The failing run's `apply-extraction` and the gate's reads ran in its stage, through the
-    // launch; the stage verbs ran on the store.
+    // The failing run's `apply-extraction` and its session, through which the run and the gate
+    // read, ran in its stage, through the launch; the stage verbs ran on the store.
     let id = undone["stage_id"].as_str().unwrap();
     let log = std::fs::read_to_string(w.root.join("ekr-stage.log")).unwrap();
     let run_log: Vec<&str> = log.lines().skip(log_lines).collect();
@@ -840,7 +840,7 @@ fn a_postgres_run_that_fails_its_gate_is_undone() {
             .any(|l| l.starts_with(&format!("{id}|{verb}")))
     };
     assert!(in_stage("apply-extraction"), "{log}");
-    assert!(in_stage("ontology"), "{log}");
+    assert!(in_stage("session"), "{log}");
     for verb in ["stage begin", &format!("stage abandon {id}")] {
         assert!(
             run_log.iter().any(|l| *l == format!("-|{verb}")),
@@ -2327,7 +2327,8 @@ fn security_every_ekr_that_opens_a_launched_store_holds_the_connection_on_descri
     let _ = cortex(&w, &["schema", "pg", "--sample", "1", "--dry-run"]);
 
     let (log, opened) = store_invocations(&w);
-    for verb in ["head", "seed", "apply-extraction", "quality", "sample"] {
+    // The run's reads and its gate's `ekr quality` are requests to its `ekr session`.
+    for verb in ["head", "seed", "apply-extraction", "session", "sample"] {
         assert!(
             opened
                 .iter()

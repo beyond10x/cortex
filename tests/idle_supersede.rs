@@ -45,8 +45,12 @@ fn world() -> World {
     let stand_in = w.bin.join("ekr");
     executable(
         &stand_in,
-        &EKR.replace("@ROOT@", &root)
-            .replace("@EKR@", &ekr().display().to_string()),
+        &[
+            common::EKR_SESSION_SHIM,
+            &EKR.replace("@ROOT@", &root)
+                .replace("@EKR@", &ekr().display().to_string()),
+        ]
+        .concat(),
     );
     std::fs::create_dir_all(w.root.join("registry")).unwrap();
     registry(
