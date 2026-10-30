@@ -16,21 +16,41 @@ use regex::Regex;
 enum Keep {
     /// The whole match.
     Nothing,
-    /// The value only: groups 1 and 2 (the name and the separator) are kept, group 3 is the value.
+    /// The value only: groups 1 and 2 (the name and the separator) are kept, group 3 is the value,
+    /// and group 4, when the rule has one (an element's closing tag), is kept after it.
     Name,
     /// The password of a URL's userinfo: group 1 (scheme, user and `:`) is kept, group 2 is the
     /// password, and the `@` after it is kept.
     User,
 }
 
-/// A credential's name, with any `<word>_` prefix (`DB_PASSWORD`, `client_secret`,
-/// `AWS_SECRET_ACCESS_KEY`), starting at a word boundary or after a percent-encoded byte,
-/// encoded once or more (`%3Faccess_token`, `%253Faccess_token`).
-const NAME: &str = r"((?:\b|%(?:25)*[0-9a-f]{2})(?:[a-z0-9]+_)*(?:password|passwd|secret|api[_-]?key|access[_-]?key|access[_-]?token|auth[_-]?token))";
-/// `=`, `:` or `=>`, raw or percent-encoded once or more, after the quote that closes a quoted
-/// name (`"password": `, `\"password\": ` inside a JSON string), as the opt-in `Credential`
-/// class of `crate::redact` reads it.
-const SEPARATOR: &str = r#"((?:\\?["']|%(?:25)*2[27])?\s*(?:=>|[:=]|%(?:25)*3[ad])\s*)"#;
+/// A credential's name, with any `<word>_` or `<word>-` prefix (`DB_PASSWORD`, `client_secret`,
+/// `db-password`, `AWS_SECRET_ACCESS_KEY`). `password` and `passwd` may be glued to a prefix
+/// (`PGPASSWORD`), `secret` may be followed by `key` (`SECRET_KEY`, `DJANGO_SECRET_KEY`), and
+/// `pass` is a name after a `<word>_` prefix only (`DB_PASS`), so the words `pass` and `bypass`
+/// are not. Leading `_` are part of it (`_password`, `__db_password__`). `crate::redact`'s
+/// `Credential` class reads the same spellings.
+pub(crate) const KEYWORD: &str = r"_*(?:(?:[a-z0-9]+[_-])*(?:[a-z0-9]*pass(?:word|wd)|secret(?:[_-]?key)?|api[_-]?key|access[_-]?key|access[_-]?token|auth[_-]?token)|(?:[a-z0-9]+_)+pass)";
+/// Markup around a name or after its separator: a code span, bold or italic, as Markdown and chat
+/// write a key (`` `DB_PASSWORD`: ``, `*api_key*: `, `**api_key:** `).
+pub(crate) const MARKUP: &str = r"[`*_~]{1,3}";
+/// `=`, `:` or `=>`, raw or percent-encoded once or more, after the quote or markup that closes a
+/// quoted name (`"password": `, `\"password\": ` inside a JSON string, `` `password`: ``), and
+/// followed by markup before a space (`**password:** `), as the opt-in `Credential` class of
+/// `crate::redact` reads it.
+fn separator() -> String {
+    format!(
+        r#"((?:\\?["']|%(?:25)*2[27]|{MARKUP})?\s*(?:=>|[:=]|%(?:25)*3[ad])(?:{MARKUP}\s+|\s*))"#
+    )
+}
+/// An element's text, as XML writes a credential (`<db_password>…</db_password>`): six or more
+/// characters up to the closing tag, which is kept. Groups: the `>`, the value, the closing `</`.
+pub(crate) const ELEMENT_VALUE: &str = r"(>\s*)([^\s<][^<]{5,}?)(\s*</)";
+/// A command-line flag's value after a space or a tab (`--db-password <value>`), which is not
+/// another flag. Groups: the space, the value.
+pub(crate) const FLAG_VALUE: &str = r#"([ \t]+["']?)([^\s"'\-][^\s"']{5,})"#;
+/// A flag's name: one or two `-` that start a word (`--db-password`).
+pub(crate) const FLAG: &str = r"\B--?";
 /// An assigned value in text: up to the next space or quote.
 const TEXT_VALUE: &str = r#"([^\s"']{6,})"#;
 /// One character of an assigned value in a key. A value ends at a space, a quote, `&` or `#`,
@@ -52,8 +72,32 @@ const KEY_VALUE: &str = concat!("((?:", key_unit!(), "){6,})");
 /// break may be written `\n`, as in a JSON string.
 const KEY_LINES: &str = r"(?:(?:\s|\\[rn])+(?:(?:Proc-Type|DEK-Info):[^\r\n\\]*|[A-Za-z0-9+/=]{16,}|[A-Za-z0-9+/=]+\s*\z))*";
 
-fn build(value: &str) -> Vec<(&'static str, Keep, Regex)> {
-    let assignment = format!(r#"(?i){NAME}{SEPARATOR}(?:\\?["'])?{value}"#);
+/// Whether a flag's value is a word of prose (`--password option`): lower-case letters only,
+/// with any punctuation that ends a sentence or a clause after them.
+pub(crate) fn prose_word(value: &str) -> bool {
+    let word = value.trim_end_matches(['.', ',', ';', ':', '!', '?', ')']);
+    !word.is_empty() && word.chars().all(|c| c.is_ascii_lowercase())
+}
+
+/// A rule: its shape, what it keeps, its pattern, and whether a value it found is masked.
+type Rule = (&'static str, Keep, Regex, fn(&str) -> bool);
+
+fn any_value(_: &str) -> bool {
+    true
+}
+
+fn not_prose(value: &str) -> bool {
+    !prose_word(value)
+}
+
+fn build(value: &str) -> Vec<Rule> {
+    // A credential's name at a word boundary or after a percent-encoded byte, encoded once or
+    // more (`%3Faccess_token`, `%253Faccess_token`).
+    let name = format!(r"((?:\b|%(?:25)*[0-9a-f]{{2}}){KEYWORD})");
+    let separator = separator();
+    let assignment = format!(r#"(?i){name}{separator}(?:\\?["'`])?{value}"#);
+    let element = format!(r"(?i)(<{KEYWORD}(?:\s[^<>]*)?){ELEMENT_VALUE}");
+    let flag = format!(r"(?i)({FLAG}{KEYWORD}){FLAG_VALUE}");
     // A whole key first, then a key without its `END` line: two rules, because one with both as
     // alternatives reads to the end of the text for every `BEGIN` line without an `END` line.
     [
@@ -111,24 +155,36 @@ fn build(value: &str) -> Vec<(&'static str, Keep, Regex)> {
             "url-password",
             Keep::User,
             // A user name holding a raw `@` (`jane@corp.example:<password>@host`). Its password
-            // holds no `,` or `;` either, so a user, host and port before a list of addresses
+            // holds a `,` or `;` only after something a port is not (a non-digit, or six digits
+            // or more), so a user, host and port before a list of addresses
             // (`ops@mail.example:587,admin@example.org`) is not read as one.
-            r#"(?i)\b([a-z][a-z0-9+.\-]*://[^\s/?#:"<>`{}|\\^]*@[^\s/?#:"<>`{}|\\^]*:)([^\s/?#"<>`{}|\\^,;]+)@"#.into(),
+            concat!(
+                r#"(?i)\b([a-z][a-z0-9+.\-]*://[^\s/?#:"<>`{}|\\^]*@[^\s/?#:"<>`{}|\\^]*:)("#,
+                r#"(?:[^\s/?#"<>`{}|\\^,;]*[^\s/?#"<>`{}|\\^,;0-9][^\s/?#"<>`{}|\\^,;]*|[0-9]{6,})"#,
+                r#"[,;][^\s/?#"<>`{}|\\^]*|[^\s/?#"<>`{}|\\^,;]+)@"#,
+            )
+            .into(),
         ),
         ("secret-assignment", Keep::Name, assignment),
+        ("secret-assignment", Keep::Name, element),
     ]
     .into_iter()
-    .map(|(name, keep, pattern)| (name, keep, Regex::new(&pattern).expect("a valid pattern")))
+    .map(|(name, keep, pattern)| (name, keep, pattern, any_value as fn(&str) -> bool))
+    .chain([("secret-assignment", Keep::Name, flag, not_prose as fn(&str) -> bool)])
+    .map(|(name, keep, pattern, accept)| {
+        let rule = Regex::new(&pattern).expect("a valid pattern");
+        (name, keep, rule, accept)
+    })
     .collect()
 }
 
-fn text_rules() -> &'static [(&'static str, Keep, Regex)] {
-    static RULES: OnceLock<Vec<(&'static str, Keep, Regex)>> = OnceLock::new();
+fn text_rules() -> &'static [Rule] {
+    static RULES: OnceLock<Vec<Rule>> = OnceLock::new();
     RULES.get_or_init(|| build(TEXT_VALUE))
 }
 
-fn key_rules() -> &'static [(&'static str, Keep, Regex)] {
-    static RULES: OnceLock<Vec<(&'static str, Keep, Regex)>> = OnceLock::new();
+fn key_rules() -> &'static [Rule] {
+    static RULES: OnceLock<Vec<Rule>> = OnceLock::new();
     RULES.get_or_init(|| build(KEY_VALUE))
 }
 
@@ -158,10 +214,10 @@ fn already_masked(value: &str) -> bool {
     token && !starts_a_key_value(rest)
 }
 
-fn apply(rules: &[(&'static str, Keep, Regex)], text: &str) -> (String, usize) {
+fn apply(rules: &[Rule], text: &str) -> (String, usize) {
     let mut out = text.to_string();
     let mut count = 0;
-    for (name, keep, rule) in rules {
+    for (name, keep, rule, accept) in rules {
         let replaced = rule.replace_all(&out, |c: &regex::Captures| {
             let value = match keep {
                 Keep::Nothing => &c[0],
@@ -173,13 +229,18 @@ fn apply(rules: &[(&'static str, Keep, Regex)], text: &str) -> (String, usize) {
             let token_split_at_its_colon = matches!(keep, Keep::User)
                 && c[1].ends_with("[masked:")
                 && already_masked(&format!("[masked:{}", &c[2]));
-            if already_masked(value) || token_split_at_its_colon {
+            if already_masked(value) || token_split_at_its_colon || !accept(value) {
                 return c[0].to_string();
             }
             count += 1;
             match keep {
                 Keep::Nothing => format!("[masked:{name}]"),
-                Keep::Name => format!("{}{}[masked:{name}]", &c[1], &c[2]),
+                Keep::Name => format!(
+                    "{}{}[masked:{name}]{}",
+                    &c[1],
+                    &c[2],
+                    c.get(4).map_or("", |m| m.as_str())
+                ),
                 Keep::User => format!("{}[masked:{name}]@", &c[1]),
             }
         });

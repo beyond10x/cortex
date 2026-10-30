@@ -36,6 +36,27 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Fixed
+
+- Now masked on every run, and found by the `Credential` class: a password under a name glued to
+  a prefix (`PGPASSWORD=`) or cut short after one (`DB_PASS=`), a secret followed by `key`
+  (`SECRET_KEY=`, `DJANGO_SECRET_KEY=`, `AWS_SECRET_KEY=`, `secret_key = `), a name in Markdown
+  or chat markup (`` `DB_PASSWORD`: ``, `*AWS_SECRET_ACCESS_KEY*: `, `**api_key**: `,
+  `**Password:** `), a name with a leading `_` (`self._password = `), an XML element (`<db_password>…</db_password>`) and a command-line flag
+  with its value after a space (`--db-password …`, not a lower-case word such as `option`). Kept:
+  `access_key_id`, `secret_santa`, `password_policy`, `--password-file`, `<password_hint>`, a
+  heading or label with no value, `PGPASSFILE`, and `pass` alone.
+- The `Credential` class also reads a JSON-quoted name inside a JSON string
+  (`{\"db_password\": \"…\"}`) and a value that starts with a percent-encoded byte
+  (`aws_secret_access_key=%2B…`), as masking does.
+- A URL password after a user name that holds a raw `@` is masked when it holds a `,` or `;`
+  too; a user, host and port before a list of addresses (`ops@mail.example:587,admin@example.org`)
+  is still kept.
+- Upgrading: a structured source whose adapter, operation, path or glob ends in one of the names
+  now read (`…_pass`, `…secret_key`, `pgpassword`, a name followed by `*` or `` ` ``) is written
+  in hex in its records' identities, as other credential names already are, so those records get
+  new identities once.
+
 ## 0.7.1 — 2026-10-30
 
 ### Fixed

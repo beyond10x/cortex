@@ -26,9 +26,14 @@ stand; [Status](./status.mdx) lists what is planned.
   token shapes, JSON Web Tokens, the password in a URL such as `https://user:password@host` (a
   raw `@` in it or in the user name included), a private key whose `END` line was cut off, and
   `password=`-style assignments, also with a prefix (`DB_PASSWORD=`, `client_secret=`,
-  `AWS_SECRET_ACCESS_KEY=`), quoted
-  (`"password": "…"`, also inside a JSON string as `\"password\": \"…\"`), with `=>`, or
-  percent-encoded once or twice (`access_token%3D`, `access_token%3A`, `access_token%253D`).
+  `AWS_SECRET_ACCESS_KEY=`), glued to one or cut short (`PGPASSWORD=`, `DB_PASS=`), with `key`
+  after `secret` (`SECRET_KEY=`, `DJANGO_SECRET_KEY=`), quoted
+  (`"password": "…"`, also inside a JSON string as `\"password\": \"…\"`), in Markdown or chat
+  markup (`` `DB_PASSWORD`: ``, `**api_key**: `, `**Password:** `), with `=>`, or
+  percent-encoded once or twice (`access_token%3D`, `access_token%3A`, `access_token%253D`), and
+  the same names as an XML element (`<db_password>…</db_password>`) or as a command-line flag
+  with its value after a space (`--db-password …`; a lower-case word after the flag, as in
+  `--password option`, is read as prose and kept).
   That covers a document's text, title, description and URL,
   and a URL or record key wherever cortex writes it: the run's `stopped` and `skipped` messages,
   its log and its state file. Masking is irreversible, so a credential in a listed shape is never
