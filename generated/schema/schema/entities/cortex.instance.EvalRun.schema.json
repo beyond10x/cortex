@@ -23,10 +23,12 @@
       "$ref": "#/$defs/cortex.instance.EvalRunner"
     },
     "cases": {
-      "type": "integer"
+      "type": "integer",
+      "minimum": 0
     },
     "passed": {
-      "type": "integer"
+      "type": "integer",
+      "minimum": 0
     },
     "cost_usd": {
       "type": "string",
@@ -46,11 +48,15 @@
     "state"
   ],
   "additionalProperties": false,
+  "x-ess-invariants": [
+    "cases >= 0",
+    "passed >= 0"
+  ],
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "c62105bd24d5d4a0d650b895b9c576a8e7066038a9961c9f0fcba15ca1d8b9f3",
-    "contract_digest": "slice-sha256/2:988f3c135e38bf8a31433f59a43fbb2930e5fb0819243bffa04bcdb9d45222d1",
+    "source_digest": "454ae2cdefe42498de39f694543a1a07725b9d4b16d1a2caf6ef6fa1a9fbb502",
+    "contract_digest": "slice-sha256/2:af59e9307ea310deb11ea16ee4531d7a7e9bff6b847f7aeed1ae9e38d6dc5e83",
     "regenerate": "ess generate"
   },
   "$defs": {

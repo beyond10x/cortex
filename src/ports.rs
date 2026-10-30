@@ -353,6 +353,7 @@ fn source_ran(source_id: m::SourceId, report: &Report) -> m::SourceRan {
         source_id,
         documents_new: report.documents_new,
         documents_applied: report.documents_applied,
+        facts_reapplied: report.facts_reapplied as i64,
         cost_usd: cost_decimal(report.cost_usd),
         cost_counted: report.cost_counted,
         daily_ceiling_reached: report.daily_ceiling_reached,
@@ -735,5 +736,21 @@ impl RunSourceBehavior for Ports {
         let ran = source_ran(input.source_id, &report);
         self.shared.borrow_mut().last_run = Some(report);
         Ok(m::RunSourceOutcome::Ran { source_ran: ran })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `SourceRan` carries the facts the run applied again, as the run's report counts them.
+    #[test]
+    fn the_source_ran_event_carries_the_facts_the_run_applied_again() {
+        let report = Report {
+            facts_reapplied: 3,
+            ..Report::default()
+        };
+        let ran = source_ran(m::SourceId("i/s".into()), &report);
+        assert_eq!(ran.facts_reapplied, 3);
     }
 }

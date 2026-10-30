@@ -571,6 +571,21 @@ errors:
     fields:
       - {name: review_id, type: cortex.ask.ReviewId}
 
+  - name: cortex.ask.BadRequest
+    summary: >-
+      The body of a record route is above 64 KiB, which answers 413, or is not the body the route
+      takes, which answers 400; `message` says why, for a person.
+    fields:
+      - {name: message, type: String}
+
+  - name: cortex.ask.StoreFailed
+    summary: >-
+      The answer records could not be read or written; it answers 500 with a fixed message and
+      `request_id`. The detail (a database path, SQL text) goes only to the service's standard
+      error, on a line naming that `request_id`.
+    fields:
+      - {name: request_id, type: String}
+
   - name: cortex.ask.FigureTooLarge
     summary: >-
       The figure is over a cap (`cortex.ask.FigureSpec`); nothing is drawn. `limit` names the cap,
@@ -764,6 +779,22 @@ commands:
             header: {generated: true}
         summary: It answers 401; nothing was cast.
 
+      - name: bad-request
+        external: The body is above 64 KiB or is not a vote's body
+        error: cortex.ask.BadRequest
+        payload:
+          cortex.ask.BadRequest:
+            message: {generated: true}
+        summary: It answers 413 for a body above 64 KiB, else 400; nothing was cast.
+
+      - name: store-failed
+        external: The answer records cannot be read or written
+        error: cortex.ask.StoreFailed
+        payload:
+          cortex.ask.StoreFailed:
+            request_id: {generated: true}
+        summary: It answers 500; the detail goes only to the service's standard error.
+
       - name: no-such-answer
         external: No answer record carries `answer_id`
         error: cortex.ask.AnswerNotFound
@@ -860,6 +891,22 @@ commands:
       - {name: expect_facts, type: List<String>}
       - {name: expect_nodes, type: List<String>}
     outcomes:
+      - name: bad-request
+        external: The body is above 64 KiB or is not a close's body
+        error: cortex.ask.BadRequest
+        payload:
+          cortex.ask.BadRequest:
+            message: {generated: true}
+        summary: It answers 413 for a body above 64 KiB, else 400; nothing changed.
+
+      - name: store-failed
+        external: The answer records cannot be read or written
+        error: cortex.ask.StoreFailed
+        payload:
+          cortex.ask.StoreFailed:
+            request_id: {generated: true}
+        summary: It answers 500; the detail goes only to the service's standard error.
+
       - name: closed
         moves: cortex.ask.ReviewItem.close
         instance: review_id

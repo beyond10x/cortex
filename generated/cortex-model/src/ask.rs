@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest c62105bd24d5d4a0d650b895b9c576a8e7066038a9961c9f0fcba15ca1d8b9f3
-// contract digest 1ad5072384a73590b57279a68f9f5499ad318a5cce767e782321013bc5c8c638
+// model digest 454ae2cdefe42498de39f694543a1a07725b9d4b16d1a2caf6ef6fa1a9fbb502
+// contract digest c75c17e5eb6aa81c48b081736bc63dd7442f26133a33121f93755de3becaa515
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Answers — `cortex.ask`.
@@ -940,6 +940,20 @@ pub enum CastVoteOutcome {
         /// Why it was refused: `cortex.ask.Unidentified`.
         error: Unidentified,
     },
+    /// `bad-request` — externally decided (The body is above 64 KiB or is not a vote's body).
+    ///
+    /// It answers 413 for a body above 64 KiB, else 400; nothing was cast.
+    BadRequest {
+        /// Why it was refused: `cortex.ask.BadRequest`.
+        error: BadRequest,
+    },
+    /// `store-failed` — externally decided (The answer records cannot be read or written).
+    ///
+    /// It answers 500; the detail goes only to the service's standard error.
+    StoreFailed {
+        /// Why it was refused: `cortex.ask.StoreFailed`.
+        error: StoreFailed,
+    },
     /// `no-such-answer` — externally decided (No answer record carries `answer_id`).
     ///
     /// It answers 404; nothing was cast.
@@ -985,6 +999,20 @@ pub struct CloseReview {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CloseReviewOutcome {
+    /// `bad-request` — externally decided (The body is above 64 KiB or is not a close's body).
+    ///
+    /// It answers 413 for a body above 64 KiB, else 400; nothing changed.
+    BadRequest {
+        /// Why it was refused: `cortex.ask.BadRequest`.
+        error: BadRequest,
+    },
+    /// `store-failed` — externally decided (The answer records cannot be read or written).
+    ///
+    /// It answers 500; the detail goes only to the service's standard error.
+    StoreFailed {
+        /// Why it was refused: `cortex.ask.StoreFailed`.
+        error: StoreFailed,
+    },
     /// `closed` — otherwise.
     ///
     /// The item leaves the review queue with its reason.
@@ -1193,6 +1221,15 @@ pub struct AnswerNotFound {
     pub answer_id: AnswerId,
 }
 
+/// The declared error `cortex.ask.BadRequest`.
+///
+/// The body of a record route is above 64 KiB, which answers 413, or is not the body the route takes, which answers 400; `message` says why, for a person.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BadRequest {
+    /// `message` — `String`.
+    pub message: String,
+}
+
 /// The declared error `cortex.ask.Busy`.
 ///
 /// The service is working on `max_in_flight` answers already; it answers 429 at once, asks no model and spends no question of the minute. Ask again later.
@@ -1325,6 +1362,15 @@ pub struct ReviewNotFound {
 pub struct ReviewNotOpen {
     /// `review_id` — `cortex.ask.ReviewId`.
     pub review_id: ReviewId,
+}
+
+/// The declared error `cortex.ask.StoreFailed`.
+///
+/// The answer records could not be read or written; it answers 500 with a fixed message and `request_id`. The detail (a database path, SQL text) goes only to the service's standard error, on a line naming that `request_id`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreFailed {
+    /// `request_id` — `String`.
+    pub request_id: String,
 }
 
 /// The declared error `cortex.ask.Unidentified`.
