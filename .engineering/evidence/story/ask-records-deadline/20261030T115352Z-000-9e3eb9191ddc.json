@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-30T11:53:52Z",
+  "actor": "human:timo",
+  "artifact": "story:ask-records-deadline",
+  "kind": "story",
+  "revision": 14,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:adversary-w30a-askio-pass-2",
+    "review": "review-result:adversary-w30a-askio-pass-2",
+    "outcome": "fixed"
+  }
+}

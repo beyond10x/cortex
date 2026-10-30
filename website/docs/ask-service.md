@@ -78,7 +78,8 @@ not read past that and fails the answer with `model-failed`.
 
 Each answer starts its own reader and kills it when the answer ends; readers are not pooled, so
 no answer inherits a reader another answer left stuck or mid-call. At most `max_in_flight`
-readers run at once.
+readers run at once, and at most as many model calls: an answer holds its slot until its reader
+is stopped and its model call has ended, also when nobody reads it any more.
 
 ## The event contract
 
@@ -119,14 +120,16 @@ answer's UUIDv7, the id its record and its votes carry.
 The `error` event of an answer that started ends its `message` with `(request <answer_id>)`, the id
 of its record. The `message` of `model-failed` and `reader-failed` is a fixed text: what the
 gateway answered, the reader's program path and any other internal detail go only to the
-service's standard error, on a line naming that request id.
+service's standard error, on a line naming that request id. Every line the service writes there
+is masked for credential shapes first, as a record is.
 
 A reader who closes the stream before its last event stops the answer at once: no model is
 asked again and the reader process is stopped. The answer is recorded as `client-closed`, with
 the token counts and steps of the model calls already made; it is no failure and opens no review
-item, `slow` included. A reader who leaves while the model is asked frees the answer's
-`max_in_flight` slot at once; the model call already made is still waited for, up to
-`max_seconds`, so its tokens are counted, and none of its tool calls is made.
+item, `slow` included. A reader who leaves while the model is asked does not cut the call: it
+is waited for, up to `max_seconds`, so its tokens are counted, and none of its tool calls is
+made. Until it ends, the answer keeps its `max_in_flight` slot, so a client who disconnects
+cannot start more readers or model calls than `max_in_flight`.
 
 A tool result is rewritten into compact text (each text that is JSON written without whitespace)
 and cut at a character boundary to `max_result_bytes`; its `tool` event says whether it was cut.

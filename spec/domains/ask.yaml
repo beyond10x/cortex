@@ -68,7 +68,8 @@ types:
   # means no answer is slow. `max_in_flight` is the most answers the service works on at once,
   # over every identity (absent means 8): a question past it answers 429 at once with an `error`
   # event whose `reason` is `busy` (`cortex.ask.Busy`), asks no model and spends no question of
-  # the minute. Each is an Integer above 0. A `retention_days` too large to count in
+  # the minute. An answer holds its place until its reader is stopped and its model call has
+  # ended, also after its reader closed the stream. Each is an Integer above 0. A `retention_days` too large to count in
   # milliseconds before now keeps every record: the purge's `before` stops at the earliest instant
   # a Timestamp writes (0001-01-01T00:00:00Z) and never wraps into the future.
   # UNMAPPED: the refusal of a `retention_days`, `slow_after_ms` or `max_in_flight` of 0 or less
