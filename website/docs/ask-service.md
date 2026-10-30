@@ -211,9 +211,10 @@ whatever the instance's
 
 The record routes need the identity header too (401 without it) and answer JSON; a refusal is
 `{"error": <reason>, "message": <text>}`. A body above 64 KiB is refused with 413
-`bad-request`. On every route the service reads a body above the route's limit to its end, up
-to 16 MiB and for at most 10 seconds, before it sends the 413, so a client still sending the
-body reads the refusal. A failure of the records answers 500 `store-failed` with a fixed message and a
+`bad-request`. Before it answers any request, an unknown path or method included, the service
+reads its body to the end; a body above the route's limit, or one the answer does not use, is
+discarded as it is read, up to 16 MiB and for at most 10 seconds. A client still sending the
+body so reads the answer. A failure of the records answers 500 `store-failed` with a fixed message and a
 `request_id`; the detail (a database path, SQL text) goes only to the service's standard error,
 on a line naming that `request_id`.
 

@@ -205,6 +205,24 @@ async fn read_body(body: Body, limit: usize) -> Result<Bytes, BodyRefused> {
     Ok(Bytes::from(kept))
 }
 
+/// Reads and discards the body of a request whose answer needs none of it, within the bounds of
+/// [`read_body`], so a client still sending it reads the answer.
+async fn discard(body: Body) {
+    let _ = read_body(body, 0).await;
+}
+
+/// An unknown path: 404, once the body is discarded.
+async fn not_found(body: Body) -> StatusCode {
+    discard(body).await;
+    StatusCode::NOT_FOUND
+}
+
+/// A known path with another method: 405 (the router adds `Allow`), once the body is discarded.
+async fn method_not_allowed(body: Body) -> StatusCode {
+    discard(body).await;
+    StatusCode::METHOD_NOT_ALLOWED
+}
+
 /// The body of a record route, or its refusal: 413 above [`RECORD_BODY_LIMIT`], 400 when it
 /// cannot be read.
 fn record_body(body: Result<Bytes, BodyRefused>) -> Result<Bytes, Box<Response>> {
@@ -430,7 +448,8 @@ async fn vote(
 }
 
 /// `GET /review`: `{"reviews": [...]}`, the open review items, oldest first.
-async fn review(State(service): State<Arc<Service>>, headers: HeaderMap) -> Response {
+async fn review(State(service): State<Arc<Service>>, headers: HeaderMap, body: Body) -> Response {
+    discard(body).await;
     if identity_of(&service, &headers).is_none() {
         return unidentified(&service);
     }
@@ -604,12 +623,15 @@ pub fn serve(settings: Settings, keeper: Keeper) -> Result<(), String> {
                 }
             }
         });
-        // Each route reads its body itself (`read_body`), with its own limit.
+        // Each route reads its body itself (`read_body`), with its own limit; every other answer,
+        // an unknown path or method included, is sent once the body is discarded.
         let app = Router::new()
             .route("/ask", post(ask))
             .route("/ask/{answer_id}/vote", post(vote))
             .route("/review", get(review))
             .route("/review/{review_id}/close", post(close))
+            .method_not_allowed_fallback(method_not_allowed)
+            .fallback(not_found)
             .with_state(service);
         println!("{}", json!({"listening": address.to_string()}));
         axum::serve(listener, app)

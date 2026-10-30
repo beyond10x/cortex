@@ -36,6 +36,27 @@ const MAX_REQUEST: usize = 1 << 20;
 /// connection closed.
 const MAX_DRAIN: usize = 16 << 20;
 
+/// The longest this server reads a refused request's body before it answers.
+const DRAIN_TIME: Duration = Duration::from_secs(10);
+
+/// Reads and discards up to `left` bytes of a body from `reader`, for at most [`DRAIN_TIME`]; it
+/// stops early when the connection ends or fails.
+fn drain(reader: &mut impl Read, stream: &TcpStream, mut left: usize) {
+    let until = Instant::now() + DRAIN_TIME;
+    let mut buf = [0u8; 8192];
+    while left > 0 {
+        let rest = until.saturating_duration_since(Instant::now());
+        if rest.is_zero() || stream.set_read_timeout(Some(rest)).is_err() {
+            return;
+        }
+        let take = left.min(buf.len());
+        match reader.read(&mut buf[..take]) {
+            Ok(0) | Err(_) => return,
+            Ok(n) => left -= n,
+        }
+    }
+}
+
 /// The most bytes of a request's head this server reads: its request line and header lines, line
 /// ends included.
 const MAX_HEAD: usize = 64 << 10;
@@ -244,7 +265,8 @@ fn head_line(reader: &mut impl BufRead, left: &mut usize) -> HeadLine {
 /// Answers one HTTP request on `stream`; the caller closes it. A head over [`MAX_HEAD`] is
 /// refused with 431 as soon as it reaches it, before the bearer check and with nothing more read;
 /// a request without the `bearer` header is refused with 401. A refusal after the head (401, 404,
-/// 405, 413) is sent once the body its `content-length` declares is read, up to [`MAX_DRAIN`].
+/// 405, 413) is sent once the body its `content-length` declares is read, up to [`MAX_DRAIN`] and
+/// for [`DRAIN_TIME`], or at once to a client that sent `expect: 100-continue`.
 fn handle(
     stream: &TcpStream,
     path: &str,
@@ -264,6 +286,7 @@ fn handle(
     };
     let mut length = 0;
     let mut authorized = false;
+    let mut expects_continue = false;
     loop {
         let line = match head_line(&mut reader, &mut left) {
             HeadLine::Line(line) => line,
@@ -277,6 +300,11 @@ fn handle(
         if let Some((name, value)) = line.split_once(':') {
             if name.trim().eq_ignore_ascii_case("content-length") {
                 length = value.trim().parse().unwrap_or(0);
+            }
+            if name.trim().eq_ignore_ascii_case("expect")
+                && value.trim().eq_ignore_ascii_case("100-continue")
+            {
+                expects_continue = true;
             }
             if name.trim().eq_ignore_ascii_case("authorization")
                 && same(value.trim().as_bytes(), bearer.as_bytes())
@@ -301,11 +329,12 @@ fn handle(
     };
     if let Some(status) = refused {
         // The body is read and discarded first: a connection closed with bytes unread is reset,
-        // and a client still sending its body would lose the refusal.
-        let _ = std::io::copy(
-            &mut (&mut reader).take(length.min(MAX_DRAIN) as u64),
-            &mut std::io::sink(),
-        );
+        // and a client still sending its body would lose the refusal. A client that sent
+        // `expect: 100-continue` holds its body back until it is answered, so it is answered at
+        // once.
+        if !expects_continue {
+            drain(&mut reader, stream, length.min(MAX_DRAIN));
+        }
         return respond(&mut out, status, None);
     }
     let mut body = vec![0; length];

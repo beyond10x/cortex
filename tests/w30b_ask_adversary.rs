@@ -496,7 +496,6 @@ fn an_expect_continue_client_is_not_left_waiting_by_the_service() {
 /// still sending its body: an unknown path (`/ask/`, a trailing slash), a wrong method (`GET
 /// /ask`), and the `GET /review` route, none of which read the body.
 #[test]
-#[ignore = "adversary: the 404, 405 and GET /review answers are sent with the body unread, and the client still writing loses them"]
 fn a_client_still_sending_its_body_reads_the_answers_of_routes_that_read_no_body() {
     let service = serve();
     let body = vec![b'x'; 4 * MIB];
@@ -612,7 +611,7 @@ fn a_proxy_request_of_exactly_one_mib_is_served_and_one_byte_more_is_refused() {
 /// A client that frames its body with `transfer-encoding: chunked` and writes it whole before it
 /// reads gets the server's refusal, as a client declaring `content-length` now does.
 #[test]
-#[ignore = "adversary: the proxy drains only a declared content-length; a chunked body is left unread and the 401 is lost"]
+#[ignore = "story:ignored-adversary-limits: the proxy drains only a declared content-length; a chunked body is left unread and the 401 is lost"]
 fn a_proxy_client_sending_a_chunked_body_reads_its_refusal() {
     let out = with_proxy(|p| {
         let mut s = TcpStream::connect(&p.addr).unwrap();
@@ -646,7 +645,6 @@ fn a_proxy_client_sending_a_chunked_body_reads_its_refusal() {
 /// server that will refuse the request answers it at once (RFC 9110 10.1.1); the proxy did before
 /// this change, for an unauthenticated request and for one above 1 MiB.
 #[test]
-#[ignore = "adversary: the proxy now waits for a body the client holds back until its read timeout (30 s) before the 401 or 413"]
 fn a_proxy_refusal_is_not_held_back_from_an_expect_continue_client() {
     let seen = with_proxy(|p| {
         let auth = format!("authorization: {}\r\n", p.bearer);
