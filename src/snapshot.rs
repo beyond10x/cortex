@@ -533,8 +533,11 @@ pub struct Restored {
     /// The snapshot of the store and state the restore replaced, `<ms>-before-restore`; `None`
     /// when `snapshots.keep` is `0`.
     pub before_restore: Option<String>,
-    /// Whether `state/` was put back: a snapshot with no copy of it leaves `state/` as it is.
+    /// Whether `state/` was put back: a snapshot with no copy of it leaves `state/` as it is, and
+    /// so does a copy that cannot be written back ([`Restored::state_failed`]).
     pub state_restored: bool,
+    /// Why the snapshot's copy of `state/` was not written back after the store was restored.
+    pub state_failed: Option<String>,
     /// Why the viewer did not start again, when it did not.
     pub viewer_failed: Option<String>,
 }
@@ -719,18 +722,22 @@ pub fn restore_held(
             drop(source);
             settle(&target, &store.store);
             drop(target);
-            let state_restored = state_from.is_file();
-            if state_restored {
-                write_state(layout, &state_from).map_err(RestoreError::Failed)?;
-            }
+            // The store is restored by now: a state copy that cannot be written back is reported
+            // beside it, not as a restore that failed.
+            let held = state_from.is_file();
+            let state_failed = held
+                .then(|| write_state(layout, &state_from).err())
+                .flatten();
+            let state_restored = held && state_failed.is_none();
             rotate(layout, keep, Some(snapshot));
-            Ok((before_restore, state_restored))
+            Ok((before_restore, state_restored, state_failed))
         })
         .map_err(RestoreError::Failed)?;
-    let (before_restore, state_restored) = restored?;
+    let (before_restore, state_restored, state_failed) = restored?;
     Ok(Restored {
         before_restore,
         state_restored,
+        state_failed,
         viewer_failed,
     })
 }
@@ -941,6 +948,34 @@ mod tests {
             list(&layout),
             [name, before],
             "the snapshot restored from is never rotated out by its own restore"
+        );
+    }
+
+    /// The store is put back before `state/`; a state copy that cannot be written leaves the
+    /// store restored, and the restore says the state was not, with why.
+    #[test]
+    fn a_restore_whose_state_copy_fails_reports_the_store_restored_and_the_state_not() {
+        let tmp = tempfile::tempdir().unwrap();
+        let layout = Layout::new(tmp.path().to_path_buf());
+        spec(&layout, "");
+        let store = store_with(&layout.dir, &["a"]);
+        seen(&layout, "seen a");
+        let name = run(&layout, 1000, 3);
+        store_with(&layout.dir, &["b"]);
+        seen(&layout, "seen b");
+        let copy = state_dir(&layout).join(format!("{name}.json"));
+        std::fs::write(&copy, "not json").unwrap();
+        let restored = restore_held(&layout, "t", &name, &no_units(tmp.path())).unwrap();
+        assert_eq!(rows(&store), ["a"], "the store is restored");
+        assert!(!restored.state_restored);
+        let why = restored
+            .state_failed
+            .expect("why the state was not restored");
+        assert!(why.contains(&copy.display().to_string()), "{why}");
+        assert_eq!(
+            std::fs::read_to_string(live_state(&layout).join("news.json")).unwrap(),
+            "seen b",
+            "state/ is left as it was"
         );
     }
 

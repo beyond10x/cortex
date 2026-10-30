@@ -620,6 +620,15 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
         },
         Command::Sources => match app.sources() {
             Ok(rows) => {
+                // A status file that cannot be read fails the listing, naming the file, instead of
+                // listing the source as never run.
+                for row in &rows {
+                    let (instance, source) = split(&row.source_id.0);
+                    let layout = Layout::new(ctx.home.instance_dir(instance));
+                    if let Err(e) = cortex_cli::status::read(&layout, source) {
+                        return fail(e);
+                    }
+                }
                 for row in rows {
                     println!(
                         "{}",
@@ -908,6 +917,22 @@ fn unit_collision(ctx: &Ctx, name: &str, spec: &m::InstanceSpec) -> Option<Strin
     schedule::unit_name_collision(name, &sources, &others)
 }
 
+/// Fails a `create` or `adopt` that already recorded the instance `name` and its sources: takes
+/// them out of the registry again and removes the instance directory `layout`, so nothing is left
+/// half registered and a retry is not `name-taken`. Called before any unit is written.
+fn unregister(ctx: &Ctx, name: &str, layout: &Layout, reason: impl std::fmt::Display) -> ExitCode {
+    {
+        let mut shared = ctx.shared.borrow_mut();
+        shared.registry.instances.remove(name);
+        shared
+            .registry
+            .sources
+            .retain(|_, s| s.data.instance_name.0 != name);
+    }
+    let _ = std::fs::remove_dir_all(&layout.dir);
+    fail(reason)
+}
+
 /// Puts what installing the units did in `detail["units"]`: each unit taken over from a home that
 /// holds no instance of the name ([`Systemd::taken_over`]), and why the install failed, when it
 /// did.
@@ -1103,10 +1128,12 @@ fn create(
         | m::CreateInstanceOutcome::Partial { instance_created } => {
             let partial = seeded.as_ref().is_some_and(|ran| !seed_finished(ran));
             let Ok(port) = u16::try_from(instance_created.view_port) else {
-                return fail(format!(
-                    "serve.view_port {} is no port",
-                    instance_created.view_port
-                ));
+                return unregister(
+                    ctx,
+                    &name,
+                    &layout,
+                    format!("serve.view_port {} is no port", instance_created.view_port),
+                );
             };
             let meta = Meta {
                 format: "cortex.instance-meta/1".into(),
@@ -1116,7 +1143,7 @@ fn create(
                 adopted: false,
             };
             if let Err(e) = layout.save_meta(&meta) {
-                return fail(e);
+                return unregister(ctx, &name, &layout, e);
             }
             for source in &spec.sources {
                 let input = m::AddSource {
@@ -1127,7 +1154,7 @@ fn create(
                     schedule: source.schedule.clone(),
                 };
                 if let Err(e) = app.add_source(input) {
-                    return fail(e);
+                    return unregister(ctx, &name, &layout, e);
                 }
             }
             let mut detail = json!({
@@ -1465,10 +1492,12 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                 return fail("adopted without reading the store");
             };
             let Ok(port) = u16::try_from(instance_adopted.view_port) else {
-                return fail(format!(
-                    "serve.view_port {} is no port",
-                    instance_adopted.view_port
-                ));
+                return unregister(
+                    ctx,
+                    &name,
+                    &layout,
+                    format!("serve.view_port {} is no port", instance_adopted.view_port),
+                );
             };
             let meta = Meta {
                 format: "cortex.instance-meta/1".into(),
@@ -1478,7 +1507,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                 adopted: true,
             };
             if let Err(e) = layout.save_meta(&meta) {
-                return fail(e);
+                return unregister(ctx, &name, &layout, e);
             }
             for source in &spec.sources {
                 let input = m::AddSource {
@@ -1489,7 +1518,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                     schedule: source.schedule.clone(),
                 };
                 if let Err(e) = app.add_source(input) {
-                    return fail(e);
+                    return unregister(ctx, &name, &layout, e);
                 }
             }
             let mut detail = json!({
@@ -1784,6 +1813,9 @@ fn restore(app: &mut App, ctx: &Ctx, name: &str, snapshot: &str) -> ExitCode {
             if let Some(restored) = finished {
                 detail["before_restore"] = json!(restored.before_restore);
                 detail["state_restored"] = json!(restored.state_restored);
+                if let Some(e) = restored.state_failed {
+                    detail["state_failed"] = json!(e);
+                }
                 if let Some(e) = restored.viewer_failed {
                     detail["units"] = json!({"failed": e});
                 }

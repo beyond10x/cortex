@@ -139,12 +139,26 @@ fn path(layout: &Layout, source: &str) -> PathBuf {
     layout.dir.join("status").join(format!("{source}.json"))
 }
 
-/// The status of `source` (its name within the instance); empty when none was written.
+/// The status of `source` (its name within the instance); empty when none was written. A file
+/// that cannot be read or parsed is an error naming it.
+pub fn read(layout: &Layout, source: &str) -> Result<Status, String> {
+    let file = path(layout, source);
+    let bytes = match std::fs::read(&file) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Status::default()),
+        Err(e) => return Err(format!("cannot read {}: {e}", file.display())),
+    };
+    serde_json::from_slice(&bytes)
+        .map_err(|e| format!("{} is no source status: {e}", file.display()))
+}
+
+/// [`read`], with a file that cannot be read or parsed answered as an empty status and named on
+/// stderr: what a listing or the metric file shows, never what a run records on.
 pub fn load(layout: &Layout, source: &str) -> Status {
-    std::fs::read(path(layout, source))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default()
+    read(layout, source).unwrap_or_else(|e| {
+        eprintln!("cortex: {e}");
+        Status::default()
+    })
 }
 
 /// Sets the last run fields of `data` from its status file.
@@ -180,7 +194,8 @@ pub fn record_run(
     duration_ms: Option<i64>,
     figures: Option<&Figures>,
 ) -> Result<(), String> {
-    let mut status = load(layout, source);
+    // A status that cannot be read is left as it is: rewriting it would start its counts again.
+    let mut status = read(layout, source)?;
     status.add(duration_ms, figures);
     status.format = "cortex.source-status/1".into();
     status.last_outcome = Some(outcome_name(outcome).into());
@@ -744,5 +759,22 @@ mod tests {
         assert!(text.contains(
             "cortex_source_runs_total{source=\"t/news\",outcome=\"store-outcome-unknown\"} 1\n"
         ));
+    }
+
+    /// A status file that cannot be parsed is an error naming it, and a run's record leaves it as
+    /// it is instead of starting the counts again; a missing one is an empty status.
+    #[test]
+    fn a_corrupt_status_file_is_an_error_and_is_not_rewritten() {
+        let tmp = tempfile::tempdir().unwrap();
+        let layout = Layout::new(tmp.path().to_path_buf());
+        assert_eq!(read(&layout, "news").unwrap().runs.len(), 0);
+        let file = path(&layout, "news");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, b"").unwrap();
+        let e = read(&layout, "news").unwrap_err();
+        assert!(e.contains(&file.display().to_string()), "{e}");
+        let e = record(&layout, "news", m::RunOutcome::Ran, 1, None).unwrap_err();
+        assert!(e.contains(&file.display().to_string()), "{e}");
+        assert_eq!(std::fs::read(&file).unwrap(), b"");
     }
 }

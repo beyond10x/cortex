@@ -183,6 +183,35 @@ fn restoring_the_snapshot_taken_before_a_run_undoes_that_run() {
     assert_eq!(w.head("t"), after_second, "the restore was undone");
 }
 
+/// The store is restored before `state/`: when the snapshot's copy of the state cannot be written
+/// back, `restore` still answers `restored`, with `state_restored: false` and the reason in
+/// `state_failed`, and the store is at the snapshot.
+#[test]
+fn a_restore_whose_state_copy_fails_reports_the_store_restored_and_the_state_not() {
+    let w = World::new();
+    let dir = create(&w);
+    run_applying(&w, 0);
+    let after_first = w.head("t");
+    run_applying(&w, 1);
+    let [_, before_second] = names(&dir);
+    let copy = dir.join(format!("snapshots-state/{before_second}.json"));
+    assert!(copy.is_file());
+    std::fs::write(&copy, "not json").unwrap();
+
+    let (code, restored) = w.cortex(&["restore", "t", &before_second]);
+    assert_eq!(
+        (code, restored["outcome"].as_str()),
+        (0, Some("restored")),
+        "{restored}"
+    );
+    assert_eq!(restored["detail"]["state_restored"], false, "{restored}");
+    let why = restored["detail"]["state_failed"]
+        .as_str()
+        .unwrap_or_else(|| panic!("no state_failed: {restored}"));
+    assert!(why.contains(&copy.display().to_string()), "{why}");
+    assert_eq!(w.head("t"), after_first, "the store is at the snapshot");
+}
+
 #[test]
 fn a_run_that_applies_nothing_takes_no_snapshot() {
     let w = World::new();

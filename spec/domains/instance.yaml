@@ -2248,10 +2248,13 @@ commands:
             name: input.name
             snapshot: input.snapshot
         summary: >-
-          The store and the instance state were snapshotted as `<ms>-before-restore`, then put
-          back to the snapshot's copies: every source's seen state and the known entity names
-          included, so the next runs apply again what the undone runs applied. A viewer that was
-          running was stopped first and started again after.
+          The store and the instance state were snapshotted as `<ms>-before-restore`, then the
+          store was put back to the snapshot's copy, and after it the instance state: every
+          source's seen state and the known entity names included, so the next runs apply again
+          what the undone runs applied. A state copy that could not be written back leaves the
+          store restored and the state as it was, reported as `state_restored: false` with the
+          reason in `state_failed`. A viewer that was running was stopped first and started again
+          after.
 
       - name: no-such-instance
         unknown_instance: true

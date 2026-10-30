@@ -123,6 +123,19 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   check reads an instance's frozen copy (`instances/<name>/instance.yaml`), so an instance created
   with such a value is refused, naming the field, by every command that reads that copy, `update`
   included, until the value in that file is brought into range.
+- A home file cortex rewrote (`registry.json`, a source status, a state file) was renamed into
+  place without being synced, so a crash could leave it empty and every command then failed. Each
+  is now synced to disk before the rename, and its directory after it.
+- A source status file that could not be parsed was read as empty, and the next run rewrote it
+  with its counts started again. `cortex sources` now fails, naming the file, and a run leaves it
+  as it is and records why in `cortex.log`; other commands name it on standard error and go on.
+- A `create` or `adopt` that failed after recording the instance (its meta or a source could not
+  be saved) left it registered, so a retry answered `name-taken`. It now takes the instance and
+  its sources out of the registry again and removes the instance directory.
+- A `restore` whose store was put back but whose copy of `state/` could not be written failed as a
+  whole, though the store had changed, and a gated run's undo then said the store still held the
+  run. The restore now answers `restored` with `state_restored: false` and the reason in
+  `state_failed`, and the undo says the store is back and `state/` is not.
 
 ## 0.6.1 — 2026-10-17
 

@@ -8,7 +8,13 @@ description: Where instances live, what a run does, the systemd units, failures 
 
 ## Where things live
 
-Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
+Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`. cortex replaces
+each file it rewrites (the registry, a status, a state file) through a temporary file it syncs
+to disk, a rename, and a sync of the directory, so a crash leaves the old file or the new one.
+A `create` or `adopt` that fails after it recorded the instance takes it out of the registry
+again and removes its directory, so it can be retried. A source status file that cannot be read
+fails `cortex sources`, naming the file, and a run leaves it as it is (`cortex.log` says why);
+other commands list the source as if it had never run.
 
 | path | holds |
 |---|---|
@@ -500,6 +506,9 @@ in `snapshots/`, without the extension. To undo the last run, restore the newest
 Because `state/` is put back, the next runs apply again what the undone runs applied, at the
 cost of their model calls. A snapshot with no copy of `state/` in `snapshots-state/` (one you
 copied without it) puts back the store only, and the restore reports `state_restored: false`.
+So does a copy of `state/` that cannot be written back once the store is restored: the restore
+still answers `restored`, with the store at the snapshot, `state/` as it was, and the reason in
+`state_failed`.
 
 To undo a restore, restore its `before_restore` snapshot.
 
