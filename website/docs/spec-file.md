@@ -22,7 +22,8 @@ Model Context Protocol specification, and a budget of $0.50 per run.
 ```yaml
 format: cortex.instance/1
 name: example
-description: Developments in open-source vector databases and the companies behind them.
+description: >-
+  Developments in open-source vector databases and the companies behind them.
 ekr: {version: "0.0.34"}
 seed: {schema: seed/schema.yaml, documents: []}
 model: {model: claude-sonnet-5-5, budget_usd: "1", timeout_s: 900}
@@ -75,7 +76,7 @@ different seed files answers `seed-change-refused`.
 | field | meaning |
 |---|---|
 | `model` | the model name passed to `claude --model` |
-| `backend` | optional: `Claude` (the default) runs `claude -p`. `Codex` is accepted by `create` and `update` but extracts nothing in this release: every run fails as `extraction-failed`, naming `story:codex-model-backend` (see [Commands](./commands.md#global-options)) |
+| `backend` | optional: `Claude` (the default) runs `claude -p`. `Codex` is accepted by `create` and `update` but extracts nothing in this release: every run fails as `extraction-failed`, saying the Codex backend does not extract yet (see [Commands](./commands.md#global-options)) |
 | `budget_usd` | the spending limit of one run, in US dollars, as a decimal string; above 0. A run stops starting new batches once it is spent. Required without a `gateway`; with one it may be omitted, and bounds nothing (see [A model gateway](#a-model-gateway)) |
 | `daily_ceiling_usd` | optional: the most the instance's model calls spend in one UTC calendar day, in US dollars, as a decimal string; above 0. Absent means no ceiling. See [The daily ceiling](#the-daily-ceiling). Bounds nothing behind a `gateway` |
 | `budget_tokens` | optional: the most tokens one run's model calls use, a whole number above 0. Absent means no limit in tokens. Required with a `gateway`. See [Limits in tokens](#limits-in-tokens) |
@@ -123,7 +124,11 @@ a smaller `batch_chars` makes its batches smaller.
 ### The daily ceiling
 
 ```yaml
-model: {model: claude-sonnet-5-5, budget_usd: "1", daily_ceiling_usd: "5", timeout_s: 900}
+model:
+  model: claude-sonnet-5-5
+  budget_usd: "1"
+  daily_ceiling_usd: "5"
+  timeout_s: 900
 ```
 
 `daily_ceiling_usd` covers every model call of the instance in one UTC calendar day: the runs of
@@ -155,7 +160,10 @@ model:
   budget_tokens: 200000
   daily_ceiling_tokens: 2000000
   timeout_s: 900
-  gateway: {base_url: "https://gateway.example", token_env: GW_TOKEN, max_context_tokens: 128000}
+  gateway:
+    base_url: "https://gateway.example"
+    token_env: GW_TOKEN
+    max_context_tokens: 128000
 ```
 
 | field | meaning |
@@ -203,7 +211,12 @@ figure bounds nothing:
 ### Limits in tokens
 
 ```yaml
-model: {model: claude-sonnet-5-5, budget_usd: "1", budget_tokens: 200000, daily_ceiling_tokens: 2000000, timeout_s: 900}
+model:
+  model: claude-sonnet-5-5
+  budget_usd: "1"
+  budget_tokens: 200000
+  daily_ceiling_tokens: 2000000
+  timeout_s: 900
 ```
 
 The dollar limits rely on the cost `claude` states in each answer, and for a model `claude` cannot
@@ -281,7 +294,15 @@ settings:
   kind: web
   value:
     profile: tavily.api-key
-    input: {input: search, value: {queries: [widget engine], policy: {topic: news, max_results: 5, include_domains: [], exclude_domains: []}}}
+    input:
+      input: search
+      value:
+        queries: [widget engine]
+        policy:
+          topic: news
+          max_results: 5
+          include_domains: []
+          exclude_domains: []
 ```
 
 ### `kind: web`
@@ -436,7 +457,12 @@ operation: pages.changed
 records: results
 id: id
 time: version.createdAt
-paging: {style: NextLink, param: cursor, next: _links.next, max_pages: 20, stop_older_than_since: true}
+paging:
+  style: NextLink
+  param: cursor
+  next: _links.next
+  max_pages: 20
+  stop_older_than_since: true
 ```
 
 :::caution[PageNumber paging can skip records]
@@ -952,7 +978,9 @@ status in `cortex sources`; see [Operating](./operating.md#failures).
 ```yaml
 monitoring:
   metrics: true
-  hook: {command: [/usr/local/bin/notify-oncall, --channel, brains], timeout_s: 10}
+  hook:
+    command: [/usr/local/bin/notify-oncall, --channel, brains]
+    timeout_s: 10
 ```
 
 | field | meaning |

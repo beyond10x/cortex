@@ -29,9 +29,16 @@ model:
 ask:
   listen: "127.0.0.1:8088"
   identity_header: x-asker
-  limits: {max_steps: 8, max_result_bytes: 16384, max_seconds: 120, per_identity_per_minute: 10, max_tool_calls: 16}
+  limits:
+    max_steps: 8
+    max_result_bytes: 16384
+    max_seconds: 120
+    per_identity_per_minute: 10
+    max_tool_calls: 16
   max_in_flight: 8
-  link_templates: {node: "https://view.example/node/{id}", evidence: "https://view.example/evidence/{id}"}
+  link_templates:
+    node: "https://view.example/node/{id}"
+    evidence: "https://view.example/evidence/{id}"
   guidance: Answer in English, in at most five sentences.
   retention_days: 90
   slow_after_ms: 20000
@@ -165,15 +172,25 @@ Without a policy, the question and the tool results reach the model unchanged, `
 always false and `unrestored` 0. Detection is by pattern, with the limits that
 [Limits](./limits.md) states for extraction.
 
+A stream with one tool call and an answer, without a policy. The service sends each `data:` line
+as one line of JSON; here each is broken after a comma to fit the page:
+
 ```text
 event: status
-data: {"event":"status","value":{"format":"cortex.ask-events/1","message":"starting the reader","step":0}}
+data: {"event":"status","value":{"format":"cortex.ask-events/1",
+  "message":"starting the reader","step":0}}
 
 event: tool
-data: {"event":"tool","value":{"arguments":"{\"query\":\"widget\"}","failed":false,"name":"search","result_bytes":35,"step":1,"truncated":false,"withheld":false}}
+data: {"event":"tool","value":{"arguments":"{\"query\":\"widget\"}",
+  "failed":false,"name":"search","result_bytes":35,"step":1,
+  "truncated":false,"withheld":false}}
 
 event: done
-data: {"event":"done","value":{"answer":"…","answer_id":"0192f3a1-7c2e-7d41-9b0a-3f5e6d7c8b9a","cached_tokens":100,"context_tokens":200,"evidence":[],"input_tokens":300,"nodes":["n-42"],"output_tokens":30,"steps":2,"unrestored":0}}
+data: {"event":"done","value":{"answer":"…",
+  "answer_id":"0192f3a1-7c2e-7d41-9b0a-3f5e6d7c8b9a",
+  "cached_tokens":100,"context_tokens":200,"evidence":[],
+  "input_tokens":300,"nodes":["n-42"],"output_tokens":30,"steps":2,
+  "unrestored":0}}
 ```
 
 ## Answer records, votes and review

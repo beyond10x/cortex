@@ -20,7 +20,7 @@ use cortex_cli::schedule::{self, Systemd};
 use cortex_cli::snapshot::{self, Refusal, RestoreError};
 use cortex_cli::{ekr, eval, home, instance, model_map, quality, run, schema, spec, structured};
 
-/// Spin up EKR knowledge brains from a spec, fed on a schedule by Connectors data sources.
+/// Spin up EKR knowledge instances from a spec, fed on a schedule by Connectors data sources.
 #[derive(Parser)]
 #[command(name = "cortex", version)]
 struct Cli {
