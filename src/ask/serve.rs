@@ -172,6 +172,31 @@ fn record_body(body: Result<Bytes, BytesRejection>) -> Result<Bytes, Box<Respons
     }
 }
 
+/// The stream of one answer: its events to the reader, the tool calls made for its record, and
+/// its `max_in_flight` slot.
+struct Events {
+    tx: tokio::sync::mpsc::UnboundedSender<ma::AskEvent>,
+    tool_calls: Vec<ma::AskTool>,
+    permit: Option<tokio::sync::OwnedSemaphorePermit>,
+}
+
+impl super::Stream for Events {
+    fn emit(&mut self, event: ma::AskEvent) -> bool {
+        if let ma::AskEvent::Tool(tool) = &event {
+            self.tool_calls.push(tool.clone());
+        }
+        self.tx.send(event).is_ok()
+    }
+
+    fn gone(&self) -> bool {
+        self.tx.is_closed()
+    }
+
+    fn left(&mut self) {
+        self.permit = None;
+    }
+}
+
 async fn ask(
     State(service): State<Arc<Service>>,
     headers: HeaderMap,
@@ -215,7 +240,8 @@ async fn ask(
         return bad_request(&why);
     }
     // Past `max_in_flight` answers the question is refused at once, before it spends a question
-    // of the minute. The permit lives as long as the answer's blocking thread.
+    // of the minute. The permit lives as long as the answer's blocking thread, or until its
+    // reader leaves while the answer waits on the model (`Events::left`).
     let Ok(permit) = service.in_flight.clone().try_acquire_owned() else {
         return refusal(
             StatusCode::TOO_MANY_REQUESTS,
@@ -246,21 +272,24 @@ async fn ask(
     let service = service.clone();
     let (started, at_ms) = (Instant::now(), now_ms());
     tokio::task::spawn_blocking(move || {
-        let _permit = permit;
         let answer_id = uuid::Uuid::now_v7().to_string();
-        let mut tool_calls = Vec::new();
+        let mut stream = Events {
+            tx,
+            tool_calls: Vec::new(),
+            permit: Some(permit),
+        };
         let outcome = answer(
             &service.settings,
             &answer_id,
             &identity,
             &question,
-            &mut |event| {
-                if let ma::AskEvent::Tool(tool) = &event {
-                    tool_calls.push(tool.clone());
-                }
-                tx.send(event).is_ok()
-            },
+            &mut stream,
         );
+        let Events {
+            tx,
+            tool_calls,
+            permit: _permit,
+        } = stream;
         // The answer's id is its request id: the detail of a failure (a gateway's body, a program
         // path) goes to standard error under it, and the client's `error` names it.
         if let Some(detail) = super::detail(&outcome) {

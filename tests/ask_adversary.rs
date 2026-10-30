@@ -1181,7 +1181,6 @@ fn causes_after_a_second(store: &Records, answer_id: &str) -> Vec<&'static str> 
 /// review item"; the spec's `cortex.ask.ClientClosed`, the CHANGELOG and the site say the same.
 /// With `slow_after_ms` set, a reader who leaves after it still opens a `slow` item.
 #[test]
-#[ignore = "adversary: a client-closed answer past slow_after_ms opens a `slow` review item; the decision says none"]
 fn adversary_a_client_closed_answer_past_slow_after_ms_opens_no_review_item() {
     let gateway = Gateway::start(vec![tool_reply(1, SEARCH)], Duration::from_millis(300));
     let service = serve(
@@ -1213,7 +1212,6 @@ fn adversary_a_client_closed_answer_past_slow_after_ms_opens_no_review_item() {
 /// the site ("stops the answer at once") say the answer stops at once: with `max_in_flight: 1`,
 /// the next asker is refused `busy` by an answer nobody reads.
 #[test]
-#[ignore = "adversary: a departed reader holds its max_in_flight slot until the in-flight model call returns; the next question is refused busy"]
 fn adversary_a_departed_reader_frees_its_in_flight_slot_at_once() {
     let gateway = Gateway::start(vec![text_reply("Yes [node:n-1].")], Duration::from_secs(5));
     let service = serve(
@@ -1247,7 +1245,6 @@ fn adversary_a_departed_reader_frees_its_in_flight_slot_at_once() {
 /// store before the loop notices, though no one reads the answer and the site says a closed
 /// stream "stops the answer at once".
 #[test]
-#[ignore = "adversary: a tool call is made after the reader left, when the reply carries no thinking text"]
 fn adversary_a_reader_gone_during_a_model_call_makes_no_tool_call() {
     let reply = json!({
         "choices": [{"index": 0, "finish_reason": "tool_calls",

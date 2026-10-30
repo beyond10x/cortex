@@ -124,7 +124,9 @@ service's standard error, on a line naming that request id.
 A reader who closes the stream before its last event stops the answer at once: no model is
 asked again and the reader process is stopped. The answer is recorded as `client-closed`, with
 the token counts and steps of the model calls already made; it is no failure and opens no review
-item.
+item, `slow` included. A reader who leaves while the model is asked frees the answer's
+`max_in_flight` slot at once; the model call already made is still waited for, up to
+`max_seconds`, so its tokens are counted, and none of its tool calls is made.
 
 A tool result is rewritten into compact text (each text that is JSON written without whitespace)
 and cut at a character boundary to `max_result_bytes`; its `tool` event says whether it was cut.

@@ -1002,11 +1002,11 @@ impl Keeper {
             at: stamp(asked.at_ms),
         };
         self.run(|_| {}, |app| app.record_answer(input))?;
-        // A reader leaving is no fault of the answer: it opens no review item.
-        if !matches!(
-            kind,
-            ma::AnswerOutcome::Answered | ma::AnswerOutcome::ClientClosed
-        ) {
+        // A reader leaving is no fault of the answer: it opens no review item, `slow` included.
+        if kind == ma::AnswerOutcome::ClientClosed {
+            return Ok(());
+        }
+        if kind != ma::AnswerOutcome::Answered {
             self.open_review(&asked.answer_id, ma::ReviewCause::Failed)?;
         }
         if self

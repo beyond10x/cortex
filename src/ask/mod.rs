@@ -531,15 +531,62 @@ fn cut_off(finish_reason: &str, spent: &Spent) -> ma::AskOutcome {
     }
 }
 
-/// Answers `question` for `identity`, under `answer_id`: the tool loop. Each event before the last is handed to
-/// `emit` as it happens; `emit` answers false once nobody reads the stream, which ends the loop.
-/// The outcome is the answer or why there is none; [`final_event`] makes it the last event.
+/// Where an answer's events go, and whether anyone still reads them.
+pub trait Stream {
+    /// Hands `event` to the reader; false once nobody reads the stream, which ends the loop.
+    fn emit(&mut self, event: ma::AskEvent) -> bool;
+    /// Whether the reader has closed the stream, without sending anything.
+    fn gone(&self) -> bool;
+    /// The reader closed the stream while the loop waits on the model: whatever the answer holds
+    /// that keeps other questions out (its `max_in_flight` slot) is given back now.
+    fn left(&mut self);
+}
+
+/// How often a wait on the model looks whether the reader has gone.
+const GONE_POLL: Duration = Duration::from_millis(25);
+
+/// Runs `work` (a model call) on its own thread and waits for it, looking whether the reader of
+/// `stream` has gone; when it has, [`Stream::left`] is called at once. The call itself is not cut:
+/// what it spent is still counted, and it ends by its reply or the answer's deadline. The second
+/// value says whether the reader went.
+fn while_read<T: Send>(stream: &mut dyn Stream, work: impl FnOnce() -> T + Send) -> (T, bool) {
+    std::thread::scope(|scope| {
+        let (done, result) = std::sync::mpsc::channel();
+        let worker = scope.spawn(move || {
+            let _ = done.send(work());
+        });
+        let mut gone = false;
+        loop {
+            match result.recv_timeout(GONE_POLL) {
+                Ok(value) => return (value, gone),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    if !gone && stream.gone() {
+                        gone = true;
+                        stream.left();
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    // The work panicked before it sent: its panic is this thread's.
+                    match worker.join() {
+                        Err(panic) => std::panic::resume_unwind(panic),
+                        Ok(()) => unreachable!("the model call ended without a result"),
+                    }
+                }
+            }
+        }
+    })
+}
+
+/// Answers `question` for `identity`, under `answer_id`: the tool loop. Each event before the
+/// last is handed to `stream` as it happens; once nobody reads it the loop ends, also while it
+/// waits on the model, and no tool call is made for a reader who has gone. The outcome is the
+/// answer or why there is none; [`final_event`] makes it the last event.
 pub fn answer(
     settings: &Settings,
     answer_id: &str,
     identity: &str,
     question: &str,
-    emit: &mut dyn FnMut(ma::AskEvent) -> bool,
+    stream: &mut dyn Stream,
 ) -> ma::AskOutcome {
     let limits = &settings.ask.limits;
     // A limit past ten years is no limit in practice; the clamp keeps the sum from overflowing.
@@ -563,7 +610,7 @@ pub fn answer(
         }
         None => question.to_string(),
     };
-    if !emit(status(0, "starting the reader")) {
+    if !stream.emit(status(0, "starting the reader")) {
         return client_closed(&spent);
     }
     let mut reader = match mcp::Reader::start(&settings.reader, deadline) {
@@ -601,10 +648,19 @@ pub fn answer(
         if Instant::now() >= deadline {
             return limit("time-limit");
         }
-        if !emit(status(step, "asking the model")) {
+        if !stream.emit(status(step, "asking the model")) {
             return client_closed(&spent);
         }
-        let reply = match gateway.chat(&messages, &tools, deadline) {
+        // A reader who leaves during the model call gives back the answer's slot at once; the
+        // call's reply still counts what it spent, and nothing of it is streamed or run.
+        let (reply, gone) = while_read(stream, || gateway.chat(&messages, &tools, deadline));
+        if gone {
+            if let Ok(reply) = &reply {
+                spent.add(&reply.usage);
+            }
+            return client_closed(&spent);
+        }
+        let reply = match reply {
             Ok(r) => r,
             Err(CallError::Timeout) => return limit("time-limit"),
             Err(CallError::Failed(reason)) => return model_failed(reason),
@@ -639,7 +695,7 @@ pub fn answer(
             let mut answer = String::new();
             for piece in pieces.into_iter().filter(|p| !p.is_empty()) {
                 answer.push_str(&piece);
-                if !emit(ma::AskEvent::Delta(ma::AskDelta { text: piece })) {
+                if !stream.emit(ma::AskEvent::Delta(ma::AskDelta { text: piece })) {
                     return client_closed(&spent);
                 }
             }
@@ -664,8 +720,8 @@ pub fn answer(
         // Text before a tool call is the model thinking aloud, not the answer.
         if let Some(text) = reply.content.as_deref().filter(|t| !t.trim().is_empty()) {
             let text = restored(batch.as_ref(), text);
-            if !emit(ma::AskEvent::Delta(ma::AskDelta { text }))
-                || !emit(ma::AskEvent::Discard(ma::AskDiscard { step }))
+            if !stream.emit(ma::AskEvent::Delta(ma::AskDelta { text }))
+                || !stream.emit(ma::AskEvent::Discard(ma::AskDiscard { step }))
             {
                 return client_closed(&spent);
             }
@@ -685,11 +741,16 @@ pub fn answer(
                 reply.tool_calls.len(),
                 over.len()
             );
-            if !emit(status(step, &message)) {
+            if !stream.emit(status(step, &message)) {
                 return client_closed(&spent);
             }
         }
         for call in made {
+            // No tool call is made for a reader who has gone: a reply without thinking text
+            // reaches here with nothing sent since the model was asked.
+            if stream.gone() {
+                return client_closed(&spent);
+            }
             let (text, failed) = match serde_json::from_str::<Value>(&call.arguments) {
                 Ok(arguments) => match reader.call(&call.name, arguments, deadline) {
                     Ok(result) => compact(&result),
@@ -699,7 +760,7 @@ pub fn answer(
                 Err(e) => (format!("the arguments are not JSON: {e}"), true),
             };
             let (shown, truncated, withheld) = shown(batch.as_mut(), &text, max_bytes);
-            if !emit(ma::AskEvent::Tool(ma::AskTool {
+            if !stream.emit(ma::AskEvent::Tool(ma::AskTool {
                 step,
                 name: call.name.clone(),
                 arguments: call.arguments.clone(),
