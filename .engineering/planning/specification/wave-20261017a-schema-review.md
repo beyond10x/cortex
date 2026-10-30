@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: specification:wave-20261017a-schema-review
 kind: specification
-status: approved
+status: implemented
 title: 'Wave 20261017a: schema proposals on approval, edge type widening'
 relations:
 - specifies: story:schema-proposals-on-approval
 - specifies: story:schema-widens-edge-type
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-17T02:22:09Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-17T02:22:09Z", actor: "human:timo", revision: 3}
+- {from: "approved", to: "implemented", at: "2026-10-30T09:39:33Z", actor: "human:timo", revision: 4}
 ---
 ## Wave 20261017a: schema proposals on approval, edge type widening
 

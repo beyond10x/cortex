@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: specification:wave-20261015b-paging-windows-adoption
 kind: specification
-status: approved
+status: implemented
 title: 'Wave 20261015b: paging, windows, fetch-only, cost split, adoption by key, connection by profile'
 relations:
 - specifies: story:next-link-paging
@@ -11,10 +11,11 @@ relations:
 - specifies: story:adopt-seen-by-key
 - specifies: story:epoch-window-placeholders
 - specifies: story:connection-by-profile
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-15T03:31:24Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-15T03:31:24Z", actor: "human:timo", revision: 3}
+- {from: "approved", to: "implemented", at: "2026-10-30T09:39:33Z", actor: "human:timo", revision: 4}
 ---
 ## Wave 20261015b: paging, windows, fetch-only, cost split, adoption by key, connection by profile
 

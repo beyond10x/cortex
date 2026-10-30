@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: specification:wave-20261017b-answer-service
 kind: specification
-status: approved
+status: implemented
 title: 'Wave 20261017b: the answer service'
 relations:
 - specifies: story:ask-service
@@ -10,10 +10,11 @@ relations:
 - specifies: story:answer-records-and-review
 - specifies: story:eval-cases-from-review
 - specifies: story:ask-redaction
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-17T03:37:09Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-17T03:37:09Z", actor: "human:timo", revision: 3}
+- {from: "approved", to: "implemented", at: "2026-10-30T09:39:33Z", actor: "human:timo", revision: 5}
 ---
 ## Wave 20261017b: the answer service
 

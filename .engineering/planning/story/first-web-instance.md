@@ -15,7 +15,7 @@ scope:
   path: examples/agent-tooling.yaml
 - confidence: inferred
   path: examples/seed/agent-tooling.yaml
-revision: 18
+revision: 19
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 10, decided_on: {"recorded":{"review_outcome":6}}}
 - {from: "proposed", to: "active", at: "2026-10-05T16:13:32Z", actor: "agent:claude", revision: 11, decided_on: {"recorded":{"review_outcome":6}}}
@@ -153,3 +153,38 @@ The crawl was then started by hand (`systemctl --user start`, 2026-10-14 02:48 C
 - Day 1: 2026-10-15; days 1 to 7 (2026-10-15 to 2026-10-21) hold 7 news runs and 1 crawl
 - Read on day 8: 2026-10-22, after the 00:30 CEST news run, against the Acceptance
 - At the restart: news and crawl `runs: 0`, `consecutive_failures: 0` (`cortex sources`)
+
+## agent-tooling-5 (recorded in the store reconcile of 2026-10-30)
+
+The body above ends at `agent-tooling-4`. A later instance, `agent-tooling-5`, runs from the user
+timers `cortex-agent-tooling-5-news.timer` and `cortex-agent-tooling-5-mcp-specification.timer`
+(`systemctl --user list-timers 'cortex-*'`, 2026-10-30), with `XDG_CONFIG_HOME=~/.config/cortex-at5`
+in the unit. Nothing in this store records its creation, its binaries or its day 1.
+
+Run outcomes, from `journalctl --user -u cortex-agent-tooling-5-news.service -u
+cortex-agent-tooling-5-mcp-specification.service` (read 2026-10-30):
+
+| date (CEST/CET) | source | outcome | documents applied |
+|---|---|---|---|
+| 2026-10-17 | news | ran | 15 |
+| 2026-10-18 | news | ran | 7 |
+| 2026-10-19 | news | ran | 9 |
+| 2026-10-20 | news | ran | 6 |
+| 2026-10-21 | news | ran | 10 |
+| 2026-10-21 | mcp-specification | ran | 19 |
+| 2026-10-22 | news | ran | 6 |
+| 2026-10-23 | news | ran | 8 |
+| 2026-10-24 | news | ran | 6 |
+| 2026-10-25 | news | ran | 5 |
+| 2026-10-26 | news | fetch-failed (`connections revalidate: timeout at dispatch`) | 0 |
+| 2026-10-27 | news | ran | 6 |
+| 2026-10-28 | news | ran | 7 |
+| 2026-10-28 | mcp-specification | ran | 13 |
+| 2026-10-29 | news | extraction-failed (model session limit) | 0 |
+| 2026-10-30 | news | ran | 8 |
+
+Days 2026-10-17 to 2026-10-23 hold 7 news runs and 1 crawl that exited 0 and applied 80 documents,
+which is the shape Acceptance 0 asks for. Not checked: Acceptance 1 (that every start was a timer
+start), Acceptance 2 (`ekr snapshot` relation count) and Acceptance 3 (the three questions through
+`ekr mcp`), and no `verification-report` exists. The story stays `active` until that day-8 read is
+done and recorded.
