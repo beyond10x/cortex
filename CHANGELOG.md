@@ -62,6 +62,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - Masking a key that was masked already no longer masks it again when a `%3A`-separated
   assignment follows a scheme (`x://password%3a<token>&u@h`); such a stored key is no longer
   dropped on every load.
+- A client of `cortex ask serve` that sent a body above a route's limit (1 MiB for `/ask`, 64 KiB
+  for a vote or a close) could lose the 413 refusal: the service answered and closed the
+  connection with the body unread, which reset it while the client was still writing. The service
+  now reads the rest of a refused body, up to 16 MiB and for at most 10 seconds, before it
+  answers; so it does for an unknown path (404), a wrong method (405) and `GET /review`. The
+  eval `mcp` runner's redacting server likewise reads up to 16 MiB of the declared body, for at
+  most 10 seconds, before its 401, 404, 405 and 413 refusals, and answers a client that sent
+  `expect: 100-continue` at once.
 
 ### Known limits
 
@@ -80,6 +88,9 @@ Each has a test kept `#[ignore]`d that names `story:ignored-adversary-limits`.
 - In a URL with a user name and a port, a `)` and an address right after the port
   (`(smtp://ops@mail.example:587)admin@example.org`) are masked as a password
   (`tests/w30b_mask_adversary.rs`).
+- The eval `mcp` runner's redacting server drains only a body declared by `content-length`, so a
+  client that sends a chunked body before it reads may lose the server's refusal
+  (`tests/w30b_ask_adversary.rs`).
 
 Kept `#[ignore]`d under `story:credential-key-spellings`, for the next release:
 

@@ -288,3 +288,66 @@ fn a_header_line_over_the_cap_is_refused_before_any_further_read() {
     );
     assert!(took < Duration::from_secs(2), "the refusal took {took:?}");
 }
+
+/// `story:ask-body-limit-test-race`, the class of the ask service's over-limit body: a client that
+/// writes its whole request before it reads reads every refusal the server makes after the head
+/// (401, 404, 405, 413), body above the server's 1 MiB limit or not. A server that answers and
+/// closes with the body unread resets the connection, and the client's write fails instead.
+#[test]
+fn a_client_still_sending_its_body_reads_every_refusal_after_the_head() {
+    let tmp = scratch();
+    let reader = stand_in_reader(tmp.path());
+    let r = email_and_name();
+    let deadline = Instant::now() + Duration::from_secs(120);
+    let served = proxy::serve(&r, &reader, "ekr", "q", deadline, |_, config| {
+        let (addr, path) = url_of(config);
+        let bearer = config["mcpServers"]["ekr"]["headers"]["Authorization"]
+            .as_str()
+            .expect("a bearer header")
+            .to_string();
+        let big = "x".repeat(3 << 20);
+        let cases = [
+            ("POST", path.clone(), Some(bearer.as_str()), "413"),
+            ("POST", path.clone(), None, "401"),
+            (
+                "POST",
+                "/elsewhere".to_string(),
+                Some(bearer.as_str()),
+                "404",
+            ),
+            ("PUT", path.clone(), Some(bearer.as_str()), "405"),
+        ];
+        let mut seen = Vec::new();
+        for (method, target, auth, status) in cases {
+            let mut s = TcpStream::connect(&addr).expect("connect");
+            s.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+            s.set_write_timeout(Some(Duration::from_secs(20))).unwrap();
+            let auth = auth.map_or(String::new(), |a| format!("authorization: {a}\r\n"));
+            let head = format!(
+                "{method} {target} HTTP/1.1\r\nhost: {addr}\r\n{auth}content-length: {}\r\n\r\n",
+                big.len()
+            );
+            let sent = s
+                .write_all(head.as_bytes())
+                .and_then(|()| s.write_all(big.as_bytes()));
+            let mut out = String::new();
+            let read = sent.and_then(|()| s.read_to_string(&mut out).map(|_| ()));
+            seen.push((
+                status,
+                read.map(|()| out.lines().next().unwrap_or("").to_string()),
+            ));
+        }
+        seen
+    })
+    .expect("the server starts");
+    let lost: Vec<String> = served
+        .answer
+        .into_iter()
+        .filter_map(|(status, line)| match line {
+            Ok(line) if line.starts_with(&format!("HTTP/1.1 {status}")) => None,
+            Ok(line) => Some(format!("{status}: answered {line:?}")),
+            Err(e) => Some(format!("{status}: lost, {e}")),
+        })
+        .collect();
+    assert!(lost.is_empty(), "{lost:?}");
+}
