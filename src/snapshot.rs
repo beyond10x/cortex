@@ -835,6 +835,7 @@ mod tests {
             store: layout.store(),
             launch: None,
             stage: None,
+            ready: Default::default(),
         }
     }
 

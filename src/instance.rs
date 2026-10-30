@@ -120,6 +120,7 @@ impl Layout {
             store,
             launch,
             stage: None,
+            ready: Default::default(),
         }
     }
 

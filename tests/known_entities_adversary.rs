@@ -403,8 +403,9 @@ fn a_failed_store_read_fails_the_run_before_the_model_is_asked() {
     executable(
         &wrapper,
         &format!(
-            "for a in \"$@\"; do if [ \"$a\" = snapshot ]; then echo 'snapshot unavailable' >&2; \
+            "{}for a in \"$@\"; do if [ \"$a\" = snapshot ]; then echo 'snapshot unavailable' >&2; \
              exit 3; fi; done\nexec \"{}\" \"$@\"\n",
+            common::EKR_SESSION_SHIM,
             ekr().display()
         ),
     );

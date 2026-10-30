@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use cortex_model::instance as m;
 use serde_json::Value;
 
+use crate::ekr::Snapshot;
 use crate::evidence::Issued;
 use crate::sources::Origin;
 
@@ -124,8 +125,14 @@ pub struct Index {
 }
 
 impl Index {
-    /// Every node of `snapshot` (`ekr snapshot`) of a type `ontology` (`ekr ontology`) names.
+    /// Every node of `snapshot` (`ekr snapshot`, read whole) of a type `ontology` (`ekr ontology`)
+    /// names: [`Index::of`].
     pub fn from_snapshot(snapshot: &Value, ontology: &Value) -> Self {
+        Self::of(&Snapshot::of(snapshot), ontology)
+    }
+
+    /// Every node of `snapshot` of a type `ontology` (`ekr ontology`) names.
+    pub fn of(snapshot: &Snapshot, ontology: &Value) -> Self {
         let types: BTreeMap<&str, &str> = ontology["node_types"]
             .as_array()
             .into_iter()
@@ -133,24 +140,14 @@ impl Index {
             .filter_map(|t| Some((t["id"].as_str()?, t["name"].as_str()?)))
             .collect();
         let mut index = Self::default();
-        for node in snapshot["graph"]["graph"]["nodes"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .map(|(_, n)| n)
-        {
-            let Some(name) = node["canonical_name"].as_str() else {
+        for node in snapshot.graph.graph.nodes.values() {
+            let Some(name) = node.canonical_name.as_deref() else {
                 continue;
             };
-            let Some(node_type) = node["type_id"].as_str().and_then(|id| types.get(id)) else {
+            let Some(node_type) = node.type_id.as_deref().and_then(|id| types.get(id)) else {
                 continue;
             };
-            let aliases = node["aliases"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str);
-            index.add(node_type, name, aliases);
+            index.add(node_type, name, node.aliases.iter().map(String::as_str));
         }
         index
     }
@@ -300,10 +297,11 @@ pub struct Lookup {
 
 impl Lookup {
     /// The known entities of `batch`: the index's hits of its [`terms`], [`masked`], then
-    /// [`merge`]d with the run's own names `run`. The first call with a term reads `store`.
+    /// [`merge`]d with the run's own names `run`. The first call with a term reads the store
+    /// through the run's `session`.
     pub fn for_batch(
         &mut self,
-        store: &crate::ekr::Store,
+        session: &crate::ekr::Session,
         ontology: &Value,
         batch: &[Issued],
         run: &BTreeMap<String, Vec<String>>,
@@ -313,7 +311,7 @@ impl Lookup {
             Vec::new()
         } else {
             if self.index.is_none() {
-                self.index = Some(Index::from_snapshot(&store.snapshot()?, ontology));
+                self.index = Some(Index::of(&session.snapshot()?, ontology));
             }
             self.index.as_ref().expect("built above").hits(&terms)
         };

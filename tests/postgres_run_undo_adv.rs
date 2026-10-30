@@ -46,7 +46,7 @@ exec "$EKR" "$@"
 "#
     .replace("@R@", &w.root.display().to_string())
     .replace("@EKR@", &ekr().display().to_string());
-    common::executable(&path, &body);
+    common::executable(&path, &format!("{}{body}", common::EKR_SESSION_SHIM));
     path
 }
 

@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 501155e050c28011046dcae8d1dceec62fedb2aefd31466bf7cf27127bcfcad7
-// contract digest 6500154fdb77662a0f7d0e870f8f6b68f67d1c4d0d48da77d962aabfd412eaff
+// model digest a1985f8f3c719a34e29149abd79b27c00379600b80c7f19bacd9f1832d3491db
+// contract digest 24b3106592b3f21c336ecc59a60765cc68c4be0cb800ebc7f3da16d207199ac0
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -3243,7 +3243,7 @@ pub struct RestoreUnsupported {
 
 /// The declared error `cortex.instance.RunTerminated`.
 ///
-/// The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended, and stopped at the next safe point: a fetch or a model call in flight was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about the source was wrong: the failure is not counted against it.
+/// The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended, and stopped at the next safe point: a fetch, a model call or a read of the store in flight was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about the source was wrong: the failure is not counted against it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunTerminated {
     /// `reason` — `String`.
