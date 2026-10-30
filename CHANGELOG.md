@@ -48,6 +48,9 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   than remained and the run reported, and a gate's `cost_usd` check read, less than it spent. Every
   costed answer now counts in all three. A run with a failed call that carried no cost now reports
   `cost_usd` null, as `cortex quality`, `cortex schema` and `cortex eval` do.
+- A model call that had already finished when the run was sent SIGTERM was dropped as ended, and
+  what it cost counted nowhere. Its answer is now read: its cost and tokens count in the day's
+  spend and the run's, and the run still ends `terminated`.
 - A fact the model marked `replaces: true` with no current value to replace was rejected by EKR
   (`replacement-without-active-assertion`) and its value lost, its document marked seen. cortex now
   applies such a fact again in the same batch without `replaces`, so the value is stored as a plain

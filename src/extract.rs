@@ -252,6 +252,20 @@ impl Refused {
         }
     }
 
+    /// A call that had finished when the run was sent SIGTERM: [`Refused::terminated`], with the
+    /// cost and tokens its answer `stdout` reports, so they count against the run and the day.
+    /// An answer that is not JSON leaves the call uncosted.
+    fn finished_at_sigterm(stdout: &[u8]) -> Self {
+        match serde_json::from_slice::<Value>(stdout) {
+            Ok(answer) => Self {
+                cost_usd: answer["total_cost_usd"].as_f64(),
+                usage: Usage::read(&answer),
+                ..Self::terminated()
+            },
+            Err(_) => Self::terminated(),
+        }
+    }
+
     /// An error answer that cost zero: the shape of an answer given before any model was asked
     /// (a sign-in or a usage limit), worth asking once more. A missing cost is not zero.
     fn free_error_answer(&self) -> bool {
@@ -777,9 +791,14 @@ impl Model {
                 ..Refused::free(format!("cannot run claude: {e}"))
             })?;
         // The prompt is written, and the answer read, on threads of their own, so a run sent
-        // SIGTERM ends the call however far it got ([`crate::terminate`]).
-        let out = match crate::terminate::wait(&mut child, Some(prompt.as_bytes()), "claude") {
+        // SIGTERM ends the call however far it got ([`crate::terminate`]). A call that had
+        // finished when the run was sent SIGTERM is read for what it cost, and the run stops.
+        let (waited, sigterm) =
+            crate::terminate::wait_finished(&mut child, Some(prompt.as_bytes()), "claude");
+        let out = match waited {
+            Waited::Done(out) if sigterm => return Err(Refused::finished_at_sigterm(&out.stdout)),
             Waited::Done(out) => out,
+            Waited::Failed(_) if sigterm => return Err(Refused::terminated()),
             Waited::Failed(e) => return Err(Refused::uncosted(e)),
             Waited::Terminated => return Err(Refused::terminated()),
         };
@@ -1207,6 +1226,24 @@ mod tests {
             BTreeMap::from([("e2".to_string(), limit.clone()), ("e3".to_string(), limit)])
         );
         assert!(cited_by_rejected(&doc, &json!({"rejected": []})).is_empty());
+    }
+
+    /// `story:run-cost-counted-on-refusal`: a call that had finished when the run was sent
+    /// SIGTERM is refused as terminated with the cost and tokens its answer reports; one that
+    /// left no answer is terminated and uncosted.
+    #[test]
+    fn a_call_finished_at_sigterm_is_terminated_and_keeps_its_cost() {
+        let answer = br#"{"type":"result","is_error":false,"total_cost_usd":0.4,
+            "usage":{"input_tokens":7,"output_tokens":3,"cache_read_input_tokens":0,
+            "cache_creation_input_tokens":0}}"#;
+        let refused = Refused::finished_at_sigterm(answer);
+        assert_eq!(refused.terminated, Some(Stopped::Call));
+        assert_eq!(refused.cost_usd, Some(0.4));
+        assert_eq!((refused.calls, refused.usage.output_tokens), (1, Some(3)));
+
+        let refused = Refused::finished_at_sigterm(b"");
+        assert_eq!(refused.terminated, Some(Stopped::Call));
+        assert_eq!(refused.cost_usd, None);
     }
 
     /// `story:replacement-applied-as-assertion`: only a fact rejected for having nothing active
