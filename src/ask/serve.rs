@@ -79,9 +79,19 @@ fn unidentified(service: &Service) -> Response {
     )
 }
 
-fn store_failed(reason: String) -> Response {
-    eprintln!("cortex: answer records: {reason}");
-    json_error(StatusCode::INTERNAL_SERVER_ERROR, "store-failed", reason)
+/// A failure of the records: 500 `store-failed` with a new request id and a fixed message. The
+/// detail (a database path, SQL text) goes to standard error under that id, never to the client.
+fn store_failed(detail: String) -> Response {
+    let request = uuid::Uuid::now_v7().to_string();
+    eprintln!("cortex: answer records: request {request}: {detail}");
+    json_response(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        json!({
+            "error": "store-failed",
+            "message": "the answer records could not be read or written",
+            "request_id": request,
+        }),
+    )
 }
 
 /// Runs `work` on the blocking pool: the records are SQLite.
@@ -144,19 +154,21 @@ const RECORD_BODY_LIMIT: usize = 64 * 1024;
 
 /// The body of a record route, or its refusal: 413 above [`RECORD_BODY_LIMIT`], 400 when it
 /// cannot be read.
-fn record_body(body: Result<Bytes, BytesRejection>) -> Result<Bytes, Response> {
+fn record_body(body: Result<Bytes, BytesRejection>) -> Result<Bytes, Box<Response>> {
     match body {
         Ok(body) => Ok(body),
-        Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => Err(json_error(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "bad-request",
-            format!("the body is above {RECORD_BODY_LIMIT} bytes"),
-        )),
-        Err(_) => Err(json_error(
+        Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+            Err(Box::new(json_error(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "bad-request",
+                format!("the body is above {RECORD_BODY_LIMIT} bytes"),
+            )))
+        }
+        Err(_) => Err(Box::new(json_error(
             StatusCode::BAD_REQUEST,
             "bad-request",
             "the body cannot be read",
-        )),
+        ))),
     }
 }
 
@@ -249,6 +261,15 @@ async fn ask(
                 tx.send(event).is_ok()
             },
         );
+        // The answer's id is its request id: the detail of a failure (a gateway's body, a program
+        // path) goes to standard error under it, and the client's `error` names it.
+        if let Some(detail) = super::detail(&outcome) {
+            eprintln!("cortex: ask: request {answer_id}: {detail}");
+        }
+        let mut last = final_event(&outcome);
+        if let ma::AskEvent::Error(e) = &mut last {
+            e.message.push_str(&format!(" (request {answer_id})"));
+        }
         let asked = Asked {
             answer_id,
             identity,
@@ -258,10 +279,11 @@ async fn ask(
             at_ms,
         };
         // The record is kept before the last event, so a reader who saw it can vote on it.
+        let request = asked.answer_id.clone();
         if let Err(e) = service.keeper.record(asked, &outcome) {
-            eprintln!("cortex: answer records: {e}");
+            eprintln!("cortex: answer records: request {request}: {e}");
         }
-        let _ = tx.send(final_event(&outcome));
+        let _ = tx.send(last);
     });
     let stream = UnboundedReceiverStream::new(rx).map(|event| Ok::<_, Infallible>(sse(&event)));
     Sse::new(stream).into_response()
@@ -279,7 +301,7 @@ async fn vote(
     };
     let body = match record_body(body) {
         Ok(body) => body,
-        Err(refused) => return refused,
+        Err(refused) => return *refused,
     };
     let Ok(body) = serde_json::from_slice::<Value>(&body) else {
         return json_error(
@@ -392,7 +414,7 @@ async fn close(
     }
     let body = match record_body(body) {
         Ok(body) => body,
-        Err(refused) => return refused,
+        Err(refused) => return *refused,
     };
     let body = serde_json::from_slice::<Value>(&body).ok();
     let expected = body.as_ref().map(|b| {

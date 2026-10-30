@@ -442,8 +442,28 @@ pub fn final_event(outcome: &ma::AskOutcome) -> ma::AskEvent {
             "the reader closed the stream before the answer".into(),
             None,
         ),
-        ma::AskOutcome::ModelFailed { error: e } => error("model-failed", e.reason.clone(), None),
-        ma::AskOutcome::ReaderFailed { error: e } => error("reader-failed", e.reason.clone(), None),
+        // The reason of a model or reader failure can carry a gateway's body or a program path:
+        // it is [`detail`], for the log only.
+        ma::AskOutcome::ModelFailed { .. } => error(
+            "model-failed",
+            "the model gateway could not be reached or gave no usable answer".into(),
+            None,
+        ),
+        ma::AskOutcome::ReaderFailed { .. } => error(
+            "reader-failed",
+            "the store's reader could not be started or stopped answering".into(),
+            None,
+        ),
+    }
+}
+
+/// The detail of an outcome that is for the service's log and never for the client: the reason
+/// of a model or reader failure.
+pub fn detail(outcome: &ma::AskOutcome) -> Option<&str> {
+    match outcome {
+        ma::AskOutcome::ModelFailed { error } => Some(&error.reason),
+        ma::AskOutcome::ReaderFailed { error } => Some(&error.reason),
+        _ => None,
     }
 }
 

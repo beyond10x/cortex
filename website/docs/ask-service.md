@@ -71,7 +71,7 @@ no model. Bind `listen` where only that guard reaches it.
 The gateway is spoken to as an OpenAI-compatible endpoint: `POST <base_url>/v1/chat/completions`
 (`<base_url>/chat/completions` when `base_url` already ends in `/v1`), with the value of the
 variable `token_env` names as a bearer token, read when an answer starts. A missing or empty token
-fails the answer with `model-failed`, naming the variable. The reader does not inherit that
+fails the answer with `model-failed`; the service's log names the variable. The reader does not inherit that
 variable, nor any other `ANTHROPIC_*` or `CLAUDE_*` variable: it reads a store and gets no model
 credential. A `max_seconds` above ten years counts as ten years. A gateway answer above 4 MiB is
 not read past that and fails the answer with `model-failed`.
@@ -115,6 +115,11 @@ answer's UUIDv7, the id its record and its votes carry.
 | `model-failed` | 200 | the gateway could not be reached, answered an error or no message |
 | `reader-failed` | 200 | the reader could not be started or stopped answering |
 | `cut-off` | 200 | the model's reply ended at its token limit (`finish_reason` `length`) or at a content filter (`content_filter`); its text is no answer and is not streamed |
+
+The `error` event of an answer that started ends its `message` with `(request <answer_id>)`, the id
+of its record. The `message` of `model-failed` and `reader-failed` is a fixed text: what the
+gateway answered, the reader's program path and any other internal detail go only to the
+service's standard error, on a line naming that request id.
 
 A reader who closes the stream before its last event stops the answer at once: no model is
 asked again and the reader process is stopped. The answer is recorded as `client-closed`, with
@@ -184,7 +189,9 @@ whatever the instance's
 
 The record routes need the identity header too (401 without it) and answer JSON; a refusal is
 `{"error": <reason>, "message": <text>}`. A body above 64 KiB is refused with 413
-`bad-request`.
+`bad-request`. A failure of the records answers 500 `store-failed` with a fixed message and a
+`request_id`; the detail (a database path, SQL text) goes only to the service's standard error,
+on a line naming that `request_id`.
 
 | route | body | answers |
 |---|---|---|

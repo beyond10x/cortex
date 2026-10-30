@@ -59,6 +59,11 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   answer above 4 MiB fails the answer with `model-failed`, and a vote or close body above 64 KiB
   answers 413. The redaction policy is compiled once when the service starts, not twice per
   question. Readers stay one per question, killed when the answer ends.
+- `cortex ask serve` sent internal text to HTTP clients: the database path and SQL error of a
+  record route's 500, and the gateway's answer or the reader's program path in an `error` event.
+  A record route's failure now answers `store-failed` with a fixed message and a `request_id`;
+  an answer's `error` event carries a fixed message for `model-failed` and `reader-failed`, ending
+  `(request <answer_id>)`. The detail goes to standard error on a line naming the same id.
 
 ## 0.6.1 — 2026-10-17
 
