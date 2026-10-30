@@ -36,6 +36,78 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+## 0.7.1 — 2026-10-30
+
+### Fixed
+
+- Across two homes, an instance whose unit name is another instance's (instance `a-b` with source
+  `c` and instance `a` with source `b-c` both name `cortex-a-b-c`) took over the other home's live
+  unit, and that home's source stopped running. `create`, `update` and `adopt` now refuse before
+  changing anything, naming the unit, the home that holds it and its source or viewer there. A unit
+  whose home no longer holds the instance it belongs to is still taken over (`units.taken_over`).
+- In a URL or record key, a raw `%` before an encoded `&` or `#` (`<token>%%26page=2`) no longer
+  carries the rest of the query into the masked value, so two URLs that differ after it stay two
+  documents. A twice-encoded `&` or `#` (`%2526`) ends a masked value too, and a `%` before
+  another escape or character (`%25%21`, `%%41`, `%2%41`, `%2%x`) stays in it.
+- Upgrading: a key 0.7.0 stored for a URL with `%%26` in its query
+  (`access_token=[masked:secret-assignment]`, the rest of the query inside the masked value)
+  matches no key after the change. Each such document is read once more after the upgrade,
+  under its new key, and the old key stays in the state file, matched by nothing.
+- Now masked: a password assigned with a twice percent-encoded name or separator
+  (`%253Faccess_token%253D<token>`), a JSON-quoted password inside a JSON string
+  (`{\"password\": \"<token>\"}`), and a URL password after a user name that holds a raw `@`
+  (`ftp://jane@corp.example:<password>@host`) when the password holds no `,` or `;`, so a user,
+  host and port before a list of addresses (`ops@mail.example:587,admin@example.org`) is kept.
+- Now masked without a redaction policy: a value assigned to an access key by name
+  (`AWS_SECRET_ACCESS_KEY=<v>`, `aws_secret_access_key = <v>`, `access-key: <v>`). 0.7.0 left
+  it in place unless the policy held the `Credential` class.
+- Masking a key that was masked already no longer masks it again when a `%3A`-separated
+  assignment follows a scheme (`x://password%3a<token>&u@h`); such a stored key is no longer
+  dropped on every load.
+- A client of `cortex ask serve` that sent a body above a route's limit (1 MiB for `/ask`, 64 KiB
+  for a vote or a close) could lose the 413 refusal: the service answered and closed the
+  connection with the body unread, which reset it while the client was still writing. The service
+  now reads the rest of a refused body, up to 16 MiB and for at most 10 seconds, before it
+  answers; so it does for an unknown path (404), a wrong method (405) and `GET /review`. The
+  eval `mcp` runner's redacting server likewise reads up to 16 MiB of the declared body, for at
+  most 10 seconds, before its 401, 404, 405 and 413 refusals, and answers a client that sent
+  `expect: 100-continue` at once.
+
+### Known limits
+
+Each has a test kept `#[ignore]`d that names `story:ignored-adversary-limits`.
+
+- `cortex update` does not refuse a redaction rule that rewrites the ids of a `structured` source
+  with seen records, though the rewrite re-keys them (`tests/rekey_adversary_pass2.rs`).
+- A record member literally named `$` and the whole record id `$` are one key path
+  (`tests/rekey_adversary_pass2.rs`).
+- A run that failed before it applied a batch does not count the tokens its failed answers
+  reported ([Limits](https://beyond10x.github.io/cortex/docs/limits),
+  `tests/partial_counts_adversary.rs`).
+- A credential that ends in a raw `%` and one hex digit right before an encoded or raw `&` or `#`
+  (`<token>%2%26`, `<token>%2&`) keeps that `%` and digit in clear in a key
+  (`tests/w30b_mask_adversary.rs`).
+- In a URL with a user name and a port, a `)` and an address right after the port
+  (`(smtp://ops@mail.example:587)admin@example.org`) are masked as a password
+  (`tests/w30b_mask_adversary.rs`).
+- The eval `mcp` runner's redacting server drains only a body declared by `content-length`, so a
+  client that sends a chunked body before it reads may lose the server's refusal
+  (`tests/w30b_ask_adversary.rs`).
+
+Kept `#[ignore]`d under `story:credential-key-spellings`, for the next release:
+
+- A value assigned to `secret_key`, `SECRET_KEY` or another name with `secret` before its last
+  word is kept in clear, with or without a `Credential` policy (`tests/w30b_mask_adversary.rs`).
+- A URL password holding `,` or `;` after a user name with a raw `@` is kept in clear
+  (`tests/w30b_mask_adversary.rs`).
+
+Kept `#[ignore]`d under `story:name-redaction-boundaries`, since 0.6.1
+(`tests/redaction_beside_marks_adv.rs`):
+
+- A known name glued to CJK text or an underscore, a name followed by a footnote digit, a name in
+  a lower-case-prefixed file name and a name starting with a titlecase digraph are shown to the
+  model unreplaced.
+
 ## 0.7.0 — 2026-10-30
 
 0.7.0 needs Connectors 0.60.0 or newer: a Connectors source refuses an older one, naming the version.

@@ -146,7 +146,7 @@ fn a_latin_name_with_a_click_or_glottal_letter_is_not_shown() {
 /// there is no `\b` between a CJK letter or an underscore and a Latin letter. Seen twice it is
 /// not rare either, so the model is shown it. The gate does not run known names at all.
 #[test]
-#[ignore = "adversary finding: out of scope (known-name boundary, not RareName); pre-existing"]
+#[ignore = "story:name-redaction-boundaries: out of scope (known-name boundary, not RareName); pre-existing"]
 fn a_known_name_glued_to_cjk_text_or_an_underscore_is_not_shown() {
     let r = policy(true, &["Müller"], true);
     let texts = ["会议上Müller发言了。", "Danke an _Müller_ für die Hilfe."];
@@ -161,7 +161,7 @@ fn a_known_name_glued_to_cjk_text_or_an_underscore_is_not_shown() {
 /// Author lists mark affiliations with superscript digits glued to the name (`Rowan¹`). `¹` is
 /// numeric, so `joins` reads it as part of the word and the name is neither replaced nor checked.
 #[test]
-#[ignore = "adversary finding: out of scope (digit boundary, not underscore or CJK); pre-existing"]
+#[ignore = "story:name-redaction-boundaries: out of scope (digit boundary, not underscore or CJK); pre-existing"]
 fn a_name_with_a_footnote_digit_is_not_shown() {
     let r = policy(true, &[], true);
     let (shown, left) = one(&r, "Authors: Ada Rowan¹, Bo Quill²");
@@ -177,7 +177,7 @@ fn a_name_with_a_footnote_digit_is_not_shown() {
 /// spec and skipped whole, so the name is shown there while the same name in the prose beside it
 /// is replaced: the placeholder no longer hides who it stands for.
 #[test]
-#[ignore = "adversary finding: spec-sanctioned (identifier through underscores); judgement"]
+#[ignore = "story:name-redaction-boundaries: spec-sanctioned (identifier through underscores); judgement"]
 fn a_name_in_a_lower_case_prefixed_file_name_is_not_shown() {
     let r = policy(true, &[], true);
     let (shown, left) = one(
@@ -195,7 +195,7 @@ fn a_name_in_a_lower_case_prefixed_file_name_is_not_shown() {
 /// A titlecase digraph (`ǅ`, `\p{Lt}`) is not `\p{Lu}`, so a name written with one never starts a
 /// capitalised word.
 #[test]
-#[ignore = "adversary finding: out of scope (titlecase letters); pre-existing, rarely typed"]
+#[ignore = "story:name-redaction-boundaries: out of scope (titlecase letters); pre-existing, rarely typed"]
 fn a_name_starting_with_a_titlecase_digraph_is_not_shown() {
     let r = policy(true, &[], true);
     let (shown, left) = one(&r, "Thanks to ǅemila for the map.");

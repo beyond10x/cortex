@@ -996,6 +996,54 @@ fn a_body_above_the_body_limit_is_refused_inside_the_event_contract() {
     );
 }
 
+/// Sends one request on a connection of its own, the whole body written before anything is read,
+/// as a client that only reads once it has sent: what came back, or how the connection failed.
+fn send_then_read(addr: &str, path: &str, identity: &str, body: &[u8]) -> Result<String, String> {
+    let mut s = TcpStream::connect(addr).map_err(|e| format!("connect: {e}"))?;
+    s.set_read_timeout(Some(Duration::from_secs(30))).unwrap();
+    s.set_write_timeout(Some(Duration::from_secs(30))).unwrap();
+    let head = format!(
+        "POST {path} HTTP/1.1\r\nhost: {addr}\r\n{HEADER}: {identity}\r\n\
+         content-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+        body.len()
+    );
+    s.write_all(head.as_bytes())
+        .and_then(|()| s.write_all(body))
+        .map_err(|e| format!("write: {e}"))?;
+    let mut out = Vec::new();
+    s.read_to_end(&mut out).map_err(|e| format!("read: {e}"))?;
+    Ok(String::from_utf8_lossy(&out).into_owned())
+}
+
+/// `story:ask-body-limit-test-race`: a client still sending a body above a route's limit reads the
+/// route's refusal. The service answers once it has read past the limit; it must read the rest of
+/// the body before it closes, or the client's write meets a reset connection and the refusal is
+/// lost (`main`'s run 41082799472: `read: error decoding response body`). Each route with a body
+/// limit: `/ask` (1 MiB, an `error` event), the vote and the close (64 KiB, a JSON refusal).
+#[test]
+fn a_client_still_sending_an_over_limit_body_reads_the_refusal_on_every_route() {
+    let gateway = Gateway::start(vec![text_reply("Yes [node:n-1].")], Duration::ZERO);
+    let service = serve(&gateway, Setup::default());
+    let big = json!({"question": "q".repeat(3 * 1024 * 1024)})
+        .to_string()
+        .into_bytes();
+    for (path, says) in [
+        ("/ask", "event: error"),
+        ("/ask/no-such-answer/vote", "\"bad-request\""),
+        ("/review/no-such-review/close", "\"bad-request\""),
+    ] {
+        for round in 0..5 {
+            let out = send_then_read(&service.addr, path, "hana", &big);
+            let out = out.unwrap_or_else(|e| panic!("{path}, round {round}: {e}"));
+            assert!(
+                out.starts_with("HTTP/1.1 413") && out.contains(says),
+                "{path}, round {round}: {}",
+                &out[..out.len().min(400)]
+            );
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Bounds of the service (`story:ask-service-bounds`)
 

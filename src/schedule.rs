@@ -202,21 +202,56 @@ fn single_line<W: std::fmt::Display>(
 
 /// Whose a unit file another home wrote is.
 enum Owner {
-    /// That home holds an active instance of the name: the unit is its own.
-    Live(PathBuf),
+    /// That home holds an active instance of the name, or (`Some`, what it is: `source a/b-c` or
+    /// `the viewer of instance a-b`) an active instance of another name one of whose units has
+    /// this unit's name: the unit is its own.
+    Live(PathBuf, Option<String>),
     /// That home's registry cannot be read (why), so it may hold the instance.
     Unreadable(PathBuf, String),
-    /// That home does not exist, or holds no active instance of the name. No command of it
-    /// reaches the unit again, and the home that writes it next takes it over.
+    /// That home does not exist, or holds no active instance of the name and no active instance
+    /// whose unit this is. No command of it reaches the unit again, and the home that writes it
+    /// next takes it over.
     Orphaned(PathBuf),
 }
 
 impl Owner {
     fn home(&self) -> &Path {
         match self {
-            Owner::Live(home) | Owner::Unreadable(home, _) | Owner::Orphaned(home) => home,
+            Owner::Live(home, _) | Owner::Unreadable(home, _) | Owner::Orphaned(home) => home,
         }
     }
+}
+
+/// What in `registry` the unit file `name` belongs to: the source or viewer of an active instance
+/// whose unit has that name (`cortex-<instance>-<source>`, `cortex-<instance>-view`). Instance `a`
+/// with source `b-c` and instance `a-b` with source `c` name one unit, so a unit named for
+/// instance `a-b` may be instance `a`'s. Answers the holding instance and what of it holds the
+/// unit.
+fn unit_holder(registry: &crate::home::Registry, name: &str) -> Option<(String, String)> {
+    let unit = name
+        .strip_suffix(".service")
+        .or_else(|| name.strip_suffix(".timer"))?;
+    let active = |instance: &str| {
+        registry
+            .instances
+            .get(instance)
+            .is_some_and(|i| i.state == m::InstanceState::Active)
+    };
+    let viewer = registry
+        .instances
+        .keys()
+        .filter(|i| active(i))
+        .find(|i| view_unit(i) == unit)
+        .map(|i| (i.clone(), format!("the viewer of instance {i}")));
+    viewer.or_else(|| {
+        registry
+            .sources
+            .values()
+            .map(|s| (&s.data.instance_name.0, &s.data.name))
+            .filter(|(i, _)| active(i))
+            .find(|(i, s)| source_unit(i, s) == unit)
+            .map(|(i, s)| (i.clone(), format!("source {i}/{s}")))
+    })
 }
 
 /// `KEY=value` for systemd's `Environment=`, quoted: systemd unquotes `\\` and `\"` there and
@@ -389,7 +424,9 @@ impl Systemd {
     }
 
     /// Who the unit file `name` of `instance` belongs to, when it exists and another home wrote it.
-    /// A timer that names no home belongs to its service's.
+    /// A timer that names no home belongs to its service's. The other home holds it when it holds
+    /// an active `instance`, or an active instance of another name one of whose units is `name`
+    /// ([`unit_holder`]).
     fn foreign(&self, instance: &str, name: &str) -> Option<Owner> {
         let read = |name: &str| std::fs::read_to_string(self.unit_dir.join(name)).ok();
         let home = home_of(&read(name)?).or_else(|| {
@@ -399,17 +436,22 @@ impl Systemd {
         if same_home(&home, &self.home_root) {
             return None;
         }
-        // A home that does not exist reads as an empty registry.
+        // A home that does not exist reads as an empty registry. An instance of another name that
+        // holds the unit is named first: that home may also hold an instance of this name, which
+        // does not hold the unit.
         Some(match crate::home::Home::new(home.clone()).load_registry() {
-            Ok(registry)
-                if registry
+            Ok(registry) => match unit_holder(&registry, name) {
+                Some((holder, what)) if holder != instance => Owner::Live(home, Some(what)),
+                Some(_) => Owner::Live(home, None),
+                None if registry
                     .instances
                     .get(instance)
                     .is_some_and(|i| i.state == m::InstanceState::Active) =>
-            {
-                Owner::Live(home)
-            }
-            Ok(_) => Owner::Orphaned(home),
+                {
+                    Owner::Live(home, None)
+                }
+                None => Owner::Orphaned(home),
+            },
             Err(e) => Owner::Unreadable(home, e),
         })
     }
@@ -422,11 +464,17 @@ impl Systemd {
         let (path, home) = (path.display(), owner.home().display());
         let other = "cortex changes no unit of another home";
         match (owner, install) {
-            (Owner::Live(_), true) => format!(
+            (Owner::Live(_, Some(holder)), install) => format!(
+                "{path} belongs to the cortex home {home}, where it is the unit of {holder}; \
+                 {other}. A unit is named cortex-<instance>-<source>, so {instance} here names \
+                 it too: rename the source or the instance here, or remove that instance there{}",
+                if install { ", or pass --no-units" } else { "" }
+            ),
+            (Owner::Live(_, None), true) => format!(
                 "{path} belongs to the cortex home {home}, which has an instance of the same \
                  name; {other}. Remove the instance there, or pass --no-units"
             ),
-            (Owner::Live(_), false) => format!(
+            (Owner::Live(_, None), false) => format!(
                 "{path} belongs to the cortex home {home}, which has an instance of the same \
                  name; {other}. Remove the instance there, then `update` {instance} here to \
                  install this home's units"
