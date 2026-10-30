@@ -340,3 +340,122 @@ fn a_frozen_spec_with_a_reserved_source_name_still_parses() {
         );
     }
 }
+
+/// The spec of instance `name` with `refresh_after_days`, `view_port` and, when given, a failure
+/// hook running `hook` with `timeout_s`, each written as given.
+fn spec_with_numbers(
+    name: &str,
+    refresh_after_days: &str,
+    view_port: &str,
+    hook: Option<(&str, &str)>,
+) -> String {
+    let mut text = spec_text(name, "{backend: sqlite}")
+        .replace(
+            "refresh_after_days: 0,",
+            &format!("refresh_after_days: {refresh_after_days},"),
+        )
+        .replace(
+            "serve: {view_port: 18997}",
+            &format!("serve: {{view_port: {view_port}}}"),
+        );
+    if let Some((command, timeout_s)) = hook {
+        text.push_str(&format!(
+            "monitoring: {{hook: {{command: [\"{command}\"], timeout_s: {timeout_s}}}}}\n"
+        ));
+    }
+    text
+}
+
+#[test]
+fn an_out_of_range_number_is_refused_by_create_naming_the_field() {
+    // `refresh_after_days` is multiplied into milliseconds, a hook's `timeout_s` is added to an
+    // `Instant` and `view_port` is a TCP port: out of range they overflowed or wrapped at run time.
+    let max = i64::MAX.to_string();
+    let cases: Vec<(String, &str)> = [
+        ("36501", "18997", None),
+        (max.as_str(), "18997", None),
+        ("-1", "18997", None),
+        ("0", "65536", None),
+        ("0", "70000", None),
+        ("0", "-1", None),
+        ("0", "18997", Some(("/bin/true", "0"))),
+        ("0", "18997", Some(("/bin/true", "86401"))),
+        ("0", "18997", Some(("/bin/true", max.as_str()))),
+    ]
+    .into_iter()
+    .map(|(refresh, port, hook)| {
+        let field = match (refresh, port, hook) {
+            (_, _, Some(_)) => "monitoring.hook.timeout_s",
+            ("0", _, None) => "serve.view_port",
+            _ => "sources.news.policy.refresh_after_days",
+        };
+        (spec_with_numbers("n", refresh, port, hook), field)
+    })
+    .collect();
+    for (text, field) in cases {
+        assert!(spec::parse(&text).is_err(), "{field} accepted:\n{text}");
+        let w = World::new();
+        let path = write(&w, "n.yaml", &text);
+        let (code, _, stderr) = cortex_raw(
+            &w,
+            &[
+                "create",
+                "--spec",
+                path.to_str().unwrap(),
+                "--no-units",
+                "--no-extract",
+            ],
+        );
+        assert_eq!(code, Some(2), "{field}: {stderr}");
+        assert!(
+            stderr.contains(field),
+            "the refusal does not name {field}: {stderr}"
+        );
+        assert!(
+            !w.home.join("instances/n").exists(),
+            "a refused create left its instance directory ({field})"
+        );
+    }
+}
+
+#[test]
+fn the_largest_accepted_numbers_run_without_overflow() {
+    // 36500 days, port 65535 (and 0, "take a free port") and a hook allowed 86400 seconds are
+    // accepted; a run reads the refresh window of seen documents and calls the hook with them.
+    for port in ["0", "65535"] {
+        assert!(spec::parse(&spec_with_numbers("b", "36500", port, None)).is_ok());
+    }
+    let w = World::new();
+    let hook = w.root.join("hook");
+    common::executable(
+        &hook,
+        &format!("echo \"$@\" >> \"{}/hook.log\"\n", w.root.display()),
+    );
+    let text = spec_with_numbers(
+        "b",
+        "36500",
+        "65535",
+        Some((hook.to_str().unwrap(), "86400")),
+    );
+    let path = write(&w, "b.yaml", &text);
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(
+        (code, created["outcome"].as_str()),
+        (0, Some("created")),
+        "{created}"
+    );
+    assert_eq!(
+        created["detail"]["view"], "http://127.0.0.1:65535/",
+        "{created}"
+    );
+    // The second run holds every seen document to the 36500-day window.
+    for _ in 0..2 {
+        let (code, ran) = w.cortex(&["run", "b/news"]);
+        assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    }
+    std::fs::write(w.root.join("fail"), "").unwrap();
+    let (code, _, stderr) = cortex_raw(&w, &["run", "b/news"]);
+    assert!(code.is_some_and(|c| c != 0 && c != 2), "{code:?}: {stderr}");
+    assert!(!stderr.contains("panicked"), "{stderr}");
+    assert_eq!(w.lines("hook.log"), ["b/news fetch-failed"]);
+}

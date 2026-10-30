@@ -1102,7 +1102,12 @@ fn create(
         m::CreateInstanceOutcome::Created { instance_created }
         | m::CreateInstanceOutcome::Partial { instance_created } => {
             let partial = seeded.as_ref().is_some_and(|ran| !seed_finished(ran));
-            let port = instance_created.view_port as u16;
+            let Ok(port) = u16::try_from(instance_created.view_port) else {
+                return fail(format!(
+                    "serve.view_port {} is no port",
+                    instance_created.view_port
+                ));
+            };
             let meta = Meta {
                 format: "cortex.instance-meta/1".into(),
                 spec_dir: std::fs::canonicalize(&loaded.dir).unwrap_or(loaded.dir.clone()),
@@ -1459,7 +1464,12 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
             let Some(found) = adopted else {
                 return fail("adopted without reading the store");
             };
-            let port = instance_adopted.view_port as u16;
+            let Ok(port) = u16::try_from(instance_adopted.view_port) else {
+                return fail(format!(
+                    "serve.view_port {} is no port",
+                    instance_adopted.view_port
+                ));
+            };
             let meta = Meta {
                 format: "cortex.instance-meta/1".into(),
                 spec_dir: std::fs::canonicalize(&loaded.dir).unwrap_or(loaded.dir.clone()),

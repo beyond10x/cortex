@@ -86,6 +86,10 @@ types:
       sites: cortex.instance.SitesInput
       search: cortex.instance.SearchInput
 
+  # UNMAPPED: `refresh_after_days` is 0 to 36500 and the two maxima above 0; a spec outside these
+  # is refused (exit 2, naming the field, for `create`, `update`, `adopt` and an instance's frozen
+  # copy). These are checks on Integer values the specification has no construct for;
+  # `spec::check` holds them and `tests/spec_forms.rs` tests them.
   - name: cortex.instance.FetchPolicy
     kind: struct
     fields:
@@ -664,6 +668,9 @@ types:
       - {name: version, type: String}
       - {name: bin, type: Optional<String>}
 
+  # UNMAPPED: `view_port` is a port from 0 to 65535; a spec outside it is refused (exit 2, naming
+  # the field). A check on an Integer the specification has no construct for; `spec::check` holds
+  # it and `tests/spec_forms.rs` tests it.
   - name: cortex.instance.ServeSpec
     kind: struct
     fields:
@@ -693,6 +700,9 @@ types:
   # `disabled` when the run's recorded failure disabled the source. It holds no secret: one the
   # hook needs it reads itself, outside cortex. The call lasts `timeout_s` seconds at most, absent
   # means 10; then the hook's process group is killed.
+  # UNMAPPED: `timeout_s` is 1 to 86400; a spec outside it is refused (exit 2, naming the field).
+  # A check on an Integer the specification has no construct for; `spec::check` holds it and
+  # `tests/spec_forms.rs` tests it.
   - name: cortex.instance.RunHook
     kind: struct
     fields:

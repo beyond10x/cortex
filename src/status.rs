@@ -497,7 +497,10 @@ pub fn call_hook(
             .unwrap_or(HOOK_TIMEOUT_S),
     );
     let started = Instant::now();
-    let deadline = started + timeout;
+    // The spec check bounds `timeout_s` to a day; an `Instant` past its range is never waited for.
+    let deadline = started
+        .checked_add(timeout)
+        .unwrap_or_else(|| started + Duration::from_secs(HOOK_TIMEOUT_S));
     let spawned = Command::new(hook_program(layout, program))
         .args(args)
         .arg(source_id)

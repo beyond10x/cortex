@@ -9,6 +9,12 @@ use crate::model_map;
 
 pub const FORMAT: &str = "cortex.instance/1";
 
+/// The largest `refresh_after_days` a source policy may give: 100 years.
+pub const MAX_REFRESH_AFTER_DAYS: i64 = 36_500;
+
+/// The largest `monitoring.hook.timeout_s`: one day.
+pub const MAX_HOOK_TIMEOUT_S: i64 = 86_400;
+
 /// The `store` forms a spec may write, for the refusal of any other.
 const STORE_FORMS: &str = "use `backend: sqlite` with an optional `value: {path}`, \
                            or `backend: postgres` with `value: {config}`";
@@ -208,6 +214,13 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
                 return Err(format!("sources.{}.policy.{field}: {value}", source.name));
             }
         }
+        // A run counts the window in milliseconds; the bound keeps that product far inside i64.
+        if p.refresh_after_days > MAX_REFRESH_AFTER_DAYS {
+            return Err(format!(
+                "sources.{}.policy.refresh_after_days: {}: use 0 to {MAX_REFRESH_AFTER_DAYS} days",
+                source.name, p.refresh_after_days
+            ));
+        }
     }
     if let Some(reason) = reference_refusal(spec) {
         return Err(reason);
@@ -370,6 +383,18 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
         if hook.timeout_s.is_some_and(|t| t <= 0) {
             return Err("monitoring.hook.timeout_s must be above 0".into());
         }
+        if let Some(t) = hook.timeout_s.filter(|t| *t > MAX_HOOK_TIMEOUT_S) {
+            return Err(format!(
+                "monitoring.hook.timeout_s: {t}: use 1 to {MAX_HOOK_TIMEOUT_S} seconds"
+            ));
+        }
+    }
+    // A port is 16 bits; 0 lets the viewer take a free one.
+    if let Some(port) = spec.serve.view_port.filter(|p| u16::try_from(*p).is_err()) {
+        return Err(format!(
+            "serve.view_port: {port}: use a port from 0 to {}",
+            u16::MAX
+        ));
     }
     Ok(())
 }

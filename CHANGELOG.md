@@ -115,6 +115,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   disabled ran again on its schedule while `cortex sources` still showed it disabled. `update`,
   `create` and `adopt` now write a disabled source's units without enabling its timer;
   `cortex source enable` turns it on again.
+- A spec number out of range was accepted and failed later: a large `refresh_after_days`
+  overflowed when a run counted its window, a hook `timeout_s` near the largest integer panicked
+  the run after its line was printed, and a `view_port` of 70000 or -1 wrapped to another port.
+  The spec check now refuses, naming the field, a `refresh_after_days` above 36500, a
+  `monitoring.hook.timeout_s` above 86400 and a `serve.view_port` outside 0 to 65535. The same
+  check reads an instance's frozen copy (`instances/<name>/instance.yaml`), so an instance created
+  with such a value is refused, naming the field, by every command that reads that copy, `update`
+  included, until the value in that file is brought into range.
 
 ## 0.6.1 — 2026-10-17
 
