@@ -14,11 +14,12 @@ use common::{ekr, executable, World, EKR_SESSION_SHIM};
 /// A stand-in `ekr` in front of the real one. Every invocation logs its verb and
 /// `EKR_FULL_REPLAY` (or `unset`) to `ekr-env.log`; an `ekr session` serves each request as an
 /// invocation of its own ([`EKR_SESSION_SHIM`]). With the file `refuse-apply`, `apply-extraction`
-/// fails with a credential on stderr; with the file `example.json`, `example` prints it.
+/// fails with a credential on stderr, and with the file `refuse-<verb>` so does that verb; with
+/// the file `example.json`, `example` prints it.
 const EKR: &str = r#"R="@ROOT@"
 echo "$1 ${EKR_FULL_REPLAY-unset}" >> "$R/ekr-env.log"
 @SHIM@
-if [ "$1" = apply-extraction ] && [ -e "$R/refuse-apply" ]; then
+if { [ "$1" = apply-extraction ] && [ -e "$R/refuse-apply" ]; } || [ -e "$R/refuse-$1" ]; then
   echo "ekr: the store refused the batch: password=hunter2secret" >&2
   exit 1
 fi
@@ -134,6 +135,30 @@ fn a_credential_in_ekrs_stderr_is_masked_in_the_report_and_the_log() {
         instance.display()
     );
     let leaked = holding(&instance, "hunter2secret");
+    assert!(leaked.is_empty(), "the credential reached {leaked:?}");
+}
+
+/// D38, the class of the masked-stderr case above: an `ekr` that `cortex quality` runs outside a
+/// source run (`ekr sample`) and that fails with a credential on stderr is masked in the answer
+/// and in every file of the instance, as a run's store verb is.
+#[test]
+fn a_credential_in_ekrs_stderr_outside_a_run_is_masked_too() {
+    let w = world();
+    create(&w, "q");
+    std::fs::write(w.root.join("refuse-sample"), "").unwrap();
+    let (code, out) = w.cortex(&["quality", "q", "--sample", "5"]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("sample-failed")),
+        "{out}"
+    );
+    assert!(
+        out.to_string().contains("the store refused the batch"),
+        "{out}"
+    );
+    assert!(!out.to_string().contains("hunter2secret"), "{out}");
+    assert!(out.to_string().contains("[masked:"), "{out}");
+    let leaked = holding(&w.home.join("instances/q"), "hunter2secret");
     assert!(leaked.is_empty(), "the credential reached {leaked:?}");
 }
 

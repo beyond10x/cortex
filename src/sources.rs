@@ -147,34 +147,79 @@ pub fn rfc3339(ms: i64) -> String {
 /// `input` with the window placeholders in every string value replaced by the window's instants:
 /// `{since}` and `{until}` in RFC 3339, `{since_epoch}` and `{until_epoch}` as whole seconds since
 /// the Unix epoch, cut to the second as [`rfc3339`] cuts them, so both name the same instant, and
-/// `{since_minutes_ago}` as the whole minutes from the window's start to the run's start, rounded
-/// up from the milliseconds (`updated >= -{since_minutes_ago}m`), so the window is never narrowed.
+/// `{since_minutes_ago}` as the whole minutes from the window's start to the run's start
+/// ([`minutes_ago`]). A call fills that one at its own time instead ([`window_for_call`]).
 fn with_window(input: &Value, window: &Window) -> Value {
+    since_minutes_ago(
+        &window_for_call(input, window),
+        window.since_ms,
+        window.until_ms,
+    )
+}
+
+/// The whole minutes from `since_ms` to `at_ms`, rounded up from the milliseconds, so a relative
+/// date of that many minutes before `at_ms` (`updated >= -{since_minutes_ago}m`) is no later than
+/// `since_ms`.
+fn minutes_ago(since_ms: i64, at_ms: i64) -> String {
+    at_ms
+        .saturating_sub(since_ms)
+        .saturating_add(59_999)
+        .div_euclid(60_000)
+        .to_string()
+}
+
+/// `input` with `{since_minutes_ago}` in every string value replaced by [`minutes_ago`] from
+/// `since_ms` to `at_ms`.
+fn since_minutes_ago(input: &Value, since_ms: i64, at_ms: i64) -> Value {
     match input {
-        Value::String(t) => Value::String(
-            t.replace(
-                "{since_minutes_ago}",
-                &(window.until_ms.saturating_sub(window.since_ms))
-                    .saturating_add(59_999)
-                    .div_euclid(60_000)
-                    .to_string(),
-            )
-            .replace("{since}", &rfc3339(window.since_ms))
-            .replace("{until}", &rfc3339(window.until_ms))
-            .replace(
-                "{since_epoch}",
-                &window.since_ms.div_euclid(1000).to_string(),
-            )
-            .replace(
-                "{until_epoch}",
-                &window.until_ms.div_euclid(1000).to_string(),
-            ),
+        Value::String(t) => {
+            Value::String(t.replace("{since_minutes_ago}", &minutes_ago(since_ms, at_ms)))
+        }
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|v| since_minutes_ago(v, since_ms, at_ms))
+                .collect(),
         ),
-        Value::Array(items) => Value::Array(items.iter().map(|v| with_window(v, window)).collect()),
         Value::Object(fields) => Value::Object(
             fields
                 .iter()
-                .map(|(k, v)| (k.clone(), with_window(v, window)))
+                .map(|(k, v)| (k.clone(), since_minutes_ago(v, since_ms, at_ms)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// `input`, its pages' too, as each call is made with it: `{since_minutes_ago}` filled from the
+/// window's start to the time of the call, so a call made after the run's start (a later input,
+/// a later page) still asks from no later than `{since}`.
+fn at_call(input: &Value, since_ms: i64) -> Value {
+    since_minutes_ago(input, since_ms, crate::instance::now_ms())
+}
+
+/// [`with_window`] but `{since_minutes_ago}`, which is left for [`at_call`].
+fn window_for_call(input: &Value, window: &Window) -> Value {
+    match input {
+        Value::String(t) => Value::String(
+            t.replace("{since}", &rfc3339(window.since_ms))
+                .replace("{until}", &rfc3339(window.until_ms))
+                .replace(
+                    "{since_epoch}",
+                    &window.since_ms.div_euclid(1000).to_string(),
+                )
+                .replace(
+                    "{until_epoch}",
+                    &window.until_ms.div_euclid(1000).to_string(),
+                ),
+        ),
+        Value::Array(items) => {
+            Value::Array(items.iter().map(|v| window_for_call(v, window)).collect())
+        }
+        Value::Object(fields) => Value::Object(
+            fields
+                .iter()
+                .map(|(k, v)| (k.clone(), window_for_call(v, window)))
                 .collect(),
         ),
         other => other.clone(),
@@ -391,12 +436,34 @@ fn percent_decode(text: &str) -> Option<String> {
 pub const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
 
 /// The bytes of the file at `path`, read up to [`MAX_FILE_BYTES`] and no further; why not, when it
-/// cannot be read (`cannot be read: <error>`) or is larger (`larger than the 16 MiB cap`).
+/// cannot be read (`cannot be read: <error>`), is no regular file once symlinks are followed (`not
+/// a regular file`: a FIFO would block the run in `open`), or is larger (`larger than the 16 MiB
+/// cap`). It is opened without blocking and checked again, so a FIFO put in its place after the
+/// first check is refused as well.
 fn read_capped(path: &Path) -> Result<Vec<u8>, String> {
     use std::io::Read;
+    use std::os::unix::fs::OpenOptionsExt;
+    let regular = |meta: std::fs::Metadata| {
+        if meta.is_file() {
+            Ok(())
+        } else {
+            Err("not a regular file".to_string())
+        }
+    };
+    std::fs::metadata(path)
+        .map_err(|e| format!("cannot be read: {e}"))
+        .and_then(regular)?;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
+        .open(path)
+        .map_err(|e| format!("cannot be read: {e}"))?;
+    file.metadata()
+        .map_err(|e| format!("cannot be read: {e}"))
+        .and_then(regular)?;
     let mut bytes = Vec::new();
-    std::fs::File::open(path)
-        .and_then(|file| file.take(MAX_FILE_BYTES + 1).read_to_end(&mut bytes))
+    file.take(MAX_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)
         .map_err(|e| format!("cannot be read: {e}"))?;
     if bytes.len() as u64 > MAX_FILE_BYTES {
         return Err(format!(
@@ -709,10 +776,11 @@ fn fetch_structured(
         move |input: &Value| Ok(connectors.invoke(&c.adapter, connection, &operation, input)?)
     };
     for input in &c.inputs {
+        let call = invoker(&c.operation);
         let records = walk(
-            &mut invoker(&c.operation),
+            &mut |input: &Value| call(&at_call(input, window.since_ms)),
             &format!("{}.{}", c.adapter, c.operation),
-            &with_window(&to_serde(input), window),
+            &window_for_call(&to_serde(input), window),
             &st.records,
             c.paging.as_ref(),
             &mut unread,
@@ -1148,16 +1216,19 @@ fn fetch_records(
     // Records left out for want of a key, counted by reason.
     let mut unkeyed: BTreeMap<String, usize> = BTreeMap::new();
     for input in &c.inputs {
-        let input = with_window(&to_serde(input), window);
+        // Each call fills `{since_minutes_ago}` at its own time ([`at_call`]); a record's `{input.…}`
+        // reads the input as the run's start filled it.
+        let mut call = invoker(connectors, c, connection, &c.operation);
         let records = walk_until(
-            &mut invoker(connectors, c, connection, &c.operation),
+            &mut |input: &Value| call(&at_call(input, window.since_ms)),
             &what,
-            &input,
+            &window_for_call(&to_serde(input), window),
             &c.records,
             c.paging.as_ref(),
             stop,
             &mut unread,
         )?;
+        let input = with_window(&to_serde(input), window);
         for record in &records {
             let id = match record_id(c, record, &input) {
                 Ok(id) => id,
@@ -2134,6 +2205,31 @@ mod tests {
                 ((300_000 + OVERLAP_MS) / 60_000).to_string(),
                 rfc3339(after.since_ms)
             ])
+        );
+    }
+
+    /// D36: a call fills `{since_minutes_ago}` from the window's start to its own time, so a call
+    /// made after the run's start asks from no later than `{since}`; the other placeholders are
+    /// the run's.
+    #[test]
+    fn a_call_fills_since_minutes_ago_at_its_own_time() {
+        let now = crate::instance::now_ms();
+        // A run that started an hour ago, its window two hours less 30 s long: three hours less
+        // 30 s before the call, which rounds up to 180 minutes.
+        let window = Window {
+            since_ms: now - 3 * 3_600_000 + 30_000,
+            until_ms: now - 3_600_000,
+        };
+        let input = json!({"jql": "updated >= -{since_minutes_ago}m", "since": "{since}"});
+        let left = window_for_call(&input, &window);
+        assert_eq!(
+            left,
+            json!({"jql": "updated >= -{since_minutes_ago}m", "since": rfc3339(window.since_ms)})
+        );
+        assert_eq!(
+            at_call(&left, window.since_ms)["jql"],
+            json!("updated >= -180m"),
+            "from since to the call, not to the run's start"
         );
     }
 }

@@ -83,7 +83,7 @@ fn unidentified(service: &Service) -> Response {
 /// (`crate::mask`). A line can carry text from outside: a gateway's error body, a store's error
 /// (a connection string). Every log line of the ask service goes through here; a test of this
 /// module holds that no other line is written.
-fn log(line: &str) {
+pub(crate) fn log(line: &str) {
     eprintln!("{}", crate::mask::mask(line).0);
 }
 

@@ -46,9 +46,15 @@ impl Reader {
             .stderr(Stdio::null());
         // The reader reads a store and needs no model credential: no ANTHROPIC_* or CLAUDE_*
         // variable, nor the names the command lists (the gateway's token), reaches it.
+        // Nor any `EKR_*` variable it inherits (such as `EKR_STAGE` or `EKR_FULL_REPLAY` from the
+        // operator's shell): only the ones the command sets below, as for a store `ekr` a run
+        // starts (`crate::ekr`).
         for (name, _) in std::env::vars_os() {
             let name = name.to_string_lossy();
-            if name.starts_with("ANTHROPIC_") || name.starts_with("CLAUDE_") {
+            if name.starts_with("ANTHROPIC_")
+                || name.starts_with("CLAUDE_")
+                || name.starts_with("EKR_")
+            {
                 cmd.env_remove(name.as_ref());
             }
         }

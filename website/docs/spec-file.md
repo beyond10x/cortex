@@ -363,8 +363,9 @@ inputs:
   - {channel: "C1", oldest: "{since_epoch}"}
 ```
 
-`{since_minutes_ago}` is the window's length in whole minutes, from `{since}` to the start of
-this run, rounded up from the milliseconds so the window is never narrowed, for a query language
+`{since_minutes_ago}` is the whole minutes from `{since}` to the moment each call is made (each
+input, each page), rounded up from the milliseconds, so a call made after the run's start still
+asks from no later than `{since}` and the window is never narrowed. It is for a query language
 that takes a relative date, such as an issue tracker's:
 
 ```yaml
@@ -501,7 +502,7 @@ the run's result and in `cortex.log` (`<path>: cannot be read: <why>; skipped`,
 | `fallback_text` | optional templates tried in order only when every `text` template renders empty; the first non-empty result is the record's text |
 | `thread` | optional dotted path to the field that groups records into threads |
 | `filters` | a list, possibly empty, of `field` (a dotted path), `values` and `include`. With `include: true` only records whose field equals one of the values are read; with `include: false` those records are left out. A record is read only when it passes every filter |
-| `lookup` | optional path of a JSON file holding one object of strings, an id to a name; read against the spec file's directory as `paths` are. It maps the author and every `<@id>` in the text (below) |
+| `lookup` | optional path of a JSON file holding one object of strings, an id to a name; read against the spec file's directory as `paths` are. A lookup that is larger than 16 MiB, cannot be read or is not a regular file (a FIFO, say) fails the fetch. It maps the author and every `<@id>` in the text (below) |
 
 A record of a `MarkdownSections` file is one level-two section, with the fields `heading` (the
 heading's text) and `body` (the lines up to the next level-two heading, trimmed), so
