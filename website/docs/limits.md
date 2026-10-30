@@ -23,9 +23,11 @@ stand; [Status](./status.mdx) lists what is planned.
 
 - **Credentials are masked; personal data is kept from the model, not from the store.** Fetched
   text is masked for credential shapes on every run: private keys, cloud, forge, chat and API
-  token shapes, JSON Web Tokens, the password in a URL such as `https://user:password@host`, and
-  `password=`-style assignments, also with a prefix (`DB_PASSWORD=`, `client_secret=`) or
-  percent-encoded (`access_token%3D`). That covers a document's text, title, description and URL,
+  token shapes, JSON Web Tokens, the password in a URL such as `https://user:password@host` (a
+  raw `@` in it included), a private key whose `END` line was cut off, and `password=`-style
+  assignments, also with a prefix (`DB_PASSWORD=`, `client_secret=`), quoted
+  (`"password": "…"`), with `=>`, or percent-encoded (`access_token%3D`, `access_token%3A`).
+  That covers a document's text, title, description and URL,
   and a URL or record key wherever cortex writes it: the run's `stopped` and `skipped` messages,
   its log and its state file. Masking is irreversible, so a credential in a listed shape is never
   stored. A URL that held one is stored and cited in its masked form, with the rest of its query
@@ -48,7 +50,11 @@ stand; [Status](./status.mdx) lists what is planned.
 - **Links are found by their shape.** `Url` takes a link that starts with a scheme
   (`https://`), with `www.`, or with a dotted host followed by a path (`intranet.example.org/a`).
   A masked password or token inside a link stays part of it, so the whole link is one
-  placeholder. A bare host with no path, such as `example.org`, is not taken.
+  placeholder, and so do brackets and parentheses the link opens and closes
+  (`?filter[owner]=x`, `/wiki/Widget_(engine)`). A link ends at a `]` or `)` it did not open,
+  as in `[https://host/x]` and a Markdown link, and a citation such as `[1]` after the
+  punctuation that ends it stays outside. A bracket inside a bracket ends the link. A bare host
+  with no path, such as `example.org`, is not taken.
 - **Rare names are a guess.** `RareName` takes as a name a word that starts with a capital letter,
   has a lower-case letter in it, and appears at most `rare_limit` times (default 1) in the batch's
   document texts. Only text the model is shown counts: a word inside an address, a link, a known

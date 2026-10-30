@@ -33,7 +33,7 @@ relations:
 - specifies: story:window-relative-placeholders
 - specifies: story:runs-retention
 - specifies: story:small-robustness
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 3}
@@ -69,12 +69,12 @@ its stage opens, so it starts from every unit merged before it.
 |---|---|---|---|
 | w18a | the four stories of wave 20261018a | — | merged `7a217da7` |
 | conn | `connectors-invoke-0-60` | w18a | merged |
-| read | `one-store-read-per-run`, `idle-supersede-source-cheap` | w18a | implementing |
+| read | `one-store-read-per-run`, `idle-supersede-source-cheap` | w18a | merged |
 | cost | `run-cost-counted-on-refusal`, `replacement-applied-as-assertion` | w18a | merged |
-| ask | `ask-outcome-truthful`, `ask-service-bounds`, `ask-error-text` | w18a | implementing |
+| ask | `ask-outcome-truthful`, `ask-service-bounds`, `ask-error-text` | w18a | merged |
 | redact | `redaction-patterns-hold`, `mask-quoted-credentials` | w18a | implementing |
-| outcome | `update-refuses-rekey`, `schema-apply-outcome-unknown` | w18a | planned |
-| cli | `unit-names-unique`, `spec-integer-bounds`, `durable-home-writes` | w18a | planned |
+| outcome | `update-refuses-rekey`, `schema-apply-outcome-unknown` | w18a | implementing |
+| cli | `unit-names-unique`, `spec-integer-bounds`, `durable-home-writes` | w18a | implementing |
 | askio | `ask-records-deadline`, `eval-proxy-bounds` | ask | planned |
 | fail | `poison-document-skipped`, `window-advances-past-applied` | cost | implementing |
 | shapes | `structured-children-follow-rule`, `record-key-template`, `child-text-and-filter` | conn, outcome | planned |
@@ -158,6 +158,8 @@ directory `w30a/<unit>/`.
 | ask | `unit/w30a-ask` | 7a217da7 | `cortex-w30a-ask` | `<tree>/target` | `w30a/ask` |
 | redact | `unit/w30a-redact` | 7119552e | `cortex-w30a-redact` | `<tree>/target` | `w30a/redact` |
 | fail | `unit/w30a-fail` | 7119552e | `cortex-w30a-fail` | `<tree>/target` | `w30a/fail` |
+| outcome | `unit/w30a-outcome` | 97573d67 | `cortex-w30a-outcome` | `<tree>/target` | `w30a/outcome` |
+| cli | `unit/w30a-cli` | 97573d67 | `cortex-w30a-cli` | `<tree>/target` | `w30a/cli` |
 
 Unit rows are added as each tree is created.
 

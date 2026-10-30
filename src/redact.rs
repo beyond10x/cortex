@@ -157,14 +157,21 @@ fn regex(pattern: &str) -> Regex {
 }
 
 /// A link: a scheme, `www.`, or a dotted host followed by a path (`host.tld/path`); then anything
-/// up to whitespace, a quote or a bracket. A `[masked:<shape>]` token masking put inside it is part
-/// of it, so the rest of the link after a masked password or token is part of it too.
+/// up to whitespace, a quote, a brace or a bracket it did not open. Brackets and parentheses it
+/// opens and closes are part of it: a query key (`filter[owner]=`), a title in parentheses
+/// (`Widget_(engine)`) and a `[masked:<shape>]` token masking put inside it, so the rest of the
+/// link after a masked password or token is part of it too. The match itself stops at a `]` or
+/// `)` it opened none for (`[https://host/x]`, `[a](https://host/x),[b](…)`), so finding the
+/// next link never reads past the one before it again.
 fn url() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
     R.get_or_init(|| {
         let host = r"[\p{L}\p{N}][\p{L}\p{N}\-]*(?:\.[\p{L}\p{N}\-]+)*\.(?:\p{L}{2,}|xn--[\p{L}\p{N}\-]+)(?::[0-9]{1,5})?/";
+        let plain = r#"[^\s<>"'`{}|\\^()\[\]]"#;
+        let paren = format!(r"\((?:{plain}|\[{plain}*\])*\)");
+        let bracket = format!(r"\[(?:{plain}|\({plain}*\))*\]");
         regex(&format!(
-            r#"(?i)(?:\b(?:https?|ftps?|sftp|ssh|wss?|file)://|\bwww\.|{host})(?:[^\s<>"'`{{}}|\\^\[\]]|\[masked:[a-z0-9\-]+\])*"#
+            r"(?i)(?:\b(?:https?|ftps?|sftp|ssh|wss?|file)://|\bwww\.|{host})(?:{plain}|{paren}|{bracket})*"
         ))
     })
 }
@@ -206,8 +213,9 @@ fn phone() -> &'static Regex {
         regex(&format!(
             concat!(
                 "(?:",
-                // International: `+` or `00`, then the country code.
-                r"(?:\+|\b00)[1-9][0-9]{{0,2}}(?:{sep}?\(?[0-9]{{1,4}}\)?){{2,5}}",
+                // International: `+` or `00`, then the country code; one `/` may follow the area
+                // code (`+49 30/1234567`). A date has two, so it is never read as one.
+                r"(?:\+|\b00)[1-9][0-9]{{0,2}}(?:{sep}?\(?[0-9]{{1,4}}\)?){{2,5}}(?:/[0-9]{{1,8}}(?:{sep}?[0-9]{{1,4}}){{0,3}})?",
                 // A parenthesised area code.
                 r"|\([0-9]{{2,5}}\){sep}?[0-9]{{2,4}}(?:{sep}?[0-9]{{2,4}}){{1,3}}",
                 // North American grouping.
@@ -563,7 +571,12 @@ fn phone_number(text: &str, r: Range<usize>) -> Option<Range<usize>> {
     };
     let main = &s[..s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len())];
     let main = main.trim_end();
-    let ok = !touched && (7..=15).contains(&digits(main).count()) && !time_range().is_match(main);
+    // A number has one `/` at most; a second one after it makes a date (`+1 2024/10/30`).
+    let dated = s.contains('/') && text[r.end..].starts_with('/');
+    let ok = !touched
+        && !dated
+        && (7..=15).contains(&digits(main).count())
+        && !time_range().is_match(main);
     ok.then_some(r)
 }
 
@@ -579,22 +592,41 @@ fn phone_by_context(text: &str, r: Range<usize>) -> Option<Range<usize>> {
     ok.then_some(r)
 }
 
-/// A link without the punctuation that closes the sentence around it.
+/// A link without the punctuation that closes the sentence around it, and without a citation
+/// written after that punctuation (`https://host/x.[2]`).
 fn link(text: &str, r: Range<usize>) -> Option<Range<usize>> {
     let s = &text[r.clone()];
-    let mut end = s.len();
-    while let Some(last) = s[..end].chars().next_back() {
-        let kept = &s[..end];
+    let closes = |kept: &str, last: char| {
         let unbalanced = last == ')' && kept.matches('(').count() < kept.matches(')').count();
-        if !(matches!(last, '.' | ',' | ';' | ':' | '!' | '?' | '*') || unbalanced) {
-            break;
+        matches!(last, '.' | ',' | ';' | ':' | '!' | '?' | '*') || unbalanced
+    };
+    let mut end = s.len();
+    loop {
+        while let Some(last) = s[..end].chars().next_back() {
+            if !closes(&s[..end], last) {
+                break;
+            }
+            end -= last.len_utf8();
         }
-        end -= last.len_utf8();
+        // `url` admits no bracket inside a bracket, so the last `[` opens the closing group.
+        let cited = s[..end]
+            .strip_suffix(']')
+            .and_then(|kept| kept.rfind('['))
+            .filter(|&open| {
+                s[..open]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| closes(&s[..open], c))
+            });
+        match cited {
+            Some(open) => end = open,
+            None => break,
+        }
     }
     // A scheme or `www.` with nothing after it is no link.
     let opening = match s.find("://") {
         Some(i) => i + 3,
-        None if s.len() >= 4 && s[..4].eq_ignore_ascii_case("www.") => 4,
+        None if s.get(..4).is_some_and(|p| p.eq_ignore_ascii_case("www.")) => 4,
         None => 0,
     };
     // A host is not read inside another word, address or path (`jane@host.tld/x`, `a/b.tld/c`).
@@ -1585,6 +1617,34 @@ mod tests {
         assert_eq!(counts["Phone"], 1, "{out}");
     }
 
+    /// An international number with a `/` after the area code, as German numbers are written,
+    /// is replaced whole (R4-05).
+    #[test]
+    fn phone_with_a_slash_after_an_international_area_code_is_replaced_whole() {
+        for text in [
+            "Call +49 30/1234567 today.",
+            "Call 0049 30/123 45 67 today.",
+        ] {
+            let (out, counts) = run(&ALL, &[], text);
+            assert_eq!(out, "Call [Phone-1] today.", "{text}");
+            assert_eq!(counts["Phone"], 1, "{text}");
+        }
+    }
+
+    /// A score before a date written with `/` is not an international number: one `/` joins an
+    /// area code to its number, and a date has two.
+    #[test]
+    fn a_date_after_a_plus_sign_is_not_a_phone_number() {
+        for text in [
+            "Votes: +1 2/3/2024 so far.",
+            "Votes: +12 03/04/2024 so far.",
+        ] {
+            let (out, counts) = run(&ALL, &[], text);
+            assert_eq!(out, text);
+            assert_eq!(counts["Phone"], 0, "{out}");
+        }
+    }
+
     /// Scraped text often loses the space between a label and the number it labels.
     #[test]
     fn phone_directly_after_its_label_is_replaced() {
@@ -2483,6 +2543,80 @@ mod tests {
             !out.contains("jane-doe"),
             "a link reached the model (gate found {left:?}): {out}"
         );
+    }
+
+    /// A host-only link whose fourth byte falls inside a multi-byte character is read without a
+    /// panic (R4-01).
+    #[test]
+    fn a_host_link_with_a_multibyte_character_in_its_first_bytes_is_replaced() {
+        for (text, replaced) in [
+            ("Lunch at café.fr/menu today.", "Lunch at [Url-1] today."),
+            ("Mirror at 中国.cn/x today.", "Mirror at [Url-1] today."),
+        ] {
+            let (out, counts) = run(&[m::RedactionClass::Url], &[], text);
+            assert_eq!(out, replaced, "{text}");
+            assert_eq!(counts["Url"], 1, "{text}");
+        }
+    }
+
+    /// A query key written with brackets (`filter[owner]=`) is part of the link (R4-17).
+    #[test]
+    fn a_link_with_bracketed_query_keys_is_replaced_whole() {
+        let (out, counts) = run(
+            &[m::RedactionClass::Url],
+            &[],
+            "See https://crm/x?filter[owner]=jane_doe&sort[0]=name for it.",
+        );
+        assert_eq!(out, "See [Url-1] for it.");
+        assert_eq!(counts["Url"], 1);
+    }
+
+    /// A link written in brackets, or as a Markdown link's label, ends at the bracket that closes
+    /// it, as it ends at an unbalanced `)`.
+    #[test]
+    fn a_link_ends_at_the_bracket_that_closes_it() {
+        for (text, replaced) in [
+            (
+                "See [https://crm/x?filter[owner]=jane_doe] now.",
+                "See [[Url-1]] now.",
+            ),
+            (
+                "See [https://crm/x](https://crm/x) now.",
+                "See [[Url-1]]([Url-1]) now.",
+            ),
+            ("See [docs](https://crm/x).", "See [docs]([Url-1])."),
+            (
+                "Read https://wiki.example/Widget_(engine). Then stop.",
+                "Read [Url-1]. Then stop.",
+            ),
+            (
+                "Use https://crm/x?q=(a[b]) now, or (https://crm/y).",
+                "Use [Url-1] now, or ([Url-2]).",
+            ),
+        ] {
+            let (out, _) = run(&[m::RedactionClass::Url], &[], text);
+            assert_eq!(out, replaced, "{text}");
+        }
+    }
+
+    /// A placeholder-shaped text inside a link, one the batch already issued for another text, is
+    /// part of the link: the link's placeholder restores to the link as written, and the issued
+    /// placeholder still restores to its own value.
+    #[test]
+    fn a_placeholder_inside_a_link_is_restored_as_written() {
+        let r = redactor(&[m::RedactionClass::Url, m::RedactionClass::Email], &[]);
+        let mut batch = r.batch();
+        let first = "Mail jane.doe@example.com today.";
+        batch.reserve(first);
+        assert_eq!(batch.replace(first), "Mail [Email-1] today.");
+        let link = "https://crm/x/[Email-1]/y?filter[owner]=jane_doe";
+        let second = format!("Open {link} now.");
+        batch.reserve(&second);
+        let out = batch.replace(&second);
+        assert_eq!(out, "Open [Url-1] now.");
+        let mut answer = json!(["[Email-1]", "[Url-1]"]);
+        assert_eq!(batch.restore(&mut answer), 0);
+        assert_eq!(answer, json!(["jane.doe@example.com", link]));
     }
 
     /// A name seen once in prose and once inside an address the `Email` class hides is seen once:

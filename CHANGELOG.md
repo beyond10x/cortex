@@ -104,6 +104,23 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   begins an EKR stage or reads the store (`ekr snapshot`): such a run read the whole store to
   end nothing. The state file remembers that listing's fingerprint (`ended_listing`). Comparing
   the store with a listing no longer scans every assertion of the source for each value it ends.
+- The `redaction` policy panicked a run on a link without a scheme whose host has a multi-byte
+  character in its first four bytes (`café.fr/menu`), let the rest of a number written
+  `+49 30/1234567` through, and ended a link at `[`, so `?filter[owner]=x` reached the model.
+  Such a link is now replaced, and an international number may have one `/` after its area code
+  (a date after `+`, such as `+1 2/3/2024` or `+1 2024/10/30`, is still not a number). A link
+  keeps the brackets and parentheses it opens and closes, and ends at a `]` or `)` it did not
+  open, so `[https://host/x]` and Markdown links written back to back without a space are each
+  their own link. A citation such as `[2]` after the punctuation that ends a link stays outside it.
+- The always-on credential mask missed five shapes: a quoted name (`"password": "…"`), a URL
+  password with a raw `@` (`postgres://app:p@ss@db/x`), a value in a document key with a raw `%`
+  that starts no escape, `%3A` as the separator, and a private key whose `END` line a provider
+  cut off. Each is now masked; a separator may also be `=>` or follow a percent-encoded quote, and
+  a cut private key is masked through its last base64 line. A URL password ends before a
+  character a URL never holds raw, such as the `"` that closes a JSON string. A document whose
+  stored key holds one of these shapes, or the rest of a credential an earlier version left after
+  its `[masked:…]` token, is read again once under its masked key; the old key, and a
+  child-failure count kept under it, is dropped from the source's state.
 
 ## 0.6.1 — 2026-10-17
 
