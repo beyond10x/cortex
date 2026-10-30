@@ -55,7 +55,10 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   (`replacement-without-active-assertion`) and its value lost, its document marked seen. cortex now
   applies such a fact again in the same batch without `replaces`, so the value is stored as a plain
   assertion; it is not counted in `parts_rejected` or listed in `rejected`, and the run reports it
-  in `facts_reapplied` (in the `ran` detail, and in the `cortex.log` line when not 0).
+  in `facts_reapplied` (in the `ran` detail, and in the `cortex.log` line when not 0). Several
+  such facts of one entity and property are applied in their documents' time order, the later
+  ones still replacing, so one value stays current. A re-apply the store fails stops the run and
+  leaves the documents it carried unseen, so a later run extracts them again.
 
 ## 0.6.1 — 2026-10-17
 

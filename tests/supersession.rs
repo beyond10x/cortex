@@ -378,7 +378,6 @@ fn a_reapplied_replacement_is_counted_and_a_later_one_supersedes_it() {
 /// are applied again as plain assertions. A one-cardinality property must still end with one
 /// active value, the newer one, as it does when the two documents arrive in two runs.
 #[test]
-#[ignore = "adversary: two re-applied replacements of one property in one batch both stay active"]
 fn adversary_two_replacements_with_nothing_to_replace_in_one_batch_leave_the_newer_active() {
     let w = world();
     let ran = run_with(
@@ -404,7 +403,6 @@ fn adversary_two_replacements_with_nothing_to_replace_in_one_batch_leave_the_new
 /// fact again, so the value must not be lost: a later run stores it. Today the document is marked
 /// seen, the next run skips it, and the value never reaches the store.
 #[test]
-#[ignore = "adversary: a failed re-apply marks the document seen and its value is lost for good"]
 fn adversary_a_reapply_that_fails_once_does_not_lose_the_value() {
     let w = World::new();
     executable(&w.bin.join("claude"), CLAUDE);

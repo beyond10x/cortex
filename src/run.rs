@@ -71,10 +71,11 @@ pub struct Report {
     pub cost_counted: bool,
     pub facts_refused: usize,
     /// Parts of applied documents EKR rejected (`rejected` in its report). A fact applied again
-    /// as a plain assertion ([`extract::without_replaces`]) is not one of them.
+    /// ([`extract::reapply_rounds`]) is not one of them.
     pub parts_rejected: usize,
     /// Facts marked `replaces: true` that EKR rejected because nothing active was there to
-    /// replace ([`extract::NOTHING_TO_REPLACE`]), applied again without `replaces` and stored.
+    /// replace ([`extract::NOTHING_TO_REPLACE`]), applied again and stored: the earliest of a
+    /// subject and property as a plain assertion, each later one replacing the one before it.
     pub facts_reapplied: usize,
     pub masked: usize,
     /// Values replaced by a placeholder in the prompts sent, per class or rule of the instance's
@@ -1195,40 +1196,62 @@ fn process_in(
                 serde_json::to_string_pretty(&applied).unwrap_or_default(),
             );
         }
-        // A replacement with nothing active to replace is applied again without `replaces`, in
-        // the same batch, so its value is stored as a plain assertion instead of lost. A re-apply
-        // EKR refuses as a whole leaves those facts rejected and stops the run after this batch.
+        // A replacement with nothing active to replace is applied again in the same batch, so its
+        // value is stored instead of lost: per subject and property the earliest as a plain
+        // assertion, each later one in a round of its own, still replacing, so EKR supersedes the
+        // value before it and one stays current ([`extract::reapply_rounds`]). A round EKR fails
+        // as a whole stops the run after this batch, and the documents whose values it and the
+        // rounds after it carried are not marked seen, so a later run extracts them again.
         let mut applied = applied;
         let mut stop_after: Option<String> = None;
         let mut rejected_again: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        if let Some((again, n, rest)) = extract::without_replaces(&doc, &applied) {
-            let again_path = dir.join("reapply.yaml");
-            let text = serde_yaml_ng::to_string(&again).expect("YAML");
-            std::fs::write(&again_path, text).map_err(|e| Failure::Apply(e.to_string()))?;
-            let reapplied = store.apply(&again_path);
-            // The batch directory keeps only `extraction.yaml` under a redaction policy.
-            if pseudonymised {
-                let _ = std::fs::remove_file(&again_path);
-            }
-            match reapplied {
-                Ok(second) => {
-                    before.committed();
-                    if !pseudonymised {
-                        let _ = std::fs::write(
-                            dir.join("reapply-report.json"),
-                            serde_json::to_string_pretty(&second).unwrap_or_default(),
-                        );
-                    }
-                    let still = crate::ekr::applied(&second).rejected;
-                    report.facts_reapplied += n.saturating_sub(still);
-                    report.parts_rejected += still;
-                    for (id, refusals) in extract::cited_by_rejected(&again, &second) {
-                        rejected_again.entry(id).or_default().extend(refusals);
-                    }
-                    applied = rest;
+        let mut unstored: BTreeSet<String> = BTreeSet::new();
+        if let Some(reapply) = extract::reapply_rounds(&doc, &applied) {
+            applied = reapply.rest;
+            for (k, round) in reapply.rounds.iter().enumerate() {
+                if stop_after.is_some() {
+                    unstored.extend(round.cited.iter().cloned());
+                    continue;
                 }
-                Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown_write(e, before)),
-                Err(e) => stop_after = Some(e),
+                let name = match k {
+                    0 => "reapply".to_string(),
+                    k => format!("reapply-{k}"),
+                };
+                let again_path = dir.join(format!("{name}.yaml"));
+                let text = serde_yaml_ng::to_string(&round.doc).expect("YAML");
+                std::fs::write(&again_path, text).map_err(|e| Failure::Apply(e.to_string()))?;
+                let reapplied = store.apply(&again_path);
+                // The batch directory keeps only `extraction.yaml` under a redaction policy.
+                if pseudonymised {
+                    let _ = std::fs::remove_file(&again_path);
+                }
+                match reapplied {
+                    Ok(second) => {
+                        before.committed();
+                        if !pseudonymised {
+                            let _ = std::fs::write(
+                                dir.join(format!("{name}-report.json")),
+                                serde_json::to_string_pretty(&second).unwrap_or_default(),
+                            );
+                        }
+                        let still = crate::ekr::applied(&second).rejected;
+                        report.facts_reapplied += round.facts.saturating_sub(still);
+                        report.parts_rejected += still;
+                        for (id, refusals) in extract::cited_by_rejected(&round.doc, &second) {
+                            rejected_again.entry(id).or_default().extend(refusals);
+                        }
+                    }
+                    Err(e) if crate::ekr::outcome_unknown(&e) => {
+                        return Err(unknown_write(e, before))
+                    }
+                    Err(e) => {
+                        stop_after = Some(format!(
+                            "{e}; the documents whose values it was to store are not marked \
+                             seen, so a later run extracts them again"
+                        ));
+                        unstored.extend(round.cited.iter().cloned());
+                    }
+                }
             }
         }
         report.parts_rejected += crate::ekr::applied(&applied).rejected;
@@ -1245,9 +1268,12 @@ fn process_in(
                     .rejected
                     .push(Rejected::new(&issued.doc.key, refusals));
             }
+            if unstored.contains(&issued.id) {
+                continue;
+            }
             seen.record(&issued.doc, applied_at);
+            report.documents_applied += 1;
         }
-        report.documents_applied += batch.len() as i64;
         for (ty, name) in extract::entity_names(&restored) {
             let names = entities.entry(ty).or_default();
             if !names.contains(&name) && names.len() < KNOWN_PER_TYPE {
