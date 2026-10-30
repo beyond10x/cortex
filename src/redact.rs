@@ -322,7 +322,7 @@ fn credentials(key: bool) -> &'static [Shape] {
 
 fn credential_shapes(value: &str) -> Vec<Shape> {
     {
-        use crate::mask::{element, flag, separator, ENV_PASS};
+        use crate::mask::{element, flag, quoted_flags, separator, ENV_PASS, ENV_PASS_SEPARATOR};
         // `auth` alone is not a name: `auth: oauth2-pkce` is a setting, not a secret. Read as
         // 0.7.1 read it, so no structured record identity changes (`crate::mask`'s `NAME_0_7_1`).
         let assignment_0_7_1 = format!(
@@ -348,12 +348,13 @@ fn credential_shapes(value: &str) -> Vec<Shape> {
             separator()
         );
         // `DB_PASS=`, in upper case only, as `crate::mask` reads it.
-        let env_pass = format!(r#"(?i)({ENV_PASS})(\s*=\s*)["']?{value}"#);
+        let env_pass = format!(r#"(?i)({ENV_PASS}){ENV_PASS_SEPARATOR}{value}"#);
         // An XML element (`<db_password>…</db_password>`) and a command-line flag with its value
         // after a space (`--db-password …`), as `crate::mask` reads them.
         let element = element(name);
         let flag = flag(name);
-        let shapes: [(&'static str, &str, usize, Refine); 27] = [
+        let [double_quoted, single_quoted] = quoted_flags(name);
+        let shapes: [(&'static str, &str, usize, Refine); 29] = [
             (
                 "private-key",
                 r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----",
@@ -481,6 +482,9 @@ fn credential_shapes(value: &str) -> Vec<Shape> {
                 1,
                 not_placeholder,
             ),
+            // A quoted flag value before the assignments, which would read its first word.
+            ("secret-assignment", &double_quoted, 3, flag_secret),
+            ("secret-assignment", &single_quoted, 3, flag_secret),
             ("secret-assignment", &assignment_0_7_1, 3, assigned_secret),
             ("secret-assignment", &assignment, 3, assigned_secret),
             ("secret-assignment", &env_pass, 3, assigned_secret),
@@ -759,11 +763,14 @@ fn assigned_secret(text: &str, r: Range<usize>) -> Option<Range<usize>> {
 /// A flag's value that is a credential as `crate::mask::flag_value_is_credential` decides (not
 /// prose, a metavar, a variable or a `--secret` mount), and an assigned secret.
 fn flag_secret(text: &str, r: Range<usize>) -> Option<Range<usize>> {
-    let flag = text[..r.start]
+    let before = &text[..r.start];
+    let quoted = before.ends_with(['"', '\'']);
+    let flag = before
+        .trim_end_matches(['"', '\'', '\\', '='])
         .split_whitespace()
         .next_back()
         .unwrap_or_default();
-    crate::mask::flag_value_is_credential(flag, &text[r.clone()])
+    crate::mask::flag_value_is_credential(flag, &text[r.clone()], quoted)
         .then_some(r)
         .and_then(|r| assigned_secret(text, r))
 }

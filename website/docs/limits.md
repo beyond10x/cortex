@@ -27,16 +27,18 @@ stand; [Status](./status.mdx) lists what is planned.
   raw `@` in it or in the user name included), a private key whose `END` line was cut off, and
   `password=`-style assignments, also with a prefix (`DB_PASSWORD=`, `client_secret=`,
   `AWS_SECRET_ACCESS_KEY=`), glued to one (`PGPASSWORD=`) or cut short in upper case
-  (`DB_PASS=`; a lower-case `render_pass` is kept), with `key` after `secret` (`SECRET_KEY=`,
+  (`DB_PASS=`, `DB_PASS: `, `"DB_PASS":`; a lower-case `render_pass` is kept), with `key` after `secret` (`SECRET_KEY=`,
   `DJANGO_SECRET_KEY=`), quoted
   (`"password": "…"`, also inside a JSON string as `\"password\": \"…\"`), in Markdown or chat
   markup (`` `DB_PASSWORD`: ``, `**api_key**: `, `**Password:** `), with `=>`, or
   percent-encoded once or twice (`access_token%3D`, `access_token%3A`, `access_token%253D`), and
   the same names as an XML element closed by its own tag, with a namespace or a CDATA section
   (`<db_password>…</db_password>`), or as a command-line flag with its value after a space,
-  a quoted value whole (`--db-password …`). After a flag, a word of prose (`--password option`),
-  a metavar (`PASSWORD`, `<DB_PASSWORD>`), a variable (`$API_KEY`) and a `--secret id=…,src=…`
-  mount are kept. A name spelled in one of the ways added after 0.7.1 (glued, `SECRET_KEY`, marked
+  a quoted value whole, also escaped in a JSON string or after `=` (`--db-password "…"`). After
+  a flag, a word of prose, lower-case or capitalised (`--password option`, `--password Option`),
+  a metavar, also in brackets (`PASSWORD`, `[--password PASSWORD]`, `<DB_PASSWORD>`,
+  `(string)`), a variable, also quoted (`$API_KEY`, `"$PGPASSWORD"`), and a
+  `--secret id=…,src=…` mount are kept. A name spelled in one of the ways added after 0.7.1 (glued, `SECRET_KEY`, marked
   up) is not read before a bare `:` and its value (`get_secret_key:P-1`), as record identities
   are written.
   That covers a document's text, title, description and URL,

@@ -4,9 +4,9 @@
 //! `state::SeenState` or `structured::Source` with a shape the unit's new classes read: a value
 //! left partly in clear, content that is no credential masked, a stored key or a record identity
 //! that changes, idempotence over mixed shapes, and time on long runs of the new shapes' parts.
-//! The nine cases that broke were committed `#[ignore]`d and run since their fix in the same
-//! story. Credential-shaped values and names are assembled at run time so no such
-//! literal sits in the source.
+//! The fifteen cases that broke over two passes were committed `#[ignore]`d and run since their
+//! fix in the same story. Credential-shaped values and names are assembled at run time so no
+//! such literal sits in the source.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
@@ -573,7 +573,6 @@ fn plausible_keys_and_prefix_parts_keep_their_6aaa4800_form() {
 /// masked at e66d0af8, left in clear since `ENV_PASS` reads `=` only. Each holds a space or a
 /// quote after the `:`, so no record identity reads so.
 #[test]
-#[ignore = "adversary: DB_PASS in YAML, JSON and escaped JSON is left in clear since dc3e89db"]
 fn db_pass_in_yaml_and_json_is_masked() {
     let n = db_pass();
     let s = v();
@@ -597,7 +596,6 @@ fn db_pass_in_yaml_and_json_is_masked() {
 /// parentheses, as a CLI reference writes it (`--secret-access-key (string)`): masked since
 /// e66d0af8, because `]` and `(` make the word neither a metavar nor prose.
 #[test]
-#[ignore = "adversary: argparse usage `[--password PASSWORD]` and `--api-key (string)` are masked"]
 fn bracketed_metavars_and_typed_flags_in_help_are_kept() {
     let p = pw();
     let up = p.to_uppercase();
@@ -620,7 +618,6 @@ fn bracketed_metavars_and_typed_flags_in_help_are_kept() {
 /// A capitalised word after a flag in a heading or a sentence (`### The --password Option`):
 /// neither lower-case prose nor an upper-case metavar, so it is masked.
 #[test]
-#[ignore = "adversary: a title-case word after a flag in a heading is masked"]
 fn a_title_case_word_after_a_flag_is_prose() {
     let p = pw();
     let mut changed = Vec::new();
@@ -641,7 +638,6 @@ fn a_title_case_word_after_a_flag_is_prose() {
 /// (`--password "$PGPASSWORD"`, `"${DB_PASSWORD}"`): `$X` and `${X}` are kept, the quoted form,
 /// the one shellcheck asks for, is masked because a quoted value is masked whole.
 #[test]
-#[ignore = "adversary: a quoted $VAR after a flag is masked"]
 fn a_quoted_variable_after_a_flag_is_kept() {
     let p = pw();
     let up = p.to_uppercase();
@@ -663,7 +659,6 @@ fn a_quoted_variable_after_a_flag_is_kept() {
 /// masked and masks again. `mask.rs` promises masking is idempotent, and `SeenState::load` drops
 /// a stored key whose `mask_key` count is not 0.
 #[test]
-#[ignore = "adversary: a quoted flag value before punctuation is masked again by a second mask"]
 fn masking_a_quoted_flag_value_before_punctuation_twice_changes_nothing_more() {
     let p = pw();
     let s = v();
@@ -691,7 +686,6 @@ fn masking_a_quoted_flag_value_before_punctuation_twice_changes_nothing_more() {
 /// or a CI log in JSON holds a command) and a quoted value after `--flag=`: the first is left in
 /// clear, the second keeps every word after the first. The fix masks `--db-password "…"` whole.
 #[test]
-#[ignore = "adversary: an escaped or `=`-joined quoted flag value is left (partly) in clear"]
 fn a_quoted_flag_value_escaped_or_after_equals_is_masked_whole() {
     let p = pw();
     let s = v();

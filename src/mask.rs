@@ -38,10 +38,16 @@ const SEPARATOR_0_7_1: &str = r#"((?:\\?["']|%(?:25)*2[27])?\s*(?:=>|[:=]|%(?:25
 /// (`SECRET_KEY`, `DJANGO_SECRET_KEY`). `crate::redact`'s `Credential` class reads the same
 /// spellings.
 pub(crate) const KEYWORD: &str = r"_*(?:[a-z0-9]+[_-])*(?:[a-z0-9]*pass(?:word|wd)|secret(?:[_-]?key)?|api[_-]?key|access[_-]?key|access[_-]?token|auth[_-]?token)";
-/// A password's name cut short, in upper case as an environment assignment writes it
-/// (`DB_PASS=`, `export SMTP_PASS=`). In lower case it is code or a setting (`render_pass`,
-/// `season_pass`, `first_pass:`), so it is no name.
+/// A password's name cut short, in upper case as an environment assignment, a Compose
+/// `environment:` map or JSON writes it (`DB_PASS=`, `export SMTP_PASS=`, `DB_PASS: `,
+/// `"DB_PASS":`). In lower case it is code or a setting (`render_pass`, `season_pass`,
+/// `first_pass:`), so it is no name.
 pub(crate) const ENV_PASS: &str = r"\b(?-i:(?:[A-Z0-9]+_)+PASS)";
+/// The separator after [`ENV_PASS`]: `=`, a `:` and a space, or the quote that closes a quoted
+/// name, raw or escaped, and a `:`. A bare `:` before the value (`DB_PASS:x`), as a record
+/// identity writes it, is none.
+pub(crate) const ENV_PASS_SEPARATOR: &str =
+    r#"((?:\\?["'])?\s*=\s*|:\s+|\\?["']\s*:\s*)(?:\\?["'])?"#;
 /// Markup around a name or after its separator: a code span, bold or italic, as Markdown and chat
 /// write a key (`` `DB_PASSWORD`: ``, `*api_key*: `, `**api_key:** `).
 pub(crate) const MARKUP: &str = r"[`*_~]{1,3}";
@@ -66,13 +72,23 @@ pub(crate) fn element(name: &str) -> String {
         r"(?i)(<(?:[a-z][a-z0-9_.\-]*:)?{name}(?:\s[^<>]*)?)(>\s*)(<!\[CDATA\[(?:[^\]]|\]{{1,2}}[^\]>])+\]\]>|[^\s<][^<]{{5,}}?)(\s*</[^<>\s]+\s*>)"
     )
 }
-/// A command-line flag that names a credential (`--db-password`) and its value after a space or a
-/// tab: a quoted value whole, or six or more characters that are not another flag. Whether the
-/// value is a credential is [`flag_value_is_credential`]'s. Groups: the flag, the space, the value.
+/// A command-line flag that names a credential (`--db-password`) and its unquoted value after a
+/// space or a tab: six or more characters that are not another flag. Whether the value is a
+/// credential is [`flag_value_is_credential`]'s. Groups: the flag, the space, the value.
 pub(crate) fn flag(name: &str) -> String {
-    format!(
-        r#"(?i)(\B--?{name})([ \t]+)("[^"\r\n]{{6,}}"|'[^'\r\n]{{6,}}'|[^\s"'\-][^\s"']{{5,}})"#
-    )
+    format!(r#"(?i)(\B--?{name})([ \t]+)([^\s"'\-][^\s"']{{5,}})"#)
+}
+
+/// The same flag with a quoted value after a space, a tab or `=`, in double quotes, raw or
+/// escaped as inside a JSON string (`--db-password \"…\"`), or in single quotes. The text between
+/// the quotes is the value and the quotes are kept, so a value followed by `.` or a letter is
+/// masked to itself again. Groups: the flag, the space and the opening quote, the value, the
+/// closing quote.
+pub(crate) fn quoted_flags(name: &str) -> [String; 2] {
+    [
+        format!(r#"(?i)(\B--?{name})((?:[ \t]+|=)\\?")((?:[^"\\\r\n]|\\[^"\r\n]){{6,}})(\\?")"#),
+        format!(r#"(?i)(\B--?{name})((?:[ \t]+|=)')([^'\r\n]{{6,}})(')"#),
+    ]
 }
 
 /// Whether the closing tag `close` (`</wsse:Password>`) closes the element `open` opens
@@ -91,22 +107,33 @@ pub(crate) fn same_element(open: &str, close: &str) -> bool {
     !open.is_empty() && open.eq_ignore_ascii_case(close)
 }
 
-/// Whether `value` after the flag `flag` is a credential. A quoted value is. These are not: a word
-/// of prose (lower-case letters in any script, `--password option`, `--password ändern`, with any
-/// punctuation that ends a clause after it), a metavar (`PASSWORD`, `DB_PASSWORD`,
-/// `<DB_PASSWORD>`), a variable (`$API_KEY`, `${API_KEY}`), and a mount after `--secret`
-/// (`id=npmrc,src=…`), which names a file.
-pub(crate) fn flag_value_is_credential(flag: &str, value: &str) -> bool {
-    if value.starts_with(['"', '\'']) {
+/// Whether `value` after the flag `flag` is a credential; `quoted` when it stood in quotes. A
+/// variable is not (`$API_KEY`, `${API_KEY}`, `"$PGPASSWORD"`). Every other quoted value is.
+/// Unquoted, these are not either, also in brackets or parentheses as usage and reference text
+/// writes them (`[--password PASSWORD]`, `(string)`, `[password]`, `<DB_PASSWORD>`): a word of
+/// prose (lower-case letters in any script, `option`, `ändern`, or a capitalised word, `Option`,
+/// with any punctuation that ends a clause after it), a metavar (`PASSWORD`, `DB_PASSWORD`), and
+/// a mount after `--secret` (`id=npmrc,src=…`), which names a file.
+pub(crate) fn flag_value_is_credential(flag: &str, value: &str, quoted: bool) -> bool {
+    if value.starts_with('$') {
+        return false;
+    }
+    if quoted {
         return true;
     }
-    let word = value.trim_end_matches(['.', ',', ';', ':', '!', '?', ')']);
-    let prose = !word.is_empty() && word.chars().all(char::is_lowercase);
-    let metavar = word.starts_with('<')
-        || (word.chars().any(|c| c.is_ascii_uppercase())
+    let word = value
+        .trim_end_matches(['.', ',', ';', ':', '!', '?', ')', ']', '}', '>'])
+        .trim_start_matches(['(', '[', '{', '<']);
+    let mut chars = word.chars();
+    let title = chars.next().is_some_and(char::is_uppercase)
+        && chars.clone().next().is_some()
+        && chars.all(char::is_lowercase);
+    let prose = title || (!word.is_empty() && word.chars().all(char::is_lowercase));
+    let metavar = value.starts_with('<')
+        || word.chars().any(|c| c.is_ascii_uppercase())
             && word
                 .chars()
-                .all(|c| c.is_ascii_uppercase() || c == '_' || c == '-'));
+                .all(|c| c.is_ascii_uppercase() || c == '_' || c == '-');
     let variable = word.starts_with('$');
     let mount = flag.trim_start_matches('-').eq_ignore_ascii_case("secret") && word.contains('=');
     !(prose || metavar || variable || mount)
@@ -144,7 +171,11 @@ fn closes_itself(c: &regex::Captures) -> bool {
 }
 
 fn flag_credential(c: &regex::Captures) -> bool {
-    flag_value_is_credential(&c[1], &c[3])
+    flag_value_is_credential(&c[1], &c[3], false)
+}
+
+fn quoted_flag_credential(c: &regex::Captures) -> bool {
+    flag_value_is_credential(&c[1], &c[3], true)
 }
 
 fn build(value: &str) -> Vec<Rule> {
@@ -152,9 +183,10 @@ fn build(value: &str) -> Vec<Rule> {
     let name = format!(r"((?:\b|%(?:25)*[0-9a-f]{{2}}){KEYWORD})");
     let separator = separator();
     let assignment = format!(r#"(?i){name}{separator}(?:\\?["'`])?{value}"#);
-    let env_pass = format!(r#"(?i)({ENV_PASS})(\s*=\s*)(?:["'])?{value}"#);
+    let env_pass = format!(r#"(?i)({ENV_PASS}){ENV_PASS_SEPARATOR}{value}"#);
     let element = element(KEYWORD);
     let flag = flag(KEYWORD);
+    let [double_quoted, single_quoted] = quoted_flags(KEYWORD);
     // A whole key first, then a key without its `END` line: two rules, because one with both as
     // alternatives reads to the end of the text for every `BEGIN` line without an `END` line.
     [
@@ -222,13 +254,16 @@ fn build(value: &str) -> Vec<Rule> {
             )
             .into(),
         ),
-        ("secret-assignment", Keep::Name, assignment_0_7_1),
-        ("secret-assignment", Keep::Name, assignment),
-        ("secret-assignment", Keep::Name, env_pass),
     ]
     .into_iter()
     .map(|(name, keep, pattern)| (name, keep, pattern, any_match as fn(&regex::Captures) -> bool))
+    // A quoted flag value before the assignments, which would read its first word after `=`.
     .chain([
+        ("secret-assignment", Keep::Name, double_quoted, quoted_flag_credential as _),
+        ("secret-assignment", Keep::Name, single_quoted, quoted_flag_credential as _),
+        ("secret-assignment", Keep::Name, assignment_0_7_1, any_match as _),
+        ("secret-assignment", Keep::Name, assignment, any_match as _),
+        ("secret-assignment", Keep::Name, env_pass, any_match as _),
         ("secret-assignment", Keep::Name, element, closes_itself as _),
         ("secret-assignment", Keep::Name, flag, flag_credential as _),
     ])
