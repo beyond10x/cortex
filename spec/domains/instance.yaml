@@ -362,6 +362,11 @@ types:
       connectors: cortex.instance.StructuredConnectors
       files: cortex.instance.StructuredFiles
 
+  # UNMAPPED: with `Supersede`, a run that selects no record and whose listing (each record's
+  # key and text hash), unsettled records and held prefixes equal those of the last run that
+  # ended the source's dropped values without a failed commit reads nothing of the store: no
+  # `ekr snapshot` and no `ekr stage begin`. ESS has no construct for a read of the store;
+  # `src/run.rs` holds it and `tests/idle_supersede.rs` tests it.
   - name: cortex.instance.DropPolicy
     kind: enum
     variants: [Keep, Supersede]

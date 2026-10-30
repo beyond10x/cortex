@@ -49,6 +49,11 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   during the run is seen by the next run. On a large store each snapshot took minutes. Batch 0 is
   no longer pseudonymised twice under `refuse_if_left`, and the store's ontology is read again
   only after an apply.
+- A `dropped: Supersede` source whose run selects nothing, and whose listing, held-back records
+  and failed child calls are those of the last run that ended its dropped values, no longer
+  begins an EKR stage or reads the store (`ekr snapshot`): such a run read the whole store to
+  end nothing. The state file remembers that listing's fingerprint (`ended_listing`). Comparing
+  the store with a listing no longer scans every assertion of the source for each value it ends.
 
 ## 0.6.1 — 2026-10-17
 

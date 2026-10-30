@@ -1504,7 +1504,28 @@ impl<'a> Source<'a> {
             });
             mine.push(Mine { a, records, kept });
         }
+        // Nothing ended: no replacement to find and no edge to read.
+        if mine.iter().all(|m| m.kept) {
+            return Vec::new();
+        }
         let from = |a: &Value| a["valid_time"]["from"].as_i64();
+        // Each kept property assertion's valid start and id, by its records, subject and predicate:
+        // the candidates to replace an ended one of the same three.
+        type Claim<'m> = (&'m BTreeSet<String>, String, String);
+        let mut replacements: BTreeMap<Claim<'_>, Vec<(i64, &str)>> = BTreeMap::new();
+        for r in mine.iter().filter(|r| r.kept) {
+            if r.a["predicate"]["Property"].is_null() {
+                continue;
+            }
+            if let (Some(f), Some(id)) = (from(r.a), r.a["id"].as_str()) {
+                let claim = (
+                    &r.records,
+                    r.a["subject"].to_string(),
+                    r.a["predicate"].to_string(),
+                );
+                replacements.entry(claim).or_default().push((f, id));
+            }
+        }
         let mut ops = Vec::new();
         let mut retracted: Vec<&Value> = Vec::new();
         for m in mine.iter().filter(|m| !m.kept) {
@@ -1513,12 +1534,16 @@ impl<'a> Source<'a> {
             let replacement = a["predicate"]["Property"].as_str().and_then(|_| {
                 let start = from(a);
                 let end = a["valid_time"]["to"].as_i64();
-                mine.iter()
-                    .filter(|r| r.kept && r.records == m.records)
-                    .filter(|r| {
-                        r.a["subject"] == a["subject"] && r.a["predicate"] == a["predicate"]
-                    })
-                    .filter_map(|r| Some((from(r.a)?, r.a["id"].as_str()?)))
+                let claim = (
+                    &m.records,
+                    a["subject"].to_string(),
+                    a["predicate"].to_string(),
+                );
+                replacements
+                    .get(&claim)
+                    .into_iter()
+                    .flatten()
+                    .copied()
                     .filter(|(f, _)| start.is_none_or(|s| *f >= s) && end.is_none_or(|e| *f <= e))
                     .max()
             });
@@ -1540,6 +1565,10 @@ impl<'a> Source<'a> {
                     retracted.push(a);
                 }
             }
+        }
+        // Nothing retracted: no edge to delete, and no set of the store's assertions to build.
+        if retracted.is_empty() {
+            return ops;
         }
         // The edges of retracted relations no active relation assertion that stays still joins.
         let joins = |a: &Value| {
@@ -2187,6 +2216,91 @@ mod tests {
             matches!(&ops[..], [Operation::Retract { assertion, .. }] if assertion == "a-old"),
             "{ops:?}"
         );
+    }
+
+    /// `story:idle-supersede-source-cheap`: `ended` indexes the assertions that stay by record,
+    /// subject and predicate, so each one ended finds its replacement without a scan of every
+    /// assertion of the source, and when nothing is ended it reads no edge and builds no set of the
+    /// store's assertions. 20,000 records each with a superseded and a current value, beside
+    /// 20,000 assertions of other writers: a scan per ended assertion is 20,000 × 40,000 steps,
+    /// a minute in a debug build; indexed, it is well under the bound.
+    #[test]
+    fn ended_over_a_large_store_indexes_what_stays_and_ends_nothing_without_reading_edges() {
+        use crate::ekr::Operation;
+        let m = mapping();
+        let s = source(&m);
+        const RECORDS: usize = 20_000;
+        const FOREIGN: usize = 20_000;
+        let mut assertions = serde_json::Map::new();
+        let mut evidence = serde_json::Map::new();
+        let property = |id: &str, subject: &str, value: &str, ev: &str, from: i64| {
+            json!({"id": id, "subject": {"Node": subject}, "predicate": {"Property": "p-age"},
+                "object": {"Value": {"value_kind": "String", "value": value}},
+                "evidence": [ev], "lifecycle": "Active", "valid_time": {"from": from, "to": null}})
+        };
+        for n in 0..RECORDS {
+            let ev = format!("e-{n}");
+            evidence.insert(
+                ev.clone(),
+                json!({"source": {"HumanStatement": {"identity": format!("record:dir:people.list:P-{n}")}}}),
+            );
+            let subject = format!("n{n}");
+            let (old, new) = (format!("old-{n}"), format!("new-{n}"));
+            assertions.insert(old.clone(), property(&old, &subject, "36", &ev, 1));
+            assertions.insert(new.clone(), property(&new, &subject, "37", &ev, 2));
+        }
+        evidence.insert(
+            "w".into(),
+            json!({"source": {"HumanStatement": {"identity": "https://example.org/a"}}}),
+        );
+        for n in 0..FOREIGN {
+            let id = format!("f-{n}");
+            assertions.insert(id.clone(), property(&id, "web", "1", "w", 1));
+        }
+        let snapshot = json!({"graph": {"graph": {
+            "assertions": assertions, "edges": {}, "nodes": {}, "evidence": evidence}}});
+        let ontology = json!({"node_types": [{"properties": [{"id": "p-age", "name": "age"}]}],
+            "edge_types": []});
+        let docs: Vec<_> = (0..RECORDS)
+            .map(|n| {
+                let mut d = issued(
+                    &s,
+                    "x",
+                    json!({"id": format!("P-{n}"), "name": "N", "age": 37}),
+                )
+                .doc;
+                d.hash = None;
+                d
+            })
+            .collect();
+        let listed = s.listed(&docs);
+
+        let started = std::time::Instant::now();
+        let ops = s.ended(&snapshot, &ontology, &listed, &BTreeSet::new(), &[]);
+        let took = started.elapsed();
+        assert_eq!(ops.len(), RECORDS);
+        assert!(ops.iter().all(|op| matches!(op,
+            Operation::Supersede { assertion, by, effective_from: 2 }
+                if assertion.strip_prefix("old-") == by.strip_prefix("new-"))));
+        assert!(
+            took < std::time::Duration::from_secs(20),
+            "ended took {took:?} for {RECORDS} records"
+        );
+
+        // Nothing ended: no operation, whatever the edges hold.
+        let mut idle = snapshot;
+        let a = idle["graph"]["graph"]["assertions"]
+            .as_object_mut()
+            .unwrap();
+        a.retain(|id, _| !id.starts_with("old-"));
+        idle["graph"]["graph"]["edges"] = json!({"x": {"id": "x", "source": "n1",
+            "type_id": "t", "target": "n2"}});
+        let started = std::time::Instant::now();
+        assert_eq!(
+            s.ended(&idle, &ontology, &listed, &BTreeSet::new(), &[]),
+            []
+        );
+        assert!(started.elapsed() < std::time::Duration::from_secs(20));
     }
 
     /// A held prefix with no relation keeps every value of its records; with a relation, only the
