@@ -2,17 +2,18 @@
 format: aep.planning-md/3
 id: story:ask-body-limit-test-race
 kind: story
-status: active
+status: implemented
 title: The over-limit body case of the ask service passes on every run
 tags:
 - release-check-0-7-0
 relations:
 - decomposes: epic:standalone-1-0
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T15:47:08Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-30T15:47:08Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-30T16:33:15Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 ## Outcome
 

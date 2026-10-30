@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-30T16:33:15Z",
+  "actor": "human:timo",
+  "artifact": "story:unit-takeover-across-homes",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261030b at 7d85eeb5: 1279 passed, 0 failed, 13 ignored, exit 0",
+    "reference": "wave/20261030b@7d85eeb5"
+  }
+}
