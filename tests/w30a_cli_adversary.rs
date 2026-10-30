@@ -1,6 +1,7 @@
 //! Adversary cases for unit `cli` of wave 20261030a (`story:unit-names-unique`,
 //! `story:spec-integer-bounds`, `story:durable-home-writes`). A case still ignored names the finding
 //! it shows, so the branch stays green; `cargo test --test w30a_cli_adversary -- --ignored` runs it.
+//! The `adv_w30b_` cases are wave 20261030b's (`story:unit-takeover-across-homes`).
 
 mod common;
 
@@ -214,12 +215,10 @@ fn exec_of(w: &World, unit: &str) -> Option<String> {
 }
 
 /// Instance `a` with source `b-c` in one home and instance `a-b` with source `c` in another, on
-/// one systemd user manager, name one unit. `Systemd::foreign` asks the first home for an
-/// instance `a-b`, finds none, reads the unit as orphaned and lets the second home take it over:
-/// the first home's source no longer runs.
+/// one systemd user manager, name one unit. `Systemd::foreign` asked the first home for an
+/// instance `a-b`, found none, read the unit as orphaned and let the second home take it over:
+/// the first home's source no longer ran.
 #[test]
-#[ignore = "adversary: across two homes, instance a-b/c takes over the live unit cortex-a-b-c of \
-            instance a/b-c in the other home (Systemd::foreign asks for the requesting instance)"]
 fn adv_w30a_a_colliding_unit_of_a_live_instance_in_another_home_is_not_taken_over() {
     let w = World::new();
     let other = w.root.join("home2");
@@ -252,6 +251,117 @@ fn adv_w30a_a_colliding_unit_of_a_live_instance_in_another_home_is_not_taken_ove
         second.1,
         second.2
     );
+    assert_refused_for_a_b_c(&w, &second);
+}
+
+/// The refusal of a command of the second home that would write `cortex-a-b-c`: exit 2, naming
+/// the unit, the first home and the instance there whose unit it is.
+fn assert_refused_for_a_b_c(w: &World, r: &(Option<i32>, Value, String)) {
+    let (code, out, err) = r;
+    assert_eq!(*code, Some(2), "{out} {err}");
+    for part in ["cortex-a-b-c.", w.home.to_str().unwrap(), "source a/b-c"] {
+        assert!(
+            err.contains(part),
+            "the refusal does not name {part:?}: {err}"
+        );
+    }
+}
+
+/// `update` and `adopt` of instance `a-b` in a second home refuse to write `cortex-a-b-c`, the
+/// live unit of source `a/b-c` in the first home, as `create` does; the unit stays the first
+/// home's.
+#[test]
+fn adv_w30b_update_and_adopt_refuse_a_colliding_unit_another_home_holds() {
+    let w = World::new();
+    let other = w.root.join("home2");
+    assert_created(&at(
+        &w,
+        &w.home,
+        &[
+            "create",
+            "--spec",
+            spec_of(&w, "a", "b-c").to_str().unwrap(),
+            "--no-extract",
+        ],
+    ));
+    let before = exec_of(&w, "cortex-a-b-c.service").expect("the unit of a/b-c");
+    let spec = spec_of(&w, "a-b", "c");
+    let spec = spec.to_str().unwrap();
+
+    let adopted = at(
+        &w,
+        &other,
+        &[
+            "adopt",
+            "--spec",
+            spec,
+            "--store",
+            w.root.join("no-store.sqlite").to_str().unwrap(),
+        ],
+    );
+    assert_refused_for_a_b_c(&w, &adopted);
+    assert_eq!(exec_of(&w, "cortex-a-b-c.service"), Some(before.clone()));
+
+    assert_created(&at(
+        &w,
+        &other,
+        &["create", "--spec", spec, "--no-extract", "--no-units"],
+    ));
+    let updated = at(&w, &other, &["update", "a-b", "--spec", spec]);
+    assert_refused_for_a_b_c(&w, &updated);
+    assert_eq!(exec_of(&w, "cortex-a-b-c.service"), Some(before));
+}
+
+/// A colliding unit whose home holds the instance no longer is orphaned, as a unit of the same
+/// instance name is: another home's `create` takes it over and names it in `units.taken_over`.
+#[test]
+fn adv_w30b_a_colliding_unit_of_a_removed_instance_is_taken_over() {
+    let w = World::new();
+    let other = w.root.join("home2");
+    assert_created(&at(
+        &w,
+        &w.home,
+        &[
+            "create",
+            "--spec",
+            spec_of(&w, "a", "b-c").to_str().unwrap(),
+            "--no-extract",
+        ],
+    ));
+    let path = w.home.join("registry.json");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let removed = text.replace("\"Active\"", "\"Removed\"");
+    assert_ne!(text, removed, "no Active instance in {text}");
+    std::fs::write(&path, removed).unwrap();
+
+    let second = at(
+        &w,
+        &other,
+        &[
+            "create",
+            "--spec",
+            spec_of(&w, "a-b", "c").to_str().unwrap(),
+            "--no-extract",
+        ],
+    );
+    assert_created(&second);
+    let taken: Vec<&str> = second.1["detail"]["units"]["taken_over"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no units.taken_over: {}", second.1))
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    let home = w.home.display();
+    assert_eq!(
+        taken,
+        [
+            format!("cortex-a-b-c.service (home {home})"),
+            format!("cortex-a-b-c.timer (home {home})"),
+        ],
+        "{}",
+        second.1
+    );
+    assert!(exec_of(&w, "cortex-a-b-c.service").is_some_and(|e| e.contains(" run a-b/c ")));
 }
 
 /// Every regular file of `dir`, by name, with its text.

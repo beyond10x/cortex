@@ -36,6 +36,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Fixed
+
+- Across two homes, an instance whose unit name is another instance's (instance `a-b` with source
+  `c` and instance `a` with source `b-c` both name `cortex-a-b-c`) took over the other home's live
+  unit, and that home's source stopped running. `create`, `update` and `adopt` now refuse before
+  changing anything, naming the unit, the home that holds it and its source or viewer there. A unit
+  whose home no longer holds the instance it belongs to is still taken over (`units.taken_over`).
+
 ### Known limits
 
 Each has a test kept `#[ignore]`d that names `story:ignored-adversary-limits`.
