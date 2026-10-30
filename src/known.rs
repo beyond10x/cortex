@@ -204,10 +204,11 @@ impl Index {
     /// after its subject and object were created, so they count. A thing with an alias equal, byte
     /// for byte, to an alias of an indexed node of its type is that node, and adds nothing (a
     /// canonical name is never compared); any other is a new node, named by the least, in byte
-    /// order, of its members' first aliases, with every alias of them. Residual: a fact refused
-    /// without a transaction after its things were resolved (a `replaces` fact with nothing left
-    /// to replace) leaves out what only it named. A foreign writer's commit during the run is not
-    /// seen.
+    /// order, of its members' first aliases, with every alias of them. A `replaces` fact with
+    /// nothing left to replace is refused without a transaction and creates nothing here; the run
+    /// applies it again ([`crate::extract::reapply_rounds`]) and calls this with each round's
+    /// document and report too, so what only it named is added then. A foreign writer's commit
+    /// during the run is not seen.
     pub fn applied(&mut self, document: &serde_yaml_ng::Value, report: &Value) {
         use serde_yaml_ng::Value as Yaml;
         let rejected: BTreeMap<&str, bool> = report["rejected"]

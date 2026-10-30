@@ -31,11 +31,16 @@ EOF
 "##;
 
 fn world() -> World {
+    world_of(&["alpha", "beta"])
+}
+
+/// [`world`] with the records `ids`, in that order.
+fn world_of(ids: &[&str]) -> World {
     let w = World::new();
     let root = w.root.display().to_string();
     executable(&w.bin.join("claude"), &CLAUDE.replace("@ROOT@", &root));
     std::fs::create_dir_all(w.root.join("repos")).unwrap();
-    let records: String = ["alpha", "beta"]
+    let records: String = ids
         .iter()
         .map(|id| {
             let text = format!("The {id} service runs part of billing. ").repeat(20);
@@ -125,5 +130,29 @@ fn a_node_created_by_a_reapply_round_is_offered_to_the_next_batch_as_in_the_stor
             .take(5)
             .collect::<Vec<_>>()
             .join("\n")
+    );
+}
+
+/// The same shape where batch 2 names `widget`: its record's id is `widget`, a term of the batch
+/// (`known::terms`), so a fresh snapshot would offer the node the re-apply round created. The
+/// run's grown index must offer it too: each re-apply round's document and report feed it, as
+/// the first apply's do.
+#[test]
+fn a_node_created_by_a_reapply_round_is_a_store_hit_of_the_next_batch_that_names_it() {
+    let w = world_of(&["alpha", "widget"]);
+    let (code, ran) = w.cortex(&["run", "r/repos"]);
+    assert_eq!(code, 0, "{ran}");
+    assert_eq!(ran["detail"]["facts_reapplied"], 1, "{ran}");
+    assert!(store_nodes(&w).iter().any(|n| n == "widget"), "{ran}");
+    let prompts = prompts(&w);
+    assert_eq!(prompts.len(), 2, "two batches: {ran}");
+    let known = prompts[1]
+        .split("Known entities:\n")
+        .nth(1)
+        .unwrap_or("(no known entities)");
+    assert!(
+        known.contains("widget (in the store"),
+        "batch 2 names widget and is not offered it from the store:\n{}",
+        known.lines().take(5).collect::<Vec<_>>().join("\n")
     );
 }

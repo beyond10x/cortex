@@ -40,9 +40,11 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 - A document the model failed on every time stopped its source at the same batch on every run,
   and nothing counted failures per document. A batch of several documents the model answers it
-  failed on still fails the run as before, after one call, and now marks its documents; a later
-  run asks each marked document alone, those that failed alone fewer times first, so a failing
-  call that spends the run's budget still leaves the next run a document further. A document that
+  failed on still fails the run as before, after one call, and now counts one failed batch for
+  each of its documents. A later run asks that batch whole once more, so one failed answer costs
+  no call per document; when it fails again, each of its documents is asked alone, those that
+  failed alone fewer times first, in that run and after, so a failing call that spends the run's
+  budget still leaves the next run a document further. A document that
   fails alone is counted in `failures/<source>.json`, beside `state/`, so a run its gate undoes
   keeps the count; from its third consecutive failure it is skipped while its text is the one
   that last failed, named in `skipped` with its count and the reason, not sent to the model, and
@@ -88,7 +90,10 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   assertion; it is not counted in `parts_rejected` or listed in `rejected`, and the run reports it
   in `facts_reapplied` (in the `ran` detail, and in the `cortex.log` line when not 0). Several
   such facts of one entity and property are applied in their documents' time order, the later
-  ones still replacing, so one value stays current. A re-apply the store fails stops the run and
+  ones still replacing, so one value stays current. A plain value of the same entity and property
+  in the batch, which EKR stored, takes its place in that order: an older replacement is not
+  applied again and stays in `rejected`, and a newer one replaces it, so the batch does not leave
+  two values current. A re-apply the store fails stops the run and
   leaves the documents it carried unseen, so a later run extracts them again.
 - `cortex ask serve` recorded an answer whose reader closed the stream as `model-failed`, with no
   tokens, and opened a review item for it. It is now recorded with the outcome `client-closed`,
@@ -117,8 +122,9 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   `(request <answer_id>)`. The detail goes to standard error on a line naming the same id,
   masked for credential shapes like every line the service logs.
 - A run reads the store once (`ekr snapshot` at its first batch) instead of once per batch, and
-  twice per batch under a `refuse_if_left` policy. The nodes each batch applies are added to what
-  it read, so the next batch is still shown them as in the store; a commit another writer makes
+  twice per batch under a `refuse_if_left` policy. The nodes each batch applies, those its
+  re-applied replacements create included, are added to what it read, so the next batch is still
+  shown them as in the store; a commit another writer makes
   during the run is seen by the next run. On a large store each snapshot took minutes. Batch 0 is
   no longer pseudonymised twice under `refuse_if_left`, and the store's ontology is read again
   only after an apply.
