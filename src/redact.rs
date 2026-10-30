@@ -157,16 +157,21 @@ fn regex(pattern: &str) -> Regex {
 }
 
 /// A link: a scheme, `www.`, or a dotted host followed by a path (`host.tld/path`); then anything
-/// up to whitespace, a quote or a brace. Square brackets are part of it: a query key
-/// (`filter[owner]=`) and a `[masked:<shape>]` token masking put inside it, so the rest of the
-/// link after a masked password or token is part of it too; `link` ends it at a `]` that closes
-/// a bracket opened before it.
+/// up to whitespace, a quote, a brace or a bracket it did not open. Brackets and parentheses it
+/// opens and closes are part of it: a query key (`filter[owner]=`), a title in parentheses
+/// (`Widget_(engine)`) and a `[masked:<shape>]` token masking put inside it, so the rest of the
+/// link after a masked password or token is part of it too. The match itself stops at a `]` or
+/// `)` it opened none for (`[https://host/x]`, `[a](https://host/x),[b](…)`), so finding the
+/// next link never reads past the one before it again.
 fn url() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
     R.get_or_init(|| {
         let host = r"[\p{L}\p{N}][\p{L}\p{N}\-]*(?:\.[\p{L}\p{N}\-]+)*\.(?:\p{L}{2,}|xn--[\p{L}\p{N}\-]+)(?::[0-9]{1,5})?/";
+        let plain = r#"[^\s<>"'`{}|\\^()\[\]]"#;
+        let paren = format!(r"\((?:{plain}|\[{plain}*\])*\)");
+        let bracket = format!(r"\[(?:{plain}|\({plain}*\))*\]");
         regex(&format!(
-            r#"(?i)(?:\b(?:https?|ftps?|sftp|ssh|wss?|file)://|\bwww\.|{host})[^\s<>"'`{{}}|\\^]*"#
+            r"(?i)(?:\b(?:https?|ftps?|sftp|ssh|wss?|file)://|\bwww\.|{host})(?:{plain}|{paren}|{bracket})*"
         ))
     })
 }
@@ -566,7 +571,12 @@ fn phone_number(text: &str, r: Range<usize>) -> Option<Range<usize>> {
     };
     let main = &s[..s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len())];
     let main = main.trim_end();
-    let ok = !touched && (7..=15).contains(&digits(main).count()) && !time_range().is_match(main);
+    // A number has one `/` at most; a second one after it makes a date (`+1 2024/10/30`).
+    let dated = s.contains('/') && text[r.end..].starts_with('/');
+    let ok = !touched
+        && !dated
+        && (7..=15).contains(&digits(main).count())
+        && !time_range().is_match(main);
     ok.then_some(r)
 }
 
@@ -582,30 +592,36 @@ fn phone_by_context(text: &str, r: Range<usize>) -> Option<Range<usize>> {
     ok.then_some(r)
 }
 
-/// A link without the punctuation that closes the sentence around it, and without what follows a
-/// `]` it opened no bracket for (`[https://host/x]`, `[https://host/x](…)`).
+/// A link without the punctuation that closes the sentence around it, and without a citation
+/// written after that punctuation (`https://host/x.[2]`).
 fn link(text: &str, r: Range<usize>) -> Option<Range<usize>> {
     let s = &text[r.clone()];
-    let mut depth = 0usize;
+    let closes = |kept: &str, last: char| {
+        let unbalanced = last == ')' && kept.matches('(').count() < kept.matches(')').count();
+        matches!(last, '.' | ',' | ';' | ':' | '!' | '?' | '*') || unbalanced
+    };
     let mut end = s.len();
-    for (i, c) in s.char_indices() {
-        match c {
-            '[' => depth += 1,
-            ']' if depth == 0 => {
-                end = i;
+    loop {
+        while let Some(last) = s[..end].chars().next_back() {
+            if !closes(&s[..end], last) {
                 break;
             }
-            ']' => depth -= 1,
-            _ => {}
+            end -= last.len_utf8();
         }
-    }
-    while let Some(last) = s[..end].chars().next_back() {
-        let kept = &s[..end];
-        let unbalanced = last == ')' && kept.matches('(').count() < kept.matches(')').count();
-        if !(matches!(last, '.' | ',' | ';' | ':' | '!' | '?' | '*') || unbalanced) {
-            break;
+        // `url` admits no bracket inside a bracket, so the last `[` opens the closing group.
+        let cited = s[..end]
+            .strip_suffix(']')
+            .and_then(|kept| kept.rfind('['))
+            .filter(|&open| {
+                s[..open]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| closes(&s[..open], c))
+            });
+        match cited {
+            Some(open) => end = open,
+            None => break,
         }
-        end -= last.len_utf8();
     }
     // A scheme or `www.` with nothing after it is no link.
     let opening = match s.find("://") {
@@ -2569,6 +2585,14 @@ mod tests {
                 "See [[Url-1]]([Url-1]) now.",
             ),
             ("See [docs](https://crm/x).", "See [docs]([Url-1])."),
+            (
+                "Read https://wiki.example/Widget_(engine). Then stop.",
+                "Read [Url-1]. Then stop.",
+            ),
+            (
+                "Use https://crm/x?q=(a[b]) now, or (https://crm/y).",
+                "Use [Url-1] now, or ([Url-2]).",
+            ),
         ] {
             let (out, _) = run(&[m::RedactionClass::Url], &[], text);
             assert_eq!(out, replaced, "{text}");

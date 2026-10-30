@@ -64,7 +64,6 @@ fn fastest(mut f: impl FnMut()) -> Duration {
 /// date written year first after a `+1` vote is: `+1 2024/10` has seven digits, and the `/30`
 /// after it stays in the text. Before the change, `+1 2024` (five digits) was refused.
 #[test]
-#[ignore = "adversary: an ISO date after +1 is replaced as a phone number (+1 2024/10/30)"]
 fn an_iso_date_after_a_plus_one_is_not_a_phone_number() {
     let text = "Votes: +1 2024/10/30 so far.";
     let (out, counts) = run(&BUILT_IN, text);
@@ -77,7 +76,6 @@ fn an_iso_date_after_a_plus_one_is_not_a_phone_number() {
 /// A citation after a link in parentheses is not part of the link: before the change the link
 /// ended at `[` and its unbalanced `)` was trimmed; now the `)` and `[1]` are swallowed.
 #[test]
-#[ignore = "adversary: a [1] citation after a link swallows the closing parenthesis and the citation"]
 fn a_citation_after_a_parenthesised_link_stays_outside_it() {
     for (text, replaced) in [
         (
@@ -98,7 +96,6 @@ fn a_citation_after_a_parenthesised_link_stays_outside_it() {
 /// Two Markdown links joined by a comma, with no space, are two links. Now the first link runs
 /// through `),[b](` into the second, and the label `b` is hidden inside one placeholder.
 #[test]
-#[ignore = "adversary: two Markdown links without a space between them become one link"]
 fn two_markdown_links_joined_without_a_space_are_two_links() {
     let text = "Sources: [a](https://example.org/1),[b](https://example.org/2).";
     let (out, counts) = run(&[m::RedactionClass::Url], text);
@@ -110,7 +107,6 @@ fn two_markdown_links_joined_without_a_space_are_two_links() {
 /// text: each match now runs to the end of the run of non-space text and `link` cuts it at `]`,
 /// so every link scans the rest of the text again. Before the change a match ended at `[`.
 #[test]
-#[ignore = "adversary: bracketed links back to back are found in quadratic time"]
 fn bracketed_links_back_to_back_are_found_in_linear_time() {
     let r = redactor(&[m::RedactionClass::Url]);
     let unit = "[https://a.example/b]";
@@ -196,7 +192,6 @@ fn no_generated_text_panics_the_built_in_classes() {
 /// in compact JSON the rule now runs through the host, the closing quote and the next key to
 /// the `@` of an address after it. Before the change only `pw` was masked.
 #[test]
-#[ignore = "adversary: url-password runs past the host to a later @ and masks the host and the next JSON key"]
 fn a_url_password_does_not_run_past_its_host_to_a_later_at_sign() {
     let pw = secret();
     let text = format!(r#"{{"dsn":"postgres://app:{pw}@db:5432","owner":"ops@corp.example"}}"#);
@@ -212,7 +207,6 @@ fn a_url_password_does_not_run_past_its_host_to_a_later_at_sign() {
 /// against 6.5 ms before the change. The `BEGIN … END` alternative before the cut-key one
 /// scans to the end of the text for every `BEGIN`.
 #[test]
-#[ignore = "adversary: private-key masking is quadratic in BEGIN lines without an END line"]
 fn begin_lines_without_an_end_line_are_masked_in_linear_time() {
     let begin = format!("-----BEGIN PRIVATE {}-----\n", "KEY");
     let small = begin.repeat(1 << 9);
@@ -237,7 +231,6 @@ fn begin_lines_without_an_end_line_are_masked_in_linear_time() {
 /// the masked value starts with `[masked:`, so `mask_key` counts nothing and `SeenState::load`
 /// keeps the key, and the rest of the credential, for good.
 #[test]
-#[ignore = "adversary: a key stored before the change keeps the rest of the password in the state file"]
 fn a_stored_key_holding_the_rest_of_a_credential_is_dropped_on_load() {
     let rest = secret();
     let old_keys = [

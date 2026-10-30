@@ -43,13 +43,19 @@ const KEY_LINES: &str = r"(?:(?:\s|\\[rn])+(?:(?:Proc-Type|DEK-Info):[^\r\n\\]*|
 
 fn build(value: &str) -> Vec<(&'static str, Keep, Regex)> {
     let assignment = format!(r#"(?i){NAME}{SEPARATOR}["']?{value}"#);
+    // A whole key first, then a key without its `END` line: two rules, because one with both as
+    // alternatives reads to the end of the text for every `BEGIN` line without an `END` line.
     [
         (
             "private-key",
             Keep::Nothing,
-            format!(
-                r"-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|{KEY_LINES})"
-            ),
+            r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"
+                .to_string(),
+        ),
+        (
+            "private-key",
+            Keep::Nothing,
+            format!(r"-----BEGIN [A-Z ]*PRIVATE KEY-----{KEY_LINES}"),
         ),
         (
             "aws-access-key",
@@ -85,8 +91,10 @@ fn build(value: &str) -> Vec<(&'static str, Keep, Regex)> {
         (
             "url-password",
             Keep::User,
-            // The password runs to the last `@` before the path: it may hold a raw `@`.
-            r"(?i)\b([a-z][a-z0-9+.\-]*://[^\s/?#@:]*:)([^\s/?#]+)@".into(),
+            // The password runs to the last `@` before the path: it may hold a raw `@`. It holds
+            // no character a URL never holds raw (`"`, `<`, `{`), so it ends with its URL in a
+            // JSON string, before an address later in the text.
+            r#"(?i)\b([a-z][a-z0-9+.\-]*://[^\s/?#@:]*:)([^\s/?#"<>`{}|\\^]+)@"#.into(),
         ),
         ("secret-assignment", Keep::Name, assignment),
     ]
@@ -105,6 +113,29 @@ fn key_rules() -> &'static [(&'static str, Keep, Regex)] {
     RULES.get_or_init(|| build(KEY_VALUE))
 }
 
+/// Whether `value` is a `[masked:<shape>]` token, followed by nothing or by what ends a value in
+/// a key (`&`, `#`, `%26`, `%23`), as a masked key shown in a text has it. A token followed by
+/// anything else holds the rest of a credential an earlier mask missed (`[masked:url-password]@ss`
+/// for a password with a raw `@`), and is masked again.
+fn already_masked(value: &str) -> bool {
+    let Some((shape, rest)) = value
+        .strip_prefix("[masked:")
+        .and_then(|v| v.split_once(']'))
+    else {
+        return false;
+    };
+    let token = !shape.is_empty()
+        && shape
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    let ends = rest.is_empty()
+        || rest.starts_with(['&', '#'])
+        || rest
+            .get(..3)
+            .is_some_and(|p| p.eq_ignore_ascii_case("%26") || p.eq_ignore_ascii_case("%23"));
+    token && ends
+}
+
 fn apply(rules: &[(&'static str, Keep, Regex)], text: &str) -> (String, usize) {
     let mut out = text.to_string();
     let mut count = 0;
@@ -115,7 +146,7 @@ fn apply(rules: &[(&'static str, Keep, Regex)], text: &str) -> (String, usize) {
                 Keep::Name => &c[3],
                 Keep::User => &c[2],
             };
-            if value.starts_with("[masked:") {
+            if already_masked(value) {
                 return c[0].to_string();
             }
             count += 1;
@@ -325,6 +356,25 @@ mod tests {
         let (out, n) = mask(&prose);
         assert_eq!(n, 1, "{out}");
         assert!(out.ends_with(" and a blank line.\n\nKeep it."), "{out}");
+    }
+
+    /// A masked key shown in a text keeps the query after its token; a token followed by the
+    /// rest of a credential is masked again.
+    #[test]
+    fn a_masked_key_in_a_text_is_kept_and_a_partly_masked_value_is_masked_again() {
+        for kept in [
+            "see https://example.org/doc?access_token=[masked:secret-assignment]&page=2#top now",
+            "go to https://example.org/a?next=%3Faccess_token%3D[masked:secret-assignment]%26p%3D2",
+        ] {
+            assert_eq!(mask(kept), (kept.to_string(), 0), "{kept}");
+            assert_eq!(mask_key(kept), (kept.to_string(), 0), "{kept}");
+        }
+        let t = secret();
+        let (out, n) = mask(&format!("password=[masked:secret-assignment]{t}"));
+        assert_eq!(
+            (out.as_str(), n),
+            ("password=[masked:secret-assignment]", 1)
+        );
     }
 
     #[test]
