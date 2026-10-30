@@ -167,7 +167,9 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   (`instances/<name>/instance.yaml`) is not held to the bounds, a run counts a larger refresh
   window as reaching back as far as a time can, a larger hook `timeout_s` is capped at 86400
   seconds, and the port is read only when an instance is made. An `update` to an out-of-range
-  value is refused naming the field, and one into range is made as before.
+  value is refused naming the field, and one into range is made as before. `cortex ask serve`
+  is not held to the bounds either: it reads none of these fields and serves such a spec as
+  0.6.1 did.
 - A home file cortex rewrote (`registry.json`, a source status, a state file) was renamed into
   place without being synced, so a crash could leave it empty and every command then failed. Each
   is now synced to disk before the rename, and its directory after it.
