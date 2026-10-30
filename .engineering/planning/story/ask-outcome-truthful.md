@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ask-outcome-truthful
 kind: story
-status: active
+status: implemented
 title: An answer's recorded outcome says what happened
 summary: A reader closing the stream is recorded as `client-closed`, not `model-failed`; a `length` or filtered finish is not recorded as `answered`
 tags:
@@ -41,10 +41,11 @@ scope:
   path: website/docs/ask-service.md
 - confidence: cited
   path: website/docs/reference/ess/cortex-ask.md
-revision: 20
+revision: 21
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:01Z", actor: "human:timo", revision: 19}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:01Z", actor: "human:timo", revision: 20}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:08Z", actor: "human:timo", revision: 21, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:small-robustness
 kind: story
-status: active
+status: implemented
 title: Five small panics and leaks found by the review are closed
 summary: A `"!"` key in a model document, a non-object EKR host, inherited `EKR_*` on the direct path, unmasked EKR stderr, and two structured sources sharing identities
 tags:
@@ -23,10 +23,11 @@ scope:
   path: tests/credential_mask.rs
 - confidence: inferred
   path: tests/structured_files.rs
-revision: 11
+revision: 12
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:05Z", actor: "human:timo", revision: 10}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:05Z", actor: "human:timo", revision: 11}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:13Z", actor: "human:timo", revision: 12, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 

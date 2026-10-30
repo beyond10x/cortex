@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:runs-retention
 kind: story
-status: active
+status: implemented
 title: Run directories are pruned to a retention
 summary: '`runs/<time>-<source>/` directories older than a configured retention are removed at the end of a run'
 tags:
@@ -39,10 +39,11 @@ scope:
   path: website/docs/spec-file.md
 - confidence: cited
   path: website/static/schemas/instance-spec.schema.json
-revision: 13
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:05Z", actor: "human:timo", revision: 12}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:05Z", actor: "human:timo", revision: 13}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:13Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 

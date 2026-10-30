@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:idle-supersede-source-cheap
 kind: story
-status: active
+status: implemented
 title: 'An unchanged `dropped: Supersede` source begins no stage and takes no snapshot'
 summary: 'A structured source with `dropped: Supersede` and nothing selected computes its end operations before opening a stage, and skips `end_dropped` when its listing is unchanged'
 tags:
@@ -34,10 +34,11 @@ scope:
   path: tests/structured_compare_adv.rs
 - confidence: cited
   path: website/docs/spec-file.md
-revision: 16
+revision: 17
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:01Z", actor: "human:timo", revision: 15}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:01Z", actor: "human:timo", revision: 16}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:10Z", actor: "human:timo", revision: 17, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

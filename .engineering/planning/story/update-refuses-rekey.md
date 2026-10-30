@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:update-refuses-rekey
 kind: story
-status: active
+status: implemented
 title: '`cortex update` refuses a spec that re-keys a source with seen documents'
 summary: A change to a source's `id`, `adapter` or `operation` while its seen state is not empty is refused with its own outcome; the frozen spec is unchanged
 tags:
@@ -27,10 +27,11 @@ scope:
   path: tests/conformance.rs
 - confidence: cited
   path: tests/seed_change.rs
-revision: 10
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 9}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 10}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:15Z", actor: "human:timo", revision: 11, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

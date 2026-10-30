@@ -2,17 +2,18 @@
 format: aep.planning-md/3
 id: story:ess-pin-0-77
 kind: story
-status: active
+status: implemented
 title: cortex is specified and generated with ESS 0.77.0
 tags:
 - review-20261030
 relations:
 - decomposes: epic:standalone-1-0
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T13:30:18Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-30T13:30:18Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:10Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

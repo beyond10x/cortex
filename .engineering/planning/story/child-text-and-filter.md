@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:child-text-and-filter
 kind: story
-status: active
+status: implemented
 title: Child records are rendered by a template, and a filter limits child calls
 summary: '`child.text` renders each child record; `child.when` skips the child call for records that do not match'
 tags:
@@ -32,10 +32,11 @@ scope:
   path: website/docs/spec-file.md
 - confidence: cited
   path: website/static/schemas/instance-spec.schema.json
-revision: 16
+revision: 17
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:04Z", actor: "human:timo", revision: 15}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:04Z", actor: "human:timo", revision: 16}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:08Z", actor: "human:timo", revision: 17, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

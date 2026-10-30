@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:connectors-invoke-0-60
 kind: story
-status: active
+status: implemented
 title: A Connectors source runs against Connectors 0.60.0 through `connectors invoke`
 summary: cortex calls `connectors invoke <connector>/<instance> <op> --input-stdin`, not the removed `operations invoke`; one spawn per call besides readiness
 tags:
@@ -63,10 +63,11 @@ scope:
   path: tests/structured_compare_adv.rs
 - confidence: cited
   path: tests/structured_files.rs
-revision: 32
+revision: 33
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 30}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:01Z", actor: "human:timo", revision: 31}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:09Z", actor: "human:timo", revision: 33, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 

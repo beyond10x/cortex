@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:poison-document-skipped
 kind: story
-status: active
+status: implemented
 title: A document that fails its batch the same way on consecutive runs no longer blocks later batches
 summary: A per-document failure count in the source state; after N consecutive failures the document is split out, named in `skipped`, and later batches run
 tags:
@@ -48,10 +48,11 @@ scope:
   path: website/docs/spec-file.md
 - confidence: inferred
   path: website/static/schemas
-revision: 24
+revision: 25
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 22}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 23}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:11Z", actor: "human:timo", revision: 25, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

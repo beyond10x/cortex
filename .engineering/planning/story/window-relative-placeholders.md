@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:window-relative-placeholders
 kind: story
-status: active
+status: implemented
 title: An input can name the window start as minutes before now
 summary: '`{since_minutes_ago}` renders the window start as whole minutes before the run start, for query languages that take relative dates'
 tags:
@@ -21,10 +21,11 @@ scope:
   path: tests/connectors_walks.rs
 - confidence: inferred
   path: website/docs/spec-file.md
-revision: 10
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:04Z", actor: "human:timo", revision: 9}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:05Z", actor: "human:timo", revision: 10}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:15Z", actor: "human:timo", revision: 11, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 

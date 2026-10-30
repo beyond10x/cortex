@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:one-store-read-per-run
 kind: story
-status: active
+status: implemented
 title: A run reads the store once, not twice per batch
 summary: The `refuse_if_left` pre-check and the per-batch known-entity lookup share one snapshot index built once per run and updated after each apply
 tags:
@@ -29,10 +29,11 @@ scope:
   path: tests/redaction_gate.rs
 - confidence: cited
   path: website/docs/operating.md
-revision: 14
+revision: 15
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:01Z", actor: "human:timo", revision: 13}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:01Z", actor: "human:timo", revision: 14}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:11Z", actor: "human:timo", revision: 15, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

@@ -2,11 +2,15 @@
 format: aep.planning-md/3
 id: story:structured-children-follow-rule
 kind: story
-status: draft
+status: implemented
 title: A structured source calls a child operation only for the parents its rule matches
 relations:
 - serves: vision:self-updating-instances
-revision: 2
+revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-10-30T15:30:02Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "proposed", to: "active", at: "2026-10-30T15:30:02Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":2}}}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:14Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

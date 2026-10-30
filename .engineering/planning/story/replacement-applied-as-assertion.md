@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:replacement-applied-as-assertion
 kind: story
-status: active
+status: implemented
 title: A replacing fact with nothing active to replace is stored as a plain assertion
 summary: A fact refused as `replacement-without-active-assertion` is re-applied without `replaces`, so the document's value is not lost
 tags:
@@ -25,10 +25,11 @@ scope:
   path: website/docs/commands.md
 - confidence: cited
   path: website/docs/operating.md
-revision: 12
+revision: 13
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:01Z", actor: "human:timo", revision: 11}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:01Z", actor: "human:timo", revision: 12}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:12Z", actor: "human:timo", revision: 13, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

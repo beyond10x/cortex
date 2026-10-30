@@ -2,17 +2,18 @@
 format: aep.planning-md/3
 id: story:spec-compat-gate
 kind: story
-status: active
+status: implemented
 title: The gate fails on an unacknowledged incompatible specification change
 tags:
 - review-20261030
 relations:
 - decomposes: epic:standalone-1-0
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T13:30:19Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-30T13:30:20Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:14Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

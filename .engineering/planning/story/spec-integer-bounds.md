@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:spec-integer-bounds
 kind: story
-status: active
+status: implemented
 title: Out-of-range numbers in a spec are refused at validation instead of overflowing at run time
 summary: '`refresh_after_days`, hook `timeout_s` and `view_port` are bounded in the spec check'
 tags:
@@ -21,10 +21,11 @@ scope:
   path: src/status.rs
 - confidence: cited
   path: tests/spec_forms.rs
-revision: 10
+revision: 11
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 9}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:14Z", actor: "human:timo", revision: 11, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

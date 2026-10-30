@@ -33,7 +33,7 @@ relations:
 - specifies: story:window-relative-placeholders
 - specifies: story:runs-retention
 - specifies: story:small-robustness
-revision: 14
+revision: 15
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 3}
@@ -176,3 +176,19 @@ All as `b10x-bot[bot]` through `b10x-gates bot`: this opening store commit; the 
 `wave/20261030a` and any regeneration after it; the closing store commit; one PR to `main`,
 auto-merged when CI is green; the release commits of 0.7.0 (release branch, version, CHANGELOG),
 the tag `v0.7.0` and its GitHub Release. Nothing else.
+
+## Close
+
+Closed on 2026-10-30.
+
+- Units merged into `wave/20261030a`: conn, cost, ask, read, redact, cli, fail, sec, outcome,
+  askio, p2, p2b, session, shapes, ess, tail, harden (ESS hardening, techniques 6, 1, 4), site
+  (documentation site review fixes).
+- 29 stories moved to implemented on `task check` at 004e8d51: exit 0, 1241 passed, 0 failed,
+  13 ignored. The first full run failed 1 of 1023 (`tests/stand_ins.rs:85`, a stand-in in
+  `tests/w30a_security.rs` not written by `common::executable`), fixed in 004e8d51.
+- Release: 0.7.0 (986b8167), one pull request from this branch.
+- Follow-ups (draft, tag `review-20261030`): answer-records-observable,
+  update-removed-instance-precedence, connections-launch-deadline, stderr-mask-across-lines,
+  rekey-check-per-path, and the 15 filed during the review.
+- story:key-template-checked-at-load archived: D24 covers it.

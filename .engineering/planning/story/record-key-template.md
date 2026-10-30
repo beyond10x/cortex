@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:record-key-template
 kind: story
-status: active
+status: implemented
 title: Two records with equal ids in two inputs are both applied
 summary: A source's record key can be a template over record fields; a null id is named in `skipped`, not keyed `null`
 tags:
@@ -37,10 +37,11 @@ scope:
   path: tests/connectors_walks.rs
 - confidence: cited
   path: website/docs/spec-file.md
-revision: 18
+revision: 19
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:04Z", actor: "human:timo", revision: 16}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:04Z", actor: "human:timo", revision: 17}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:12Z", actor: "human:timo", revision: 19, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

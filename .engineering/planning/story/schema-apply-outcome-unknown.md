@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:schema-apply-outcome-unknown
 kind: story
-status: active
+status: implemented
 title: '`cortex schema` stops on an unknown store write and reports what was published'
 summary: An `outcome unknown` from a proposal's apply stops the loop as `run.rs` does; a failure after publish is not reported as "still approved"
 tags:
@@ -25,10 +25,11 @@ scope:
   path: src/schema.rs
 - confidence: inferred
   path: tests/conformance.rs
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 7}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 8}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:13Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

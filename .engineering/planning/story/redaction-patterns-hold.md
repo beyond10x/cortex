@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:redaction-patterns-hold
 kind: story
-status: active
+status: implemented
 title: Redaction neither panics nor leaks on non-ASCII hosts, slashed phone numbers or bracketed query keys
 summary: '`link()` slices on char boundaries; the international phone separator admits `/`; a URL body admits `[` and `]`'
 tags:
@@ -15,10 +15,11 @@ scope:
   path: src/redact.rs
 - confidence: inferred
   path: website/docs/limits.md
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 6}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 7}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:12Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 

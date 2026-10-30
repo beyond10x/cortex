@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ask-service-bounds
 kind: story
-status: active
+status: implemented
 title: The ask service bounds answers in flight, bodies, tool calls and reader start-ups
 summary: A global semaphore on answers, smaller vote and review bodies, a cap on tool calls per step and on gateway body size, a reused reader, and the redaction policy compiled once
 tags:
@@ -48,10 +48,11 @@ scope:
   path: website/docs/reference/ess/cortex-ask.md
 - confidence: inferred
   path: website/static/schemas/instance-spec.schema.json
-revision: 24
+revision: 25
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 22}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 23}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:08Z", actor: "human:timo", revision: 25, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 

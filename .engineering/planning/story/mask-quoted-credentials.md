@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:mask-quoted-credentials
 kind: story
-status: active
+status: implemented
 title: The always-on mask catches quoted, `@`-bearing, percent-separated and truncated credentials
 summary: '`"password": "…"`, `p@ss` userinfo, `%3A` separators, raw `%` in values and a PEM block cut before its END line are masked'
 tags:
@@ -17,10 +17,11 @@ scope:
   path: tests/credential_mask.rs
 - confidence: inferred
   path: website/docs/limits.md
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 7}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 8}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:11Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 

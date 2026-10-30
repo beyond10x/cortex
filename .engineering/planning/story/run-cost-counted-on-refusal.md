@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:run-cost-counted-on-refusal
 kind: story
-status: active
+status: implemented
 title: A refused or cut-off model call's cost counts against the run budget and the gate's cost
 summary: The cost of a split, refused or failed call is added to `spent` and `report.cost_usd`, not only the daily ledger
 tags:
@@ -31,10 +31,11 @@ scope:
   path: tests/run_metrics.rs
 - confidence: inferred
   path: tests/runout_adversary.rs
-revision: 15
+revision: 16
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:01Z", actor: "human:timo", revision: 14}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:01Z", actor: "human:timo", revision: 15}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:13Z", actor: "human:timo", revision: 16, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

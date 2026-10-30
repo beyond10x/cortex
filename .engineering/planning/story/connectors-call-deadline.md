@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:connectors-call-deadline
 kind: story
-status: active
+status: implemented
 title: A `connectors` call that hangs ends within a deadline, and a structured file has a size cap
 summary: Every `connectors` child is waited for with a deadline and killed past it; structured and markdown files over a cap are skipped with a note
 tags:
@@ -29,10 +29,11 @@ scope:
   path: tests/structured_files.rs
 - confidence: inferred
   path: website/docs/operating.md
-revision: 13
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:04Z", actor: "human:timo", revision: 12}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:04Z", actor: "human:timo", revision: 13}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:09Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 

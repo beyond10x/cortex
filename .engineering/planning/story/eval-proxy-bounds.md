@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:eval-proxy-bounds
 kind: story
-status: active
+status: implemented
 title: The eval MCP proxy bounds its sockets and its header reads
 summary: Closed connections are pruned from the proxy's open list; request and header lines have a size cap checked before the bearer check
 tags:
@@ -15,10 +15,11 @@ scope:
   path: src/ask/proxy.rs
 - confidence: inferred
   path: tests/ask_redaction_security.rs
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 6}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 7}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:10Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

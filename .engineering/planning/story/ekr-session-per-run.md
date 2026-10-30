@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ekr-session-per-run
 kind: story
-status: active
+status: implemented
 title: A run's store reads go through one `ekr session`
 summary: ontology, snapshot, mint, propose, validate, commit, quality and head go through one session per run; readiness is checked once per run
 tags:
@@ -42,10 +42,11 @@ scope:
   path: tests/parent_prefix_adv2.rs
 - confidence: cited
   path: tests/store_backend.rs
-revision: 20
+revision: 21
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:04Z", actor: "human:timo", revision: 19}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:04Z", actor: "human:timo", revision: 20}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:10Z", actor: "human:timo", revision: 21, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

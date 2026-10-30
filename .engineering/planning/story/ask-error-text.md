@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ask-error-text
 kind: story
-status: active
+status: implemented
 title: HTTP clients of the ask service get no internal paths or SQL text
 summary: Store and reader failures answer a stable code and a request id; the detail goes to the log only
 tags:
@@ -34,10 +34,11 @@ scope:
   path: tests/answer_records.rs
 - confidence: inferred
   path: website/docs/ask-service.md
-revision: 16
+revision: 17
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 15}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 16}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:07Z", actor: "human:timo", revision: 17, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

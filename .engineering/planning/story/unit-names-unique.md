@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:unit-names-unique
 kind: story
-status: active
+status: implemented
 title: Two instances never write one systemd unit, and `update` leaves a disabled source's timer off
 summary: Unit names cannot collide across instance and source names; reinstalling units keeps a disabled source disabled
 tags:
@@ -27,10 +27,11 @@ scope:
   path: tests/unit_homes_adversary.rs
 - confidence: inferred
   path: website/docs/operating.md
-revision: 13
+revision: 14
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 12}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 13}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:15Z", actor: "human:timo", revision: 14, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:durable-home-writes
 kind: story
-status: active
+status: implemented
 title: Home files survive a crash and a failed create leaves no half-registered instance
 summary: '`write_atomic` syncs before rename; an unreadable status file is an error, not an empty one; `create` rolls back on a later failure; restore writes state before reporting'
 tags:
@@ -33,10 +33,11 @@ scope:
   path: tests/snapshots.rs
 - confidence: inferred
   path: tests/unit_homes.rs
-revision: 16
+revision: 17
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 15}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 16}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:09Z", actor: "human:timo", revision: 17, decided_on: {"recorded":{"test_result":1,"review_outcome":3}}}
 ---
 ## Outcome
 

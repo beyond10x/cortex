@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ask-records-deadline
 kind: story
-status: active
+status: implemented
 title: A stalled record database fails ask calls within a deadline instead of hanging them
 summary: Every PostgreSQL record call has a deadline; the records mutex is not held past it
 tags:
@@ -29,10 +29,11 @@ scope:
   path: tests/answer_records_deadline.rs
 - confidence: inferred
   path: tests/answer_records_postgres.rs
-revision: 14
+revision: 15
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 13}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 14}
+- {from: "active", to: "implemented", at: "2026-10-30T15:30:08Z", actor: "human:timo", revision: 15, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 
