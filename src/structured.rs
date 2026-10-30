@@ -2373,6 +2373,7 @@ mod tests {
             },
             time: Some("$.at".into()),
             parent: "IN_PROJECT".into(),
+            follow: None,
         }
     }
 

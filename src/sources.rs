@@ -412,6 +412,10 @@ pub struct Fetched {
     /// A `structured` source's child calls that failed, one per parent and operation. The parent
     /// and the other children are read; the run names each in `skipped`.
     pub failed_children: Vec<ChildFailure>,
+    /// A `structured` source's child calls its `follow` rule left out, one per parent and
+    /// operation: `(parent raw id, operation)`. The run keeps the values of those children as for
+    /// a failed call, and counts them per operation in `skipped`.
+    pub not_followed: Vec<(String, String)>,
     /// What a `structured` source's `links` found: by the identity of each change linked, the
     /// link's relation and the identity of the tag it is linked to, in the order of `links`.
     pub links: BTreeMap<String, Vec<(String, String)>>,
@@ -638,7 +642,8 @@ fn fetch_structured_files(
 /// mapping is one document more, keyed `<child prefix>:<parent raw id>:<raw id>`
 /// ([`crate::structured::child_key`]). A child call that fails leaves that parent's records of
 /// the operation unread and is named in `failed_children`; the parent and its other children are
-/// read.
+/// read. A child with a `follow` rule is called only for a parent the rule matches ([`follows`],
+/// measured from the window's end, the run's start); another parent goes to `not_followed`.
 ///
 /// After its children, each of the source's `links` is found for the parent ([`compare_links`]):
 /// what it links goes to `links`, by the identities the run gives the records (`redactor` is the
@@ -656,6 +661,7 @@ fn fetch_structured(
     let mut unread = Vec::new();
     let mut keys = BTreeSet::new();
     let mut failed_children = Vec::new();
+    let mut not_followed = Vec::new();
     let mut links: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
     let mut failed_links = Vec::new();
     let prefix = crate::structured::prefix(st);
@@ -679,6 +685,10 @@ fn fetch_structured(
             // call read them all.
             let mut read: BTreeMap<&str, Read> = BTreeMap::new();
             for child in children {
+                if !follows(child.follow.as_ref(), record, window.until_ms) {
+                    not_followed.push((parent.clone(), child.operation.clone()));
+                    continue;
+                }
                 let mut left = Vec::new();
                 let found = walk(
                     &mut invoker(&child.operation),
@@ -743,6 +753,7 @@ fn fetch_structured(
         documents: docs,
         unread,
         failed_children,
+        not_followed,
         links,
         failed_links,
         ..Fetched::default()
@@ -1490,6 +1501,38 @@ fn passes(f: &m::RecordFilter, record: &Value) -> bool {
     hit == f.include
 }
 
+/// Whether a child operation is called for the parent `record` under its `follow` rule
+/// (`cortex.instance.FollowRule`), `start_ms` being the run's start. `equals`: the value at the
+/// field is of the rule's JSON kind and equal to it, numbers by value. `within_days`: it is a text
+/// read as a document's time is ([`instant`]), no earlier than `days` days before `start_ms`.
+/// `at_least`: it is a JSON number no less than `number`. A missing field, or a value of another
+/// kind, does not match. No rule matches every parent.
+pub fn follows(rule: Option<&m::FollowRule>, record: &Value, start_ms: i64) -> bool {
+    let Some(rule) = rule else {
+        return true;
+    };
+    let number = |v: &Value| match v {
+        Value::Number(n) => n.as_f64(),
+        _ => None,
+    };
+    match rule {
+        m::FollowRule::Equals(r) => {
+            let want = to_serde(&r.value);
+            at(record, &r.field).is_some_and(|got| match (number(got), number(&want)) {
+                (Some(a), Some(b)) => a == b,
+                _ => *got == want,
+            })
+        }
+        m::FollowRule::WithinDays(r) => at(record, &r.field)
+            .and_then(Value::as_str)
+            .and_then(instant)
+            .is_some_and(|t| t >= start_ms.saturating_sub(r.days.saturating_mul(86_400_000))),
+        m::FollowRule::AtLeast(r) => at(record, &r.field)
+            .and_then(number)
+            .is_some_and(|n| n >= r.number as f64),
+    }
+}
+
 /// The text, number or boolean at `path` of `record`, as text; `None` for anything else or blank
 /// text.
 fn scalar(record: &Value, path: &str) -> Option<String> {
@@ -1630,6 +1673,67 @@ fn markdown_sections(content: &str) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 2026-10-30T00:00:00Z, and one day, in milliseconds.
+    const START: i64 = 1_793_318_400_000;
+    const DAY: i64 = 86_400_000;
+
+    #[test]
+    fn a_follow_rule_matches_a_parent_by_equal_value_recent_time_or_large_enough_number() {
+        let equals = |value: mj_value::Value| {
+            m::FollowRule::Equals(m::FollowEquals {
+                field: "archived".into(),
+                value,
+            })
+        };
+        let archived = |v: Value| json!({"archived": v});
+        let no = equals(mj_value::Value::Bool(false));
+        assert!(follows(Some(&no), &archived(json!(false)), START));
+        assert!(!follows(Some(&no), &archived(json!(true)), START));
+        assert!(!follows(Some(&no), &archived(json!("false")), START));
+        assert!(!follows(Some(&no), &json!({}), START));
+        let one = equals(mj_value::Value::Number("1".into()));
+        assert!(follows(Some(&one), &archived(json!(1.0)), START));
+        assert!(!follows(Some(&one), &archived(json!("1")), START));
+
+        let recent = m::FollowRule::WithinDays(m::FollowWithinDays {
+            field: "$.last.at".into(),
+            days: 30,
+        });
+        let at = |t: Value| json!({"last": {"at": t}});
+        assert!(follows(
+            Some(&recent),
+            &at(json!(rfc3339(START - 3 * DAY))),
+            START
+        ));
+        assert!(follows(Some(&recent), &at(json!("2026-10-27")), START));
+        assert!(follows(
+            Some(&recent),
+            &at(json!(rfc3339(START - 30 * DAY))),
+            START
+        ));
+        assert!(!follows(
+            Some(&recent),
+            &at(json!(rfc3339(START - 90 * DAY))),
+            START
+        ));
+        assert!(!follows(Some(&recent), &json!({"last": {}}), START));
+        assert!(!follows(Some(&recent), &at(json!(START / 1000)), START));
+        assert!(!follows(Some(&recent), &at(json!("yesterday")), START));
+
+        let stars = m::FollowRule::AtLeast(m::FollowAtLeast {
+            field: "stars".into(),
+            number: 5,
+        });
+        assert!(follows(Some(&stars), &json!({"stars": 5}), START));
+        assert!(follows(Some(&stars), &json!({"stars": 7.5}), START));
+        assert!(!follows(Some(&stars), &json!({"stars": 4}), START));
+        assert!(!follows(Some(&stars), &json!({"stars": "5"}), START));
+
+        assert!(follows(None, &json!({}), START));
+    }
+
+    use cortex_model::json as mj_value;
 
     fn paging(style: m::PageStyle, next: Option<&str>, max_pages: i64) -> m::Paging {
         m::Paging {

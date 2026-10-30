@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "d0c6a31749113e3980a43fe52535aef214b93505b8cc60910767f60cc61b6013",
-    "contract_digest": "194d13785b2cf1ca647a687346331ba5a05a5ef7fe21fc26e1df02720edd5f8b"
+    "source_digest": "b733dddb295079d310a1946d28f401adadd80a0173c9c13c2515f7cfdd4b5028",
+    "contract_digest": "c5eba4e2439f7861023faa9d7ecaecb830cc816eb56a6313e54deda65e7f7b2a"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -335,6 +335,34 @@
     {
       "kind": "domain_type",
       "source": "cortex.instance.FilesSource",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.FollowAtLeast",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.FollowEquals",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.FollowRule",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.FollowWithinDays",
       "disposition": {
         "disposition": "generated"
       }

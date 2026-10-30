@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest d0c6a31749113e3980a43fe52535aef214b93505b8cc60910767f60cc61b6013
-  contract digest 194d13785b2cf1ca647a687346331ba5a05a5ef7fe21fc26e1df02720edd5f8b
+  model digest b733dddb295079d310a1946d28f401adadd80a0173c9c13c2515f7cfdd4b5028
+  contract digest c5eba4e2439f7861023faa9d7ecaecb830cc816eb56a6313e54deda65e7f7b2a
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-256 capabilities: **248 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+260 capabilities: **252 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -61,6 +61,10 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | domain type | `cortex.instance.FetchPolicy` |
 | domain type | `cortex.instance.FileRecords` |
 | domain type | `cortex.instance.FilesSource` |
+| domain type | `cortex.instance.FollowAtLeast` |
+| domain type | `cortex.instance.FollowEquals` |
+| domain type | `cortex.instance.FollowRule` |
+| domain type | `cortex.instance.FollowWithinDays` |
 | domain type | `cortex.instance.GateCheck` |
 | domain type | `cortex.instance.HookResult` |
 | domain type | `cortex.instance.Instance.State` |

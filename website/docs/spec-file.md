@@ -710,6 +710,7 @@ record the source read, whose records become nodes of their own, each linked to 
 | `mapping` | how a child record becomes an entity, as `mapping` above, relations included |
 | `time` | optional dotted path to the child record's publication time, which dates its evidence and the facts drawn from it ([how](./operating.md#what-one-run-does)); without it, a child's facts are dated by the run |
 | `parent` | the name of the relation from each child record's node to its parent's node |
+| `follow` | optional: a rule the parent record must match for the child to be called for it (below) |
 
 A child record's identity is `<prefix>/<operation>:<parent>:<id>`: the source's prefix, the child
 operation, its parent's identity after the source's prefix (the parent's id, or its digest), with
@@ -732,7 +733,22 @@ the `parent` relation from the child's node type to the parent's; children with 
 share one edge type.
 
 Every run calls each child once for every parent it reads (more with `paging`), whether or not the
-parent changed. A child call that fails for one parent (Connectors answers `forbidden`, say, or the
+parent changed, unless the child has a `follow` rule. Then it is called only for the parents the
+rule matches; `field` is a dotted path into the parent record, as `{a.b}` placeholders name one:
+
+| `follow` | the parent matches when |
+|---|---|
+| `{rule: equals, value: {field: archived, value: false}}` | the value at `field` equals `value`, of the same JSON kind: `false` is not `"false"`; numbers compare by value |
+| `{rule: within_days, value: {field: last_activity_at, days: 30}}` | the value at `field` is a text holding an RFC 3339 instant, a date alone (midnight UTC) or epoch seconds, no earlier than `days` days before the run's start; `days` above 0 |
+| `{rule: at_least, value: {field: star_count, number: 1}}` | the value at `field` is a JSON number no less than `number`; `number` above 0 |
+
+A parent without the field, or with a value of another kind, does not match. A parent the rule
+does not match is still read and applied as a node; only its records of that child are not asked
+for, and none of its earlier ones is ended (`dropped: Supersede`), as after a failed call. The run
+counts those parents per child in `skipped`
+(`tags.list: 2 parents not followed by its rule; …`).
+
+A child call that fails for one parent (Connectors answers `forbidden`, say, or the
 answer has no array at `records`) does not fail the run: the parent and its other children are
 read and applied, and the run names the parent's identity and the operation, with the reason, in
 `skipped`. That parent's records of that operation are not read in that run, and none of its

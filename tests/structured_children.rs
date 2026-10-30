@@ -652,3 +652,204 @@ fn a_spec_with_two_children_of_one_operation_is_refused() {
         "{refused}"
     );
 }
+
+/// `projects` as the stand-in's `projects.json`, each project given the tags and events the
+/// other tests give projects 1 and 2.
+fn write_projects(w: &World, projects: &[Value]) {
+    std::fs::write(
+        w.root.join("projects.json"),
+        serde_json::json!({ "projects": projects }).to_string(),
+    )
+    .unwrap();
+    for project in projects {
+        let id = project["id"].as_i64().unwrap();
+        std::fs::write(
+            w.root.join(format!("tags-{id}.json")),
+            tags(&["v1.0", "v1.1", "v2.0"]),
+        )
+        .unwrap();
+        write_events(w, id, &events(id));
+    }
+}
+
+/// Creates instance `name` as [`create`] does, its `tags.list` child carrying `follow`.
+fn create_following(w: &World, name: &str, dropped: &str, follow: &str) {
+    let text = spec_text(name, dropped).replace(
+        "                records: \"$.tags\"\n",
+        &format!("                records: \"$.tags\"\n                follow: {follow}\n"),
+    );
+    assert!(text.contains("follow:"), "{text}");
+    let path = w.root.join(format!("{name}.yaml"));
+    std::fs::write(&path, text).unwrap();
+    let (code, created) = w.cortex(&["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+}
+
+/// The lines of a run's `skipped` that start with `prefix`.
+fn skipped_starting(ran: &Value, prefix: &str) -> Vec<String> {
+    ran["detail"]["skipped"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter(|s| s.starts_with(prefix))
+        .map(str::to_string)
+        .collect()
+}
+
+/// `story:structured-children-follow-rule`, acceptance 2: with `follow: equals archived false`
+/// and three parents, one archived, the stand-in receives the tags call for the two others only;
+/// every parent is applied, the events of all three are asked for, the run counts the parent the
+/// rule skipped, and the archived parent's tags from an earlier run keep their values
+/// (`dropped: Supersede`).
+#[test]
+fn a_follow_rule_calls_the_child_only_for_the_parents_it_matches_and_keeps_the_others_children() {
+    let w = world();
+    let project = |id: i64, name: &str, archived: bool| serde_json::json!({"id": id, "name": name, "path": format!("group/{name}"), "archived": archived});
+    write_projects(
+        &w,
+        &[
+            project(1, "alpha", false),
+            project(2, "beta", false),
+            project(3, "gamma", false),
+        ],
+    );
+    create_following(
+        &w,
+        "follow",
+        "        dropped: Supersede",
+        "{rule: equals, value: {field: archived, value: false}}",
+    );
+    let first = run(&w, "follow");
+    assert_eq!(first["detail"]["documents_applied"], 3 + 9 + 12, "{first}");
+    assert!(skipped_starting(&first, "tags.list").is_empty(), "{first}");
+
+    write_projects(
+        &w,
+        &[
+            project(1, "alpha", false),
+            project(2, "beta", false),
+            project(3, "gamma", true),
+        ],
+    );
+    std::fs::remove_file(w.root.join("invocations.log")).unwrap();
+    let ran = run(&w, "follow");
+    assert_eq!(
+        w.lines("invocations.log"),
+        [
+            "projects.list",
+            "tags.list 1",
+            "events.list 1",
+            "tags.list 2",
+            "events.list 2",
+            "events.list 3"
+        ]
+    );
+    let counted = skipped_starting(&ran, "tags.list: ");
+    assert_eq!(counted.len(), 1, "{ran}");
+    assert!(
+        counted[0].starts_with("tags.list: 1 parent not followed by its rule"),
+        "{ran}"
+    );
+    assert_eq!(ran["detail"].get("retracted"), None, "{ran}");
+
+    let s = store(&w, "follow");
+    assert_eq!(s.of(PROJECT).len(), 3);
+    let kept = s.children(TAG, 3);
+    assert_eq!(kept.len(), 3);
+    for tag in kept {
+        assert_eq!(s.active_about(&tag.id).len(), 2, "{tag:?} kept its values");
+    }
+    assert_linked(&s, TAG, 3);
+}
+
+/// `story:structured-children-follow-rule`, acceptance 3: `within_days` 30 follows a parent
+/// active 3 days ago (RFC 3339, and a date alone) and skips one active 90 days ago and one
+/// without the field.
+#[test]
+fn a_within_days_rule_follows_a_recent_parent_and_skips_an_old_one_and_one_without_the_field() {
+    let w = world();
+    let now = cortex_cli::instance::now_ms();
+    let at = |ms: i64| cortex_cli::sources::rfc3339(ms);
+    let three_days_ago = at(now - 3 * DAY);
+    write_projects(
+        &w,
+        &[
+            serde_json::json!({"id": 1, "name": "alpha", "path": "g/alpha", "last_activity_at": three_days_ago}),
+            serde_json::json!({"id": 2, "name": "beta", "path": "g/beta", "last_activity_at": at(now - 90 * DAY)}),
+            serde_json::json!({"id": 3, "name": "gamma", "path": "g/gamma"}),
+            serde_json::json!({"id": 4, "name": "delta", "path": "g/delta", "last_activity_at": &three_days_ago[..10]}),
+        ],
+    );
+    create_following(
+        &w,
+        "recent",
+        "",
+        "{rule: within_days, value: {field: last_activity_at, days: 30}}",
+    );
+    let ran = run(&w, "recent");
+    let tags_asked: Vec<String> = w
+        .lines("invocations.log")
+        .into_iter()
+        .filter(|l| l.starts_with("tags.list"))
+        .collect();
+    assert_eq!(tags_asked, ["tags.list 1", "tags.list 4"], "{ran}");
+    assert_eq!(
+        ran["detail"]["documents_applied"],
+        4 + 2 * 3 + 4 * 4,
+        "{ran}"
+    );
+    assert!(
+        skipped_starting(&ran, "tags.list: 2 parents not followed by its rule").len() == 1,
+        "{ran}"
+    );
+}
+
+/// `story:structured-children-follow-rule`, acceptance 3: `at_least` follows a parent whose
+/// number equals N, and skips one below it and one whose value is a text.
+#[test]
+fn an_at_least_rule_follows_a_parent_whose_number_equals_it() {
+    let w = world();
+    write_projects(
+        &w,
+        &[
+            serde_json::json!({"id": 1, "name": "alpha", "path": "g/alpha", "star_count": 5}),
+            serde_json::json!({"id": 2, "name": "beta", "path": "g/beta", "star_count": 4}),
+            serde_json::json!({"id": 3, "name": "gamma", "path": "g/gamma", "star_count": "5"}),
+        ],
+    );
+    create_following(
+        &w,
+        "stars",
+        "",
+        "{rule: at_least, value: {field: star_count, number: 5}}",
+    );
+    run(&w, "stars");
+    let tags_asked: Vec<String> = w
+        .lines("invocations.log")
+        .into_iter()
+        .filter(|l| l.starts_with("tags.list"))
+        .collect();
+    assert_eq!(tags_asked, ["tags.list 1"]);
+}
+
+/// A rule whose `days` or `number` is not above 0 is refused when the spec is read, naming the
+/// place.
+#[test]
+fn a_follow_rule_with_a_number_not_above_zero_is_refused() {
+    let follow = |rule: &str| {
+        spec_text("zero", "").replace(
+            "                records: \"$.tags\"\n",
+            &format!("                records: \"$.tags\"\n                follow: {rule}\n"),
+        )
+    };
+    let fine = follow("{rule: at_least, value: {field: stars, number: 1}}");
+    assert!(cortex_cli::spec::parse(&fine).is_ok());
+    for rule in [
+        "{rule: at_least, value: {field: stars, number: 0}}",
+        "{rule: within_days, value: {field: at, days: -1}}",
+    ] {
+        let refused = cortex_cli::spec::parse(&follow(rule)).expect_err(rule);
+        assert!(refused.contains("children[0].follow"), "{rule}: {refused}");
+    }
+}

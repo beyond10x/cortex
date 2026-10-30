@@ -36,6 +36,15 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Added
+
+- A `structured` source's child may carry a `follow` rule (`equals`, `within_days` or
+  `at_least` on a field of the parent record), and the run calls that child only for the parents
+  the rule matches. A parent it does not match is still applied as a node; its children of that
+  operation are not asked for, and none of its earlier ones is ended. The run's `skipped` counts
+  those parents per child operation. A child without `follow` is called for every parent, as
+  before.
+
 ### Fixed
 
 - A document the model failed on every time stopped its source at the same batch on every run,

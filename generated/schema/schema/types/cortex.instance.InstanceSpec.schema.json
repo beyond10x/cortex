@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "d0c6a31749113e3980a43fe52535aef214b93505b8cc60910767f60cc61b6013",
-    "contract_digest": "slice-sha256/2:f11815ddd8d338226713164f40d7e0dd4efed3d20bfefe7b503d2671cd08609b",
+    "source_digest": "b733dddb295079d310a1946d28f401adadd80a0173c9c13c2515f7cfdd4b5028",
+    "contract_digest": "slice-sha256/2:1eb812508cd9657d43c0358c3ffc65eb2b34bb804276b10bda0b332520a2fe4d",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -460,6 +460,131 @@
         "glob"
       ],
       "additionalProperties": false
+    },
+    "cortex.instance.FollowAtLeast": {
+      "title": "FollowAtLeast",
+      "x-ess-name": "cortex.instance.FollowAtLeast",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "field",
+        "number"
+      ],
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "number > 0"
+      ]
+    },
+    "cortex.instance.FollowEquals": {
+      "title": "FollowEquals",
+      "x-ess-name": "cortex.instance.FollowEquals",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "value": {}
+      },
+      "required": [
+        "field",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "cortex.instance.FollowRule": {
+      "title": "FollowRule",
+      "x-ess-name": "cortex.instance.FollowRule",
+      "x-ess-kind": "union",
+      "oneOf": [
+        {
+          "title": "at_least",
+          "type": "object",
+          "properties": {
+            "rule": {
+              "type": "string",
+              "const": "at_least"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.FollowAtLeast"
+            }
+          },
+          "required": [
+            "rule",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "equals",
+          "type": "object",
+          "properties": {
+            "rule": {
+              "type": "string",
+              "const": "equals"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.FollowEquals"
+            }
+          },
+          "required": [
+            "rule",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "title": "within_days",
+          "type": "object",
+          "properties": {
+            "rule": {
+              "type": "string",
+              "const": "within_days"
+            },
+            "value": {
+              "$ref": "#/$defs/cortex.instance.FollowWithinDays"
+            }
+          },
+          "required": [
+            "rule",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "x-ess-union-tag": "rule"
+    },
+    "cortex.instance.FollowWithinDays": {
+      "title": "FollowWithinDays",
+      "x-ess-name": "cortex.instance.FollowWithinDays",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "field",
+        "days"
+      ],
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "days > 0"
+      ]
     },
     "cortex.instance.GateCheck": {
       "title": "GateCheck",
@@ -1326,6 +1451,9 @@
         },
         "parent": {
           "type": "string"
+        },
+        "follow": {
+          "$ref": "#/$defs/cortex.instance.FollowRule"
         }
       },
       "required": [

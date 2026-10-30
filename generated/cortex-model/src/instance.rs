@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest d0c6a31749113e3980a43fe52535aef214b93505b8cc60910767f60cc61b6013
-// contract digest 194d13785b2cf1ca647a687346331ba5a05a5ef7fe21fc26e1df02720edd5f8b
+// model digest b733dddb295079d310a1946d28f401adadd80a0173c9c13c2515f7cfdd4b5028
+// contract digest c5eba4e2439f7861023faa9d7ecaecb830cc816eb56a6313e54deda65e7f7b2a
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -279,6 +279,48 @@ pub struct FilesSource {
     pub glob: String,
     /// `records` — `Optional<cortex.instance.FileRecords>`.
     pub records: Option<FileRecords>,
+}
+
+/// FollowAtLeast — `cortex.instance.FollowAtLeast`.
+///
+/// Every value satisfies `number > 0` — declared here, enforced by whatever behaviour constructs one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FollowAtLeast {
+    /// `field` — `String`.
+    pub field: String,
+    /// `number` — `Integer`.
+    pub number: i64,
+}
+
+/// FollowEquals — `cortex.instance.FollowEquals`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FollowEquals {
+    /// `field` — `String`.
+    pub field: String,
+    /// `value` — `Json`.
+    pub value: crate::json::Value,
+}
+
+/// FollowRule — `cortex.instance.FollowRule`: one of a fixed set of shapes, tagged on the wire by `rule`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FollowRule {
+    /// Tagged `at_least` — `cortex.instance.FollowAtLeast`.
+    AtLeast(FollowAtLeast),
+    /// Tagged `equals` — `cortex.instance.FollowEquals`.
+    Equals(FollowEquals),
+    /// Tagged `within_days` — `cortex.instance.FollowWithinDays`.
+    WithinDays(FollowWithinDays),
+}
+
+/// FollowWithinDays — `cortex.instance.FollowWithinDays`.
+///
+/// Every value satisfies `days > 0` — declared here, enforced by whatever behaviour constructs one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FollowWithinDays {
+    /// `field` — `String`.
+    pub field: String,
+    /// `days` — `Integer`.
+    pub days: i64,
 }
 
 /// GateCheck — `cortex.instance.GateCheck`.
@@ -1005,6 +1047,8 @@ pub struct StructuredChild {
     pub time: Option<String>,
     /// `parent` — `String`.
     pub parent: String,
+    /// `follow` — `Optional<cortex.instance.FollowRule>`.
+    pub follow: Option<FollowRule>,
 }
 
 /// StructuredConnectors — `cortex.instance.StructuredConnectors`.
