@@ -70,6 +70,12 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   such facts of one entity and property are applied in their documents' time order, the later
   ones still replacing, so one value stays current. A re-apply the store fails stops the run and
   leaves the documents it carried unseen, so a later run extracts them again.
+- The `redaction` policy panicked a run on a link without a scheme whose host has a multi-byte
+  character in its first four bytes (`café.fr/menu`), let the rest of a number written
+  `+49 30/1234567` through, and ended a link at `[`, so `?filter[owner]=x` reached the model.
+  Such a link is now replaced, an international number may have one `/` after its area code (a
+  date after `+`, with two, is still not a number), and a link keeps its square brackets up to a
+  `]` it opened no bracket for (`[https://host/x]`, `[https://host/x](…)`).
 
 ## 0.6.1 — 2026-10-17
 
