@@ -225,8 +225,9 @@ impl Owner {
 /// What in `registry` the unit file `name` belongs to: the source or viewer of an active instance
 /// whose unit has that name (`cortex-<instance>-<source>`, `cortex-<instance>-view`). Instance `a`
 /// with source `b-c` and instance `a-b` with source `c` name one unit, so a unit named for
-/// instance `a-b` may be instance `a`'s.
-fn unit_holder(registry: &crate::home::Registry, name: &str) -> Option<String> {
+/// instance `a-b` may be instance `a`'s. Answers the holding instance and what of it holds the
+/// unit.
+fn unit_holder(registry: &crate::home::Registry, name: &str) -> Option<(String, String)> {
     let unit = name
         .strip_suffix(".service")
         .or_else(|| name.strip_suffix(".timer"))?;
@@ -241,7 +242,7 @@ fn unit_holder(registry: &crate::home::Registry, name: &str) -> Option<String> {
         .keys()
         .filter(|i| active(i))
         .find(|i| view_unit(i) == unit)
-        .map(|i| format!("the viewer of instance {i}"));
+        .map(|i| (i.clone(), format!("the viewer of instance {i}")));
     viewer.or_else(|| {
         registry
             .sources
@@ -249,7 +250,7 @@ fn unit_holder(registry: &crate::home::Registry, name: &str) -> Option<String> {
             .map(|s| (&s.data.instance_name.0, &s.data.name))
             .filter(|(i, _)| active(i))
             .find(|(i, s)| source_unit(i, s) == unit)
-            .map(|(i, s)| format!("source {i}/{s}"))
+            .map(|(i, s)| (i.clone(), format!("source {i}/{s}")))
     })
 }
 
@@ -435,18 +436,20 @@ impl Systemd {
         if same_home(&home, &self.home_root) {
             return None;
         }
-        // A home that does not exist reads as an empty registry.
+        // A home that does not exist reads as an empty registry. An instance of another name that
+        // holds the unit is named first: that home may also hold an instance of this name, which
+        // does not hold the unit.
         Some(match crate::home::Home::new(home.clone()).load_registry() {
-            Ok(registry)
-                if registry
+            Ok(registry) => match unit_holder(&registry, name) {
+                Some((holder, what)) if holder != instance => Owner::Live(home, Some(what)),
+                Some(_) => Owner::Live(home, None),
+                None if registry
                     .instances
                     .get(instance)
                     .is_some_and(|i| i.state == m::InstanceState::Active) =>
-            {
-                Owner::Live(home, None)
-            }
-            Ok(registry) => match unit_holder(&registry, name) {
-                Some(holder) => Owner::Live(home, Some(holder)),
+                {
+                    Owner::Live(home, None)
+                }
                 None => Owner::Orphaned(home),
             },
             Err(e) => Owner::Unreadable(home, e),
