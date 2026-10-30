@@ -1040,6 +1040,96 @@ pub fn cited_by_rejected(doc: &Yaml, report: &Value) -> BTreeMap<String, Vec<Str
     out
 }
 
+/// EKR's refusal of a fact marked `replaces: true` when the store holds no active value of that
+/// subject and property to replace.
+pub const NOTHING_TO_REPLACE: &str = "replacement-without-active-assertion";
+
+/// Whether EKR rejected `part` (one `rejected` part of an extraction report) for
+/// [`NOTHING_TO_REPLACE`] and nothing else.
+fn nothing_to_replace(part: &Value) -> bool {
+    match &part["refusal"] {
+        Value::String(t) => {
+            t == NOTHING_TO_REPLACE
+                || t.strip_prefix(NOTHING_TO_REPLACE)
+                    .is_some_and(|rest| rest.starts_with(':'))
+        }
+        Value::Null => {
+            let codes: Vec<&str> = part["issues"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|i| i["code"].as_str())
+                .collect();
+            !codes.is_empty() && codes.iter().all(|c| *c == NOTHING_TO_REPLACE)
+        }
+        _ => false,
+    }
+}
+
+/// The facts of `doc` (a merged document) that `report` (its `ekr.integrate.ExtractionReport`)
+/// rejected for [`NOTHING_TO_REPLACE`] alone, as a document to apply again: each such fact
+/// without `replaces`, so EKR stores it as a plain assertion, with `doc`'s format, ontology and
+/// entities and the evidence items those facts cite. Returned with how many facts it holds and
+/// `report` with those parts taken out of its `rejected`; `None` when there are none.
+pub fn without_replaces(doc: &Yaml, report: &Value) -> Option<(Yaml, usize, Value)> {
+    let facts = doc["facts"].as_sequence().map_or(&[][..], Vec::as_slice);
+    let mut again: Vec<Yaml> = Vec::new();
+    let mut rest: Vec<Value> = Vec::new();
+    for part in report["rejected"].as_array().into_iter().flatten() {
+        let fact = part["item"]
+            .as_str()
+            .and_then(|item| item.strip_prefix("facts["))
+            .and_then(|rest| rest.split(']').next())
+            .and_then(|n| n.parse::<usize>().ok())
+            .and_then(|i| facts.get(i));
+        match fact {
+            Some(Yaml::Tagged(fact)) if nothing_to_replace(part) => {
+                let mut fact = fact.clone();
+                if let Yaml::Mapping(body) = &mut fact.value {
+                    body.remove("replaces");
+                }
+                again.push(Yaml::Tagged(fact));
+            }
+            _ => rest.push(part.clone()),
+        }
+    }
+    if again.is_empty() {
+        return None;
+    }
+    let cited: BTreeSet<&str> = again
+        .iter()
+        .filter_map(|f| match f {
+            Yaml::Tagged(f) => f.value["evidence"].as_sequence(),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(Yaml::as_str)
+        .collect();
+    let evidence: Vec<Yaml> = doc["evidence"]
+        .as_sequence()
+        .into_iter()
+        .flatten()
+        .filter(|item| {
+            item["evidence"]["id"]
+                .as_str()
+                .is_some_and(|id| cited.contains(id))
+        })
+        .cloned()
+        .collect();
+    let mut out = Mapping::new();
+    for key in ["format", "ontology", "entities"] {
+        if let Some(value) = doc.get(key) {
+            out.insert(Yaml::String(key.into()), value.clone());
+        }
+    }
+    let n = again.len();
+    out.insert(Yaml::String("facts".into()), Yaml::Sequence(again));
+    out.insert(Yaml::String("evidence".into()), Yaml::Sequence(evidence));
+    let mut report = report.clone();
+    report["rejected"] = Value::Array(rest);
+    Some((Yaml::Mapping(out), n, report))
+}
+
 /// Entity names per node type in a merged document, for the next run's prompt.
 pub fn entity_names(model: &Value) -> Vec<(String, String)> {
     model["entities"]
@@ -1117,6 +1207,67 @@ mod tests {
             BTreeMap::from([("e2".to_string(), limit.clone()), ("e3".to_string(), limit)])
         );
         assert!(cited_by_rejected(&doc, &json!({"rejected": []})).is_empty());
+    }
+
+    /// `story:replacement-applied-as-assertion`: only a fact rejected for having nothing active
+    /// to replace is applied again, without `replaces`, with the evidence it cites; every other
+    /// rejected part stays in the report.
+    #[test]
+    fn a_replacement_with_nothing_to_replace_is_applied_again_without_replaces() {
+        let doc = tagged(&json!({
+            "format": "ekr.extraction-document/1",
+            "ontology": {"node_types": [], "edge_types": []},
+            "entities": [{"node_type": "Product", "aliases": ["W"]}],
+            "facts": [
+                {"!Relation": {"relation": "R", "evidence": ["e1"]}},
+                {"!Property": {"property": "p", "replaces": true, "evidence": ["e2"]}},
+                {"!Property": {"property": "q", "replaces": true, "evidence": ["e3"]}},
+                {"!Property": {"property": "r", "replaces": true, "evidence": ["e1"]}},
+            ],
+            "evidence": [
+                {"evidence": {"id": "e1"}, "payload": []},
+                {"evidence": {"id": "e2"}, "payload": []},
+                {"evidence": {"id": "e3"}, "payload": []},
+            ],
+        }));
+        let report = json!({"rejected": [
+            {"item": "facts[1]", "refusal": "replacement-without-active-assertion: facts[1]: none"},
+            {"item": "facts[2]", "refusal": null, "issues": [{"code": "invalid-supersession"}]},
+            {"item": "facts[3]", "refusal": null,
+                "issues": [{"code": "replacement-without-active-assertion"}]},
+            {"item": "entities[0]", "refusal": "replacement-without-active-assertion"},
+        ]});
+        let (again, n, rest) = without_replaces(&doc, &report).expect("two to apply again");
+        assert_eq!(n, 2);
+        let facts = again["facts"].as_sequence().unwrap();
+        let props: Vec<&str> = facts
+            .iter()
+            .map(|f| match f {
+                Yaml::Tagged(f) => {
+                    assert!(f.value.get("replaces").is_none(), "{f:?}");
+                    f.value["property"].as_str().unwrap()
+                }
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(props, ["p", "r"]);
+        let ids: Vec<&str> = again["evidence"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .map(|e| e["evidence"]["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, ["e1", "e2"]);
+        assert_eq!(again["entities"], doc["entities"]);
+        assert_eq!(again["format"], doc["format"]);
+        let items: Vec<&str> = rest["rejected"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["item"].as_str().unwrap())
+            .collect();
+        assert_eq!(items, ["facts[2]", "entities[0]"]);
+        assert!(without_replaces(&doc, &rest).is_none());
     }
 
     #[test]

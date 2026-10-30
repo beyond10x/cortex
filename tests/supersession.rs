@@ -4,9 +4,11 @@
 //! (`story:extraction-supersedes`, EKR 0.0.31).
 //!
 //! Facts are dated by their document's time, so documents can arrive out of order. A replacement
-//! older than the value it would supersede is rejected by EKR (`invalid-supersession`), and one
-//! with nothing active to replace is rejected too (`replacement-without-active-assertion`). cortex
-//! lists either under the run's `rejected`, with the document it cites, and the run goes on.
+//! older than the value it would supersede is rejected by EKR (`invalid-supersession`); cortex
+//! lists it under the run's `rejected`, with the document it cites, and the run goes on. One with
+//! nothing active to replace is rejected too (`replacement-without-active-assertion`); cortex
+//! applies it again without `replaces`, so its value is stored as a plain assertion, and counts it
+//! in the run's `facts_reapplied` (`story:replacement-applied-as-assertion`).
 
 mod common;
 
@@ -287,30 +289,86 @@ fn a_replacement_older_than_the_value_it_replaces_is_listed_and_the_run_goes_on(
     assert_eq!(developed_by(graph), ["a", "b"]);
 }
 
+/// The last line of the instance's `cortex.log`.
+fn last_log_line(w: &World) -> Value {
+    let text = std::fs::read_to_string(w.home.join("instances/owned/cortex.log")).unwrap();
+    serde_json::from_str(text.lines().last().expect("a log line")).unwrap()
+}
+
 /// A replacement with nothing active to replace is rejected by EKR as
-/// `replacement-without-active-assertion`, for that fact alone: the run lists it and the rest of
-/// the document applies.
+/// `replacement-without-active-assertion`; cortex applies that fact again without `replaces`
+/// (`story:replacement-applied-as-assertion`), so its value is stored as a plain assertion, is
+/// neither rejected nor listed, and the run counts it in `facts_reapplied`.
 #[test]
-fn a_replacement_with_nothing_to_replace_is_listed_and_the_run_goes_on() {
+fn a_replacement_with_nothing_to_replace_is_stored_as_an_assertion() {
     let w = world();
     let ran = run_with(
         &w,
         &[r#"{"id":"a","time":"2026-01-02","text":"The owner is now Alice."}"#],
     );
     assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
-    assert_eq!(ran["detail"]["parts_rejected"], 1, "{ran}");
-    let refusals = refusals(&ran);
-    assert_eq!(refusals.len(), 1, "{ran}");
-    assert_eq!(refusals[0].0, "a", "{ran}");
-    assert!(
-        refusals[0]
-            .1
-            .contains("replacement-without-active-assertion"),
-        "{ran}"
-    );
+    assert_eq!(ran["detail"]["parts_rejected"], 0, "{ran}");
+    assert_eq!(ran["detail"]["facts_reapplied"], 1, "{ran}");
+    assert!(refusals(&ran).is_empty(), "{ran}");
 
     let snap = snapshot(&w);
     let graph = &snap["graph"]["graph"];
-    assert!(owners(graph).is_empty());
+    let owners = owners(graph);
+    assert_eq!(owners.len(), 1, "{owners:?}");
+    assert_eq!(
+        (
+            owners[0].value.as_str(),
+            &owners[0].records,
+            owners[0].from,
+            active(&owners[0])
+        ),
+        ("Alice", &vec!["a".to_string()], Some(JAN_2), true),
+        "{owners:?}"
+    );
     assert_eq!(developed_by(graph), ["a"]);
+}
+
+/// The acceptance of `story:replacement-applied-as-assertion`: in a batch of two documents, the
+/// one whose replacement has nothing to replace keeps its value, the run report and its log line
+/// count one re-applied fact, and the stored value is an ordinary one a later replacement
+/// supersedes.
+#[test]
+fn a_reapplied_replacement_is_counted_and_a_later_one_supersedes_it() {
+    let w = world();
+    let ran = run_with(
+        &w,
+        &[
+            r#"{"id":"a","time":"2026-01-02","text":"The owner is now Alice."}"#,
+            r#"{"id":"c","time":"2026-01-02","text":"Nothing about owners."}"#,
+        ],
+    );
+    assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
+    assert_eq!(ran["detail"]["facts_reapplied"], 1, "{ran}");
+    assert_eq!(ran["detail"]["parts_rejected"], 0, "{ran}");
+    assert_eq!(last_log_line(&w)["facts_reapplied"], 1);
+    let graph = snapshot(&w)["graph"]["graph"].clone();
+    let alice: Vec<Owner> = owners(&graph);
+    assert!(
+        alice.len() == 1 && active(&alice[0]) && alice[0].value == "Alice",
+        "{alice:?}"
+    );
+    assert_eq!(developed_by(&graph), ["a", "c"]);
+
+    let later = run_with(
+        &w,
+        &[
+            r#"{"id":"a","time":"2026-01-02","text":"The owner is now Alice."}"#,
+            r#"{"id":"c","time":"2026-01-02","text":"Nothing about owners."}"#,
+            r#"{"id":"b","time":"2026-01-03","text":"The owner is now Bob."}"#,
+        ],
+    );
+    assert_eq!(later["detail"]["facts_reapplied"], 0, "{later}");
+    assert_eq!(later["detail"]["parts_rejected"], 0, "{later}");
+    let graph = snapshot(&w)["graph"]["graph"].clone();
+    let owners = owners(&graph);
+    let now: Vec<&Owner> = owners.iter().filter(|o| active(o)).collect();
+    assert!(
+        now.len() == 1 && now[0].value == "Bob",
+        "Bob supersedes Alice: {owners:?}"
+    );
 }
