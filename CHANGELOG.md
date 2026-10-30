@@ -132,9 +132,12 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   `+49 30/1234567` through, and ended a link at `[`, so `?filter[owner]=x` reached the model.
   Such a link is now replaced, and an international number may have one `/` after its area code
   (a date after `+`, such as `+1 2/3/2024` or `+1 2024/10/30`, is still not a number). A link
-  keeps the brackets and parentheses it opens and closes, and ends at a `]` or `)` it did not
-  open, so `[https://host/x]` and Markdown links written back to back without a space are each
-  their own link. A citation such as `[2]` after the punctuation that ends a link stays outside it.
+  keeps the brackets and parentheses it opens and closes, and a `(` or `)` without a partner
+  while the link goes on after it (`?q=Jane(Doe`, `/a1)report.pdf`). It ends at a `]` it did not
+  open, and at a `)` it did not open before a space, a bracket, a quote, the end of the text or
+  the punctuation that closes a sentence, so `[https://host/x]` and Markdown links written back
+  to back without a space are each their own link. A citation such as `[2]` after the
+  punctuation that ends a link stays outside it.
 - The always-on credential mask missed five shapes: a quoted name (`"password": "…"`), a URL
   password with a raw `@` (`postgres://app:p@ss@db/x`), a value in a document key with a raw `%`
   that starts no escape, `%3A` as the separator, and a private key whose `END` line a provider

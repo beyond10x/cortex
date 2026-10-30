@@ -51,9 +51,12 @@ stand; [Status](./status.mdx) lists what is planned.
   (`https://`), with `www.`, or with a dotted host followed by a path (`intranet.example.org/a`).
   A masked password or token inside a link stays part of it, so the whole link is one
   placeholder, and so do brackets and parentheses the link opens and closes
-  (`?filter[owner]=x`, `/wiki/Widget_(engine)`). A link ends at a `]` or `)` it did not open,
-  as in `[https://host/x]` and a Markdown link, and a citation such as `[1]` after the
-  punctuation that ends it stays outside. A bracket inside a bracket ends the link. A bare host
+  (`?filter[owner]=x`, `/wiki/Widget_(engine)`), and a `(` or `)` without a partner while the
+  link goes on after it (`?q=Jane(Doe`, `/a1)report.pdf`). A link ends at a `]` it did not
+  open, and at a `)` it did not open before a space, a bracket, a quote, the end of the text or
+  the punctuation that closes a sentence, as in `[https://host/x]`, a Markdown link and
+  `(see https://host/x).`; a citation such as `[1]` after the punctuation that ends it stays
+  outside. A bracket inside a bracket ends the link. A bare host
   with no path, such as `example.org`, is not taken.
 - **Rare names are a guess.** `RareName` takes as a name a word that starts with a capital letter,
   has a lower-case letter in it, and appears at most `rare_limit` times (default 1) in the batch's

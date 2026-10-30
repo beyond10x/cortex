@@ -160,18 +160,26 @@ fn regex(pattern: &str) -> Regex {
 /// up to whitespace, a quote, a brace or a bracket it did not open. Brackets and parentheses it
 /// opens and closes are part of it: a query key (`filter[owner]=`), a title in parentheses
 /// (`Widget_(engine)`) and a `[masked:<shape>]` token masking put inside it, so the rest of the
-/// link after a masked password or token is part of it too. The match itself stops at a `]` or
-/// `)` it opened none for (`[https://host/x]`, `[a](https://host/x),[b](…)`), so finding the
-/// next link never reads past the one before it again.
+/// link after a masked password or token is part of it too. A `(` or `)` without a partner is
+/// part of it while the link goes on after it (`?q=Jane(Doe`, `/a1)Jane_Doe.pdf`), and so is the
+/// sentence punctuation between it and the rest. The match itself stops at a `]` it opened none
+/// for, and at a `)` it opened none for that only a space, a bracket, a quote, the end of the
+/// text or punctuation before one of those follows (`[https://host/x]`,
+/// `[a](https://host/x),[b](…)`, `(see https://host/x).`), so finding the next link never reads
+/// past the one before it again.
 fn url() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
     R.get_or_init(|| {
         let host = r"[\p{L}\p{N}][\p{L}\p{N}\-]*(?:\.[\p{L}\p{N}\-]+)*\.(?:\p{L}{2,}|xn--[\p{L}\p{N}\-]+)(?::[0-9]{1,5})?/";
         let plain = r#"[^\s<>"'`{}|\\^()\[\]]"#;
+        // What carries a link on past a parenthesis without a partner: not the punctuation that
+        // closes a sentence around the link, which `link` trims.
+        let goes_on = r#"[^\s<>"'`{}|\\^()\[\].,;:!?*]"#;
         let paren = format!(r"\((?:{plain}|\[{plain}*\])*\)");
         let bracket = format!(r"\[(?:{plain}|\({plain}*\))*\]");
+        let unpaired = format!(r"[()]+[.,;:!?*]*{goes_on}");
         regex(&format!(
-            r"(?i)(?:\b(?:https?|ftps?|sftp|ssh|wss?|file)://|\bwww\.|{host})(?:{plain}|{paren}|{bracket})*"
+            r"(?i)(?:\b(?:https?|ftps?|sftp|ssh|wss?|file)://|\bwww\.|{host})(?:{plain}|{paren}|{bracket}|{unpaired})*"
         ))
     })
 }
@@ -2596,6 +2604,81 @@ mod tests {
         ] {
             let (out, _) = run(&[m::RedactionClass::Url], &[], text);
             assert_eq!(out, replaced, "{text}");
+        }
+    }
+
+    /// A `(` or `)` without a partner inside a link is part of it while the link goes on after it,
+    /// so nothing of the link after it is left in clear; a `)` the link did not open still ends it
+    /// before a space, a bracket, the end of the text or the punctuation that ends a sentence.
+    #[test]
+    fn a_parenthesis_without_a_partner_inside_a_link_keeps_the_link_whole() {
+        for (text, replaced) in [
+            ("See https://crm/s?q=Jane(Doe-4711 now.", "See [Url-1] now."),
+            ("See https://crm/s?q=Jane((Doe now.", "See [Url-1] now."),
+            (
+                "Open https://crm/f/a1)Jane_Doe.pdf now.",
+                "Open [Url-1] now.",
+            ),
+            (
+                "Open https://crm/f/a1).Jane_Doe.pdf now.",
+                "Open [Url-1] now.",
+            ),
+            ("Open https://crm/f/a1))Jane_Doe now.", "Open [Url-1] now."),
+            ("Open https://crm/f/a(1)b)Jane now.", "Open [Url-1] now."),
+            ("Open https://crm/f/a)b(c now.", "Open [Url-1] now."),
+            ("(see https://crm/x), then go.", "(see [Url-1]), then go."),
+            ("(see https://crm/x). Then go.", "(see [Url-1]). Then go."),
+            ("(see https://crm/x)", "(see [Url-1])"),
+            ("(see https://crm/x)[1] now.", "(see [Url-1])[1] now."),
+            (
+                "[a](https://crm/1),[b](https://crm/2).",
+                "[a]([Url-1]),[b]([Url-2]).",
+            ),
+            (
+                "[a](https://crm/1)[b](https://crm/2).",
+                "[a]([Url-1])[b]([Url-2]).",
+            ),
+        ] {
+            let (out, _) = run(&[m::RedactionClass::Url], &[], text);
+            assert_eq!(out, replaced, "{text}");
+        }
+    }
+
+    /// Links with parentheses without a partner, and Markdown links joined by `),`, `)` or `).`,
+    /// back to back without a space, are scanned once: no match of `url` runs past the link it
+    /// ends for `link` to cut it back, so the next search never reads that text again and the
+    /// scan reads the text about once, whatever its length.
+    #[test]
+    fn links_with_parentheses_without_a_partner_are_scanned_once() {
+        for unit in [
+            "[a](https://a.example/b),",
+            "[a](https://a.example/b)",
+            "(https://a.example/b(c),",
+            "(https://a.example/b).[1]",
+            "(https://a.example/b)c(d.",
+            "https://a.example/b)c(d. ",
+        ] {
+            let text = unit.repeat(1 << 11);
+            let (mut pos, mut read, mut links) = (0, 0, 0);
+            while let Some(m) = url().find_at(&text, pos) {
+                read += m.end() - pos;
+                let kept = link(&text, m.range()).filter(|r| !r.is_empty());
+                if let Some(r) = &kept {
+                    let cut = &text[r.end..m.end()];
+                    assert!(
+                        !cut.contains("://") && cut.len() <= 4,
+                        "{unit}: link cut {cut:?} off a match"
+                    );
+                    links += 1;
+                }
+                pos = kept.map_or(next_char(&text, m.start()), |r| r.end);
+            }
+            assert!(links > 0, "{unit}: no link");
+            assert!(
+                read <= 2 * text.len(),
+                "{unit}: the scan read {read} bytes of a text of {}",
+                text.len()
+            );
         }
     }
 
