@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 7b241ba41c4c5c9b167cb3c615d4c4a19c82761ddb9cf5ed04d1dc15a4a8c732
-// contract digest 32bb9bc0fb8cf7902d67bda9b9d26c2e03a4a1bef7a11b1a84e91119b95f5ed8
+// model digest d0c6a31749113e3980a43fe52535aef214b93505b8cc60910767f60cc61b6013
+// contract digest 194d13785b2cf1ca647a687346331ba5a05a5ef7fe21fc26e1df02720edd5f8b
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -245,6 +245,7 @@ where
         match &outcome {
             crate::instance::ProposeSchemaChangesOutcome::SampleFailed { .. } => {}
             crate::instance::ProposeSchemaChangesOutcome::ProposeFailed { .. } => {}
+            crate::instance::ProposeSchemaChangesOutcome::StoreOutcomeUnknown { .. } => {}
             crate::instance::ProposeSchemaChangesOutcome::Proposed { schema_changes_proposed, .. } => {
                 self.outbox.push(PublishedEvent::SchemaChangesProposed(schema_changes_proposed.clone()));
             }
@@ -388,6 +389,7 @@ where
         match &outcome {
             crate::instance::UpdateInstanceOutcome::SeedChangeRefused { .. } => {}
             crate::instance::UpdateInstanceOutcome::NotActive { .. } => {}
+            crate::instance::UpdateInstanceOutcome::RekeyRefused { .. } => {}
             crate::instance::UpdateInstanceOutcome::Updated { instance_updated, .. } => {
                 self.outbox.push(PublishedEvent::InstanceUpdated(instance_updated.clone()));
             }

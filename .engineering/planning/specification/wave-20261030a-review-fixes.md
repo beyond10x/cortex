@@ -33,7 +33,7 @@ relations:
 - specifies: story:window-relative-placeholders
 - specifies: story:runs-retention
 - specifies: story:small-robustness
-revision: 12
+revision: 13
 transitions:
 - {from: "draft", to: "in_review", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 2}
 - {from: "in_review", to: "approved", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 3}
@@ -78,7 +78,7 @@ its stage opens, so it starts from every unit merged before it.
 | askio | `ask-records-deadline`, `eval-proxy-bounds` | ask | fixing adversary findings (pass 1) |
 | fail | `poison-document-skipped`, `window-advances-past-applied` | cost | merged (3ac47068) |
 | shapes | `structured-children-follow-rule`, `record-key-template`, `child-text-and-filter` | conn, outcome | planned |
-| session | `ekr-session-per-run` | read, fail | implementing |
+| session | `ekr-session-per-run` | read, fail | adversary |
 | tail | `connectors-call-deadline`, `window-relative-placeholders`, `runs-retention`, `small-robustness` | conn, shapes | planned |
 | ess | move the `ess` pin in `spec/ess-inputs.yaml` from 0.60.0 to the newest ESS release and regenerate | every unit above | planned |
 
@@ -162,6 +162,8 @@ directory `w30a/<unit>/`.
 | cli | `unit/w30a-cli` | 97573d67 | `cortex-w30a-cli` | `<tree>/target` | `w30a/cli` |
 | askio | `unit/w30a-askio` | 3c7066a4 | `cortex-w30a-askio` | `<tree>/target` | `w30a/askio` |
 | session | `unit/w30a-session` | 3ac47068 | `cortex-w30a-session` | `<tree>/target` | `w30a/session` |
+| sec | `unit/w30a-sec` | 3ac47068 | `cortex-w30a-sec` | `<tree>/target` | `w30a/sec` |
+| p2 | `unit/w30a-p2` | d63686d1 | `cortex-w30a-p2` | `<tree>/target` | `w30a/p2` |
 
 Unit rows are added as each tree is created.
 

@@ -1168,6 +1168,16 @@ errors:
     fields:
       - {name: name, type: cortex.instance.InstanceName}
 
+  - name: cortex.instance.RekeyRefused
+    summary: >-
+      An update may not change how a source keys its documents while the source has seen
+      documents: its seen state would no longer match, and every document would be extracted
+      again. To re-key on purpose, remove the source's `state/<source>.json` first.
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: source, type: String}
+      - {name: field, type: String}
+
   - name: cortex.instance.InstanceNotActive
     summary: The instance is removed, so nothing changed.
     fields:
@@ -1268,7 +1278,9 @@ errors:
       EKR could not say whether a store write of the run took effect (`ekr stage begin`,
       `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage
       answered that the publication outcome is unknown). Nothing about the source was wrong; the
-      next run settles the stage, or extracts the batch again.
+      next run settles the stage, or extracts the batch again. For `cortex schema`, the write is a
+      proposal's schema transaction (`ekr commit`) or the stage of `cortex schema apply`; the
+      reason names it.
     fields:
       - {name: reason, type: String}
 
@@ -1380,7 +1392,10 @@ errors:
     summary: >-
       A model call for schema proposals failed, timed out, answered no valid proposals or found the
       budget or the instance's daily ceiling spent, the redaction policy refused what the model
-      would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+      would be shown, or EKR could not read the store's ontology, or `proposals.jsonl` could not
+      be written. Nothing was applied and no proposal was recorded, except when a line of
+      `proposals.jsonl` could not be written after earlier proposals were applied: those stay
+      applied, the lines before stay written, and the reason names both counts.
     fields:
       - {name: reason, type: String}
 
@@ -1418,8 +1433,12 @@ errors:
   - name: cortex.instance.SchemaApplyFailed
     summary: >-
       EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer
-      a transaction. Nothing was published: the stage was abandoned, or on `sqlite` the snapshot
-      taken before was restored; every approved proposal is still `approved`.
+      a transaction: nothing was published, the stage was abandoned, or on `sqlite` the snapshot
+      taken before was restored, and every approved proposal is still `approved`. Or, after the
+      changes were published, EKR could not read the store's head or `proposals.jsonl` could not
+      be written: the changes stay in the store, and the reason says so and names the revision
+      (on `postgres`, the head the stage was published at; on `sqlite`, the last committed one),
+      or, when no proposal was applied, says no change was committed.
     fields:
       - {name: reason, type: String}
 
@@ -1615,6 +1634,25 @@ commands:
           cortex.instance.InstanceNotActive:
             state: {generated: true}
         summary: The instance is removed; nothing changed.
+
+      - name: rekey-refused
+        external: >-
+          A source the frozen spec and the new one both name, whose `state/<source>.json` holds a
+          seen document, changes a field its documents are keyed by: its `kind`; a `connectors`
+          source's `adapter`, `operation` or `id`; a `files` source's `records` format (no
+          `records` and `WholeFile` are one), with a per-record format their `records.id`, or a
+          root of its `paths` that reaches a seen file under another spelling (`docs` and
+          `./docs`; adding, removing or reordering roots is not one); a `structured` source's
+          `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths`
+          or `glob` as written, or its `mapping.id`. A record path is compared as it is read
+          (`key` and `$.key` are one path)
+        error: cortex.instance.RekeyRefused
+        payload:
+          cortex.instance.RekeyRefused:
+            name: input.name
+            source: {generated: true}
+            field: {generated: true}
+        summary: Nothing changed; the frozen spec and every source's seen state are as they were.
 
       - name: updated
         updates: cortex.instance.Instance
@@ -2578,12 +2616,29 @@ commands:
         summary: No model was asked and nothing was written.
 
       - name: propose-failed
-        external: A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology
+        external: A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, EKR cannot read the ontology, or `proposals.jsonl` cannot be written
         error: cortex.instance.ProposeFailed
         payload:
           cortex.instance.ProposeFailed:
             reason: {generated: true}
-        summary: Nothing was applied and no `proposals.jsonl` was written.
+        summary: >-
+          Nothing was applied and no proposal was recorded, except when a line of
+          `proposals.jsonl` could not be written after earlier proposals were applied: those stay
+          applied and the lines before it stay written; the reason names how many of each.
+
+      - name: store-outcome-unknown
+        external: >-
+          Applying, EKR cannot say whether a proposal's schema transaction took effect (`ekr
+          commit` answers that the publication outcome is unknown)
+        error: cortex.instance.StoreOutcomeUnknown
+        payload:
+          cortex.instance.StoreOutcomeUnknown:
+            reason: {generated: true}
+        summary: >-
+          The round stops at that proposal and asks EKR for no later one. The proposals before it
+          stay decided and recorded in `proposals.jsonl`; it and every later one are not recorded.
+          The reason names the proposal; `ekr ontology` answers whether its change took effect.
+          `cortex schema` exits 4, as `cortex run` does for this outcome.
 
       - name: proposed
         when: dry_run
@@ -2825,12 +2880,19 @@ commands:
           head is where it was (`postgres`) or back at the snapshot (`sqlite`).
 
       - name: apply-failed
-        external: EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction
+        external: EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction, or, after the publish, read the store's head, or `proposals.jsonl` cannot be written
         error: cortex.instance.SchemaApplyFailed
         payload:
           cortex.instance.SchemaApplyFailed:
             reason: {generated: true}
-        summary: Nothing was published; every approved proposal is still `approved`.
+        summary: >-
+          Before the publish, nothing was published and every approved proposal is still
+          `approved`. After it, when a proposal was applied, the changes are in the store and the
+          reason says so, naming the revision: the head the stage was published at (`postgres`) or
+          the last committed one (`sqlite`); when none was, the reason says no change was
+          committed. When only the head could not be read, every decision is written to
+          `proposals.jsonl`; when `proposals.jsonl` could not be written, it still lists every
+          approved proposal `approved`.
 
       - name: store-outcome-unknown
         external: EKR cannot say whether the stage's begin or publish took effect
@@ -2840,7 +2902,8 @@ commands:
             reason: {generated: true}
         summary: >-
           Every approved proposal is still `approved`. The stage is kept in `stage.json`, and the
-          next run of a source settles it.
+          next run of a source settles it. `cortex schema apply` exits 4, as `cortex run` does for
+          this outcome.
 
       - name: applied
         updates: cortex.instance.Instance

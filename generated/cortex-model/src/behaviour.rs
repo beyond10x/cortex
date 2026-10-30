@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 7b241ba41c4c5c9b167cb3c615d4c4a19c82761ddb9cf5ed04d1dc15a4a8c732
-// contract digest 32bb9bc0fb8cf7902d67bda9b9d26c2e03a4a1bef7a11b1a84e91119b95f5ed8
+// model digest d0c6a31749113e3980a43fe52535aef214b93505b8cc60910767f60cc61b6013
+// contract digest 194d13785b2cf1ca647a687346331ba5a05a5ef7fe21fc26e1df02720edd5f8b
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -127,6 +127,8 @@ pub enum ExternalCommand<'a> {
     CortexInstanceRestoreSnapshot(&'a crate::instance::RestoreSnapshot),
     /// The executing `cortex.instance.RunEval` input.
     CortexInstanceRunEval(&'a crate::instance::RunEval),
+    /// The executing `cortex.instance.UpdateInstance` input.
+    CortexInstanceUpdateInstance(&'a crate::instance::UpdateInstance),
 }
 
 impl ExternalCommand<'_> {
@@ -145,6 +147,7 @@ impl ExternalCommand<'_> {
             Self::CortexInstanceRejectSchemaProposals(_) => "cortex.instance.RejectSchemaProposals",
             Self::CortexInstanceRestoreSnapshot(_) => "cortex.instance.RestoreSnapshot",
             Self::CortexInstanceRunEval(_) => "cortex.instance.RunEval",
+            Self::CortexInstanceUpdateInstance(_) => "cortex.instance.UpdateInstance",
         }
     }
 }
@@ -748,6 +751,10 @@ where
         if self.ports.try_external(ExternalCommand::CortexInstanceProposeSchemaChanges(&input), "propose-failed")? {
             return Ok(crate::instance::ProposeSchemaChangesOutcome::ProposeFailed { error: crate::instance::ProposeFailed { reason: self.ports.try_generate_string()? } });
         }
+        // `store-outcome-unknown`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceProposeSchemaChanges(&input), "store-outcome-unknown")? {
+            return Ok(crate::instance::ProposeSchemaChangesOutcome::StoreOutcomeUnknown { error: crate::instance::StoreOutcomeUnknown { reason: self.ports.try_generate_string()? } });
+        }
         // `proposed`: an accepting branch, in declaration order.
         if decided(Some(&input.dry_run).map(|value| *value), "cortex.instance.ProposeSchemaChanges")? {
             let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
@@ -921,6 +928,10 @@ where
         // `not-active`: selected by the addressed row.
         if decided(equal(Some(&held.state).map(|value| match value { crate::instance::InstanceState::Active => "Active", crate::instance::InstanceState::Removed => "Removed" }.to_owned()), Some("Removed".to_owned())), "cortex.instance.UpdateInstance")? {
             return Ok(crate::instance::UpdateInstanceOutcome::NotActive { error: crate::instance::InstanceNotActive { state: self.ports.try_generate_cortex_instance_instance_state()? } });
+        }
+        // `rekey-refused`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceUpdateInstance(&input), "rekey-refused")? {
+            return Ok(crate::instance::UpdateInstanceOutcome::RekeyRefused { error: crate::instance::RekeyRefused { name: input.name.clone(), source: self.ports.try_generate_string()?, field: self.ports.try_generate_string()? } });
         }
         // `updated`: the default.
         let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {

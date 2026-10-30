@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 7b241ba41c4c5c9b167cb3c615d4c4a19c82761ddb9cf5ed04d1dc15a4a8c732
-// contract digest 32bb9bc0fb8cf7902d67bda9b9d26c2e03a4a1bef7a11b1a84e91119b95f5ed8
+// model digest d0c6a31749113e3980a43fe52535aef214b93505b8cc60910767f60cc61b6013
+// contract digest 194d13785b2cf1ca647a687346331ba5a05a5ef7fe21fc26e1df02720edd5f8b
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -2034,16 +2034,16 @@ pub enum ApplySchemaProposalsOutcome {
         /// Why it was refused: `cortex.instance.SchemaGateFailed`.
         error: SchemaGateFailed,
     },
-    /// `apply-failed` — externally decided (EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction).
+    /// `apply-failed` — externally decided (EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction, or, after the publish, read the store's head, or `proposals.jsonl` cannot be written).
     ///
-    /// Nothing was published; every approved proposal is still `approved`.
+    /// Before the publish, nothing was published and every approved proposal is still `approved`. After it, when a proposal was applied, the changes are in the store and the reason says so, naming the revision: the head the stage was published at (`postgres`) or the last committed one (`sqlite`); when none was, the reason says no change was committed. When only the head could not be read, every decision is written to `proposals.jsonl`; when `proposals.jsonl` could not be written, it still lists every approved proposal `approved`.
     ApplyFailed {
         /// Why it was refused: `cortex.instance.SchemaApplyFailed`.
         error: SchemaApplyFailed,
     },
     /// `store-outcome-unknown` — externally decided (EKR cannot say whether the stage's begin or publish took effect).
     ///
-    /// Every approved proposal is still `approved`. The stage is kept in `stage.json`, and the next run of a source settles it.
+    /// Every approved proposal is still `approved`. The stage is kept in `stage.json`, and the next run of a source settles it. `cortex schema apply` exits 4, as `cortex run` does for this outcome.
     StoreOutcomeUnknown {
         /// Why it was refused: `cortex.instance.StoreOutcomeUnknown`.
         error: StoreOutcomeUnknown,
@@ -2295,12 +2295,19 @@ pub enum ProposeSchemaChangesOutcome {
         /// Why it was refused: `cortex.instance.SampleFailed`.
         error: SampleFailed,
     },
-    /// `propose-failed` — externally decided (A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology).
+    /// `propose-failed` — externally decided (A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, EKR cannot read the ontology, or `proposals.jsonl` cannot be written).
     ///
-    /// Nothing was applied and no `proposals.jsonl` was written.
+    /// Nothing was applied and no proposal was recorded, except when a line of `proposals.jsonl` could not be written after earlier proposals were applied: those stay applied and the lines before it stay written; the reason names how many of each.
     ProposeFailed {
         /// Why it was refused: `cortex.instance.ProposeFailed`.
         error: ProposeFailed,
+    },
+    /// `store-outcome-unknown` — externally decided (Applying, EKR cannot say whether a proposal's schema transaction took effect (`ekr commit` answers that the publication outcome is unknown)).
+    ///
+    /// The round stops at that proposal and asks EKR for no later one. The proposals before it stay decided and recorded in `proposals.jsonl`; it and every later one are not recorded. The reason names the proposal; `ekr ontology` answers whether its change took effect. `cortex schema` exits 4, as `cortex run` does for this outcome.
+    StoreOutcomeUnknown {
+        /// Why it was refused: `cortex.instance.StoreOutcomeUnknown`.
+        error: StoreOutcomeUnknown,
     },
     /// `proposed` — when `dry_run`.
     ///
@@ -2728,6 +2735,13 @@ pub enum UpdateInstanceOutcome {
     NotActive {
         /// Why it was refused: `cortex.instance.InstanceNotActive`.
         error: InstanceNotActive,
+    },
+    /// `rekey-refused` — externally decided (A source the frozen spec and the new one both name, whose `state/<source>.json` holds a seen document, changes a field its documents are keyed by: its `kind`; a `connectors` source's `adapter`, `operation` or `id`; a `files` source's `records` format (no `records` and `WholeFile` are one), with a per-record format their `records.id`, or a root of its `paths` that reaches a seen file under another spelling (`docs` and `./docs`; adding, removing or reordering roots is not one); a `structured` source's `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths` or `glob` as written, or its `mapping.id`. A record path is compared as it is read (`key` and `$.key` are one path)).
+    ///
+    /// Nothing changed; the frozen spec and every source's seen state are as they were.
+    RekeyRefused {
+        /// Why it was refused: `cortex.instance.RekeyRefused`.
+        error: RekeyRefused,
     },
     /// `updated` — otherwise.
     ///
@@ -3198,11 +3212,24 @@ pub struct NameTaken {
 
 /// The declared error `cortex.instance.ProposeFailed`.
 ///
-/// A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+/// A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology, or `proposals.jsonl` could not be written. Nothing was applied and no proposal was recorded, except when a line of `proposals.jsonl` could not be written after earlier proposals were applied: those stay applied, the lines before stay written, and the reason names both counts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProposeFailed {
     /// `reason` — `String`.
     pub reason: String,
+}
+
+/// The declared error `cortex.instance.RekeyRefused`.
+///
+/// An update may not change how a source keys its documents while the source has seen documents: its seen state would no longer match, and every document would be extracted again. To re-key on purpose, remove the source's `state/<source>.json` first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RekeyRefused {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `source` — `String`.
+    pub source: String,
+    /// `field` — `String`.
+    pub field: String,
 }
 
 /// The declared error `cortex.instance.RestoreUnsupported`.
@@ -3234,7 +3261,7 @@ pub struct SampleFailed {
 
 /// The declared error `cortex.instance.SchemaApplyFailed`.
 ///
-/// EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction. Nothing was published: the stage was abandoned, or on `sqlite` the snapshot taken before was restored; every approved proposal is still `approved`.
+/// EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction: nothing was published, the stage was abandoned, or on `sqlite` the snapshot taken before was restored, and every approved proposal is still `approved`. Or, after the changes were published, EKR could not read the store's head or `proposals.jsonl` could not be written: the changes stay in the store, and the reason says so and names the revision (on `postgres`, the head the stage was published at; on `sqlite`, the last committed one), or, when no proposal was applied, says no change was committed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SchemaApplyFailed {
     /// `reason` — `String`.
@@ -3353,7 +3380,7 @@ pub struct StoreHeld {
 
 /// The declared error `cortex.instance.StoreOutcomeUnknown`.
 ///
-/// EKR could not say whether a store write of the run took effect (`ekr stage begin`, `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage, or extracts the batch again.
+/// EKR could not say whether a store write of the run took effect (`ekr stage begin`, `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage, or extracts the batch again. For `cortex schema`, the write is a proposal's schema transaction (`ekr commit`) or the stage of `cortex schema apply`; the reason names it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreOutcomeUnknown {
     /// `reason` — `String`.

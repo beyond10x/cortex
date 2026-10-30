@@ -635,6 +635,13 @@ impl Scenario {
                     Some(("SeedChangeRefused", json!({"name": error.name.0}))),
                 ),
                 m::UpdateInstanceOutcome::Updated { .. } => ("updated", None),
+                m::UpdateInstanceOutcome::RekeyRefused { error } => (
+                    "rekey-refused",
+                    Some((
+                        "RekeyRefused",
+                        json!({"name": error.name.0, "source": error.source, "field": error.field}),
+                    )),
+                ),
                 m::UpdateInstanceOutcome::NotActive { error } => (
                     "not-active",
                     Some((
@@ -941,6 +948,10 @@ impl Scenario {
                 m::ProposeSchemaChangesOutcome::ProposeFailed { error } => (
                     "propose-failed",
                     Some(("ProposeFailed", json!({"reason": error.reason}))),
+                ),
+                m::ProposeSchemaChangesOutcome::StoreOutcomeUnknown { error } => (
+                    "store-outcome-unknown",
+                    Some(("StoreOutcomeUnknown", json!({"reason": error.reason}))),
                 ),
                 m::ProposeSchemaChangesOutcome::NoSuchInstance { error } => (
                     "no-such-instance",
@@ -1571,7 +1582,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        118,
+        120,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "SchemaApplyFailed payload",
-  "description": "EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction. Nothing was published: the stage was abandoned, or on `sqlite` the snapshot taken before was restored; every approved proposal is still `approved`.",
+  "description": "EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction: nothing was published, the stage was abandoned, or on `sqlite` the snapshot taken before was restored, and every approved proposal is still `approved`. Or, after the changes were published, EKR could not read the store's head or `proposals.jsonl` could not be written: the changes stay in the store, and the reason says so and names the revision (on `postgres`, the head the stage was published at; on `sqlite`, the last committed one), or, when no proposal was applied, says no change was committed.",
   "x-ess-name": "cortex.instance.SchemaApplyFailed",
   "x-ess-kind": "error-payload",
   "type": "object",
@@ -17,8 +17,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7b241ba41c4c5c9b167cb3c615d4c4a19c82761ddb9cf5ed04d1dc15a4a8c732",
-    "contract_digest": "slice-sha256/2:c20d470cc9de315fe7183c9d6ad9ccf132845b97820358b8af339f470af093b5",
+    "source_digest": "d0c6a31749113e3980a43fe52535aef214b93505b8cc60910767f60cc61b6013",
+    "contract_digest": "slice-sha256/2:a829aea166d2c86f2ecc827cda2d524c8f11f990a1eafde1cb1359fbc8056d92",
     "regenerate": "ess generate"
   }
 }

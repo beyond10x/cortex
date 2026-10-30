@@ -14,6 +14,7 @@ goes to stderr as `cortex: <message>` with exit status 2. `cortex run` has six o
 Connectors stayed unavailable before anything was fetched (`connection-unavailable`), 6 when a
 batch did not fit the model's window (`batch-too-large`), 7 when the model could not be reached
 (`model-unavailable`) and 8 when the run was sent SIGTERM (`terminated`); see [Exit statuses of `cortex run`](./operating.md#exit-statuses-of-cortex-run).
+`cortex schema` and `cortex schema apply` exit 4 for `store-outcome-unknown` as well.
 `cortex list` and `cortex sources` print one JSON line per row.
 
 The outcomes are the ones the specification declares; the
@@ -42,13 +43,13 @@ naming `story:codex-model-backend`, and `codex` is never started; `cortex qualit
 |---|---|---|
 | `cortex create --spec <file> [--no-extract] [--no-units] [--replace-binary] [--postgres-schema-config <file>]` | create an instance from a spec file and add its sources. `--no-extract` skips the seed documents, `--no-units` installs no systemd units, and `--replace-binary` replaces `<home>/bin/cortex` even when it is newer than this cortex (see [Operating](./operating.md#systemd-units); `adopt` and `update` take it too). For a `postgres` store, `--postgres-schema-config` names the `ekr.postgres/1` file of the schema-management role, and `ekr postgres-schema` creates the provider tables with it before the seed; without it the tables must already exist. `partial` is `created` for a seed that stopped before every seed document was extracted: its `seed` detail adds `documents_new`, `stopped`, `facts_refused` and `parts_rejected` (or carries `failed`), and `cortex run <name>/seed` extracts the rest | `created`, `partial`, `name-taken`, `connection-missing`, `seed-refused` |
 | `cortex adopt --spec <file> --store <file> [--host <file>] [--seen <source>=<file>]… [--no-units] [--replace-binary]` | make an existing EKR store an instance, with its whole revision history, and add the spec's sources: nothing is seeded, extracted or written to the store named (see [Operating](./operating.md#adopting-an-existing-store)). `--store` is the SQLite database, which is copied into the instance, or for a `postgres` spec the `ekr.postgres/1` file its `store.value.config` names. `--host` is the `ekr.cli-host/1` document the store was seeded under. `--seen` starts a source from a `cortex.seen/1` file; without it the first run re-extracts every document. `adopted` reports the store's head as `revision`, and `seen_documents` and `seen_without_evidence` (seen documents the store holds no evidence of) | `adopted`, `name-taken`, `backend-mismatch`, `store-unreadable`, `store-held`, `seed-types-missing` |
-| `cortex update <name> --spec <file> [--no-units] [--replace-binary]` | replace the instance's spec: sources, model and serve settings. New sources are added and every source's timer is (re)installed; the seed cannot change | `updated`, `seed-change-refused`, `not-active`, `no-such-instance` |
+| `cortex update <name> --spec <file> [--no-units] [--replace-binary]` | replace the instance's spec: sources, model and serve settings. New sources are added and every source's timer is (re)installed; the seed cannot change, and neither can how a source with seen documents keys them (`rekey-refused` names the source and the field: its `kind`, a `connectors` source's `adapter`, `operation` or `id`, a `files` source's `records` format (none and `WholeFile` are one) and, per record, its `records.id`, or a root of its `paths` that reaches a seen file under another spelling such as `docs` to `./docs` (adding, removing or reordering roots is not refused), a `structured` source's `input`, `adapter`, `operation`, files `paths` or `glob` as written, or `mapping.id`; record paths are compared as read, so `key` and `$.key` are one; remove `state/<source>.json` to re-key on purpose) | `updated`, `seed-change-refused`, `rekey-refused`, `not-active`, `no-such-instance` |
 | `cortex remove <name>` | stop and delete the instance's timers and viewer that its home wrote (`units.kept` names any of the same name another home wrote); its directory and store stay | `removed`, `wrong-state`, `no-such-instance` |
 | `cortex restore <name> <snapshot>` | put a `sqlite` store and the instance's `state/` back to a snapshot a run took before it applied anything (see [Operating](./operating.md#undoing-a-run)). It snapshots what it replaces as `<ms>-before-restore` and reports the name as `before_restore`, and `state_restored` (with the reason in `state_failed` when its copy of `state/` could not be written back); a running viewer is stopped and started again. It does not wait for the home's lock | `restored`, `busy`, `no-such-snapshot`, `backend-unsupported`, `no-such-instance` |
 | `cortex quality <name> --sample <n>` | measure how often the instance's facts are supported by the evidence they cite (see [Measuring fact quality](#measuring-fact-quality)). It reads the store and writes nothing to it, so a removed instance is measured too. It holds the home's lock only while it draws the sample, so the timers' runs do not wait behind the model calls | `measured`, `sample-failed`, `judge-failed`, `no-such-instance` |
 | `cortex eval run <name> --set <file> --runner mcp\|ask\|replay [--from <stamp>]` | ask each case of an eval set and score each answer with no model, by the fact strings it must contain and the node ids it must cite (see [Running an eval set](#running-an-eval-set)). It reads the store and writes nothing to it. It holds the home's lock only while it reads the set, the spec and a replayed run | `evaluated`, `set-invalid`, `runner-failed`, `no-such-instance` |
 | `cortex eval case add <name> --set <file> --from-review <review id>` | append the case of a closed review item of the answer service to an eval set, creating the file when it does not exist (see [Adding a case from a review](#adding-a-case-from-a-review)). An open item is refused and the set file is left as it was | `added`, `set-invalid`, `no-such-review`, `review-open`, `no-expectations`, `case-exists`, `no-such-instance` |
-| `cortex schema <name> [--sample <n>] [--dry-run \| --review]` | have the instance's model propose changes to the store's ontology from a sample of its facts (default 40) and apply each one EKR applies as a schema transaction of its own (see [Proposing schema changes](#proposing-schema-changes)). `--dry-run` records the proposals and applies none; `--review` records each one `pending` for a decision (see [Reviewing schema changes](#reviewing-schema-changes)). It holds the home's lock while it draws the sample and while it applies, not during the model calls | `applied`, `proposed` (a dry run), `reviewed`, `sample-failed`, `propose-failed`, `no-such-instance` |
+| `cortex schema <name> [--sample <n>] [--dry-run \| --review]` | have the instance's model propose changes to the store's ontology from a sample of its facts (default 40) and apply each one EKR applies as a schema transaction of its own (see [Proposing schema changes](#proposing-schema-changes)). `--dry-run` records the proposals and applies none; `--review` records each one `pending` for a decision (see [Reviewing schema changes](#reviewing-schema-changes)). It holds the home's lock while it draws the sample and while it applies, not during the model calls | `applied`, `proposed` (a dry run), `reviewed`, `sample-failed`, `propose-failed`, `store-outcome-unknown`, `no-such-instance` |
 | `cortex schema approve <name> <stamp> [--only <n>]… [--by <who>]` | approve the pending proposals of a review run: those `--only` names by their line (from 1), or every pending one | `approved`, `not-pending`, `no-such-run`, `no-such-instance` |
 | `cortex schema reject <name> <stamp> [--only <n>]… --reason <text> [--by <who>]` | reject them, with the reason | `rejected`, `not-pending`, `no-such-run`, `no-such-instance` |
 | `cortex schema apply <name> <stamp>` | apply the run's approved proposals, with no model call, in an EKR stage (`postgres`) or after a snapshot (`sqlite`), held to the spec's `gate` | `applied`, `not-approved`, `gate-failed`, `apply-failed`, `store-outcome-unknown`, `no-such-run`, `no-such-instance` |
@@ -220,7 +221,12 @@ at), `proposed`, `applied`, `refused`, `recorded_only`, `invalid`, `dropped`, `c
 reports it) and `dir`. `sample-failed` asks no model and writes nothing. `propose-failed` (a model
 call failed or found the budget or the daily ceiling spent, `refuse_if_left` refused what the model would be shown, or
 EKR could not read the ontology) applies nothing and writes no `proposals.jsonl`; its reason states
-the cost so far.
+the cost so far. When a line of `proposals.jsonl` cannot be written after earlier proposals were
+applied, `propose-failed` leaves those applied and the lines before it written, and its reason
+counts both. When EKR cannot say whether a proposal's schema transaction took effect (`ekr commit`
+answers that the publication outcome is unknown), the round stops there as
+`store-outcome-unknown`, exit 4: no later proposal is asked of EKR, the proposals before it stay
+recorded, and the reason names the proposal; `ekr ontology` answers whether its change took effect.
 
 ### Reviewing schema changes
 
@@ -252,10 +258,17 @@ run is:
   published at the head it began from only when EKR answered every transaction and the spec's
   `gate` passed, and abandoned otherwise: `gate-failed` and `apply-failed` leave the store's head
   where it was and every approved proposal `approved`. A publish whose outcome EKR cannot tell is
-  `store-outcome-unknown`; the stage stays in `stage.json` and the next run of a source settles it.
+  `store-outcome-unknown`, exit 4; the stage stays in `stage.json` and the next run of a source
+  settles it.
 - On a `sqlite` store the store is copied first and kept as the snapshot `<ms>-schema-<stamp>` once
   a transaction commits, which the detail names (`snapshot`) and [`cortex restore`](#instances) puts
   back. A gate that fails restores it.
+- Once the changes are published, they stay. When EKR then cannot read the store's head, or
+  `proposals.jsonl` cannot be rewritten, the outcome is `apply-failed`, and its reason says the
+  changes are in the store and names the revision: the head the stage was published at
+  (`postgres`) or the last one committed (`sqlite`). When no proposal was applied, it says no
+  change was committed instead. With only the head unread, every decision is
+  written; with `proposals.jsonl` unwritten, it still lists the proposals `approved`.
 
 The gate's checks on a number of `ekr quality` are read after the changes; checks on the run
 report's measures (`documents_new`, `facts_refused`, `cost_usd`, …) belong to a source run and are
