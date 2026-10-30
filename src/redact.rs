@@ -322,8 +322,10 @@ fn credentials(key: bool) -> &'static [Shape] {
 
 fn credential_shapes(value: &str) -> Vec<Shape> {
     {
-        // `auth` alone is not a name: `auth: oauth2-pkce` is a setting, not a secret.
-        let assignment = format!(
+        use crate::mask::{element, flag, quoted_flags, separator, ENV_PASS, ENV_PASS_SEPARATOR};
+        // `auth` alone is not a name: `auth: oauth2-pkce` is a setting, not a secret. Read as
+        // 0.7.1 read it, so no structured record identity changes (`crate::mask`'s `NAME_0_7_1`).
+        let assignment_0_7_1 = format!(
             concat!(
                 r#"(?i)((?:\b|%[0-9a-f]{{2}})(?:[a-z0-9]+[_\-])*"#,
                 r"(?:password|passwd|passphrase|pwd|secret|token|api[_\-]?key|access[_\-]?key",
@@ -332,8 +334,27 @@ fn credential_shapes(value: &str) -> Vec<Shape> {
             ),
             value = value
         );
-        let assignment = assignment.as_str();
-        let shapes: [(&'static str, &str, usize, Refine); 23] = [
+        // The spellings `crate::mask::KEYWORD` reads, with this class's wider set of names:
+        // `password` glued to a prefix (`PGPASSWORD`), `secret` followed by `key` (`SECRET_KEY`),
+        // a leading `_`; quoted, escaped (`\"password\": `) or marked up (`` `password`: ``,
+        // `**password:** `), with no bare `:` before the value (`crate::mask::separator`).
+        let name = concat!(
+            r"_*(?:[a-z0-9]+[_\-])*",
+            r"(?:[a-z0-9]*pass(?:word|wd)|passphrase|pwd|secret(?:[_\-]?key)?|token",
+            r"|api[_\-]?key|access[_\-]?key|private[_\-]?key|credentials?|authorization)",
+        );
+        let assignment = format!(
+            r#"(?i)((?:\b|%[0-9a-f]{{2}}){name}){}(?:\\?["'`])?{value}"#,
+            separator()
+        );
+        // `DB_PASS=`, in upper case only, as `crate::mask` reads it.
+        let env_pass = format!(r#"(?i)({ENV_PASS}){ENV_PASS_SEPARATOR}{value}"#);
+        // An XML element (`<db_password>…</db_password>`) and a command-line flag with its value
+        // after a space (`--db-password …`), as `crate::mask` reads them.
+        let element = element(name);
+        let flag = flag(name);
+        let [double_quoted, single_quoted] = quoted_flags(name);
+        let shapes: [(&'static str, &str, usize, Refine); 29] = [
             (
                 "private-key",
                 r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----",
@@ -461,7 +482,14 @@ fn credential_shapes(value: &str) -> Vec<Shape> {
                 1,
                 not_placeholder,
             ),
-            ("secret-assignment", assignment, 3, assigned_secret),
+            // A quoted flag value before the assignments, which would read its first word.
+            ("secret-assignment", &double_quoted, 3, flag_secret),
+            ("secret-assignment", &single_quoted, 3, flag_secret),
+            ("secret-assignment", &assignment_0_7_1, 3, assigned_secret),
+            ("secret-assignment", &assignment, 3, assigned_secret),
+            ("secret-assignment", &env_pass, 3, assigned_secret),
+            ("secret-assignment", &element, 3, element_secret),
+            ("secret-assignment", &flag, 3, flag_secret),
         ];
         shapes
             .into_iter()
@@ -681,12 +709,15 @@ fn capitalised(text: &str, r: Range<usize>) -> Option<Range<usize>> {
 }
 
 /// Whether a credential-shaped value is a placeholder written in its place: bracketed, templated,
-/// masked, an environment variable's name, a run of one character or a digest.
+/// masked, an environment variable's name, a run of one character or a digest. A `%` that starts
+/// a percent-encoded byte (`%2B…`) starts a value, not a placeholder (`%DB_PASSWORD%`).
 fn placeholder_value(v: &str) -> bool {
     let lower = v.to_lowercase();
     let mut chars = v.chars();
     let first = chars.next();
-    matches!(first, Some('[' | '<' | '{' | '$' | '%'))
+    let encoded =
+        first == Some('%') && v.len() >= 3 && v.as_bytes()[1..3].iter().all(u8::is_ascii_hexdigit);
+    (matches!(first, Some('[' | '<' | '{' | '$' | '%')) && !encoded)
         || chars.all(|c| Some(c) == first)
         || [
             "xxxx",
@@ -727,6 +758,39 @@ fn assigned_secret(text: &str, r: Range<usize>) -> Option<Range<usize>> {
     let v = &text[r.clone()];
     let mixed = v.chars().any(char::is_alphabetic) && v.chars().any(|c| c.is_ascii_digit());
     ((mixed || v.chars().count() >= 20) && !placeholder_value(v)).then_some(r)
+}
+
+/// A flag's value that is a credential as `crate::mask::flag_value_is_credential` decides (not
+/// prose, a metavar, a variable or a `--secret` mount), and an assigned secret.
+fn flag_secret(text: &str, r: Range<usize>) -> Option<Range<usize>> {
+    let before = &text[..r.start];
+    let quoted = before.ends_with(['"', '\'']);
+    let flag = before
+        .trim_end_matches(['"', '\'', '\\', '='])
+        .split_whitespace()
+        .next_back()
+        .unwrap_or_default();
+    crate::mask::flag_value_is_credential(flag, &text[r.clone()], quoted)
+        .then_some(r)
+        .and_then(|r| assigned_secret(text, r))
+}
+
+/// An element's value whose closing tag closes the element it opens (`crate::mask::same_element`),
+/// and an assigned secret; in a CDATA section, its content is.
+fn element_secret(text: &str, r: Range<usize>) -> Option<Range<usize>> {
+    let open = text[..r.start]
+        .rfind('<')
+        .map_or("", |at| &text[at..r.start]);
+    let rest = text[r.end..].trim_start();
+    let close = rest.find('>').map_or("", |at| &rest[..=at]);
+    let (head, tail) = ("<![CDATA[", "]]>");
+    let content = if text[r.clone()].starts_with(head) && text[r.clone()].ends_with(tail) {
+        r.start + head.len()..r.end - tail.len()
+    } else {
+        r.clone()
+    };
+    (crate::mask::same_element(open, close) && assigned_secret(text, content).is_some())
+        .then_some(r)
 }
 
 fn built_in(class: m::RedactionClass) -> Step {
