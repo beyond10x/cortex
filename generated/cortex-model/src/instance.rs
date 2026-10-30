@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest abc5c6e0927c4e8bbce623bf863c93367dcd0bc76d512ed81965526d1550fc73
-// contract digest be55a8cb0ee20c3ffc61a3eb86ea98b04b86867b3cbc66aae8b9dc2b006b8b8a
+// model digest 27b36ede5b41e613d48d278ac4a11a63e29b4671889f2c834469a882ad067db5
+// contract digest cff2b91ce0d081e1113c4b95b8f4760e3444dfa2df98f13bbb18217c263c24a7
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -2736,7 +2736,7 @@ pub enum UpdateInstanceOutcome {
         /// Why it was refused: `cortex.instance.InstanceNotActive`.
         error: InstanceNotActive,
     },
-    /// `rekey-refused` — externally decided (A source the frozen spec and the new one both name, whose `state/<source>.json` holds a seen document, changes a field its documents are keyed by: its `kind`; a `connectors` source's `adapter`, `operation` or `id`; a `files` source's `paths`, whether it reads `records`, and their `records.id`; a `structured` source's `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths` or `glob`, or its `mapping.id`. A path is compared as written, and a record path as it is read (`key` and `$.key` are one path)).
+    /// `rekey-refused` — externally decided (A source the frozen spec and the new one both name, whose `state/<source>.json` holds a seen document, changes a field its documents are keyed by: its `kind`; a `connectors` source's `adapter`, `operation` or `id`; a `files` source's `records` format (no `records` and `WholeFile` are one), with a per-record format their `records.id`, or a root of its `paths` that reaches a seen file under another spelling (`docs` and `./docs`; adding, removing or reordering roots is not one); a `structured` source's `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths` or `glob` as written, or its `mapping.id`. A record path is compared as it is read (`key` and `$.key` are one path)).
     ///
     /// Nothing changed; the frozen spec and every source's seen state are as they were.
     RekeyRefused {

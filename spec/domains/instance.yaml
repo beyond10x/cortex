@@ -1624,12 +1624,13 @@ commands:
         external: >-
           A source the frozen spec and the new one both name, whose `state/<source>.json` holds a
           seen document, changes a field its documents are keyed by: its `kind`; a `connectors`
-          source's `adapter`, `operation` or `id`; a `files` source's `paths`, whether it reads
-          `records`, and their `records.id`; a `structured` source's `input`, its `connectors`
-          input's `adapter` or `operation`, its `files` input's `paths` or `glob`, or its
-          `mapping.id`.
-          A path is compared as written, and a record path as it is read (`key` and `$.key` are
-          one path)
+          source's `adapter`, `operation` or `id`; a `files` source's `records` format (no
+          `records` and `WholeFile` are one), with a per-record format their `records.id`, or a
+          root of its `paths` that reaches a seen file under another spelling (`docs` and
+          `./docs`; adding, removing or reordering roots is not one); a `structured` source's
+          `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths`
+          or `glob` as written, or its `mapping.id`. A record path is compared as it is read
+          (`key` and `$.key` are one path)
         error: cortex.instance.RekeyRefused
         payload:
           cortex.instance.RekeyRefused:

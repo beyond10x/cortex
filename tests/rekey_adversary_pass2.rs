@@ -143,7 +143,7 @@ fn registry_source() -> String {
 /// record, though no source field changed. The correction says every change to a field that goes
 /// into a seen key is refused; this one is accepted.
 #[test]
-#[ignore = "adversary: a structured record's identity depends on the redaction rules; a rule matching the ids re-keys every record and the update is accepted"]
+#[ignore = "follow-up: redaction rules feed structured seen keys"]
 fn a_redaction_rule_that_rewrites_structured_ids_with_seen_records_is_refused() {
     let w = World::new();
     executable(&w.bin.join("claude"), CLAUDE);
@@ -186,6 +186,18 @@ fn a_redaction_rule_that_rewrites_structured_ids_with_seen_records_is_refused() 
 
 /// One `files` source `logs` reading `logs/*.jsonl` with `records` in `format`.
 fn logs_source(format: &str) -> String {
+    logs_source_keyed(format, "id")
+}
+
+/// [`logs_source`] with its records' `id` path `id`, or with no `records` when `format` is empty.
+fn logs_source_keyed(format: &str, id: &str) -> String {
+    let records = if format.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n        records: {{format: {format}, id: \"{id}\", text: [\"{{text}}\"], filters: []}}"
+        )
+    };
     format!(
         r#"  - name: logs
     schedule: daily
@@ -193,11 +205,58 @@ fn logs_source(format: &str) -> String {
       kind: files
       value:
         paths: [logs]
-        glob: "*.jsonl"
-        records: {{format: {format}, id: id, text: ["{{text}}"], filters: []}}
+        glob: "*.jsonl"{records}
     {POLICY}
 "#
     )
+}
+
+/// A `logs` instance `name` over one JSON Lines file, created from `source`, whose state holds
+/// the file's whole-file key.
+fn seen_logs(w: &World, name: &str, source: &str) -> PathBuf {
+    std::fs::create_dir_all(w.root.join("logs")).unwrap();
+    std::fs::write(
+        w.root.join("logs/a.jsonl"),
+        "{\"id\": \"1\", \"other\": \"x\", \"text\": \"Example Labs develops the Widget engine.\"}\n",
+    )
+    .unwrap();
+    let spec = instance_spec(w, name, source, "");
+    create(w, &spec);
+    let key = w.root.join("logs/a.jsonl").display().to_string();
+    seed_state(w, name, "logs", &key);
+    spec
+}
+
+/// Under `WholeFile` a file is one document keyed by its path and `records.id` is not read, so
+/// changing it keys no seen document another way.
+#[test]
+fn a_records_id_change_under_whole_file_is_not_a_rekey() {
+    let w = World::new();
+    let spec = seen_logs(&w, "i", &logs_source_keyed("WholeFile", "id"));
+    instance_spec(&w, "i", &logs_source_keyed("WholeFile", "$.other"), "");
+    let out = update(&w, "i", &spec);
+    assert_eq!(
+        (out.0, out.1["outcome"].as_str()),
+        (0, Some("updated")),
+        "{}",
+        out.1
+    );
+}
+
+/// No `records` and `records: {format: WholeFile}` read a file alike (`spec-file.md`), so moving
+/// between them keys no seen document another way.
+#[test]
+fn whole_file_records_and_no_records_are_one_keying() {
+    let w = World::new();
+    let spec = seen_logs(&w, "n", &logs_source_keyed("", "id"));
+    instance_spec(&w, "n", &logs_source_keyed("WholeFile", "id"), "");
+    let out = update(&w, "n", &spec);
+    assert_eq!(
+        (out.0, out.1["outcome"].as_str()),
+        (0, Some("updated")),
+        "{}",
+        out.1
+    );
 }
 
 /// `records.format` decides a `files` document's key: `WholeFile` keys the file by its path
@@ -206,7 +265,6 @@ fn logs_source(format: &str) -> String {
 /// from `WholeFile` to `JsonLines` is accepted, while the same key change from no `records` to
 /// `JsonLines` is refused.
 #[test]
-#[ignore = "adversary: keyed_by does not compare records.format; WholeFile to JsonLines re-keys every file as <path>#<id> and is accepted"]
 fn a_files_records_format_change_with_seen_documents_is_refused() {
     let w = World::new();
     std::fs::create_dir_all(w.root.join("logs")).unwrap();
@@ -257,7 +315,6 @@ fn docs_source(paths: &str) -> String {
 /// refusal's only way forward (remove `state/<source>.json`) re-extracts every seen document,
 /// the cost the story exists to prevent.
 #[test]
-#[ignore = "adversary: keyed_by compares a files source's paths list as text; adding a root, which keys no seen document another way, is refused"]
 fn adding_a_root_to_a_files_source_with_seen_documents_is_not_a_rekey() {
     let w = World::new();
     for dir in ["docs", "notes"] {
@@ -303,7 +360,7 @@ fn issues_source(id: &str) -> String {
 /// `sources::at` reads `$` as the whole record and `$.$` as its member named `$`: two different
 /// values. `record_path` maps both to `$`, so the change compares equal and is accepted.
 #[test]
-#[ignore = "adversary: record_path maps $ (the whole record) and $.$ (a member named $) to one path; the id change is accepted"]
+#[ignore = "infeasible: needs a member literally named $"]
 fn the_whole_record_id_and_a_member_named_dollar_are_two_paths() {
     let w = World::new();
     let spec = instance_spec(&w, "d", &issues_source("$"), "");

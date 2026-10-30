@@ -1497,15 +1497,16 @@ fn record_path(path: &str) -> String {
 
 /// The fields a source's document keys are derived from, by name: its kind, then
 /// - for a `connectors` source, its `adapter`, `operation` and `id` path;
-/// - for a `files` source, its `paths` (a document's key is the file's path as they reach it, so
-///   `docs` and `./docs` key the same file two ways), whether it reads `records`, and with them
-///   their `id` path;
+/// - for a `files` source, whether it keys whole files (no `records`, or `records` in
+///   `WholeFile` format) or records of a format, and for records their `id` path;
 /// - for a `structured` source, where its records come from (`input`), from Connectors its
 ///   `adapter` and `operation`, from files its `paths` and `glob` (both in every record's key),
 ///   and its `mapping.id` path.
 ///
-/// A path read from a record is compared as `sources::at` reads it. The glob of a `files` source
-/// only picks files and is not in their keys, so it is not compared.
+/// A path read from a record is compared as `sources::at` reads it. A `files` source's `paths`
+/// are not here: each file's key is its own path, which a list of roots does not change; a root
+/// that reaches a seen file under another spelling is [`respelled_root`]. Its glob only picks
+/// files and is not in their keys.
 fn keyed_by(settings: &m::SourceSettings) -> Vec<(&'static str, String)> {
     let kind = match settings {
         m::SourceSettings::Web(_) => "web",
@@ -1520,16 +1521,13 @@ fn keyed_by(settings: &m::SourceSettings) -> Vec<(&'static str, String)> {
             ("operation", c.operation.clone()),
             ("id", record_path(&c.id)),
         ]),
-        m::SourceSettings::Files(f) => {
-            fields.push(("paths", format!("{:?}", f.paths)));
-            match &f.records {
-                Some(r) => fields.extend([
-                    ("records", "records".to_string()),
-                    ("records.id", record_path(&r.id)),
-                ]),
-                None => fields.push(("records", "whole files".to_string())),
-            }
-        }
+        m::SourceSettings::Files(f) => match &f.records {
+            Some(r) if r.format != m::RecordFormat::WholeFile => fields.extend([
+                ("records", format!("{:?}", r.format)),
+                ("records.id", record_path(&r.id)),
+            ]),
+            _ => fields.push(("records", "whole files".to_string())),
+        },
         m::SourceSettings::Structured(s) => {
             match &s.input {
                 m::StructuredInput::Connectors(c) => fields.extend([
@@ -1550,15 +1548,74 @@ fn keyed_by(settings: &m::SourceSettings) -> Vec<(&'static str, String)> {
     fields
 }
 
+/// A `files` root as its files' keys start: `~/` expanded and a relative root read against
+/// `base`, as `sources::under` reads it, with no trailing `/`.
+fn root_spelling(base: &Path, root: &str) -> String {
+    let path = cortex_cli::ekr::expand(root);
+    let full = if path.is_absolute() {
+        path
+    } else {
+        base.join(path)
+    };
+    let text = full.display().to_string();
+    match text.trim_end_matches('/') {
+        "" => text,
+        trimmed => trimmed.to_string(),
+    }
+}
+
+/// The directory `spelling` names, with `.` dropped and `..` taking the step before it away.
+fn root_directory(spelling: &str) -> Vec<std::ffi::OsString> {
+    let mut steps: Vec<std::ffi::OsString> = Vec::new();
+    for step in Path::new(spelling).components() {
+        match step {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir if matches!(steps.last(), Some(last) if last != ".." && last != "/") =>
+            {
+                steps.pop();
+            }
+            other => steps.push(other.as_os_str().to_os_string()),
+        }
+    }
+    steps
+}
+
+/// Whether a root of `new` that `old` does not list reaches a file one of `old`'s roots reached
+/// under another spelling (`docs` and `./docs`, `a/../docs`, `~/docs` and `$HOME/./docs`): that
+/// file's key, its path as the root reaches it, changes. A root added beside the old ones, a root
+/// removed, the roots reordered, or a root inside another written the same way (`docs` and
+/// `docs/sub`), keys no file another way. Relative roots are read against `base`.
+fn respelled_root(base: &Path, old: &m::FilesSource, new: &m::FilesSource) -> bool {
+    let before: Vec<String> = old.paths.iter().map(|r| root_spelling(base, r)).collect();
+    let inside = |a: &str, b: &str| a == b || a.starts_with(&format!("{b}/"));
+    new.paths
+        .iter()
+        .map(|r| root_spelling(base, r))
+        .filter(|added| !before.contains(added))
+        .any(|added| {
+            let dir = root_directory(&added);
+            before.iter().any(|was| {
+                let was_dir = root_directory(was);
+                let overlap = dir.starts_with(&was_dir) || was_dir.starts_with(&dir);
+                overlap && !inside(&added, was) && !inside(was, &added)
+            })
+        })
+}
+
 /// The first source the frozen spec `old` and `new` both name whose documents `new` keys another
 /// way while its seen state holds a document: its name and the first field that changed. A source
 /// with no state file, or one with no document, is not; a state file that cannot be read counts
-/// as holding one.
+/// as holding one. A `files` root is read against the directory the instance was created from
+/// (`meta.json`'s `spec_dir`), or as written when that cannot be read.
 fn rekeyed(
     layout: &Layout,
     old: &m::InstanceSpec,
     new: &m::InstanceSpec,
 ) -> Option<(String, &'static str)> {
+    let base = layout
+        .load_meta()
+        .map(|meta| meta.spec_dir)
+        .unwrap_or_default();
     new.sources.iter().find_map(|source| {
         let was = old.sources.iter().find(|s| s.name == source.name)?;
         let (before, after) = (keyed_by(&was.settings), keyed_by(&source.settings));
@@ -1566,7 +1623,15 @@ fn rekeyed(
             .iter()
             .zip(&before)
             .find(|(a, b)| a != b)
-            .map(|(a, _)| a.0)?;
+            .map(|(a, _)| a.0)
+            .or_else(|| match (&was.settings, &source.settings) {
+                (m::SourceSettings::Files(o), m::SourceSettings::Files(n))
+                    if respelled_root(&base, o, n) =>
+                {
+                    Some("paths")
+                }
+                _ => None,
+            })?;
         let seen = cortex_cli::state::SeenState::load(&layout.seen(&source.name))
             .map_or(true, |state| !state.documents.is_empty());
         seen.then(|| (source.name.clone(), field))
