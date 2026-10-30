@@ -24,33 +24,93 @@ enum Keep {
     User,
 }
 
-/// A credential's name, with any `<word>_` or `<word>-` prefix (`DB_PASSWORD`, `client_secret`,
-/// `db-password`, `AWS_SECRET_ACCESS_KEY`). `password` and `passwd` may be glued to a prefix
-/// (`PGPASSWORD`), `secret` may be followed by `key` (`SECRET_KEY`, `DJANGO_SECRET_KEY`), and
-/// `pass` is a name after a `<word>_` prefix only (`DB_PASS`), so the words `pass` and `bypass`
-/// are not. Leading `_` are part of it (`_password`, `__db_password__`). `crate::redact`'s
-/// `Credential` class reads the same spellings.
-pub(crate) const KEYWORD: &str = r"_*(?:(?:[a-z0-9]+[_-])*(?:[a-z0-9]*pass(?:word|wd)|secret(?:[_-]?key)?|api[_-]?key|access[_-]?key|access[_-]?token|auth[_-]?token)|(?:[a-z0-9]+_)+pass)";
+/// A credential's name as 0.7.1 read it, with any `<word>_` prefix (`DB_PASSWORD`,
+/// `client_secret`, `AWS_SECRET_ACCESS_KEY`), at a word boundary or after a percent-encoded byte,
+/// encoded once or more (`%3Faccess_token`, `%253Faccess_token`), and its separator. Kept as
+/// written: a structured source's record identities (`crate::structured::prefix`) are written so
+/// that masking leaves them as they are, and only this rule reads a name followed by a bare `:`
+/// and its value (`vault.secret:<id>`), so no identity 0.7.1 wrote changes.
+const NAME_0_7_1: &str = r"((?:\b|%(?:25)*[0-9a-f]{2})(?:[a-z0-9]+_)*(?:password|passwd|secret|api[_-]?key|access[_-]?key|access[_-]?token|auth[_-]?token))";
+const SEPARATOR_0_7_1: &str = r#"((?:\\?["']|%(?:25)*2[27])?\s*(?:=>|[:=]|%(?:25)*3[ad])\s*)"#;
+/// A credential's name in the spellings read since `story:credential-key-spellings`, with any
+/// `<word>_` or `<word>-` prefix and any leading `_` (`db-password`, `_password`). `password` and
+/// `passwd` may be glued to a prefix (`PGPASSWORD`), and `secret` may be followed by `key`
+/// (`SECRET_KEY`, `DJANGO_SECRET_KEY`). `crate::redact`'s `Credential` class reads the same
+/// spellings.
+pub(crate) const KEYWORD: &str = r"_*(?:[a-z0-9]+[_-])*(?:[a-z0-9]*pass(?:word|wd)|secret(?:[_-]?key)?|api[_-]?key|access[_-]?key|access[_-]?token|auth[_-]?token)";
+/// A password's name cut short, in upper case as an environment assignment writes it
+/// (`DB_PASS=`, `export SMTP_PASS=`). In lower case it is code or a setting (`render_pass`,
+/// `season_pass`, `first_pass:`), so it is no name.
+pub(crate) const ENV_PASS: &str = r"\b(?-i:(?:[A-Z0-9]+_)+PASS)";
 /// Markup around a name or after its separator: a code span, bold or italic, as Markdown and chat
 /// write a key (`` `DB_PASSWORD`: ``, `*api_key*: `, `**api_key:** `).
 pub(crate) const MARKUP: &str = r"[`*_~]{1,3}";
-/// `=`, `:` or `=>`, raw or percent-encoded once or more, after the quote or markup that closes a
-/// quoted name (`"password": `, `\"password\": ` inside a JSON string, `` `password`: ``), and
-/// followed by markup before a space (`**password:** `), as the opt-in `Credential` class of
-/// `crate::redact` reads it.
-fn separator() -> String {
+/// The separator after a name in a spelling [`KEYWORD`] reads: the quote or markup that closes a
+/// quoted name (`"password": `, `\"password\": ` inside a JSON string, `` `password`: ``), then
+/// `=` or `=>`, raw or percent-encoded once or more, or `:` followed by a space, an opening quote
+/// or markup and a space (`**password:** `). A bare `:` before the value (`get_secret_key:P-1`),
+/// as an identifier or a record identity writes it, is no separator here.
+pub(crate) fn separator() -> String {
     format!(
-        r#"((?:\\?["']|%(?:25)*2[27]|{MARKUP})?\s*(?:=>|[:=]|%(?:25)*3[ad])(?:{MARKUP}\s+|\s*))"#
+        r#"((?:\\?["']|%(?:25)*2[27]|{MARKUP})?\s*(?:(?:=>|=|%(?:25)*3d)(?:{MARKUP}\s+|\s*)|:(?:{MARKUP}\s+|\s+|\\?["'`])))"#
     )
 }
-/// An element's text, as XML writes a credential (`<db_password>…</db_password>`): six or more
-/// characters up to the closing tag, which is kept. Groups: the `>`, the value, the closing `</`.
-pub(crate) const ELEMENT_VALUE: &str = r"(>\s*)([^\s<][^<]{5,}?)(\s*</)";
-/// A command-line flag's value after a space or a tab (`--db-password <value>`), which is not
-/// another flag. Groups: the space, the value.
-pub(crate) const FLAG_VALUE: &str = r#"([ \t]+["']?)([^\s"'\-][^\s"']{5,})"#;
-/// A flag's name: one or two `-` that start a word (`--db-password`).
-pub(crate) const FLAG: &str = r"\B--?";
+/// An XML element that holds a credential (`<db_password>…</db_password>`, `<wsse:Password
+/// Type="…">…</wsse:Password>`), with its name, an optional namespace prefix and its attributes:
+/// its text of six or more characters, or a CDATA section. The value ends at a closing tag, and
+/// the element is read only when that tag closes it ([`same_element`]), so a `<password>`
+/// placeholder in prose is not. Groups: the opening tag without its `>`, the `>`, the value, the
+/// closing tag.
+pub(crate) fn element(name: &str) -> String {
+    format!(
+        r"(?i)(<(?:[a-z][a-z0-9_.\-]*:)?{name}(?:\s[^<>]*)?)(>\s*)(<!\[CDATA\[(?:[^\]]|\]{{1,2}}[^\]>])+\]\]>|[^\s<][^<]{{5,}}?)(\s*</[^<>\s]+\s*>)"
+    )
+}
+/// A command-line flag that names a credential (`--db-password`) and its value after a space or a
+/// tab: a quoted value whole, or six or more characters that are not another flag. Whether the
+/// value is a credential is [`flag_value_is_credential`]'s. Groups: the flag, the space, the value.
+pub(crate) fn flag(name: &str) -> String {
+    format!(
+        r#"(?i)(\B--?{name})([ \t]+)("[^"\r\n]{{6,}}"|'[^'\r\n]{{6,}}'|[^\s"'\-][^\s"']{{5,}})"#
+    )
+}
+
+/// Whether the closing tag `close` (`</wsse:Password>`) closes the element `open` opens
+/// (`<wsse:Password Type="…"`), in any case.
+pub(crate) fn same_element(open: &str, close: &str) -> bool {
+    let open = open
+        .trim_start_matches('<')
+        .split(|c: char| c.is_whitespace() || c == '>')
+        .next()
+        .unwrap_or_default();
+    let close = close
+        .trim()
+        .trim_start_matches("</")
+        .trim_end_matches('>')
+        .trim();
+    !open.is_empty() && open.eq_ignore_ascii_case(close)
+}
+
+/// Whether `value` after the flag `flag` is a credential. A quoted value is. These are not: a word
+/// of prose (lower-case letters in any script, `--password option`, `--password ändern`, with any
+/// punctuation that ends a clause after it), a metavar (`PASSWORD`, `DB_PASSWORD`,
+/// `<DB_PASSWORD>`), a variable (`$API_KEY`, `${API_KEY}`), and a mount after `--secret`
+/// (`id=npmrc,src=…`), which names a file.
+pub(crate) fn flag_value_is_credential(flag: &str, value: &str) -> bool {
+    if value.starts_with(['"', '\'']) {
+        return true;
+    }
+    let word = value.trim_end_matches(['.', ',', ';', ':', '!', '?', ')']);
+    let prose = !word.is_empty() && word.chars().all(char::is_lowercase);
+    let metavar = word.starts_with('<')
+        || (word.chars().any(|c| c.is_ascii_uppercase())
+            && word
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c == '_' || c == '-'));
+    let variable = word.starts_with('$');
+    let mount = flag.trim_start_matches('-').eq_ignore_ascii_case("secret") && word.contains('=');
+    !(prose || metavar || variable || mount)
+}
 /// An assigned value in text: up to the next space or quote.
 const TEXT_VALUE: &str = r#"([^\s"']{6,})"#;
 /// One character of an assigned value in a key. A value ends at a space, a quote, `&` or `#`,
@@ -72,32 +132,29 @@ const KEY_VALUE: &str = concat!("((?:", key_unit!(), "){6,})");
 /// break may be written `\n`, as in a JSON string.
 const KEY_LINES: &str = r"(?:(?:\s|\\[rn])+(?:(?:Proc-Type|DEK-Info):[^\r\n\\]*|[A-Za-z0-9+/=]{16,}|[A-Za-z0-9+/=]+\s*\z))*";
 
-/// Whether a flag's value is a word of prose (`--password option`): lower-case letters only,
-/// with any punctuation that ends a sentence or a clause after them.
-pub(crate) fn prose_word(value: &str) -> bool {
-    let word = value.trim_end_matches(['.', ',', ';', ':', '!', '?', ')']);
-    !word.is_empty() && word.chars().all(|c| c.is_ascii_lowercase())
-}
+/// A rule: its shape, what it keeps, its pattern, and whether a match is masked.
+type Rule = (&'static str, Keep, Regex, fn(&regex::Captures) -> bool);
 
-/// A rule: its shape, what it keeps, its pattern, and whether a value it found is masked.
-type Rule = (&'static str, Keep, Regex, fn(&str) -> bool);
-
-fn any_value(_: &str) -> bool {
+fn any_match(_: &regex::Captures) -> bool {
     true
 }
 
-fn not_prose(value: &str) -> bool {
-    !prose_word(value)
+fn closes_itself(c: &regex::Captures) -> bool {
+    same_element(&c[1], &c[4])
+}
+
+fn flag_credential(c: &regex::Captures) -> bool {
+    flag_value_is_credential(&c[1], &c[3])
 }
 
 fn build(value: &str) -> Vec<Rule> {
-    // A credential's name at a word boundary or after a percent-encoded byte, encoded once or
-    // more (`%3Faccess_token`, `%253Faccess_token`).
+    let assignment_0_7_1 = format!(r#"(?i){NAME_0_7_1}{SEPARATOR_0_7_1}(?:\\?["'])?{value}"#);
     let name = format!(r"((?:\b|%(?:25)*[0-9a-f]{{2}}){KEYWORD})");
     let separator = separator();
     let assignment = format!(r#"(?i){name}{separator}(?:\\?["'`])?{value}"#);
-    let element = format!(r"(?i)(<{KEYWORD}(?:\s[^<>]*)?){ELEMENT_VALUE}");
-    let flag = format!(r"(?i)({FLAG}{KEYWORD}){FLAG_VALUE}");
+    let env_pass = format!(r#"(?i)({ENV_PASS})(\s*=\s*)(?:["'])?{value}"#);
+    let element = element(KEYWORD);
+    let flag = flag(KEYWORD);
     // A whole key first, then a key without its `END` line: two rules, because one with both as
     // alternatives reads to the end of the text for every `BEGIN` line without an `END` line.
     [
@@ -165,12 +222,16 @@ fn build(value: &str) -> Vec<Rule> {
             )
             .into(),
         ),
+        ("secret-assignment", Keep::Name, assignment_0_7_1),
         ("secret-assignment", Keep::Name, assignment),
-        ("secret-assignment", Keep::Name, element),
+        ("secret-assignment", Keep::Name, env_pass),
     ]
     .into_iter()
-    .map(|(name, keep, pattern)| (name, keep, pattern, any_value as fn(&str) -> bool))
-    .chain([("secret-assignment", Keep::Name, flag, not_prose as fn(&str) -> bool)])
+    .map(|(name, keep, pattern)| (name, keep, pattern, any_match as fn(&regex::Captures) -> bool))
+    .chain([
+        ("secret-assignment", Keep::Name, element, closes_itself as _),
+        ("secret-assignment", Keep::Name, flag, flag_credential as _),
+    ])
     .map(|(name, keep, pattern, accept)| {
         let rule = Regex::new(&pattern).expect("a valid pattern");
         (name, keep, rule, accept)
@@ -229,7 +290,7 @@ fn apply(rules: &[Rule], text: &str) -> (String, usize) {
             let token_split_at_its_colon = matches!(keep, Keep::User)
                 && c[1].ends_with("[masked:")
                 && already_masked(&format!("[masked:{}", &c[2]));
-            if already_masked(value) || token_split_at_its_colon || !accept(value) {
+            if already_masked(value) || token_split_at_its_colon || !accept(c) {
                 return c[0].to_string();
             }
             count += 1;

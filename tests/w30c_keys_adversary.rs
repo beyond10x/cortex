@@ -4,8 +4,8 @@
 //! `state::SeenState` or `structured::Source` with a shape the unit's new classes read: a value
 //! left partly in clear, content that is no credential masked, a stored key or a record identity
 //! that changes, idempotence over mixed shapes, and time on long runs of the new shapes' parts.
-//! A case that breaks is marked `#[ignore = "adversary: …"]` so the branch stays green; run it
-//! with `--ignored`. Credential-shaped values and names are assembled at run time so no such
+//! The nine cases that broke were committed `#[ignore]`d and run since their fix in the same
+//! story. Credential-shaped values and names are assembled at run time so no such
 //! literal sits in the source.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -81,7 +81,6 @@ fn fastest(mut f: impl FnMut()) -> Duration {
 /// A flag's value in quotes with spaces (`--db-password "<four words>"`, as a shell writes a
 /// passphrase): `FLAG_VALUE` stops at the first space, so `mask` keeps the last three words.
 #[test]
-#[ignore = "adversary: a quoted flag value with spaces keeps all but its first word in clear"]
 fn a_quoted_flag_value_with_spaces_is_masked_whole() {
     let value = cat(&["Tr0ub4dor ", "horse9 ", "battery7 ", "staple3"]);
     let r = policy();
@@ -104,7 +103,6 @@ fn a_quoted_flag_value_with_spaces_is_masked_whole() {
 /// element rule reads neither a namespace prefix nor a value that starts with `<`, so the whole
 /// password is kept in clear.
 #[test]
-#[ignore = "adversary: <ns:Password> and a CDATA password element keep the whole value in clear"]
 fn a_namespaced_or_cdata_password_element_is_masked() {
     let s = v();
     let p = cat(&["Pass", "word"]);
@@ -132,7 +130,6 @@ fn a_namespaced_or_cdata_password_element_is_masked() {
 /// text. In HTML, any later `</…>` (`</p>`, `</li>`) closes the "element", and the prose up to it
 /// is masked.
 #[test]
-#[ignore = "adversary: a <password> placeholder before any later closing tag masks the prose after it"]
 fn a_placeholder_element_before_a_later_closing_tag_keeps_the_prose() {
     let mut changed = Vec::new();
     for text in [
@@ -151,7 +148,6 @@ fn a_placeholder_element_before_a_later_closing_tag_keeps_the_prose() {
 /// compiler pass, a CI hook. `(?:[a-z0-9]+_)+pass` reads each as a password's name, and the code
 /// or the setting after it is masked. They were kept at 6aaa4800.
 #[test]
-#[ignore = "adversary: `<word>_pass` masks render passes, compiler passes and CI hooks"]
 fn pass_suffixed_names_that_hold_no_credential_are_kept() {
     let r = policy();
     let mut changed = Vec::new();
@@ -178,7 +174,6 @@ fn pass_suffixed_names_that_hold_no_credential_are_kept() {
 /// a BuildKit secret mount (`--secret id=…,src=…`, which names a file). `mask` masks each; the
 /// policy keeps the first three as placeholders.
 #[test]
-#[ignore = "adversary: flag metavars, $VARS and `docker build --secret id=…,src=…` are masked"]
 fn flag_metavars_variables_and_secret_mounts_are_kept() {
     let p = pw();
     let up = p.to_uppercase();
@@ -200,7 +195,6 @@ fn flag_metavars_variables_and_secret_mounts_are_kept() {
 /// `prose_word` reads only ASCII lower-case letters as prose, so a lower-case word with an
 /// accent after a flag is masked as a value (`--password ändern`, German for "change").
 #[test]
-#[ignore = "adversary: a lower-case non-ASCII word after a flag is masked as a value"]
 fn a_lower_case_word_with_an_accent_after_a_flag_is_prose() {
     let text = format!("Mit --{} ändern Sie das Kennwort.", pw());
     assert_eq!(mask(&text), (text.clone(), 0));
@@ -213,7 +207,6 @@ fn a_lower_case_word_with_an_accent_after_a_flag_is_prose() {
 /// is read again under a new key, a second evidence document), and two such keys that differ
 /// only in that value are one key (the second document is left out as a repeat).
 #[test]
-#[ignore = "adversary: non-credential `<word>_pass=` keys are dropped on load and merged"]
 fn keys_that_hold_no_credential_keep_their_stored_form() {
     let keys = [
         "https://example.org/search?q=render_pass%3Dvulkan",
@@ -336,19 +329,21 @@ fn ended_for(s: &Source, old: &str) -> Vec<Operation> {
     )
 }
 
-/// A child operation that now ends in a name (`…get_secret_key`) is written in hex in its
-/// records' identities, while the source's own prefix is unchanged, so `Source::earlier` is
-/// empty. A child value applied at 6aaa4800 cites `<prefix>/<operation>:<parent>:<id>` in
-/// clear; no prefix the source holds owns it, so when the record is gone its value is never
-/// ended, and the re-read record's value stands beside it.
+/// A child operation that ends in a name the new spellings read (`…get_secret_key`) followed by a
+/// bare `:`. Its records' identities are the ones 6aaa4800 wrote, in clear, so a child value applied
+/// then is ended when the record is gone. Before the fix the operation was written in hex, the
+/// old identity was owned by no prefix, and its value was never ended.
 #[test]
-#[ignore = "adversary: a child operation newly in hex orphans the child values applied at 6aaa4800"]
 fn a_child_value_applied_before_its_operation_turned_hex_still_ends() {
     let st = source_yaml("cloud", "projects.list", true);
     let s = Source::new(&st, None);
     let old = format!("cloud:projects.list/{CHILD_OPERATION}:P-1:k1");
     let now = s.child_identity(CHILD_OPERATION, "P-1", "k1");
-    assert_ne!(now.as_deref(), Some(old.as_str()), "the identity changed");
+    assert_eq!(
+        now.as_deref(),
+        Some(old.as_str()),
+        "the identity 6aaa4800 wrote"
+    );
     let ops = ended_for(&s, &old);
     assert!(
         matches!(&ops[..], [Operation::Retract { assertion, .. }] if assertion == "a-old"),
@@ -361,7 +356,6 @@ fn a_child_value_applied_before_its_operation_turned_hex_still_ends() {
 /// (`onepassword`, glued): `Source::earlier` holds the prefix with no part in hex, not the one
 /// 6aaa4800 wrote, so a value applied then is never ended.
 #[test]
-#[ignore = "adversary: a prefix partly in hex at 6aaa4800 is not among `earlier`; its values never end"]
 fn a_value_applied_under_a_partly_hex_prefix_still_ends() {
     let st = source_yaml(&cat(&["one", "pass", "word"]), "vault.secret", false);
     let s = Source::new(&st, None);

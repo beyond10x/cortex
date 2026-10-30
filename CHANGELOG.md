@@ -39,23 +39,26 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 ### Fixed
 
 - Now masked on every run, and found by the `Credential` class: a password under a name glued to
-  a prefix (`PGPASSWORD=`) or cut short after one (`DB_PASS=`), a secret followed by `key`
-  (`SECRET_KEY=`, `DJANGO_SECRET_KEY=`, `AWS_SECRET_KEY=`, `secret_key = `), a name in Markdown
-  or chat markup (`` `DB_PASSWORD`: ``, `*AWS_SECRET_ACCESS_KEY*: `, `**api_key**: `,
-  `**Password:** `), a name with a leading `_` (`self._password = `), an XML element (`<db_password>…</db_password>`) and a command-line flag
-  with its value after a space (`--db-password …`, not a lower-case word such as `option`). Kept:
-  `access_key_id`, `secret_santa`, `password_policy`, `--password-file`, `<password_hint>`, a
-  heading or label with no value, `PGPASSFILE`, and `pass` alone.
+  a prefix (`PGPASSWORD=`) or cut short after one in upper case (`DB_PASS=`), a secret followed
+  by `key` (`SECRET_KEY=`, `DJANGO_SECRET_KEY=`, `AWS_SECRET_KEY=`, `secret_key = `), a name in
+  Markdown or chat markup (`` `DB_PASSWORD`: ``, `*AWS_SECRET_ACCESS_KEY*: `, `**api_key**: `,
+  `**Password:** `), a name with a leading `_` (`self._password = `), an XML element with or
+  without a namespace, its text or a CDATA section (`<db_password>…</db_password>`,
+  `<wsse:Password …>…</wsse:Password>`), and a command-line flag with its value after a space,
+  a quoted value whole (`--db-password …`).
+- Kept as they are: `access_key_id`, `secret_santa`, `password_policy`, `--password-file`,
+  `<password_hint>`, a `<password>` placeholder not closed by its own tag, a heading or label
+  with no value, `PGPASSFILE`, `pass` alone, a lower-case `_pass` name (`render_pass`,
+  `season_pass=`), and after a flag a word of prose in any script (`option`, `ändern`), a metavar
+  (`PASSWORD`, `<DB_PASSWORD>`), a variable (`$API_KEY`) or a `--secret id=…,src=…` mount.
+- A name in one of these spellings followed by a bare `:` and its value (`get_secret_key:P-1`)
+  is read only in the spellings 0.7.1 read, so no structured record identity changes.
 - The `Credential` class also reads a JSON-quoted name inside a JSON string
   (`{\"db_password\": \"…\"}`) and a value that starts with a percent-encoded byte
   (`aws_secret_access_key=%2B…`), as masking does.
 - A URL password after a user name that holds a raw `@` is masked when it holds a `,` or `;`
   too; a user, host and port before a list of addresses (`ops@mail.example:587,admin@example.org`)
   is still kept.
-- Upgrading: a structured source whose adapter, operation, path or glob ends in one of the names
-  now read (`…_pass`, `…secret_key`, `pgpassword`, a name followed by `*` or `` ` ``) is written
-  in hex in its records' identities, as other credential names already are, so those records get
-  new identities once.
 
 ## 0.7.1 — 2026-10-30
 
