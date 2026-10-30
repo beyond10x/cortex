@@ -523,8 +523,10 @@ errors:
 
   - name: cortex.ask.ClientClosed
     summary: >-
-      The reader closed the stream before its last event; the answer stops at once and opens no
-      review item. `steps` counts the model calls made, and the token counts add up their `usage`
+      The reader closed the stream before its last event; no further model or tool call is made,
+      and the answer opens no review item. A model call in flight when the reader left runs to its
+      reply or `max_seconds`, and the answer keeps its `max_in_flight` slot until it ends. `steps`
+      counts the model calls made, and the token counts add up their `usage`
       as `cortex.ask.AskDone` does; `context_tokens` is the prompt tokens of the last one.
     fields:
       - {name: steps, type: Integer}

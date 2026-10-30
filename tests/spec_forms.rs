@@ -506,6 +506,37 @@ fn a_frozen_copy_above_a_bound_keeps_running_and_updates_only_into_range() {
 }
 
 #[test]
+fn the_bounds_hold_where_a_spec_is_given_and_not_where_one_is_served() {
+    // `create`, `update` and `adopt` read a spec with `spec::load_given`, which refuses a number
+    // above its range. `cortex ask serve` runs over an existing instance's spec and reads it with
+    // `spec::load_served`, as 0.6.1 read it, so a spec 0.6.1 served keeps being served.
+    let w = World::new();
+    let max = i64::MAX.to_string();
+    for (text, field) in [
+        (
+            spec_with_numbers("s", "40000", "18997", None),
+            "sources.news.policy.refresh_after_days",
+        ),
+        (
+            spec_with_numbers("s", "0", "70000", None),
+            "serve.view_port",
+        ),
+        (
+            spec_with_numbers("s", "0", "18997", Some(("/bin/true", max.as_str()))),
+            "monitoring.hook.timeout_s",
+        ),
+    ] {
+        let path = write(&w, "s.yaml", &text);
+        let refused = spec::load_given(&path).err().unwrap_or_default();
+        assert!(refused.contains(field), "load_given: {field}: {refused:?}");
+        assert!(
+            spec::load_served(&path).is_ok(),
+            "load_served refused {field}"
+        );
+    }
+}
+
+#[test]
 fn the_largest_accepted_numbers_run_without_overflow() {
     // 36500 days, port 65535 (and 0, "take a free port") and a hook allowed 86400 seconds are
     // accepted; a run reads the refresh window of seen documents and calls the hook with them.

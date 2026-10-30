@@ -3120,7 +3120,7 @@ fn enable(app: &mut App, ctx: &Ctx, source_id: &str) -> ExitCode {
 /// `cortex ask serve`: a spec the service cannot serve is refused (exit 2, naming the field)
 /// before anything binds; a service that stops exits 1.
 fn ask_serve(home: &Home, spec: &std::path::Path) -> ExitCode {
-    let (settings, loaded) = match cortex_cli::spec::load_given(spec)
+    let (settings, loaded) = match cortex_cli::spec::load_served(spec)
         .and_then(|loaded| cortex_cli::ask::Settings::of(home, &loaded.model).map(|s| (s, loaded)))
     {
         Ok(s) => s,

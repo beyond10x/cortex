@@ -58,13 +58,26 @@ pub fn load(path: &Path) -> Result<Loaded, String> {
 /// alone, so an instance created before the rule keeps loading and can be updated to a new name.
 ///
 /// A spec it accepts with a dollar limit behind a model gateway gets one warning line on stderr
-/// ([`dollar_limits_warning`]).
+/// ([`dollar_limits_warning`]). A number out of range is refused here ([`bounds_refusal`]), where
+/// a spec is written, and nowhere a spec is only run.
 pub fn load_given(path: &Path) -> Result<Loaded, String> {
+    given(path, true)
+}
+
+/// Reads the spec file `cortex ask serve` runs over: what [`load_given`] refuses, but for the
+/// numbers [`bounds_refusal`] holds. The spec is an existing instance's, which 0.6.1 served with
+/// any of them, and the answer service reads none of them; a run saturates or caps them where it
+/// reads them.
+pub fn load_served(path: &Path) -> Result<Loaded, String> {
+    given(path, false)
+}
+
+fn given(path: &Path, bounded: bool) -> Result<Loaded, String> {
     let loaded = load(path)?;
     if let Some(reason) = reserved_refusal(&loaded.model)
         .or_else(|| infinite_refusal(&loaded.model))
         .or_else(|| gateway_refusal(&loaded.model))
-        .or_else(|| bounds_refusal(&loaded.model))
+        .or_else(|| bounded.then(|| bounds_refusal(&loaded.model)).flatten())
     {
         return Err(format!("{}: {reason}", path.display()));
     }
@@ -384,10 +397,11 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
 /// Why a number of `spec` is out of range: a `refresh_after_days` above
 /// [`MAX_REFRESH_AFTER_DAYS`], a `monitoring.hook.timeout_s` above [`MAX_HOOK_TIMEOUT_S`] or a
 /// `serve.view_port` that is no port (0 lets the viewer take a free one). Held for `create`,
-/// `update` and `adopt` ([`load_given`]); an instance's frozen copy, read with [`load`], is not
-/// held to it, so one created before the rule keeps running: a run saturates the refresh window
-/// and caps the hook's time ([`crate::status`]), and the port is read only when an instance is
-/// made.
+/// `update` and `adopt` ([`load_given`]); an instance's frozen copy, read with [`load`], and the
+/// spec `cortex ask serve` is given, read with [`load_served`], are not held to it, so one
+/// created before the rule keeps running: a run saturates the refresh window and caps the hook's
+/// time ([`crate::status`]), the port is read only when an instance is made, and the answer
+/// service reads none of the three.
 pub fn bounds_refusal(spec: &m::InstanceSpec) -> Option<String> {
     if let Some(source) = spec
         .sources

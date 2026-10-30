@@ -182,9 +182,12 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   `+49 30/1234567` through, and ended a link at `[`, so `?filter[owner]=x` reached the model.
   Such a link is now replaced, and an international number may have one `/` after its area code
   (a date after `+`, such as `+1 2/3/2024` or `+1 2024/10/30`, is still not a number). A link
-  keeps the brackets and parentheses it opens and closes, and ends at a `]` or `)` it did not
-  open, so `[https://host/x]` and Markdown links written back to back without a space are each
-  their own link. A citation such as `[2]` after the punctuation that ends a link stays outside it.
+  keeps the brackets and parentheses it opens and closes, and a `(` or `)` without a partner
+  while the link goes on after it (`?q=Jane(Doe`, `/a1)report.pdf`). It ends at a `]` it did not
+  open, and at a `)` it did not open before a space, a bracket, a quote, the end of the text or
+  the punctuation that closes a sentence, so `[https://host/x]` and Markdown links written back
+  to back without a space are each their own link. A citation such as `[2]` after the
+  punctuation that ends a link stays outside it.
 - The always-on credential mask missed five shapes: a quoted name (`"password": "…"`), a URL
   password with a raw `@` (`postgres://app:p@ss@db/x`), a value in a document key with a raw `%`
   that starts no escape, `%3A` as the separator, and a private key whose `END` line a provider
@@ -214,7 +217,9 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   (`instances/<name>/instance.yaml`) is not held to the bounds, a run counts a larger refresh
   window as reaching back as far as a time can, a larger hook `timeout_s` is capped at 86400
   seconds, and the port is read only when an instance is made. An `update` to an out-of-range
-  value is refused naming the field, and one into range is made as before.
+  value is refused naming the field, and one into range is made as before. `cortex ask serve`
+  is not held to the bounds either: it reads none of these fields and serves such a spec as
+  0.6.1 did.
 - A home file cortex rewrote (`registry.json`, a source status, a state file) was renamed into
   place without being synced, so a crash could leave it empty and every command then failed. Each
   is now synced to disk before the rename, and its directory after it.

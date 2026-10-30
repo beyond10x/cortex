@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest d0c6a31749113e3980a43fe52535aef214b93505b8cc60910767f60cc61b6013
-// contract digest 194d13785b2cf1ca647a687346331ba5a05a5ef7fe21fc26e1df02720edd5f8b
+// model digest 501155e050c28011046dcae8d1dceec62fedb2aefd31466bf7cf27127bcfcad7
+// contract digest 6500154fdb77662a0f7d0e870f8f6b68f67d1c4d0d48da77d962aabfd412eaff
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Answers — `cortex.ask`.
@@ -1204,7 +1204,7 @@ pub struct Busy {
 
 /// The declared error `cortex.ask.ClientClosed`.
 ///
-/// The reader closed the stream before its last event; the answer stops at once and opens no review item. `steps` counts the model calls made, and the token counts add up their `usage` as `cortex.ask.AskDone` does; `context_tokens` is the prompt tokens of the last one.
+/// The reader closed the stream before its last event; no further model or tool call is made, and the answer opens no review item. A model call in flight when the reader left runs to its reply or `max_seconds`, and the answer keeps its `max_in_flight` slot until it ends. `steps` counts the model calls made, and the token counts add up their `usage` as `cortex.ask.AskDone` does; `context_tokens` is the prompt tokens of the last one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientClosed {
     /// `steps` — `Integer`.
