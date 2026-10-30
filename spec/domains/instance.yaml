@@ -1720,6 +1720,21 @@ commands:
       # effect that creates or updates one record per element of a collection (`instances:` is
       # refused on `creates:`, `affects:` only updates), so the per-source state file holds it and
       # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.
+      # UNMAPPED: a batch of several documents the model was asked about and failed on (not
+      # `model-unavailable`, not unfit for its window, and not an error answer that cost zero,
+      # which came before any model was asked) ends the run as any failed batch does and marks its
+      # documents, kept per key with the hash of the text in `failures/<source>.json` beside
+      # `state/`, so a run that is undone keeps them; such a batch that holds a marked document is
+      # split in two instead and each half asked, down to one document, and a split batch whose
+      # parts a limit keeps from being asked, with nothing applied, is `extraction-failed`. A
+      # document that fails alone adds one to its count of consecutive failed runs, kept there
+      # with the last reason; a changed text counts from one again, and an applied document
+      # drops its count. Below 3 the run stops at it (`extraction-failed` when nothing was applied,
+      # else `ran` with `stopped` naming it and its count). From 3 on, with the same text, the
+      # document is skipped: named in the run's `skipped` with its count and reason, not sent to the
+      # model, not marked seen, wanted no longer for the run's success or its window, and the
+      # batches after it run. ESS has no per-element record effect (beyond10x/ess#459);
+      # src/state.rs and src/run.rs hold it and tests/poison_document.rs tests it.
       # UNMAPPED: after every outcome that names a source, the instance's `monitoring` reports it:
       # `metrics.prom` is rewritten with the source's run counted under its outcome, its duration,
       # and for `ran`, or any outcome reached after a batch was applied, its documents and model

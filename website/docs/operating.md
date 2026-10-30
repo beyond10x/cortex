@@ -23,6 +23,7 @@ Everything lives under the home, `$CORTEX_HOME` or `~/.local/share/cortex`:
 | `instances/<name>/meta.json` | the viewer's port and the directory the spec was created from |
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
 | `instances/<name>/state/entities.json` | entity names from earlier runs, offered to the model so it reuses them |
+| `instances/<name>/failures/<source>.json` | documents whose extraction failed (`cortex.failures/1`): each key's text hash, its consecutive runs failed with the document alone (`0` for one marked by a failed batch of several) and the last reason; outside `state/`, so undoing a run keeps it (see [What one run does](#what-one-run-does)) |
 | `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report, or claude's error text (`claude/error.txt`) |
 | `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
@@ -257,9 +258,24 @@ the UTC day reaches `model.daily_ceiling_usd` (see
 calls have used `model.budget_tokens`, when the instance's tokens of the UTC day reach
 `model.daily_ceiling_tokens`, or when an answer reported no `usage` or a count in it below 0, so
 its tokens could not be counted (see [the spec file](./spec-file.md#limits-in-tokens)). Each stop is checked before a
-batch, keeps the batches before it applied, and names the limit in `stopped`. When a batch fails after an earlier
-one was applied, the run ends as `ran` with `stopped` set; when the first batch fails, nothing was
-applied and the run fails.
+batch, keeps the batches before it applied, and names the limit in `stopped`.
+
+When the model is asked and fails on a batch of several documents for the first time, the run
+stops there as at any failed batch (after one call), and the batch's documents are marked. When a
+batch that holds a marked document fails again, it is split in two and each half asked, down to
+one document, so one document that fails every time does not stop the others. An error answer
+that cost nothing came before any model was asked (a sign-in or a usage limit) and is neither
+split, marked nor counted. A split batch whose parts a limit keeps from being asked, with nothing
+applied, fails as the batch did. A document that fails alone is counted in
+`failures/<source>.json` in the instance directory, beside `state/` and not in it, so a run its
+gate undoes keeps the count. Below 3 consecutive failures the run stops at that document: when an
+earlier document was applied, the run ends as `ran` with `stopped` set, naming the document and its
+count; when none was, nothing was applied and the run fails as `extraction-failed`. From the third
+consecutive failure of the same text on, the document is skipped: it is named in `skipped`
+(`<key>: extraction failed with the document alone on 3 consecutive runs (<reason>); skipped until
+its text changes`), in the run's result and in `cortex.log`, it is not sent to the model, it holds
+no window, and the batches after it run. A changed text is asked again and counted from one; an
+applied document drops its count.
 
 ### Counting what a run would extract
 

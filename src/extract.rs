@@ -268,7 +268,7 @@ impl Refused {
 
     /// An error answer that cost zero: the shape of an answer given before any model was asked
     /// (a sign-in or a usage limit), worth asking once more. A missing cost is not zero.
-    fn free_error_answer(&self) -> bool {
+    pub fn free_error_answer(&self) -> bool {
         self.error_answer && self.cost_usd == Some(0.0) && self.unfit.is_none()
     }
 }

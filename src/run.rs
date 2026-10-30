@@ -18,7 +18,7 @@ use crate::schedule::Systemd;
 use crate::snapshot::{self, BeforeApply, RestoreError};
 use crate::sources::{self, FetchError, Window};
 use crate::spend;
-use crate::state::{text_hash, SeenState};
+use crate::state::{text_hash, Failures, SeenState};
 use crate::structured;
 
 pub struct Tools {
@@ -89,8 +89,10 @@ pub struct Report {
     /// Documents the model was shown cut at the policy's `max_chars_per_document`.
     pub truncated: usize,
     /// Parents left out without holding the window: their child call failed on
-    /// [`sources::CHILD_FAILURE_LIMIT`] or more consecutive runs; and structured records refused
-    /// because their mapped values alone are over EKR's evidence bound.
+    /// [`sources::CHILD_FAILURE_LIMIT`] or more consecutive runs; structured records refused
+    /// because their mapped values alone are over EKR's evidence bound; and documents whose
+    /// extraction failed with the document alone on [`sources::DOCUMENT_FAILURE_LIMIT`] or more
+    /// consecutive runs, each with its count and the last reason ([`Failures`]).
     pub skipped: Vec<String>,
     /// Applied documents a part EKR rejected belongs to, each with EKR's refusal, and structured
     /// records refused before their batch because they meet store nodes of more than one type
@@ -799,7 +801,7 @@ fn process_in(
     // A document adopted by its key alone is seen with the text fetched now, and not extracted;
     // its hash is written with the rest of the run's state, so a run that is undone puts it back.
     report.hashed = seen.hash_unhashed(&docs);
-    let wanted = docs
+    let mut wanted = docs
         .iter()
         .filter(|d| seen.wants(d, started, policy.refresh_after_days))
         .count();
@@ -834,6 +836,30 @@ fn process_in(
             .collect();
         return Ok(std::mem::take(report));
     }
+    // A document whose text failed with it alone in its request on
+    // `DOCUMENT_FAILURE_LIMIT` consecutive runs is left out until its text changes: named in
+    // `skipped` with its count and reason, and not wanted, so it holds no window. The counts live
+    // outside `state/`, so a run that is undone does not reset them.
+    let failures_path = crate::state::failures_path(&layout.dir, label);
+    let mut failures = Failures::load(&failures_path).map_err(Failure::Fetch)?;
+    let refresh = policy.refresh_after_days;
+    let docs: Vec<_> = docs
+        .into_iter()
+        .filter(|d| {
+            let Some(failed) = failures
+                .skips(d)
+                .filter(|_| seen.wants(d, started, refresh))
+            else {
+                return true;
+            };
+            report.skipped.push(masked_key(
+                redactor.as_ref(),
+                &skipped_after_failures(&d.key, failed.runs, &failed.reason),
+            ));
+            wanted = wanted.saturating_sub(1);
+            false
+        })
+        .collect();
     let selected = seen.select(
         docs,
         started,
@@ -984,6 +1010,9 @@ fn process_in(
     let mut too_large: Option<String> = None;
     // Why the run ended `model-unavailable`, when the model could not be reached.
     let mut unreachable: Option<(extract::Unavailable, String)> = None;
+    // Why a batch the run split failed, the first time one did: the run's failure when it then
+    // stops at a limit with nothing applied.
+    let mut split_failure: Option<String> = None;
     while let Some((batch, depth)) = queue.pop_front() {
         stop_point(&format!("before batch {n}"))?;
         // Behind a gateway no dollar amount bounds the call, and none is passed to `claude`.
@@ -1150,6 +1179,69 @@ fn process_in(
                 ));
                 break;
             }
+            // The model was asked and failed on a batch of several documents that holds one that
+            // failed before: the batch is split in two and each half asked, down to one
+            // document, so one document that fails every time stops no other. An error answer
+            // that cost nothing came before any model was asked (a sign-in or a usage limit): not
+            // the batch's fault, never split or counted.
+            Err(refused)
+                if !refused.free_error_answer()
+                    && batch.len() > 1
+                    && batch.iter().any(|i| failures.marked(&i.doc)) =>
+            {
+                split_failure.get_or_insert(refused.message);
+                let mut first = batch;
+                let second = first.split_off(first.len() / 2);
+                queue.push_front((second, depth));
+                queue.push_front((first, depth));
+                continue;
+            }
+            // A batch of several documents, none of which failed before, that fails for the
+            // first time: its documents are marked, so a later run splits it if it fails again,
+            // and the run stops at it as at any failed batch. A transient failure costs no split.
+            Err(refused) if !refused.free_error_answer() && batch.len() > 1 => {
+                let reason = masked_key(redactor.as_ref(), &refused.message);
+                for issued in &batch {
+                    failures.failed_in_batch(&issued.doc, &reason);
+                }
+                failures.save(&failures_path).map_err(Failure::Apply)?;
+                if report.documents_applied == 0 {
+                    return Err(Failure::Extract(refused.message));
+                }
+                report.stopped = Some(refused.message);
+                break;
+            }
+            // A document that failed alone is counted, outside `state/`; from its
+            // `DOCUMENT_FAILURE_LIMIT`th consecutive run on it is skipped, holds no window, and
+            // the batches after it run. Below that, the run stops at it, as at any failed batch.
+            Err(refused) if !refused.free_error_answer() => {
+                let doc = &batch[0].doc;
+                let reason = masked_key(redactor.as_ref(), &refused.message);
+                let runs = failures.failed(doc, &reason);
+                failures.save(&failures_path).map_err(Failure::Apply)?;
+                if runs >= sources::DOCUMENT_FAILURE_LIMIT {
+                    report.skipped.push(masked_key(
+                        redactor.as_ref(),
+                        &skipped_after_failures(&doc.key, runs, &reason),
+                    ));
+                    wanted = wanted.saturating_sub(1);
+                    continue;
+                }
+                let why = masked_key(
+                    redactor.as_ref(),
+                    &format!(
+                        "{reason}; {} failed alone on {runs} consecutive run(s), and from the \
+                         {}th it is skipped until its text changes",
+                        doc.key,
+                        sources::DOCUMENT_FAILURE_LIMIT
+                    ),
+                );
+                if report.documents_applied == 0 {
+                    return Err(Failure::Extract(why));
+                }
+                report.stopped = Some(why);
+                break;
+            }
             Err(refused) if report.documents_applied == 0 => {
                 return Err(Failure::Extract(refused.message))
             }
@@ -1262,6 +1354,8 @@ fn process_in(
         for (id, refusals) in rejected_again {
             rejected.entry(id).or_default().extend(refusals);
         }
+        // An applied document's failure count, if it had one, ends.
+        let mut recovered = false;
         for issued in &batch {
             if let Some(refusals) = rejected.get(&issued.id) {
                 report
@@ -1272,7 +1366,11 @@ fn process_in(
                 continue;
             }
             seen.record(&issued.doc, applied_at);
+            recovered |= failures.applied(&issued.doc.key);
             report.documents_applied += 1;
+        }
+        if recovered {
+            failures.save(&failures_path).map_err(Failure::Apply)?;
         }
         for (ty, name) in extract::entity_names(&restored) {
             let names = entities.entry(ty).or_default();
@@ -1291,6 +1389,16 @@ fn process_in(
             report.stopped = Some(why);
             break;
         }
+    }
+    // A failed batch was split, and the run stopped at a limit (its budget, its tokens, the day's
+    // ceiling) before any part was applied: the failure stays the run's answer, as without the
+    // split, with the stop said beside it.
+    if let (Some(failure), Some(stopped), true) = (
+        &split_failure,
+        &report.stopped,
+        report.documents_applied == 0 && too_large.is_none() && unreachable.is_none(),
+    ) {
+        return Err(Failure::Extract(format!("{failure}; {stopped}")));
     }
     if let Some(why) = &too_large {
         if report.documents_applied == 0 {
@@ -2336,6 +2444,15 @@ fn finish(
         );
     }
     seen.save(path).map_err(Failure::Apply)
+}
+
+/// The `skipped` line of a document whose extraction failed with it alone on `runs` consecutive
+/// runs, the last for `reason`.
+fn skipped_after_failures(key: &str, runs: u32, reason: &str) -> String {
+    format!(
+        "{key}: extraction failed with the document alone on {runs} consecutive runs ({reason}); \
+         skipped until its text changes"
+    )
 }
 
 fn log(layout: &Layout, label: &str, report: &Report, started: i64) {

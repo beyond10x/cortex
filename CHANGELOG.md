@@ -38,6 +38,15 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 ### Fixed
 
+- A document the model failed on every time stopped its source at the same batch on every run,
+  and nothing counted failures per document. A batch of several documents that fails again after
+  a failed run is now split in two and each half asked, down to one document (its first failure
+  still fails the run as before, after one call, and marks its documents). A document that fails
+  alone is counted in `failures/<source>.json`, beside `state/`, so a run its gate undoes keeps
+  the count; from its third consecutive failure with the same text it is skipped, named in
+  `skipped` with its count and the reason, not sent to the model, and the batches after it run.
+  A changed text is asked again. An error answer that cost nothing (a sign-in or a usage limit)
+  is neither split nor counted.
 - A run sent SIGTERM during its fetch ran the fetch out before it stopped. The fetch is now a safe
   point: the `connectors` call in flight is ended with its process group (SIGKILL after 5
   seconds), a paged or `files` read stops between pages and files, and the run ends `terminated`,

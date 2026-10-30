@@ -7,13 +7,13 @@
 //! source's change whose text changed only in its links ([`SeenState::unlinked`]).
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use cortex_model::instance as m;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::sources::{Document, Origin};
+use crate::sources::{Document, Origin, DOCUMENT_FAILURE_LIMIT};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Seen {
@@ -272,6 +272,119 @@ impl SeenState {
                 unlinked_hash,
             },
         );
+    }
+}
+
+/// The format of a failures file.
+pub const FAILURES_FORMAT: &str = "cortex.failures/1";
+
+/// `<instance>/failures/<source>.json`: the source's [`Failures`], outside `state/`, so neither a
+/// snapshot nor a rewind of `state/` takes it back.
+pub fn failures_path(instance_dir: &Path, source: &str) -> PathBuf {
+    instance_dir.join("failures").join(format!("{source}.json"))
+}
+
+/// Consecutive runs whose extraction of a document failed with the document alone in its
+/// request, per key: the hash of the text that failed, the count, and the last reason. A document
+/// of a batch of several that failed is marked with a count of `0` ([`Failures::failed_in_batch`]),
+/// so a later run splits a failing batch that holds it ([`Failures::marked`]). A changed text
+/// starts the count again; an applied document drops its entry. From [`DOCUMENT_FAILURE_LIMIT`]
+/// on, a run leaves the document out ([`Failures::skips`]).
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct Failures {
+    pub format: String,
+    #[serde(default)]
+    pub documents: BTreeMap<String, Failed>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Failed {
+    pub hash: String,
+    pub runs: u32,
+    pub reason: String,
+}
+
+impl Failures {
+    /// The failures file at `path`; a missing one holds none. A key that still holds a
+    /// credential is dropped, as [`SeenState::load`] drops it.
+    pub fn load(path: &Path) -> Result<Self, String> {
+        match std::fs::read(path) {
+            Ok(bytes) => {
+                let mut failures: Self = serde_json::from_slice(&bytes)
+                    .map_err(|e| format!("{}: {e}", path.display()))?;
+                failures
+                    .documents
+                    .retain(|k, _| crate::mask::mask_key(k).1 == 0);
+                Ok(failures)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self {
+                format: FAILURES_FORMAT.into(),
+                documents: BTreeMap::new(),
+            }),
+            Err(e) => Err(format!("cannot read {}: {e}", path.display())),
+        }
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), String> {
+        let text = serde_json::to_string_pretty(self).expect("plain JSON");
+        crate::home::write_atomic(path, text.as_bytes())
+    }
+
+    /// The entry that leaves `doc` out of a run: its text failed alone on
+    /// [`DOCUMENT_FAILURE_LIMIT`] or more consecutive runs.
+    pub fn skips(&self, doc: &Document) -> Option<&Failed> {
+        self.documents
+            .get(&doc.key)
+            .filter(|f| f.runs >= DOCUMENT_FAILURE_LIMIT && f.hash == doc_hash(doc))
+    }
+
+    /// Counts one more failure of `doc` alone, for `reason`, and answers the count: one more than
+    /// before for the same text, `1` for a text that changed.
+    pub fn failed(&mut self, doc: &Document, reason: &str) -> u32 {
+        let hash = doc_hash(doc);
+        let runs = match self.documents.get(&doc.key) {
+            Some(f) if f.hash == hash => f.runs.saturating_add(1),
+            _ => 1,
+        };
+        self.documents.insert(
+            doc.key.clone(),
+            Failed {
+                hash,
+                runs,
+                reason: reason.to_string(),
+            },
+        );
+        runs
+    }
+
+    /// Marks `doc`, of a batch of several documents that failed, for `reason`: a count of `0`,
+    /// unless its text already has one.
+    pub fn failed_in_batch(&mut self, doc: &Document, reason: &str) {
+        let hash = doc_hash(doc);
+        if self.documents.get(&doc.key).is_some_and(|f| f.hash == hash) {
+            return;
+        }
+        self.documents.insert(
+            doc.key.clone(),
+            Failed {
+                hash,
+                runs: 0,
+                reason: reason.to_string(),
+            },
+        );
+    }
+
+    /// Whether `doc`'s text failed before, alone or in a batch: a failing batch that holds it is
+    /// split.
+    pub fn marked(&self, doc: &Document) -> bool {
+        self.documents
+            .get(&doc.key)
+            .is_some_and(|f| f.hash == doc_hash(doc))
+    }
+
+    /// Drops the count of an applied document; answers whether it had one.
+    pub fn applied(&mut self, key: &str) -> bool {
+        self.documents.remove(key).is_some()
     }
 }
 
@@ -607,5 +720,79 @@ mod tests {
             ]
         );
         assert!(rows.iter().all(|r| r.broken_invariant().is_none()));
+    }
+
+    /// `story:poison-document-skipped`: a document is skipped from its third consecutive failure
+    /// with the same text; a changed text starts again at one; an applied document drops it.
+    #[test]
+    fn a_document_is_skipped_from_its_limit_th_failure_with_the_same_text() {
+        let x = doc("https://example.org/x", "poison");
+        let mut failures = Failures::default();
+        for n in 1..DOCUMENT_FAILURE_LIMIT {
+            assert_eq!(failures.failed(&x, "refused"), n);
+            assert!(failures.skips(&x).is_none());
+        }
+        assert_eq!(failures.failed(&x, "refused again"), DOCUMENT_FAILURE_LIMIT);
+        let failed = failures.skips(&x).expect("skipped at the limit");
+        assert_eq!(
+            (failed.runs, failed.reason.as_str()),
+            (DOCUMENT_FAILURE_LIMIT, "refused again")
+        );
+        let changed = doc("https://example.org/x", "poison, edited");
+        assert!(failures.skips(&changed).is_none());
+        assert!(!failures.marked(&changed));
+        assert_eq!(failures.failed(&changed, "refused"), 1);
+        assert!(failures.applied(&changed.key));
+        assert!(!failures.applied(&changed.key));
+        assert!(failures.documents.is_empty());
+    }
+
+    /// A document of a failed batch of several is marked with no count; a mark keeps a count its
+    /// text already has, and the next failure alone counts one.
+    #[test]
+    fn a_document_of_a_failed_batch_is_marked_and_keeps_its_count() {
+        let x = doc("https://example.org/x", "poison");
+        let mut failures = Failures::default();
+        assert!(!failures.marked(&x));
+        failures.failed_in_batch(&x, "batch refused");
+        assert!(failures.marked(&x));
+        assert_eq!(failures.documents[&x.key].runs, 0);
+        assert_eq!(failures.failed(&x, "refused"), 1);
+        assert_eq!(failures.failed(&x, "refused"), 2);
+        failures.failed_in_batch(&x, "batch refused");
+        assert_eq!(failures.documents[&x.key].runs, 2);
+        let changed = doc("https://example.org/x", "poison, edited");
+        failures.failed_in_batch(&changed, "batch refused");
+        assert_eq!(failures.documents[&x.key].runs, 0);
+        assert!(failures.marked(&changed) && !failures.marked(&x));
+    }
+
+    /// The failures file lives beside `state/`, not in it; a missing one holds none, and a key
+    /// that still holds a credential is dropped on load.
+    #[test]
+    fn the_failures_file_lives_outside_state_and_drops_credential_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = failures_path(dir.path(), "news");
+        assert_eq!(path, dir.path().join("failures/news.json"));
+        let empty = Failures::load(&path).unwrap();
+        assert_eq!(empty.format, FAILURES_FORMAT);
+        assert!(empty.documents.is_empty());
+
+        let token = format!("Zr4{}", "p0".repeat(8));
+        let mut failures = Failures::load(&path).unwrap();
+        failures.failed(&doc("https://example.org/x", "poison"), "refused");
+        failures.failed(
+            &doc(
+                &format!("https://example.org/y?access_token={token}"),
+                "poison",
+            ),
+            "refused",
+        );
+        failures.save(&path).unwrap();
+        let loaded = Failures::load(&path).unwrap();
+        assert_eq!(
+            loaded.documents.keys().collect::<Vec<_>>(),
+            ["https://example.org/x"]
+        );
     }
 }

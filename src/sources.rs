@@ -446,6 +446,11 @@ pub struct LinkFailure {
 /// the parent is skipped.
 pub const CHILD_FAILURE_LIMIT: u32 = 3;
 
+/// Consecutive runs a document's extraction may fail with the document alone in its request and
+/// still be asked again; from this many on, it is skipped until its text changes
+/// (`crate::state::Failures`).
+pub const DOCUMENT_FAILURE_LIMIT: u32 = 3;
+
 /// The documents of one source. `window` fills `{since}` and `{until}` in a `connectors`
 /// source's inputs, and `child_failures` counts the consecutive runs each parent's child call
 /// failed in; the other kinds use neither. `max_context` caps the characters of thread context a
