@@ -1,11 +1,11 @@
 // generated from cortex v1
-// model digest 454ae2cdefe42498de39f694543a1a07725b9d4b16d1a2caf6ef6fa1a9fbb502
-// contract digest c75c17e5eb6aa81c48b081736bc63dd7442f26133a33121f93755de3becaa515
+// model digest b67f3f98215ce3eb40675cbc0752e3c6ff62343f78add75e0b29acc90d064397
+// contract digest 3f064ceb66769717d48491776dbf3b988d731bf799a474845878d5ef6d67d8c2
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
 //!
-//! Instances of a knowledge brain and the data sources that feed them. An instance owns one EKR store, created from the instance spec's seed. A source fetches documents on its own schedule, keeps those that are new or changed, has a model extract them into an EKR extraction document and applies it to the instance's store.
+//! Knowledge instances and the data sources that feed them. An instance owns one EKR store, created from the instance spec's seed. A source fetches documents on its own schedule, keeps those that are new or changed, has a model extract them into an EKR extraction document and applies it to the instance's store.
 //!
 //! Everything this bounded context declares that the synthesis plan marks generated.
 

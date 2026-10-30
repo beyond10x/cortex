@@ -108,8 +108,7 @@ stand; [Status](./status.mdx) lists what is planned.
 - **A web page is cited as a statement, not as a URL.** EKR 0.0.34 admits only `HumanStatement`
   evidence in an extraction document (`extraction-evidence-kind-unsupported` for any other), so
   cortex files a page as a `HumanStatement` whose identity is its URL. URL evidence waits on an EKR
-  release that admits it (EKR `story:extraction-admits-url-evidence`; here
-  `upstream-blocker:ekr-url-evidence`).
+  release that admits it in an extraction document.
 - **Relations in a store extracted before EKR 0.0.31 are not graph edges.** Since EKR 0.0.31 an
   extracted relation is also written as an edge, so `search` counts it in a node's `degree` and
   `expand` walks it. EKR does not backfill: relations a store took under EKR 0.0.30 or earlier stay
@@ -146,7 +145,8 @@ stand; [Status](./status.mdx) lists what is planned.
   signed-in `claude`, or a `model.gateway` in the spec, whose token is read from the variable it
   names; an `ANTHROPIC_API_KEY` in the environment is ignored either way. The spec accepts
   `model.backend: Codex`, but that backend extracts nothing in this release: every run, quality
-  measurement and schema round of such an instance fails, naming `story:codex-model-backend`.
+  measurement and schema round of such an instance fails, saying the Codex backend does not
+  extract yet.
 - **A model outage is told by its error text.** A run ends `model-unavailable`, not counted
   against the source, only when the model call's error names a refused connection, a model not
   loaded, or HTTP 502, 503, 504 or 529 (overloaded) in words cortex knows (see

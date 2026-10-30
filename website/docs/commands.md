@@ -33,7 +33,7 @@ errors and events.
 :::note[The Codex backend does not extract]
 `--codex` names the binary for a spec whose `model.backend` is `Codex`. In this release that
 backend calls no model: every run of such an instance fails as `extraction-failed`, with a reason
-naming `story:codex-model-backend`, and `codex` is never started; `cortex quality` and
+saying the Codex backend does not extract yet, and `codex` is never started; `cortex quality` and
 `cortex schema` fail the same way (`judge-failed`, `propose-failed`). Use `Claude`, the default.
 :::
 
@@ -55,7 +55,7 @@ naming `story:codex-model-backend`, and `codex` is never started; `cortex qualit
 | `cortex schema apply <name> <stamp>` | apply the run's approved proposals, with no model call, in an EKR stage (`postgres`) or after a snapshot (`sqlite`), held to the spec's `gate` | `applied`, `not-approved`, `gate-failed`, `apply-failed`, `store-outcome-unknown`, `no-such-run`, `no-such-instance` |
 | `cortex list` | instances: name, state, description, model, EKR version, seed digest, viewer address, and the version of `<home>/bin/cortex` their timers run (`binary_version`, null when none is recorded) | |
 | `cortex mcp-line <name>` | print the `claude mcp add` line that serves the instance's store through `ekr mcp` | |
-| `cortex ask serve --spec <file>` | answer questions over the store of the instance the spec names: `POST /ask` on the spec's `ask.listen` streams the events of `cortex.ask-events/1`, from a tool loop over `ekr mcp` against `model.gateway`, until stopped (see [Ask service](./ask-service.md)). A spec it cannot serve exits 2, naming the field | `answered` (`done`), `unidentified`, `rate-limited`, `limit-reached`, `model-failed`, `reader-failed` (`error`) |
+| `cortex ask serve --spec <file>` | answer questions over the store of the instance the spec names: `POST /ask` on the spec's `ask.listen` streams the events of `cortex.ask-events/1`, from a tool loop over `ekr mcp` against `model.gateway`, until stopped (see [Ask service](./ask-service.md)). A spec it cannot serve exits 2, naming the field. Each outcome but `answered` and `client-closed` ends the stream with an `error` event whose `reason` is the outcome's name, except `rate-limited` (reason `rate-limit`) and `limit-reached` (reason `step-limit` or `time-limit`); a body the service refuses before asking is reason `bad-request` (see [the reasons](./ask-service.md#the-event-contract)) | `answered` (`done` event), `unidentified`, `rate-limited`, `busy`, `limit-reached`, `model-failed`, `reader-failed`, `cut-off` (`error` event), `client-closed` (the reader left; no event is read) |
 
 `cortex update` refuses a spec whose `name` is not `<name>`. `create`, `adopt` and `update` name each unit they took over from a home that no longer holds the instance in `units.taken_over` (see [Operating](./operating.md#systemd-units)). Every command refuses a home whose path holds a line break.
 
@@ -237,7 +237,8 @@ names the run's `stamp` and counts the proposals `pending`. A person then decide
 
 ```sh
 cortex schema approve acme 20261017T101500Z --only 1 --by ops
-cortex schema reject acme 20261017T101500Z --only 2 --reason "a maker is an organisation"
+cortex schema reject acme 20261017T101500Z --only 2 \
+  --reason "a maker is an organisation"
 cortex schema apply acme 20261017T101500Z
 ```
 
@@ -286,7 +287,7 @@ A source id is `<instance>/<source>`.
 | `cortex run <instance>/<source> --fetch-only` | fetch the source as a run would, mask and scrub what it fetched, and count it against the source's seen state, without a model call or a write (see [Counting what a run would extract](./operating.md#counting-what-a-run-would-extract)). Exits 0 for `fetched`, 1 otherwise; refused beside `--record-failure` | `fetched`, `fetch-failed`, `no-such-source` |
 | `cortex source enable <instance>/<source>` | enable a source that two failed runs in a row disabled, and its timer | `enabled`, `wrong-state`, `no-such-source` |
 | `cortex source record-failure <instance>/<source> --reason <text>` | count one failed run; the second in a row disables the source and its timer | `counted`, `disabled`, `already-disabled`, `no-such-source` |
-| `cortex source add --instance-name <name> --source-id <id> --name <name> --kind <Web\|Connectors\|Files> --schedule <calendar>` | register a source in the registry; `create` and `update` do this for the spec's sources | `added` |
+| `cortex source add --instance-name <name> --source-id <id> --name <name> --kind <Web\|Connectors\|Files\|Structured> --schedule <calendar>` | register a source in the registry; `create` and `update` do this for the spec's sources | `added` |
 | `cortex sources` | sources: id, kind, state, schedule, runs, consecutive failures, and the last run's outcome, time and reason (`last_outcome`, `last_run_at`, `last_reason`; see [Operating](./operating.md#seeing-a-failure)) | |
 
 A `ran` line's detail carries `documents_new`, `documents_applied`, `cost_usd`, `facts_refused`
