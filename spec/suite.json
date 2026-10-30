@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "800bd5c5e935090f8ca8d3241638d236e0a6f34c66d67bb300f9d7e2f4a564cf",
-    "contract_digest": "8e20b98e78e0efd2c479ef15481406883332155583a9ae3fb8206839abd6d802",
+    "spec_digest": "2f040bb5060f32906e99d11e2a3ec476ededcfa3a0da182b45a69fdec615acfa",
+    "contract_digest": "ccaeb32dc8dee9993944ab1021ee7f606771faf2aa6ea94ac2d8a597b0999b12",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
@@ -27231,6 +27231,269 @@
         {
           "kind": "error",
           "name": "cortex.instance.SampleFailed"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance.ProposeSchemaChanges/outcome/store-outcome-unknown": {
+      "purpose": "`cortex.instance.ProposeSchemaChanges` answers `store-outcome-unknown` for the cause it declares as external, injected",
+      "steps": [
+        {
+          "step": "configure_external_outcome",
+          "force": {
+            "command": "cortex.instance.ProposeSchemaChanges",
+            "outcome": "store-outcome-unknown"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.ProposeSchemaChanges",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "dry_run": {
+              "kind": "literal",
+              "value": true
+            },
+            "name": {
+              "kind": "literal",
+              "value": "name"
+            },
+            "review": {
+              "kind": "literal",
+              "value": true
+            },
+            "sample": {
+              "kind": "literal",
+              "value": 1.0
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.ProposeSchemaChanges",
+            "outcome": "store-outcome-unknown"
+          }
+        },
+        {
+          "step": "expect_error",
+          "error": "cortex.instance.StoreOutcomeUnknown"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.AnswerRecorded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Answered"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Purged"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.ReviewClosed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.ReviewOpened"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.ask.Voted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalCaseAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.EvalRan"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceCreated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.QualityMeasured"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunFailed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.RunSkipped"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceAdded"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceDisabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceEnabled"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceFetched"
+        },
+        {
+          "step": "expect_no_event",
+          "event": "cortex.instance.SourceRan"
+        }
+      ],
+      "source": [
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.ProposeSchemaChanges"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.ProposeSchemaChanges",
+            "outcome": "store-outcome-unknown"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.AnswerRecorded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Answered"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Purged"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.ReviewClosed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.ReviewOpened"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.ask.Voted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalCaseAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.EvalRan"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceRemoved"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.QualityMeasured"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunFailed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.RunSkipped"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaChangesProposed"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsApplied"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SchemaProposalsDecided"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SnapshotRestored"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceAdded"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceDisabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceEnabled"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceFetched"
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.SourceRan"
+        },
+        {
+          "kind": "error",
+          "name": "cortex.instance.StoreOutcomeUnknown"
         },
         {
           "kind": "actor",

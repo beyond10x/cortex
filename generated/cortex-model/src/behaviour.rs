@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 800bd5c5e935090f8ca8d3241638d236e0a6f34c66d67bb300f9d7e2f4a564cf
-// contract digest 8e20b98e78e0efd2c479ef15481406883332155583a9ae3fb8206839abd6d802
+// model digest 2f040bb5060f32906e99d11e2a3ec476ededcfa3a0da182b45a69fdec615acfa
+// contract digest ccaeb32dc8dee9993944ab1021ee7f606771faf2aa6ea94ac2d8a597b0999b12
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -750,6 +750,10 @@ where
         // `propose-failed`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceProposeSchemaChanges(&input), "propose-failed")? {
             return Ok(crate::instance::ProposeSchemaChangesOutcome::ProposeFailed { error: crate::instance::ProposeFailed { reason: self.ports.try_generate_string()? } });
+        }
+        // `store-outcome-unknown`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceProposeSchemaChanges(&input), "store-outcome-unknown")? {
+            return Ok(crate::instance::ProposeSchemaChangesOutcome::StoreOutcomeUnknown { error: crate::instance::StoreOutcomeUnknown { reason: self.ports.try_generate_string()? } });
         }
         // `proposed`: an accepting branch, in declaration order.
         if decided(Some(&input.dry_run).map(|value| *value), "cortex.instance.ProposeSchemaChanges")? {

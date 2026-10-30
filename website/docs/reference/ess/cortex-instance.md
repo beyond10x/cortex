@@ -974,9 +974,9 @@ It has seven outcomes.
 
 **`gate-failed`** — Nothing was published; every approved proposal is still `approved`, and the store's head is where it was (`postgres`) or back at the snapshot (`sqlite`). Decided outside the input: The store after the changes fails a check of the spec's gate. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaGateFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`apply-failed`** — Nothing was published; every approved proposal is still `approved`. Decided outside the input: EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaApplyFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`apply-failed`** — Before the publish, nothing was published and every approved proposal is still `approved`. After it, the changes are in the store and the reason says so, naming the revision: the head the stage was published at (`postgres`) or the last committed one (`sqlite`). When only the head could not be read, every decision is written to `proposals.jsonl`; when `proposals.jsonl` could not be written, it still lists every approved proposal `approved`. Decided outside the input: EKR cannot read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction, or, after the publish, read the store's head, or `proposals.jsonl` cannot be written. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SchemaApplyFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`store-outcome-unknown`** — Every approved proposal is still `approved`. The stage is kept in `stage.json`, and the next run of a source settles it. Decided outside the input: EKR cannot say whether the stage's begin or publish took effect. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.StoreOutcomeUnknown`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`store-outcome-unknown`** — Every approved proposal is still `approved`. The stage is kept in `stage.json`, and the next run of a source settles it. `cortex schema apply` exits 4, as `cortex run` does for this outcome. Decided outside the input: EKR cannot say whether the stage's begin or publish took effect. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.StoreOutcomeUnknown`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`applied`** — Every approved proposal is decided: `applied` with the revision and schema version it committed, or `refused`, `recorded-only` or `invalid` with why. `revision` is the store's head after the apply. Proposals still `pending` stay so. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaProposalsApplied`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -1074,11 +1074,13 @@ It takes:
 - `dry_run` — `Boolean`
 - `review` — `Boolean`
 
-It has six outcomes.
+It has seven outcomes.
 
 **`sample-failed`** — No model was asked and nothing was written. Decided outside the input: EKR cannot draw the sample, its size is outside 1 to 1000 or the store cannot be read. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.SampleFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`propose-failed`** — Nothing was applied and no `proposals.jsonl` was written. Decided outside the input: A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, or EKR cannot read the ontology. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ProposeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`propose-failed`** — Nothing was applied and no proposal was recorded, except when a line of `proposals.jsonl` could not be written after earlier proposals were applied: those stay applied and the lines before it stay written; the reason names how many of each. Decided outside the input: A model call fails, times out, answers no valid proposals or finds the budget or the daily ceiling spent, the redaction policy refuses what the model would be shown, EKR cannot read the ontology, or `proposals.jsonl` cannot be written. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ProposeFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`store-outcome-unknown`** — The round stops at that proposal and asks EKR for no later one. The proposals before it stay decided and recorded in `proposals.jsonl`; it and every later one are not recorded. The reason names the proposal; `ekr ontology` answers whether its change took effect. `cortex schema` exits 4, as `cortex run` does for this outcome. Decided outside the input: Applying, EKR cannot say whether a proposal's schema transaction took effect (`ekr commit` answers that the publication outcome is unknown). No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.StoreOutcomeUnknown`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`proposed`** — A dry run: every proposal not dropped is recorded and none is applied; `applied` and `refused` are 0, and a change EKR would be asked to apply is `dry-run`. `cost_usd` is what the model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. Taken when `dry_run` holds of the input. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.SchemaChangesProposed`. A test reaches it by constructing an input that satisfies that condition.
 
@@ -1763,7 +1765,7 @@ Reported by `cortex.instance.CreateInstance` on its `name-taken` outcome.
 
 ### `ProposeFailed`
 
-A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology. Nothing was applied and no `proposals.jsonl` was written.
+A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology, or `proposals.jsonl` could not be written. Nothing was applied and no proposal was recorded, except when a line of `proposals.jsonl` could not be written after earlier proposals were applied: those stay applied, the lines before stay written, and the reason names both counts.
 
 It carries:
 
@@ -1817,7 +1819,7 @@ Reported by `cortex.instance.ProposeSchemaChanges` on its `sample-failed` outcom
 
 ### `SchemaApplyFailed`
 
-EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction. Nothing was published: the stage was abandoned, or on `sqlite` the snapshot taken before was restored; every approved proposal is still `approved`.
+EKR could not read the ontology, begin the stage, take the snapshot, mint an id or answer a transaction: nothing was published, the stage was abandoned, or on `sqlite` the snapshot taken before was restored, and every approved proposal is still `approved`. Or, after the changes were published, EKR could not read the store's head or `proposals.jsonl` could not be written: the changes stay in the store, and the reason says so and names the revision (on `postgres`, the head the stage was published at; on `sqlite`, the last committed one).
 
 It carries:
 
@@ -1958,13 +1960,15 @@ Reported by `cortex.instance.AdoptInstance` on its `store-held` outcome.
 
 ### `StoreOutcomeUnknown`
 
-EKR could not say whether a store write of the run took effect (`ekr stage begin`, `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage, or extracts the batch again.
+EKR could not say whether a store write of the run took effect (`ekr stage begin`, `ekr stage publish`, `ekr apply-extraction` or the settling of an earlier run's stage answered that the publication outcome is unknown). Nothing about the source was wrong; the next run settles the stage, or extracts the batch again. For `cortex schema`, the write is a proposal's schema transaction (`ekr commit`) or the stage of `cortex schema apply`; the reason names it.
 
 It carries:
 
 - `reason` — `String`
 
 Reported by `cortex.instance.ApplySchemaProposals` on its `store-outcome-unknown` outcome.
+
+Reported by `cortex.instance.ProposeSchemaChanges` on its `store-outcome-unknown` outcome.
 
 Reported by `cortex.instance.RunSource` on its `store-outcome-unknown` outcome.
 
@@ -1997,4 +2001,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `800bd5c5e935090f8ca8d3241638d236e0a6f34c66d67bb300f9d7e2f4a564cf` · contract digest `slice-sha256/2:13583069d4502ba0f0a9b3a7a3d904f9236c12e368fad222bcafc0688e977cd8`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `2f040bb5060f32906e99d11e2a3ec476ededcfa3a0da182b45a69fdec615acfa` · contract digest `slice-sha256/2:64ca5d22a474544a06b97d494c3f026e9e7bf8b1cda6342f25244e41acf73b97`. Do not edit this file; change the specification and regenerate it with `task generate`.

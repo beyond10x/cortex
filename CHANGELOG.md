@@ -45,6 +45,22 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   seen document, is now refused as `rekey-refused`, exit 1, naming the source and the field;
   nothing is written. A source with no seen document is updated as before. To re-key on purpose,
   remove the source's state file first.
+- `cortex schema` recorded a proposal whose schema transaction EKR could not say took effect
+  (`publication outcome is unknown`) as `refused` and went on to apply the next ones against an
+  ontology that might hold it. The round now stops there as the new `store-outcome-unknown`
+  outcome, exit 4 as a run's, naming the proposal: no later proposal is asked of EKR, and the ones
+  before it stay recorded. `cortex schema apply` answers its own `store-outcome-unknown` with exit
+  4 too, instead of 1.
+- `cortex schema apply` answered `apply-failed` with "every approved proposal is still approved"
+  when the store's head could not be read after the stage was published, and did not write the
+  decisions. It now writes them, and the reason says the changes are in the store and names the
+  revision: the head the stage was published at on `postgres`, the last committed one on
+  `sqlite`. When `proposals.jsonl` cannot be rewritten after the publish, the reason says the file
+  still lists the proposals `approved`.
+- `cortex schema` answered `propose-failed`, whose summary said nothing was applied, when a line of
+  `proposals.jsonl` could not be written after earlier proposals were applied. Its reason now
+  names the proposal, how many proposals are applied and how many lines are written, and the
+  summary says so.
 - A run sent SIGTERM during its fetch ran the fetch out before it stopped. The fetch is now a safe
   point: the `connectors` call in flight is ended with its process group (SIGKILL after 5
   seconds), a paged or `files` read stops between pages and files, and the run ends `terminated`,

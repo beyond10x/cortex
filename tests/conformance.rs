@@ -949,6 +949,10 @@ impl Scenario {
                     "propose-failed",
                     Some(("ProposeFailed", json!({"reason": error.reason}))),
                 ),
+                m::ProposeSchemaChangesOutcome::StoreOutcomeUnknown { error } => (
+                    "store-outcome-unknown",
+                    Some(("StoreOutcomeUnknown", json!({"reason": error.reason}))),
+                ),
                 m::ProposeSchemaChangesOutcome::NoSuchInstance { error } => (
                     "no-such-instance",
                     Some(("InstanceNotFound", json!({"name": error.name.0}))),
@@ -1578,7 +1582,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        119,
+        120,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

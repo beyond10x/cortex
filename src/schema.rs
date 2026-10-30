@@ -60,8 +60,13 @@ const ANSWER_SCHEMA: &str =
 pub enum Failure {
     /// `sample-failed`: nothing was asked and nothing written.
     Sample(String),
-    /// `propose-failed`: nothing was applied and no `proposals.jsonl` written.
+    /// `propose-failed`: nothing was applied and no proposal recorded, unless a line of
+    /// `proposals.jsonl` could not be written after earlier proposals were applied, which the
+    /// reason then counts.
     Propose(String),
+    /// `store-outcome-unknown`: EKR could not say whether a proposal's schema transaction took
+    /// effect. The round stopped there; the reason names the proposal and what was recorded.
+    StoreOutcomeUnknown(String),
 }
 
 /// A sample drawn from the instance's store with the ontology in force: [`draw`] reads them under
@@ -1096,6 +1101,32 @@ pub fn record(asked: Asked, mode: Mode<'_>) -> Result<Proposed, Failure> {
                 Ok(format!("dry-run-{placeholder}"))
             }),
         };
+        // A write EKR cannot say took effect stops the round, as it stops a run: the proposals
+        // after it are planned against an ontology that may or may not hold it.
+        let unknown = |e: &str, counts: &BTreeMap<&'static str, i64>| {
+            let applied = counts
+                .get(status_name(m::SchemaProposalStatus::Applied))
+                .copied()
+                .unwrap_or(0);
+            let kind = change_json(&c.change)["kind"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            Failure::StoreOutcomeUnknown(format!(
+                "proposal {} of {} ({kind}): {e}; the round stopped there and asked EKR for no \
+                 later proposal: the {n} before it are recorded in {}, {applied} of them applied; \
+                 it and the {} after it are not recorded, and `ekr ontology` answers whether its \
+                 change took effect",
+                n + 1,
+                asked.proposals.len(),
+                path.display(),
+                asked.proposals.len() - n - 1,
+            ))
+        };
+        let planned = match planned {
+            Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown(&e, &counts)),
+            planned => planned,
+        };
         match planned {
             Ok(Plan::Pending) => record.status = m::SchemaProposalStatus::Pending,
             Ok(Plan::RecordOnly(note)) => {
@@ -1107,12 +1138,14 @@ pub fn record(asked: Asked, mode: Mode<'_>) -> Result<Proposed, Failure> {
                 record.note = Some(note);
             }
             Ok(Plan::Write(op)) => match &mode {
-                Mode::Apply(t) => {
-                    if let Err(e) = apply(t, &asked.dir, n, &op, &mut record, &mut names) {
+                Mode::Apply(t) => match apply(t, &asked.dir, n, &op, &mut record, &mut names) {
+                    Ok(()) => {}
+                    Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown(&e, &counts)),
+                    Err(e) => {
                         record.status = m::SchemaProposalStatus::Refused;
                         record.note = Some(e);
                     }
-                }
+                },
                 Mode::DryRun | Mode::Review => names.add(&op),
             },
             Err(e) => {
@@ -1127,7 +1160,21 @@ pub fn record(asked: Asked, mode: Mode<'_>) -> Result<Proposed, Failure> {
             .append(true)
             .open(&path)
             .and_then(|mut f| f.write_all(line.as_bytes()))
-            .map_err(|e| Failure::Propose(format!("{}: {e}", path.display())))?;
+            .map_err(|e| {
+                let applied = counts
+                    .get(status_name(m::SchemaProposalStatus::Applied))
+                    .copied()
+                    .unwrap_or(0);
+                Failure::Propose(format!(
+                    "{}: {e}; proposal {} of {}, {}, was not recorded and no later one was \
+                     asked: {applied} proposal(s) are applied in all, and the {n} line(s) \
+                     before it are written",
+                    path.display(),
+                    n + 1,
+                    asked.proposals.len(),
+                    status_name(record.status),
+                ))
+            })?;
     }
     let count = |s: m::SchemaProposalStatus| counts.get(status_name(s)).copied().unwrap_or(0);
     Ok(Proposed {
@@ -1420,6 +1467,7 @@ pub fn apply_run(layout: &Layout, stamp: &str) -> Result<AppliedRun, Refusal> {
         }
     }
     let snapshot = held.snapshot().map(str::to_string);
+    let stage_head = held.stage_head();
     held.publish().map_err(|f| match refusal_of(f) {
         Refusal::ApplyFailed(e) => {
             Refusal::ApplyFailed(format!("{e}; every approved proposal is still approved"))
@@ -1427,8 +1475,40 @@ pub fn apply_run(layout: &Layout, stamp: &str) -> Result<AppliedRun, Refusal> {
         other => other,
     })?;
     store.stage = None;
-    let revision = store.head().map_err(Refusal::ApplyFailed)?;
-    write_run(&dir, &proposals).map_err(Refusal::ApplyFailed)?;
+    // From here the changes are in the store: the decisions are written whether or not the head
+    // can be read, and a failure says what was published, at which revision.
+    let committed = approved.iter().filter_map(|&i| proposals[i].revision).max();
+    let published = match (stage_head, committed) {
+        (Some(head), _) => {
+            format!("the changes are in the store: its stage was published at head {head}")
+        }
+        (None, Some(revision)) => {
+            format!("the changes are in the store: committed up to revision {revision}")
+        }
+        (None, None) => "no change was committed".to_string(),
+    };
+    let published = match &snapshot {
+        Some(name) => format!("{published}, and snapshot {name} holds the store from before"),
+        None => published,
+    };
+    let revision = store.head();
+    let written = write_run(&dir, &proposals);
+    let revision = match (revision, written) {
+        (Ok(revision), Ok(())) => revision,
+        (Err(e), Ok(())) => {
+            return Err(Refusal::ApplyFailed(format!(
+                "the store's head could not be read: {e}; {published}; every decision is \
+                 written to proposals.jsonl"
+            )))
+        }
+        (head, Err(e)) => {
+            let head = head.map_or(String::new(), |h| format!("; the store's head is {h}"));
+            return Err(Refusal::ApplyFailed(format!(
+                "the decisions could not be written: {e}; {published}{head}; proposals.jsonl \
+                 still lists every approved proposal approved"
+            )));
+        }
+    };
     let count = |s: m::SchemaProposalStatus| {
         approved
             .iter()

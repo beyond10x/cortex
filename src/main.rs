@@ -2170,6 +2170,10 @@ fn propose_schema(
                 shared.external.insert((CMD, "propose-failed"), true);
                 shared.strings.push_back(reason);
             }
+            Err(schema::Failure::StoreOutcomeUnknown(reason)) => {
+                shared.external.insert((CMD, "store-outcome-unknown"), true);
+                shared.strings.push_back(reason);
+            }
         }
     }
     let detail = |e: &m::SchemaChangesProposed| {
@@ -2230,13 +2234,29 @@ fn propose_schema(
             ok: false,
             detail: json!({"reason": error.reason}),
         },
+        Ok(m::ProposeSchemaChangesOutcome::StoreOutcomeUnknown { error }) => Done {
+            outcome: "store-outcome-unknown",
+            ok: false,
+            detail: json!({"reason": error.reason}),
+        },
         Ok(m::ProposeSchemaChangesOutcome::NoSuchInstance { error }) => Done {
             outcome: "no-such-instance",
             ok: false,
             detail: json!({"name": error.name.0}),
         },
     };
-    print("schema", &done)
+    print_schema(&done)
+}
+
+/// `print` for `cortex schema` and its verbs: `store-outcome-unknown` exits
+/// [`EXIT_STORE_OUTCOME_UNKNOWN`], as a run does, so a caller tells a store fault from a refusal.
+fn print_schema(done: &Done) -> ExitCode {
+    let printed = print("schema", done);
+    if done.outcome == "store-outcome-unknown" {
+        ExitCode::from(EXIT_STORE_OUTCOME_UNKNOWN)
+    } else {
+        printed
+    }
 }
 
 /// `schema approve` (`reason` none) and `schema reject`: decides the run's proposals under the
@@ -2413,7 +2433,7 @@ fn apply_schema_run(app: &mut App, ctx: &Ctx, name: &str, stamp: &str) -> ExitCo
         },
         Ok(m::ApplySchemaProposalsOutcome::NoSuchInstance { error }) => no_such_instance(error),
     };
-    print("schema", &done)
+    print_schema(&done)
 }
 
 fn refusal_reason(refusal: schema::Refusal) -> String {

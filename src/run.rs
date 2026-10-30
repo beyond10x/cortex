@@ -1995,6 +1995,11 @@ impl Held {
         self.undo.kept.as_deref()
     }
 
+    /// The head the stage began at, which [`Held::publish`] publishes it at; none on `sqlite`.
+    pub fn stage_head(&self) -> Option<i64> {
+        self.undo.staged.as_ref().map(|s| s.record.head)
+    }
+
     /// Publishes the stage at the head it began from (nothing to do on `sqlite`). A refused
     /// publish abandons it; one whose outcome is unknown keeps it in `stage.json` for the next run.
     pub fn publish(mut self) -> Result<(), Failure> {
