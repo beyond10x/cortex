@@ -191,7 +191,6 @@ fn grown_and_fresh(
 /// The grown index takes the store node's canonical name as one of its aliases, holds the entity
 /// for that node and adds nothing: the next batch is not shown the node the apply created.
 #[test]
-#[ignore = "adversary: Index::applied treats a store node's canonical name as an alias, so a node EKR creates beside it is missing from the next batch's store hits"]
 fn a_node_ekr_creates_beside_a_canonical_name_that_is_no_alias_is_in_the_grown_index() {
     let w = world();
     let before = index(&w);
@@ -213,7 +212,6 @@ fn a_node_ekr_creates_beside_a_canonical_name_that_is_no_alias_is_in_the_grown_i
 /// named thing of a rejected `facts[<i>]`, so the organization created for it is not a store hit
 /// of the next batch, although the store holds it.
 #[test]
-#[ignore = "adversary: Index::applied drops the subject and object of a fact rejected at commit, whose nodes EKR created before the commit, so the next batch is not shown them"]
 fn the_object_of_a_fact_rejected_at_commit_is_in_the_grown_index() {
     let w = world();
     let before = index(&w);

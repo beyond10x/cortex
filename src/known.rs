@@ -118,6 +118,9 @@ pub struct Index {
     nodes: Vec<m::KnownEntity>,
     /// Each folded canonical name and alias, and the positions in `nodes` it names.
     by_term: BTreeMap<String, Vec<usize>>,
+    /// Each node's aliases as EKR holds them, by position in `nodes`: what EKR resolves a named
+    /// thing by, byte for byte; its canonical name is never compared (`ekr resolve`).
+    exact: Vec<BTreeSet<String>>,
 }
 
 impl Index {
@@ -155,11 +158,14 @@ impl Index {
     /// A node of type `node_type` named `name`, also known as `aliases` (`name` among them or not).
     fn add<'a>(&mut self, node_type: &str, name: &str, aliases: impl IntoIterator<Item = &'a str>) {
         let mut others: Vec<String> = Vec::new();
+        let mut exact: BTreeSet<String> = BTreeSet::new();
         for alias in aliases {
+            exact.insert(alias.to_string());
             if alias != name && !others.iter().any(|o| o == alias) {
                 others.push(alias.to_string());
             }
         }
+        self.exact.push(exact);
         let at = self.nodes.len();
         for term in std::iter::once(name).chain(others.iter().map(String::as_str)) {
             let positions = self.by_term.entry(fold(term)).or_default();
@@ -189,19 +195,26 @@ impl Index {
     /// Adds the nodes `ekr apply-extraction` created applying `document` (the
     /// `ekr.extraction-document/1` the run wrote), as its `report` (`ekr.integrate.ExtractionReport`)
     /// tells. The report names no node, so the named things are read from the document as the verb
-    /// resolves them: each entity, then each fact's subject and object, less those the report lists
-    /// under `rejected` (`entities[i]`, `facts[i]`, `facts[i].subject`, `facts[i].object`); those of
-    /// one node type that share an alias, directly or through another, are one thing; one with an
-    /// alias equal to a name of an indexed node of its type is that node, and adds nothing; any
-    /// other is a new node, named by the least, in byte order, of its members' first aliases, with
-    /// every alias of them. A foreign writer's commit during the run is not seen.
+    /// resolves them: each entity, then each fact's subject and object. Those of one node type
+    /// that share an alias, directly or through another, are one thing. A thing is not created when
+    /// the report lists the place it first appears under `rejected` (`entities[i]`,
+    /// `facts[i].subject`, `facts[i].object`: EKR names a thing it did not create there). A fact the
+    /// report rejects with no `transaction_id` was refused before anything was validated, and
+    /// creates nothing only it names; one rejected with a `transaction_id` was refused at commit,
+    /// after its subject and object were created, so they count. A thing with an alias equal, byte
+    /// for byte, to an alias of an indexed node of its type is that node, and adds nothing (a
+    /// canonical name is never compared); any other is a new node, named by the least, in byte
+    /// order, of its members' first aliases, with every alias of them. Residual: a fact refused
+    /// without a transaction after its things were resolved (a `replaces` fact with nothing left
+    /// to replace) leaves out what only it named. A foreign writer's commit during the run is not
+    /// seen.
     pub fn applied(&mut self, document: &serde_yaml_ng::Value, report: &Value) {
         use serde_yaml_ng::Value as Yaml;
-        let rejected: BTreeSet<&str> = report["rejected"]
+        let rejected: BTreeMap<&str, bool> = report["rejected"]
             .as_array()
             .into_iter()
             .flatten()
-            .filter_map(|r| r["item"].as_str())
+            .filter_map(|r| Some((r["item"].as_str()?, !r["transaction_id"].is_null())))
             .collect();
         let named = |v: &Yaml| -> Option<(String, Vec<String>)> {
             let ty = v.get("node_type")?.as_str()?.to_string();
@@ -215,16 +228,16 @@ impl Index {
                 .collect();
             (!aliases.is_empty()).then_some((ty, aliases))
         };
-        let mut things: Vec<(String, Vec<String>)> = Vec::new();
+        // Each named thing, and whether the report names its place as not created.
+        let mut things: Vec<(String, Vec<String>, bool)> = Vec::new();
         let entities = document.get("entities").and_then(Yaml::as_sequence);
         for (i, e) in entities.into_iter().flatten().enumerate() {
-            if !rejected.contains(format!("entities[{i}]").as_str()) {
-                things.extend(named(e));
-            }
+            let refused = rejected.contains_key(format!("entities[{i}]").as_str());
+            things.extend(named(e).map(|(ty, a)| (ty, a, refused)));
         }
         let facts = document.get("facts").and_then(Yaml::as_sequence);
         for (i, fact) in facts.into_iter().flatten().enumerate() {
-            if rejected.contains(format!("facts[{i}]").as_str()) {
+            if rejected.get(format!("facts[{i}]").as_str()) == Some(&false) {
                 continue;
             }
             let fact = match fact {
@@ -232,41 +245,42 @@ impl Index {
                 other => other,
             };
             for end in ["subject", "object"] {
-                if rejected.contains(format!("facts[{i}].{end}").as_str()) {
-                    continue;
-                }
-                things.extend(fact.get(end).and_then(named));
+                let refused = rejected.contains_key(format!("facts[{i}].{end}").as_str());
+                things.extend(
+                    fact.get(end)
+                        .and_then(named)
+                        .map(|(ty, a)| (ty, a, refused)),
+                );
             }
         }
-        // One thing per node type and alias, transitively: each group's members by position.
-        let mut groups: Vec<(String, Vec<String>, BTreeSet<String>)> = Vec::new();
-        for (ty, aliases) in things {
+        // One thing per node type and alias, transitively, not created when any place of it is.
+        let mut groups: Vec<(String, Vec<String>, BTreeSet<String>, bool)> = Vec::new();
+        for (ty, aliases, refused) in things {
             let first = aliases[0].clone();
             let mut all: BTreeSet<String> = aliases.into_iter().collect();
             let mut firsts = vec![first];
+            let mut refused = refused;
             let mut i = 0;
             while i < groups.len() {
                 if groups[i].0 == ty && !groups[i].2.is_disjoint(&all) {
-                    let (_, f, a) = groups.swap_remove(i);
+                    let (_, f, a, r) = groups.swap_remove(i);
                     firsts.extend(f);
                     all.extend(a);
+                    refused |= r;
                 } else {
                     i += 1;
                 }
             }
-            groups.push((ty, firsts, all));
+            groups.push((ty, firsts, all, refused));
         }
-        for (ty, firsts, all) in groups {
+        for (ty, firsts, all, refused) in groups {
             let held = all.iter().any(|alias| {
                 self.by_term.get(&fold(alias)).is_some_and(|at| {
-                    at.iter().any(|&n| {
-                        let node = &self.nodes[n];
-                        node.node_type == ty
-                            && (node.name == *alias || node.aliases.contains(alias))
-                    })
+                    at.iter()
+                        .any(|&n| self.nodes[n].node_type == ty && self.exact[n].contains(alias))
                 })
             });
-            if held {
+            if refused || held {
                 continue;
             }
             let name = firsts.iter().min().expect("one member").clone();

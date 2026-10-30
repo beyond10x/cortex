@@ -159,7 +159,6 @@ fn ran(w: &World) -> Value {
 /// is the remembered one, and the idle run skips the end: the record's value stays active,
 /// although every run before this change (and any run whose listing differs) ends it.
 #[test]
-#[ignore = "adversary: a run that applied records and failed before its ends keeps the older ended_listing, so the next idle run with that listing skips ending what it applied"]
 fn a_record_applied_by_a_run_that_failed_before_its_ends_is_still_ended_once_dropped() {
     let w = world();
     ran(&w);
@@ -200,7 +199,6 @@ fn a_record_applied_by_a_run_that_failed_before_its_ends_is_still_ended_once_dro
 /// fingerprint and none forgets it. A record added and removed again in that time leaves its
 /// value in the store; back on `Supersede`, the idle run with the remembered listing skips the end.
 #[test]
-#[ignore = "adversary: runs under dropped: Keep write values but leave ended_listing in place, so returning to Supersede with the remembered listing ends nothing"]
 fn a_record_applied_while_the_source_kept_dropped_values_is_ended_back_on_supersede() {
     let w = world();
     ran(&w);

@@ -857,6 +857,13 @@ fn process_in(
         log(layout, label, report, started);
         return Ok(std::mem::take(report));
     }
+    // This run may write values of the source, under any `dropped`: the remembered listing no
+    // longer says the store holds none it dropped. Forgotten on disk before the first write, so a
+    // run that fails, is stopped or reads part of the source leaves none; [`end_dropped`] sets it
+    // again once every end committed.
+    if seen.ended_listing.take().is_some() {
+        seen.save(&seen_path).map_err(Failure::Apply)?;
+    }
 
     let mut store = layout.store_handle(spec);
     // Each mapped property is written in the kind its mapping names, else the one the store
