@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:credential-key-spellings
 kind: story
-status: active
+status: implemented
 title: A credential under a common key spelling is masked or refused
 tags:
 - downstream-request
@@ -10,10 +10,11 @@ tags:
 relations:
 - decomposes: epic:standalone-1-0
 - serves: vision:self-updating-instances
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T15:57:08Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-30T16:50:18Z", actor: "human:timo", revision: 6}
+- {from: "active", to: "implemented", at: "2026-10-30T18:35:38Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 ## Outcome
 
