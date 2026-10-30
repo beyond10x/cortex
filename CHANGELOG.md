@@ -43,6 +43,13 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   record call now has a deadline of 30 seconds, a start of the records process included, and the
   records process runs each statement with a `statement_timeout` of 30 seconds. A call past it
   answers `store-failed`, the stalled process is stopped, and the next call starts another.
+- The redacting MCP server of the eval `mcp` runner kept every connection it accepted open until
+  the case ended, so a client making many short requests held one descriptor per request, and at
+  the descriptor limit the server stopped accepting. A connection now leaves its open list once it
+  is answered. It also read request and header lines without a cap: the head is now read up to 64
+  KiB, before the bearer check, and a line that reaches the cap is answered 431 with nothing more
+  read. Its documentation no longer says it cuts tool results as the ask service does; it passes
+  each redacted result whole.
 - A run sent SIGTERM during its fetch ran the fetch out before it stopped. The fetch is now a safe
   point: the `connectors` call in flight is ended with its process group (SIGKILL after 5
   seconds), a paged or `files` read stops between pages and files, and the run ends `terminated`,

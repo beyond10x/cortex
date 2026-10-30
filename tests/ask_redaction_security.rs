@@ -218,3 +218,73 @@ fn a_value_of_a_withheld_result_is_never_restored() {
         "a guessed placeholder restored a value of a withheld result: {answer}"
     );
 }
+
+/// `story:eval-proxy-bounds`, R1-07: each connection the server accepts is kept in its open list
+/// so the end of the case can shut it down, and must leave that list when it is answered. Today
+/// none leaves until the case ends, so a client making many short requests holds one descriptor
+/// per request, and at the descriptor limit `accept` fails and the server only sleeps.
+#[test]
+fn two_thousand_sequential_connections_leave_the_open_list_bounded() {
+    let tmp = scratch();
+    let reader = stand_in_reader(tmp.path());
+    let r = email_and_name();
+    let deadline = Instant::now() + Duration::from_secs(120);
+    let served = proxy::serve(&r, &reader, "ekr", "q", deadline, |_, config| {
+        let (addr, path) = url_of(config);
+        for i in 0..2_000 {
+            let mut s = TcpStream::connect(&addr).expect("connect");
+            s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            write!(s, "GET {path} HTTP/1.1\r\nhost: {addr}\r\n\r\n").unwrap();
+            // Read to the end: the server closes the connection after it answered.
+            let mut out = String::new();
+            let _ = s.read_to_string(&mut out);
+            assert!(
+                out.starts_with("HTTP/1.1 401"),
+                "connection {i} was not answered: {out:?}"
+            );
+        }
+    })
+    .expect("the server starts");
+    // Each client read to the end of its connection, which the server closes only after it left
+    // the list: none is left.
+    assert_eq!(
+        served.open_connections(),
+        0,
+        "{} connections were still in the open list after 2,000 answered ones",
+        served.open_connections()
+    );
+}
+
+/// `story:eval-proxy-bounds`, R1-08: the request line and the header lines are read up to a cap
+/// of 64 KiB, checked as they are read and before the bearer check. A header line that reaches
+/// the cap is refused at once, before any further read; today the server reads on, without a
+/// cap, until the line ends or its 30-second read timeout.
+#[test]
+fn a_header_line_over_the_cap_is_refused_before_any_further_read() {
+    let tmp = scratch();
+    let reader = stand_in_reader(tmp.path());
+    let r = email_and_name();
+    let deadline = Instant::now() + Duration::from_secs(120);
+    let served = proxy::serve(&r, &reader, "ekr", "q", deadline, |_, config| {
+        let (addr, path) = url_of(config);
+        let mut s = TcpStream::connect(&addr).expect("connect");
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        // 64 KiB of request line and one header line that does not end, and nothing after it:
+        // a server that reads on waits for the rest.
+        let head = format!("POST {path} HTTP/1.1\r\nx-pad: ");
+        let pad = "a".repeat((64 << 10) - head.len());
+        s.write_all(head.as_bytes()).unwrap();
+        s.write_all(pad.as_bytes()).unwrap();
+        let started = Instant::now();
+        let mut out = String::new();
+        let _ = s.read_to_string(&mut out);
+        (out, started.elapsed())
+    })
+    .expect("the server starts");
+    let (out, took) = served.answer;
+    assert!(
+        out.starts_with("HTTP/1.1 431"),
+        "a header line at the cap was not refused (after {took:?}): {out:?}"
+    );
+    assert!(took < Duration::from_secs(2), "the refusal took {took:?}");
+}
