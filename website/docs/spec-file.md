@@ -726,8 +726,9 @@ Values another source asserted are never ended. A `kind: connectors` source cite
 a structured source does, so `create` and `update` refuse a `dropped: Supersede` structured source
 that reads the adapter and operation a `connectors` source of the spec reads, naming both. Two
 structured sources whose identities share one prefix (the same adapter and operation, or the same
-paths and `glob`) are one source here, as they are one record set: a run of one ends the values of
-records only the other lists.
+paths and `glob`) are one record set, so a run of one would end the values of records only the
+other lists: `create` and `update` refuse such a pair when either has `dropped: Supersede`, naming
+both and the prefix. With `dropped: Keep` on both the pair is accepted.
 
 **Relations.** A relation target names a record of the same run by that record's identity (the
 target taken as an id) or, when exactly one record of the run has it, by its name or a mapped

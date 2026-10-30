@@ -920,6 +920,32 @@ pub fn tagged(v: &Value) -> Yaml {
     }
 }
 
+/// Where `document`, the model's answer, holds an object whose one key is `"!"`: a tag with no
+/// name, which [`tagged`] cannot write (an empty YAML tag panics). The path to it, such as
+/// `facts[0]`; none when there is none. Checked before [`merge`].
+pub fn bare_tag(document: &Value) -> Option<String> {
+    match document {
+        Value::Array(items) => items
+            .iter()
+            .enumerate()
+            .find_map(|(i, v)| bare_tag(v).map(|at| format!("[{i}]{}", dotted(&at)))),
+        Value::Object(o) if o.len() == 1 && o.contains_key("!") => Some(String::new()),
+        Value::Object(o) => o
+            .iter()
+            .find_map(|(k, v)| bare_tag(v).map(|at| format!("{k}{}", dotted(&at)))),
+        _ => None,
+    }
+}
+
+/// `at`, a path below a value, as it continues the value's own path.
+fn dotted(at: &str) -> String {
+    if at.is_empty() || at.starts_with('[') {
+        at.to_string()
+    } else {
+        format!(".{at}")
+    }
+}
+
 /// The facts of the model's document whose every cited id is one of `issued`, and how many were
 /// refused for citing another.
 pub fn admitted_facts(document: &Value, issued: &BTreeSet<String>) -> (Vec<Value>, usize) {

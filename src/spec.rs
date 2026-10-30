@@ -264,6 +264,33 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
             ));
         }
     }
+    // Two structured sources whose records get one identity prefix (`structured::prefix`: the
+    // same adapter and operation, or the same paths and glob) own each other's records, so one
+    // that ends what it no longer lists would end the values the other asserted.
+    let structured: Vec<(&m::SourceSpec, &m::StructuredSource)> = spec
+        .sources
+        .iter()
+        .filter_map(|s| match &s.settings {
+            m::SourceSettings::Structured(st) => Some((s, st)),
+            _ => None,
+        })
+        .collect();
+    for (i, (first, a)) in structured.iter().enumerate() {
+        for (second, b) in &structured[i + 1..] {
+            let supersede = [a, b]
+                .iter()
+                .any(|st| st.dropped == Some(m::DropPolicy::Supersede));
+            let prefix = crate::structured::prefix(a);
+            if supersede && prefix == crate::structured::prefix(b) {
+                return Err(format!(
+                    "sources {:?} and {:?} both read {prefix}, so their records are one \
+                     identity set, and with dropped: Supersede one would end the values the \
+                     other asserted; use dropped: Keep on both, or read another source",
+                    first.name, second.name
+                ));
+            }
+        }
+    }
     // A child record's identity names its child by the operation (`structured::child_key`), so the
     // records of two children of one operation would be one record set, mapped by the first.
     for source in &spec.sources {

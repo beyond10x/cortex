@@ -1418,6 +1418,23 @@ fn process_in(
             report.unrestored += p.restore(&mut restored);
         }
         drop(pseudonyms);
+        // A tag with no name cannot be written as YAML; the answer is refused as one that is not
+        // a valid document is.
+        if let Some(at) = extract::bare_tag(&restored) {
+            let at = if at.is_empty() {
+                "the root".to_string()
+            } else {
+                mask(&at).0
+            };
+            let why = format!(
+                "the model's document holds an object key \"!\", a tag with no name, at {at}"
+            );
+            if report.documents_applied == 0 {
+                return Err(Failure::Extract(why));
+            }
+            report.stopped = Some(why);
+            break;
+        }
         let (doc, refused) = extract::merge(&restored, &batch);
         report.facts_refused += refused;
         let path = dir.join("extraction.yaml");

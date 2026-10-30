@@ -78,6 +78,20 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   now named in the run's `skipped` with the reason. A `structured` source's file over 16 MiB fails
   the fetch, naming the file, as an unreadable one already did, so `dropped: Supersede` never ends
   the values of a file it did not read. A `records` lookup file over 16 MiB fails the fetch too.
+- A model document holding an object key `"!"` (a tag with no name) panicked the run; it is now
+  an extraction error naming where the key is, and nothing of that batch is applied.
+- What `ekr` wrote to stderr when a store verb failed reached the run's report, `cortex.log` and
+  the source's status unmasked; it is now masked for credential shapes, and an unknown
+  publication outcome still reads as `store-outcome-unknown`.
+- A store `ekr` cortex starts itself (no Connectors launch) inherited every `EKR_*` variable of
+  cortex's environment but `EKR_STAGE`, such as `EKR_FULL_REPLAY` from the operator's shell; it
+  now gets only the ones cortex sets, as a launched one already did.
+- An `ekr example ekr.cli-host/1` answer whose host, `authority` or `validation_profile` is not
+  an object panicked `create` and `adopt`; it is now an error.
+- Two `structured` sources whose records share one identity prefix (the same adapter and
+  operation, or the same paths and glob) were accepted with `dropped: Supersede`, and a run of one
+  ended the values of records only the other listed. `create` and `update` now refuse the pair,
+  naming both.
 - A `connectors` record whose id was JSON null was keyed `<adapter>:<operation>:null`, so all
   such records shared one document and all but one were dropped without a word; a record without
   an id was dropped silently. Both are now left out and counted in the run's `skipped` with the

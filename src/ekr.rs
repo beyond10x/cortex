@@ -104,14 +104,21 @@ fn output(mut cmd: Command, what: &str) -> Result<std::process::Output, String> 
         .map_err(|e| format!("cannot run ekr for {what}: {e}"))
 }
 
-/// The stdout of `out`, or `ekr <what> failed: <its stderr>` when it exited other than 0.
+/// The stdout of `out`, or `ekr <what> failed: <its stderr>` when it exited other than 0, its
+/// stderr masked ([`said`]).
 fn finished(out: std::process::Output, what: &str) -> Result<Vec<u8>, String> {
     if out.status.success() {
         Ok(out.stdout)
     } else {
-        let err = String::from_utf8_lossy(&out.stderr);
-        Err(format!("ekr {what} failed: {}", err.trim()))
+        Err(format!("ekr {what} failed: {}", said(&out.stderr)))
     }
+}
+
+/// What an `ekr` wrote to stderr, trimmed and masked for credential shapes ([`crate::mask`]):
+/// an error built from it reaches the run's report, `cortex.log` and the source's status. Masking
+/// keeps prose, so [`OUTCOME_UNKNOWN`] still reads as written.
+fn said(stderr: &[u8]) -> String {
+    crate::mask::mask(String::from_utf8_lossy(stderr).trim()).0
 }
 
 /// What EKR prints when it cannot say whether a publication took effect (`StoreError::UnknownCommit`
@@ -139,10 +146,33 @@ impl Binary {
         let mut cmd = Command::new(&self.0);
         cmd.args(["example", "ekr.cli-host/1"]);
         let mut host = json(&run(cmd, "example ekr.cli-host/1")?, "example")?;
-        host["tenant"] = Value::String(tenant.to_string());
-        let profile = &mut host["authority"]["validation_profile"];
-        profile["application"] = Value::String("ekr.p2-apply/1".into());
-        profile["ruleset"] = Value::String("ekr.p2-deterministic/1".into());
+        // Each level is an object, an absent or null one made empty; anything else is an error,
+        // where indexing it would panic.
+        fn object<'v>(
+            v: &'v mut Value,
+            at: &str,
+        ) -> Result<&'v mut serde_json::Map<String, Value>, String> {
+            if v.is_null() {
+                *v = Value::Object(Default::default());
+            }
+            v.as_object_mut()
+                .ok_or_else(|| format!("ekr example ekr.cli-host/1: {at} is not an object"))
+        }
+        let host_fields = object(&mut host, "the host")?;
+        host_fields.insert("tenant".into(), Value::String(tenant.to_string()));
+        let authority = object(
+            host_fields.entry("authority").or_insert(Value::Null),
+            "authority",
+        )?;
+        let profile = object(
+            authority.entry("validation_profile").or_insert(Value::Null),
+            "authority.validation_profile",
+        )?;
+        profile.insert("application".into(), Value::String("ekr.p2-apply/1".into()));
+        profile.insert(
+            "ruleset".into(),
+            Value::String("ekr.p2-deterministic/1".into()),
+        );
         Ok(serde_json::to_string_pretty(&host).expect("plain JSON"))
     }
 
@@ -324,7 +354,8 @@ impl Launch {
 /// Removes from `cmd` every `EKR_*` variable of `inherited`, the names of the environment it would
 /// inherit. A launch hands its consumer every `EKR_*` variable it gets (`pass_env = ["EKR_"]`), so
 /// only the ones the caller sets afterwards reach the launched `ekr`, none this process inherited
-/// (such as `EKR_FULL_REPLAY` from the operator's shell).
+/// (such as `EKR_FULL_REPLAY` from the operator's shell). A store `ekr` cortex starts itself
+/// ([`Store::store_cmd`], [`Store::schema_cmd`]) is stripped the same way.
 fn remove_inherited_ekr(cmd: &mut Command, inherited: impl IntoIterator<Item = OsString>) {
     for key in inherited {
         if key.as_encoded_bytes().starts_with(b"EKR_") {
@@ -358,8 +389,10 @@ impl Store {
     fn store_cmd(&self, args: &[&OsStr]) -> Result<Command, String> {
         let mut cmd = match &self.launch {
             Some(launch) => launch.command(&launch.connection, args)?,
+            // As a launch does: only the `EKR_*` variables set below reach the store's `ekr`.
             None => {
                 let mut cmd = Command::new(&self.bin);
+                remove_inherited_ekr(&mut cmd, std::env::vars_os().map(|(key, _)| key));
                 cmd.args(args);
                 cmd
             }
@@ -502,6 +535,7 @@ impl Store {
             Some((launch, connection)) => launch.command(connection, &args)?,
             None => {
                 let mut cmd = Command::new(&self.bin);
+                remove_inherited_ekr(&mut cmd, std::env::vars_os().map(|(key, _)| key));
                 cmd.args(args);
                 cmd
             }
@@ -590,11 +624,11 @@ impl Store {
         if out.status.success() {
             return Ok(true);
         }
-        let err = String::from_utf8_lossy(&out.stderr);
+        let err = said(&out.stderr);
         if err.contains("the lineage has no seed") {
             Ok(false)
         } else {
-            Err(format!("ekr head failed: {}", err.trim()))
+            Err(format!("ekr head failed: {err}"))
         }
     }
 
@@ -902,9 +936,7 @@ impl Pipe {
         if let Some(drain) = drain {
             let _ = drain.join();
         }
-        let said = String::from_utf8_lossy(&stderr.lock().expect("not poisoned"))
-            .trim()
-            .to_string();
+        let said = said(&stderr.lock().expect("not poisoned"));
         match status {
             Ok(status) if status.success() => (Some(status), Ok(())),
             Ok(status) => (
@@ -1038,7 +1070,10 @@ impl Session {
         }
         match answer {
             Ok(answer) if answer.exit == 0 => Ok(answer.stdout),
-            Ok(answer) => Err(format!("ekr {what} failed: {}", answer.stderr.trim())),
+            Ok(answer) => Err(format!(
+                "ekr {what} failed: {}",
+                said(answer.stderr.as_bytes())
+            )),
             Err(Unread::Malformed(e)) => Err(format!("ekr {what} printed no JSON: {e}")),
             // A session whose output ended (end of file, a failed read or write, or a process a
             // signal ended) while the run was sent SIGTERM ended because of it, a stop of the
@@ -1898,6 +1933,28 @@ mod tests {
                 ("EKR_STORE".into(), "/etc/brain/pg.json".into()),
             ]
         );
+    }
+
+    /// `story:small-robustness`: what EKR wrote to stderr is masked in the error a failed verb
+    /// answers, and the text that marks an unknown outcome survives the masking, so a run still
+    /// tells `store-outcome-unknown` apart.
+    #[test]
+    fn a_failed_verbs_stderr_is_masked_and_an_unknown_outcome_still_reads_as_one() {
+        use std::os::unix::process::ExitStatusExt;
+        let failed = |stderr: &str| std::process::Output {
+            status: std::process::ExitStatus::from_raw(256),
+            stdout: Vec::new(),
+            stderr: stderr.as_bytes().to_vec(),
+        };
+        let err = super::finished(
+            failed("ekr: publication outcome is unknown; dsn password=hunter2secret\n"),
+            "apply-extraction",
+        )
+        .unwrap_err();
+        assert!(!err.contains("hunter2secret"), "{err}");
+        assert!(err.contains("[masked:"), "{err}");
+        assert!(outcome_unknown(&err), "{err}");
+        assert!(err.starts_with("ekr apply-extraction failed: "), "{err}");
     }
 
     #[test]
