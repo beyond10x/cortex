@@ -93,6 +93,17 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   A record route's failure now answers `store-failed` with a fixed message and a `request_id`;
   an answer's `error` event carries a fixed message for `model-failed` and `reader-failed`, ending
   `(request <answer_id>)`. The detail goes to standard error on a line naming the same id.
+- A run reads the store once (`ekr snapshot` at its first batch) instead of once per batch, and
+  twice per batch under a `refuse_if_left` policy. The nodes each batch applies are added to what
+  it read, so the next batch is still shown them as in the store; a commit another writer makes
+  during the run is seen by the next run. On a large store each snapshot took minutes. Batch 0 is
+  no longer pseudonymised twice under `refuse_if_left`, and the store's ontology is read again
+  only after an apply.
+- A `dropped: Supersede` source whose run selects nothing, and whose listing, held-back records
+  and failed child calls are those of the last run that ended its dropped values, no longer
+  begins an EKR stage or reads the store (`ekr snapshot`): such a run read the whole store to
+  end nothing. The state file remembers that listing's fingerprint (`ended_listing`). Comparing
+  the store with a listing no longer scans every assertion of the source for each value it ends.
 
 ## 0.6.1 — 2026-10-17
 

@@ -843,8 +843,18 @@ fn process_in(
     report.documents_new = selected.len() as i64;
     let run_dir = layout.runs().join(format!("{started}-{}", label));
     // A run with nothing new still compares the store with what the source lists, when it ends
-    // what the source no longer lists.
-    if selected.is_empty() && listed.is_none() {
+    // what the source no longer lists, unless the last run that compared them did so with the
+    // same listing, unsettled records and held prefixes ([`ended_listing`]): it then reads nothing
+    // of the store.
+    let unchanged = || match (structured.as_ref(), structured_source, listed.as_deref()) {
+        (Some(source), Some(st), Some(listed)) => {
+            fetched.unread.is_empty()
+                && seen.ended_listing.as_deref()
+                    == Some(ended_listing(st, source, listed, &seen, &held).as_str())
+        }
+        _ => false,
+    };
+    if selected.is_empty() && (listed.is_none() || unchanged()) {
         unread(report, &fetched.unread, redactor.as_ref());
         let failures = fetched.child_failures.clone();
         finish(
@@ -852,6 +862,13 @@ fn process_in(
         )?;
         log(layout, label, report, started);
         return Ok(std::mem::take(report));
+    }
+    // This run may write values of the source, under any `dropped`: the remembered listing no
+    // longer says the store holds none it dropped. Forgotten on disk before the first write, so a
+    // run that fails, is stopped or reads part of the source leaves none; [`end_dropped`] sets it
+    // again once every end committed.
+    if seen.ended_listing.take().is_some() {
+        seen.save(&seen_path).map_err(Failure::Apply)?;
     }
 
     let mut store = layout.store_handle(spec);
@@ -895,7 +912,13 @@ fn process_in(
         )?;
         // A fetch that left records unread lists only part of the source: nothing is ended.
         if let Some(listed) = listed.as_deref().filter(|_| fetched.unread.is_empty()) {
-            end_dropped(&records, listed, &seen, report, before)?;
+            let compared =
+                structured_source.map(|st| ended_listing(st, source, listed, &seen, &held));
+            // Remembered once every end committed, so the next run with the same listing reads
+            // nothing; forgotten when one did not.
+            seen.ended_listing = end_dropped(&records, listed, &seen, report, before)?
+                .then_some(compared)
+                .flatten();
         }
         unread(report, &fetched.unread, redactor.as_ref());
         if undoable {
@@ -959,19 +982,30 @@ fn process_in(
         .map(|d| evidence::issue(d, &operator, started))
         .collect();
     let batches = batches(issued, size);
+    // The store's nodes the batches name, from one `ekr snapshot` at the first batch, grown by
+    // what each batch applies.
+    let mut lookup = crate::known::Lookup::default();
+    // The store's ontology, read again only after an apply, which can widen it.
+    let mut held_ontology: Option<serde_json::Value> = None;
     // `refuse_if_left`: every batch is checked as the model would be shown it before the first
     // model call, so a refusal fails the run with nothing sent and nothing stored.
     // The known entities are checked too, each batch's store hits included.
+    // Batch 0 as the check pseudonymised it, which the loop sends unless it splits it first.
+    let mut first = None;
     if let Some(r) = redactor.as_ref().filter(|r| r.refuses()) {
-        let ontology = store.ontology().map_err(Failure::Apply)?;
+        let ontology = &*held_ontology.insert(store.ontology().map_err(Failure::Apply)?);
         for batch in &batches {
             let mut p = r.batch();
-            let known = crate::known::for_batch(&store, &ontology, batch, &entities)
+            let known = lookup
+                .for_batch(&store, ontology, batch, &entities)
                 .map_err(Failure::Apply)?;
-            let known = Known::from_ontology(&ontology, known);
+            let known = Known::from_ontology(ontology, known);
             let (shown, known) = pseudonymise(&mut p, batch, &uncut, &known);
             if let Some(why) = refused(&p, &shown, &known) {
                 return Err(Failure::Extract(why));
+            }
+            if first.is_none() {
+                first = Some((p, shown, known));
             }
         }
     }
@@ -1008,15 +1042,35 @@ fn process_in(
                 break;
             }
         };
-        let ontology = store.ontology().map_err(Failure::Apply)?;
+        // The first batch popped is batch 0, unsplit: the pre-check's pseudonymised copy of it
+        // holds, as nothing was applied since.
+        let checked = first.take();
+        if held_ontology.is_none() {
+            held_ontology = Some(store.ontology().map_err(Failure::Apply)?);
+        }
+        let ontology = held_ontology.as_ref().expect("read above");
         // The store's nodes the batch names, of any type, then the run's own names.
-        let known = crate::known::for_batch(&store, &ontology, &batch, &entities)
-            .map_err(Failure::Apply)?;
+        let known = match &checked {
+            Some(_) => Vec::new(),
+            None => lookup
+                .for_batch(&store, ontology, &batch, &entities)
+                .map_err(Failure::Apply)?,
+        };
         // With the store's ontology names, masked and one-line.
-        let known = Known::from_ontology(&ontology, known);
+        let known = Known::from_ontology(ontology, known);
         // The model is shown the batch with personal data replaced by placeholders; the mapping
         // stays in `pseudonyms`, in memory, until this batch's answer is restored.
         let ((prompt, fixed), pseudonyms) = match &redactor {
+            Some(_) if checked.is_some() => {
+                let (p, shown, known) = checked.expect("matched");
+                let prompt = extract::prompt_split(
+                    &spec.description,
+                    instructions.as_deref(),
+                    &known,
+                    &shown,
+                );
+                (prompt, Some(p))
+            }
             None => {
                 let prompt = extract::prompt_split(
                     &spec.description,
@@ -1190,6 +1244,9 @@ fn process_in(
             }
         };
         before.committed();
+        // The next batch sees what this one applied without reading the store again.
+        lookup.applied(&doc, &applied);
+        held_ontology = None;
         if !pseudonymised {
             let _ = std::fs::write(
                 dir.join("report.json"),
@@ -2186,31 +2243,21 @@ const ENDS_PER_TRANSACTION: usize = 1_000;
 /// or beyond `max_documents_per_run`), or whose mapped values are over the evidence bound, keeps
 /// its values; a run that lists no record ends nothing. The operations are committed as
 /// transactions of their own (`runs/<run>/ends-<n>.yaml`), after the run's snapshot is taken; one
-/// that fails fails the run when nothing was applied yet and stops it otherwise.
+/// that fails fails the run when nothing was applied yet and stops it otherwise. Answers whether
+/// every end committed (none to commit included).
 fn end_dropped(
     r: &Records<'_>,
     listed: &[sources::Document],
     seen: &SeenState,
     report: &mut Report,
     before: &mut Undo,
-) -> Result<(), Failure> {
+) -> Result<bool, Failure> {
     // A source that lists no record at all ends nothing: an empty list is read as a list that
     // failed, so a source cannot drop its last record.
     if listed.is_empty() {
-        return Ok(());
+        return Ok(true);
     }
-    // A record whose mapped values are over the evidence bound is recorded as seen but never
-    // applied ([`apply_records`]): on every run it stays too large, it keeps its values.
-    let unsettled: BTreeSet<String> = listed
-        .iter()
-        .filter(|d| {
-            seen.documents
-                .get(&d.key)
-                .is_none_or(|s| s.hash.as_deref() != Some(&crate::state::doc_hash(d)))
-                || evidence::lead_bytes(d, &r.source.lead(d)) > evidence::PAYLOAD_MAX_BYTES
-        })
-        .map(|d| d.key.clone())
-        .collect();
+    let unsettled = unsettled(r.source, listed, seen);
     let snapshot = r.store.snapshot().map_err(Failure::Apply)?;
     let ontology = r.store.ontology().map_err(Failure::Apply)?;
     let ops = r.source.ended(
@@ -2221,7 +2268,7 @@ fn end_dropped(
         r.held,
     );
     if ops.is_empty() {
-        return Ok(());
+        return Ok(true);
     }
     std::fs::create_dir_all(r.run_dir).map_err(|e| Failure::Apply(e.to_string()))?;
     for (n, chunk) in ops.chunks(ENDS_PER_TRANSACTION).enumerate() {
@@ -2236,7 +2283,7 @@ fn end_dropped(
                     Some(stopped) => format!("{stopped}; {e}"),
                     None => e,
                 });
-                return Ok(());
+                return Ok(false);
             }
         }
         for op in chunk {
@@ -2251,7 +2298,56 @@ fn end_dropped(
             }
         }
     }
-    Ok(())
+    Ok(true)
+}
+
+/// The records of `listed` that keep every value ([`end_dropped`]): one whose current text `seen`
+/// does not hold (held back, rejected, or beyond `max_documents_per_run`), and one whose mapped
+/// values are over the evidence bound, which is recorded as seen but never applied
+/// ([`apply_records`]): on every run it stays too large.
+fn unsettled(
+    source: &structured::Source<'_>,
+    listed: &[sources::Document],
+    seen: &SeenState,
+) -> BTreeSet<String> {
+    listed
+        .iter()
+        .filter(|d| {
+            seen.documents
+                .get(&d.key)
+                .is_none_or(|s| s.hash.as_deref() != Some(&crate::state::doc_hash(d)))
+                || evidence::lead_bytes(d, &source.lead(d)) > evidence::PAYLOAD_MAX_BYTES
+        })
+        .map(|d| d.key.clone())
+        .collect()
+}
+
+/// What [`end_dropped`] compares the store with, as one hash (`SeenState::ended_listing`): the
+/// source's definition `st`, each listed record's key and hash in key order, the [`unsettled`]
+/// records and the `held` prefixes with their relations. Two runs with the same fingerprint end
+/// the same values of a store no other writer changed in between, so the second ends none.
+fn ended_listing(
+    st: &m::StructuredSource,
+    source: &structured::Source<'_>,
+    listed: &[sources::Document],
+    seen: &SeenState,
+    held: &[structured::Held],
+) -> String {
+    let mut text = format!("{st:?}\n");
+    let records: BTreeMap<&str, String> = listed
+        .iter()
+        .map(|d| (d.key.as_str(), crate::state::doc_hash(d)))
+        .collect();
+    for (key, hash) in records {
+        text.push_str(&format!("listed {key:?} {hash}\n"));
+    }
+    for key in unsettled(source, listed, seen) {
+        text.push_str(&format!("unsettled {key:?}\n"));
+    }
+    for h in held {
+        text.push_str(&format!("held {:?} {:?}\n", h.prefix, h.relation));
+    }
+    text_hash(&text)
 }
 
 /// `key`, or a message that can name one, masked as a document key is: credential shapes, and the

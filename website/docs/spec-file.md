@@ -648,8 +648,12 @@ kind of a property the store already holds is a schema change ([`cortex schema`]
 A changed value adds an assertion of the new value. With `dropped: Keep` the old one stays active beside it, so a
 property can hold every value a record has had.
 
-**Dropped values.** With `dropped: Supersede`, after each run cortex reads the store
-(`ekr snapshot`) for the active assertions this source made: those whose evidence is all
+**Dropped values.** With `dropped: Supersede`, after a run cortex reads the store
+(`ekr snapshot`) for the active assertions this source made, unless the run selected no record
+and its listing (every record's key and text), the records it holds back and the parents whose
+child call failed are those of the last run that ended the dropped values: such a run reads
+nothing of the store, and begins no stage. A commit another writer made in between is compared
+by the next run whose listing changed. The assertions this source made are those whose evidence is all
 `record:<identity>` of this source's identities. It compares each with what the record lists now
 and ends the ones it no longer lists, in transactions of their own (`runs/<run>/ends-<n>.yaml`):
 

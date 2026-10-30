@@ -54,6 +54,13 @@ pub struct SeenState {
     /// removes the key; absent when no call is failing.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub child_failures: BTreeMap<String, u32>,
+    /// With `dropped: Supersede`, the fingerprint of what the last run that ended the dropped
+    /// values compared the store with: its listing's keys and hashes, its unsettled records and
+    /// its held prefixes (`crate::run`). A later run that selects nothing and has the same
+    /// fingerprint reads nothing of the store. Absent until such a run, so a state file written
+    /// before reads as one whose listing was never ended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended_listing: Option<String>,
     /// This run's, never written: by key, the hash of the text without its links of each change
     /// record of a structured source's link ([`crate::structured::Source::link`]). A change whose
     /// text differs from the one last applied only in its links is wanted at once and never held,
@@ -107,6 +114,7 @@ impl SeenState {
                 held_since: None,
                 pending_since: None,
                 child_failures: BTreeMap::new(),
+                ended_listing: None,
                 unlinked: BTreeMap::new(),
             }),
             Err(e) => Err(format!("cannot read {}: {e}", path.display())),

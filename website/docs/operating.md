@@ -208,7 +208,10 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
 8. **Check** the run against the spec's [`gate`](./spec-file.md#gate), when it applied
    something. A failed check undoes the run (see [Failures](#failures)).
 
-**Known entities.** Before each batch is sent, the run reads the store once (`ekr snapshot`) and
+**Known entities.** A run reads the store once, at its first batch (`ekr snapshot`), and keeps
+what it read, adding after each apply the nodes that batch's document named (a new one named by
+the least of its first aliases, as EKR names it). A commit another writer makes while the run is
+going is not seen by that run; the next run reads it. Before each batch is sent, the run
 takes every node, of any type, whose canonical name or one of whose aliases equals one of the
 batch's terms, both lowercased: each document's key and, for a record, its id (after the first
 `#` of a file record's key `<path>#<id>`, so an id holding `#` is taken whole, after
@@ -235,9 +238,9 @@ policy, and each written on one line. Behind
 a model window, a batch whose store hits make its prompt's fixed part longer than the batch size
 allowed for is split in two before it is sent (see
 [the batch size](./spec-file.md#the-batch-size)). `ekr snapshot` reads the
-whole graph (nodes, edges, assertions and evidence) at the head, once per batch, so on a large
-store each batch takes that read's time on top of the model call; a `structured` source calls no
-model and makes no such read.
+whole graph (nodes, edges, assertions and evidence) at the head, once per run, so on a large
+store the first batch takes that read's time on top of the model call; a `structured` source
+calls no model and makes no such read.
 
 A `structured` source skips steps 5 and 6: each batch of records is mapped to an extraction
 document by the source's `mapping` and applied without a model call, at a cost of 0 (see
