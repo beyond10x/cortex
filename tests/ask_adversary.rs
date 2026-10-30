@@ -1207,13 +1207,16 @@ fn adversary_a_client_closed_answer_past_slow_after_ms_opens_no_review_item() {
     );
 }
 
-/// A reader who leaves while a model call is in flight holds its `max_in_flight` slot until the
-/// gateway answers, though the spec (`cortex.ask.ClientClosed`: "the answer stops at once") and
-/// the site ("stops the answer at once") say the answer stops at once: with `max_in_flight: 1`,
-/// the next asker is refused `busy` by an answer nobody reads.
+/// A reader who leaves while a model call is in flight leaves an answer that still holds its
+/// `ekr mcp` reader and its gateway call, up to `max_seconds`. So the answer keeps its
+/// `max_in_flight` slot until its blocking thread ends (security review of wave 20261030a: a slot
+/// freed when the reader left let clients who disconnect run any number of readers and model
+/// calls). With `max_in_flight: 1`, the next asker is refused `busy` and asks no model while the
+/// abandoned call runs; the call's tokens are recorded; and once the answer ends, the slot is
+/// free again.
 #[test]
-fn adversary_a_departed_reader_frees_its_in_flight_slot_at_once() {
-    let gateway = Gateway::start(vec![text_reply("Yes [node:n-1].")], Duration::from_secs(5));
+fn adversary_a_departed_reader_holds_its_in_flight_slot_until_its_answer_ends() {
+    let gateway = Gateway::start(vec![text_reply("Yes [node:n-1].")], Duration::from_secs(3));
     let service = serve(
         &gateway,
         Setup {
@@ -1232,12 +1235,38 @@ fn adversary_a_departed_reader_frees_its_in_flight_slot_at_once() {
         );
         std::thread::sleep(Duration::from_millis(20));
     }
+    // Long enough for the service to see the reader's connection close.
     std::thread::sleep(Duration::from_millis(300));
     let next = ask(&service, "ben", "My turn?");
-    assert_ne!(
+    assert_eq!(
         next.status, 429,
-        "ann left; her abandoned answer still holds the only slot: {:?}",
+        "ann left, but her answer's reader and model call still run; ben was let in: {:?}",
         next.events
+    );
+    assert_eq!(next.terminal().1["reason"], "busy", "{:?}", next.events);
+    assert_eq!(gateway.asked(), 1, "a busy question asked the model");
+    let (_, answers) = kept(&service, 1);
+    let record = &answers[0];
+    assert_eq!(
+        records::outcome_name(record.outcome),
+        "client-closed",
+        "{record:?}"
+    );
+    assert_eq!((record.steps, record.input_tokens), (1, 10), "{record:?}");
+    // The record is kept just before the answer's thread ends, which gives the slot back.
+    let ended = Instant::now();
+    let after = loop {
+        let after = ask(&service, "ben", "My turn now?");
+        if after.status != 429 || ended.elapsed() > Duration::from_secs(5) {
+            break after;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(
+        (after.status, after.terminal().0.as_str()),
+        (200, "done"),
+        "ann's answer ended, yet its slot was not given back: {:?}",
+        after.events
     );
 }
 

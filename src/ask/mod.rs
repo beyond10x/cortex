@@ -537,50 +537,12 @@ pub trait Stream {
     fn emit(&mut self, event: ma::AskEvent) -> bool;
     /// Whether the reader has closed the stream, without sending anything.
     fn gone(&self) -> bool;
-    /// The reader closed the stream while the loop waits on the model: whatever the answer holds
-    /// that keeps other questions out (its `max_in_flight` slot) is given back now.
-    fn left(&mut self);
-}
-
-/// How often a wait on the model looks whether the reader has gone.
-const GONE_POLL: Duration = Duration::from_millis(25);
-
-/// Runs `work` (a model call) on its own thread and waits for it, looking whether the reader of
-/// `stream` has gone; when it has, [`Stream::left`] is called at once. The call itself is not cut:
-/// what it spent is still counted, and it ends by its reply or the answer's deadline. The second
-/// value says whether the reader went.
-fn while_read<T: Send>(stream: &mut dyn Stream, work: impl FnOnce() -> T + Send) -> (T, bool) {
-    std::thread::scope(|scope| {
-        let (done, result) = std::sync::mpsc::channel();
-        let worker = scope.spawn(move || {
-            let _ = done.send(work());
-        });
-        let mut gone = false;
-        loop {
-            match result.recv_timeout(GONE_POLL) {
-                Ok(value) => return (value, gone),
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    if !gone && stream.gone() {
-                        gone = true;
-                        stream.left();
-                    }
-                }
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                    // The work panicked before it sent: its panic is this thread's.
-                    match worker.join() {
-                        Err(panic) => std::panic::resume_unwind(panic),
-                        Ok(()) => unreachable!("the model call ended without a result"),
-                    }
-                }
-            }
-        }
-    })
 }
 
 /// Answers `question` for `identity`, under `answer_id`: the tool loop. Each event before the
-/// last is handed to `stream` as it happens; once nobody reads it the loop ends, also while it
-/// waits on the model, and no tool call is made for a reader who has gone. The outcome is the
-/// answer or why there is none; [`final_event`] makes it the last event.
+/// last is handed to `stream` as it happens; once nobody reads it the loop ends, at the latest
+/// when the model call it waits on ends, and no tool call is made for a reader who has gone. The
+/// outcome is the answer or why there is none; [`final_event`] makes it the last event.
 pub fn answer(
     settings: &Settings,
     answer_id: &str,
@@ -651,10 +613,12 @@ pub fn answer(
         if !stream.emit(status(step, "asking the model")) {
             return client_closed(&spent);
         }
-        // A reader who leaves during the model call gives back the answer's slot at once; the
-        // call's reply still counts what it spent, and nothing of it is streamed or run.
-        let (reply, gone) = while_read(stream, || gateway.chat(&messages, &tools, deadline));
-        if gone {
+        // The call is not cut when the reader leaves: it ends by its reply or the deadline, and
+        // the answer keeps its `max_in_flight` slot until then (the slot is the answer's thread's,
+        // `serve.rs`). A reply for a reader who has gone still counts what it spent, and nothing
+        // of it is streamed or run.
+        let reply = gateway.chat(&messages, &tools, deadline);
+        if stream.gone() {
             if let Ok(reply) = &reply {
                 spent.add(&reply.usage);
             }

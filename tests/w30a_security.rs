@@ -234,8 +234,10 @@ fn ask(service: &Service, identity: &str, question: &str) -> String {
         .unwrap()
 }
 
-/// Posts a question as `identity` on a raw connection, reads until `marker`, and closes it.
-fn leave_after(service: &Service, identity: &str, marker: &str) {
+/// Posts a question as `identity` on a raw connection, reads until `marker` or an `error` event
+/// (a refusal, which a kept-alive connection follows with nothing), closes it, and answers what
+/// it read.
+fn leave_after(service: &Service, identity: &str, marker: &str) -> String {
     let body = json!({"question": "Leave?"}).to_string();
     let mut stream = TcpStream::connect(&service.addr).unwrap();
     write!(
@@ -249,12 +251,17 @@ fn leave_after(service: &Service, identity: &str, marker: &str) {
         .unwrap();
     let mut seen = Vec::new();
     let mut buf = [0; 4096];
-    while !String::from_utf8_lossy(&seen).contains(marker) {
+    let done = |seen: &[u8]| {
+        let text = String::from_utf8_lossy(seen);
+        text.contains(marker) || text.contains("event: error")
+    };
+    while !done(&seen) {
         let n = stream.read(&mut buf).unwrap();
         assert!(n > 0, "the stream ended before {marker:?}");
         seen.extend_from_slice(&buf[..n]);
     }
     drop(stream);
+    String::from_utf8_lossy(&seen).into_owned()
 }
 
 const LIMITS: &str =
@@ -290,12 +297,13 @@ fn a_gateway_failure_reaches_neither_the_client_nor_the_log_with_a_credential_in
 
 /// `website/docs/ask-service.md` ("At most `max_in_flight` readers run at once") and the
 /// CHANGELOG ("`ask.max_in_flight` caps the answers worked on at once") bound the readers and
-/// answers in flight over every identity. A reader who leaves while the model is asked frees the
-/// answer's slot at once (`Events::left`), but the answer's thread keeps its `ekr mcp` reader and
-/// its gateway call until the call returns, up to `max_seconds`. So clients who each leave after
-/// "asking the model" hold any number of readers and model calls with `max_in_flight: 1`; the
-/// identity header is whatever the client sends, so the per-identity minute limit bounds nothing
-/// across them.
+/// answers in flight over every identity. The answer's thread keeps its `ekr mcp` reader and its
+/// gateway call after its reader leaves, until the call returns, up to `max_seconds`; a slot
+/// freed when the reader left (`Events::left`, before this review) let clients who each leave
+/// after "asking the model" hold any number of readers and model calls with `max_in_flight: 1`.
+/// The identity header is whatever the client sends, so the per-identity minute limit bounds
+/// nothing across them. The answer keeps its slot until its thread ends, so the second and third
+/// clients are refused `busy`.
 #[test]
 fn readers_of_departed_answers_stay_within_max_in_flight() {
     let gateway = Gateway::start(
@@ -309,14 +317,21 @@ fn readers_of_departed_answers_stay_within_max_in_flight() {
         Duration::from_secs(6),
     );
     let service = serve(&gateway, LIMITS, "  max_in_flight: 1");
+    let mut seen = Vec::new();
     for identity in ["ann", "ben", "cee"] {
-        leave_after(&service, identity, "asking the model");
-        // Let the answer's wait notice the reader left (it polls every 25 ms).
+        seen.push(leave_after(&service, identity, "asking the model"));
+        // Let the service see the reader's connection close.
         std::thread::sleep(Duration::from_millis(200));
     }
+    assert!(seen[0].contains("asking the model"), "{}", seen[0]);
+    for (identity, text) in ["ben", "cee"].iter().zip(&seen[1..]) {
+        assert!(
+            text.contains("429") && text.contains("busy"),
+            "{identity} was not refused busy while ann's answer ran: {text}"
+        );
+    }
     let started = Instant::now();
-    while gateway.asked.load(Ordering::SeqCst) < 3 && started.elapsed() < Duration::from_secs(3)
-    {
+    while gateway.asked.load(Ordering::SeqCst) < 3 && started.elapsed() < Duration::from_secs(3) {
         std::thread::sleep(Duration::from_millis(20));
     }
     let live = service.live_readers();

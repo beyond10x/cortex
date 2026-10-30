@@ -93,8 +93,8 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - `cortex ask serve` recorded an answer whose reader closed the stream as `model-failed`, with no
   tokens, and opened a review item for it. It is now recorded with the outcome `client-closed`,
   the token counts and steps of the model calls already made, and no review item, `slow`
-  included. A reader who leaves while the model is asked frees the answer's `max_in_flight` slot
-  at once, and no tool call of that reply is made.
+  included. A reader who leaves while the model is asked does not cut the call, and no tool call
+  of that reply is made.
 - `cortex ask serve` streamed and recorded a model reply cut off at its token limit or by a
   content filter as an answer. Such a reply (`finish_reason` `length` or `content_filter`) now
   ends the stream with an `error` event, reason `cut-off`, is recorded with the outcome `cut-off`
@@ -103,7 +103,9 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - `cortex ask serve` had no bound on answers in flight, tool calls per step, the gateway's
   answer, or the bodies of votes and review closes. `ask.max_in_flight` (default 8) caps the
   answers worked on at once: a question past it answers 429 `busy` at once and spends no question
-  of the minute. `ask.limits.max_tool_calls` (default 16) caps the tool calls one step makes; the
+  of the minute. An answer keeps its slot until its reader is stopped and its model call has
+  ended, also after its reader left, so clients who disconnect cannot run more readers or model
+  calls than the cap. `ask.limits.max_tool_calls` (default 16) caps the tool calls one step makes; the
   calls past it are not made, the model is told so, and a `status` event says how many. A gateway
   answer above 4 MiB fails the answer with `model-failed`, and a vote or close body above 64 KiB
   answers 413. The redaction policy is compiled once when the service starts, not twice per
@@ -112,7 +114,8 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   record route's 500, and the gateway's answer or the reader's program path in an `error` event.
   A record route's failure now answers `store-failed` with a fixed message and a `request_id`;
   an answer's `error` event carries a fixed message for `model-failed` and `reader-failed`, ending
-  `(request <answer_id>)`. The detail goes to standard error on a line naming the same id.
+  `(request <answer_id>)`. The detail goes to standard error on a line naming the same id,
+  masked for credential shapes like every line the service logs.
 - A run reads the store once (`ekr snapshot` at its first batch) instead of once per batch, and
   twice per batch under a `refuse_if_left` policy. The nodes each batch applies are added to what
   it read, so the next batch is still shown them as in the store; a commit another writer makes
