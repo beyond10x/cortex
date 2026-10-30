@@ -76,6 +76,13 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   Such a link is now replaced, an international number may have one `/` after its area code (a
   date after `+`, with two, is still not a number), and a link keeps its square brackets up to a
   `]` it opened no bracket for (`[https://host/x]`, `[https://host/x](…)`).
+- The always-on credential mask missed five shapes: a quoted name (`"password": "…"`), a URL
+  password with a raw `@` (`postgres://app:p@ss@db/x`), a value in a document key with a raw `%`
+  that starts no escape, `%3A` as the separator, and a private key whose `END` line a provider
+  cut off. Each is now masked; a separator may also be `=>` or follow a percent-encoded quote, and
+  a cut private key is masked through its last base64 line. A document whose stored key holds one
+  of these shapes is read again once under its masked key; the old key, and a child-failure count
+  kept under it, is dropped from the source's state.
 
 ## 0.6.1 — 2026-10-17
 

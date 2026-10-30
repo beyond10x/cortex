@@ -26,12 +26,20 @@ enum Keep {
 /// A credential's name, with any `<word>_` prefix (`DB_PASSWORD`, `client_secret`), starting at a
 /// word boundary or after a percent-encoded byte (`%3Faccess_token`).
 const NAME: &str = r"((?:\b|%[0-9a-f]{2})(?:[a-z0-9]+_)*(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token))";
-/// `=` or `:`, or `=` percent-encoded.
-const SEPARATOR: &str = r"(\s*(?:[:=]|%3d)\s*)";
+/// `=`, `:` or `=>`, raw or percent-encoded, after the quote that closes a quoted name
+/// (`"password": `), as the opt-in `Credential` class of `crate::redact` reads it.
+const SEPARATOR: &str = r#"((?:["']|%2[27])?\s*(?:=>|[:=]|%3[ad])\s*)"#;
 /// An assigned value in text: up to the next space or quote.
 const TEXT_VALUE: &str = r#"([^\s"']{6,})"#;
-/// An assigned value in a key: also up to `&` or `#`, raw or percent-encoded.
-const KEY_VALUE: &str = r#"((?:[^\s"'&#%]|%(?:[013-9a-f][0-9a-f]|2[0-24-57-9a-f])){6,})"#;
+/// An assigned value in a key: also up to `&` or `#`, raw or percent-encoded. A `%` that starts
+/// no escape (`ab%zz`) is part of the value.
+const KEY_VALUE: &str =
+    r#"((?:[^\s"'&#%]|%(?:[013-9a-f][0-9a-f]|2[0-24-57-9a-f]|[0-9a-f]?[^0-9a-f\s"'&#])){6,})"#;
+/// A private key's base64 lines after its `BEGIN` line when its `END` line is missing (a provider
+/// cut the text after it): every line of 16 or more base64 characters, the last line of the text
+/// whatever its length, and the `Proc-Type` and `DEK-Info` lines of an encrypted key. A line
+/// break may be written `\n`, as in a JSON string.
+const KEY_LINES: &str = r"(?:(?:\s|\\[rn])+(?:(?:Proc-Type|DEK-Info):[^\r\n\\]*|[A-Za-z0-9+/=]{16,}|[A-Za-z0-9+/=]+\s*\z))*";
 
 fn build(value: &str) -> Vec<(&'static str, Keep, Regex)> {
     let assignment = format!(r#"(?i){NAME}{SEPARATOR}["']?{value}"#);
@@ -39,8 +47,9 @@ fn build(value: &str) -> Vec<(&'static str, Keep, Regex)> {
         (
             "private-key",
             Keep::Nothing,
-            r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"
-                .to_string(),
+            format!(
+                r"-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|{KEY_LINES})"
+            ),
         ),
         (
             "aws-access-key",
@@ -76,7 +85,8 @@ fn build(value: &str) -> Vec<(&'static str, Keep, Regex)> {
         (
             "url-password",
             Keep::User,
-            r"(?i)\b([a-z][a-z0-9+.\-]*://[^\s/?#@:]*:)([^\s/?#@]+)@".into(),
+            // The password runs to the last `@` before the path: it may hold a raw `@`.
+            r"(?i)\b([a-z][a-z0-9+.\-]*://[^\s/?#@:]*:)([^\s/?#]+)@".into(),
         ),
         ("secret-assignment", Keep::Name, assignment),
     ]
@@ -248,6 +258,73 @@ mod tests {
             assert_eq!(mask(prose), (prose.to_string(), 0), "{prose}");
             assert_eq!(mask_key(prose), (prose.to_string(), 0), "{prose}");
         }
+    }
+
+    /// A quote after the name, `=>`, `%3A` and a percent-encoded quote all separate a name from
+    /// its value, as the opt-in `Credential` class reads them (R4-03, R4-14).
+    #[test]
+    fn a_quoted_or_encoded_separator_is_masked() {
+        let t = secret();
+        for (input, masked) in [
+            (
+                format!(r#"{{"password": "{t}"}}"#),
+                r#"{"password": [masked:secret-assignment]"}"#,
+            ),
+            (
+                format!("'api_key' => '{t}',"),
+                "'api_key' => [masked:secret-assignment]',",
+            ),
+            (
+                format!("next=%2Fa%3Faccess_token%3A{t}"),
+                "next=%2Fa%3Faccess_token%3A[masked:secret-assignment]",
+            ),
+            (
+                format!("q=%22client_secret%22%3A%22{t}%22"),
+                "q=%22client_secret%22%3A[masked:secret-assignment]",
+            ),
+        ] {
+            assert_eq!(mask(&input), (masked.to_string(), 1), "{input}");
+            assert!(!mask_key(&input).0.contains(&t), "{input}");
+        }
+    }
+
+    /// A raw `@` in a URL password, and a raw `%` that is no escape in a key's value, are part of
+    /// the value (R4-07, R4-12).
+    #[test]
+    fn an_at_sign_in_a_password_and_a_raw_percent_in_a_key_are_masked() {
+        let t = secret();
+        let url = format!("postgres://app:p@ss-{t}@db.internal:5432/x");
+        let masked = "postgres://app:[masked:url-password]@db.internal:5432/x";
+        assert_eq!(mask(&url), (masked.to_string(), 1));
+        assert_eq!(mask_key(&url), (masked.to_string(), 1));
+        assert_eq!(
+            mask_key(&format!("https://example.org/a?access_token=ab%{t}&page=2")),
+            (
+                "https://example.org/a?access_token=[masked:secret-assignment]&page=2".into(),
+                1
+            )
+        );
+    }
+
+    /// A private key cut before its `END` line is masked through its last line, and the prose
+    /// after a lone `BEGIN` line is kept.
+    #[test]
+    fn a_private_key_without_its_end_line_is_masked() {
+        // Assembled at runtime so no key-shaped literal sits in the source.
+        let begin = |kind: &str| format!("-----BEGIN {kind}PRIVATE {}-----", "KEY");
+        let body = format!("MIIE{}", "Qk7x".repeat(15));
+        let cut = format!("{}\n{body}\n{body}\nPz8r", begin("RSA "));
+        assert_eq!(
+            mask(&format!("Deploy key: {cut}")),
+            ("Deploy key: [masked:private-key]".into(), 1)
+        );
+        let prose = format!(
+            "A key file opens with {} and a blank line.\n\nKeep it.",
+            begin("")
+        );
+        let (out, n) = mask(&prose);
+        assert_eq!(n, 1, "{out}");
+        assert!(out.ends_with(" and a blank line.\n\nKeep it."), "{out}");
     }
 
     #[test]
