@@ -1,7 +1,7 @@
 //! Adversary cases for unit `redact` of wave 20261030a (`story:redaction-patterns-hold`,
 //! `story:mask-quoted-credentials`), run through the public `cortex_cli::redact`,
-//! `cortex_cli::mask` and `cortex_cli::state` APIs a run uses. Each breaking case is marked
-//! `#[ignore = "adversary: …"]` so the branch stays green; run them with `--ignored`.
+//! `cortex_cli::mask` and `cortex_cli::state` APIs a run uses. The five mask cases merged
+//! `#[ignore]`d in that wave run since `story:mask-percent-before-encoded-amp`.
 //! Credential-shaped values are assembled at runtime so no such literal sits in the source.
 
 use std::collections::BTreeMap;
@@ -269,7 +269,6 @@ fn a_stored_key_holding_the_rest_of_a_credential_is_dropped_on_load() {
 /// encoded `&` after it no longer ends the value, so two URLs that differ after it become one
 /// key and the second document is left out as a repeat.
 #[test]
-#[ignore = "adversary: a raw % before %26 swallows the rest of the query into the masked value"]
 fn a_raw_percent_before_an_encoded_ampersand_keeps_two_keys_apart() {
     let t = secret();
     let a = mask_key(&format!("https://example.org/a?access_token={t}%%26page=2"));
@@ -283,7 +282,6 @@ fn a_raw_percent_before_an_encoded_ampersand_keeps_two_keys_apart() {
 /// `[masked:secret-assignment]` token holds a `:` that `url-password` reads as the user's end;
 /// `%3A` as a separator makes a key that was left alone before the change one such key.
 #[test]
-#[ignore = "adversary: mask_key is not idempotent on a %3A-separated key after a scheme (unreached shape)"]
 fn a_masked_key_is_not_masked_again() {
     let v = "abcdefgh";
     let key = format!("x://password%3a{v}&u@h");
@@ -297,7 +295,6 @@ fn a_masked_key_is_not_masked_again() {
 /// sample on a page holds it. The cut private key accepts `\n` "as in a JSON string"; the quoted
 /// name does not accept `\"`.
 #[test]
-#[ignore = "adversary: an escaped JSON-quoted password is not masked (pre-existing)"]
 fn an_escaped_json_quoted_password_is_masked() {
     let t = secret();
     let text = format!(r#"Log: {{\"password\": \"{t}\"}}"#);
@@ -307,7 +304,6 @@ fn an_escaped_json_quoted_password_is_masked() {
 
 /// `%253D`, `=` encoded twice, as a URL inside another URL's query carries it.
 #[test]
-#[ignore = "adversary: a twice percent-encoded separator is not masked (pre-existing)"]
 fn a_twice_encoded_separator_is_masked() {
     let t = secret();
     let key = format!("https://example.org/r?next=%252Fapi%253Faccess_token%253D{t}");
@@ -317,7 +313,6 @@ fn a_twice_encoded_separator_is_masked() {
 
 /// A user part holding a raw `@`, as an address used as the user name is often written.
 #[test]
-#[ignore = "adversary: a URL password after a user name with a raw @ is not masked (pre-existing)"]
 fn a_url_password_after_a_user_with_an_at_sign_is_masked() {
     let t = secret();
     let url = format!("ftp://jane@corp.example:{t}@files.example/x");

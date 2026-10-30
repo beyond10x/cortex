@@ -10,7 +10,7 @@ tags:
 relations:
 - decomposes: epic:standalone-1-0
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T15:57:08Z", actor: "human:timo", revision: 2}
 ---
@@ -48,3 +48,8 @@ Masked as expected: lower, upper and mixed case keys, `key: `, spaced `=`, quote
 
 The same probe against `unit/w30b-mask` (b39be845): 12 of 25 still leak. The escaped-JSON
 `db_password` is masked there; the escaped AWS secret access key and the `%2B` value still leak.
+
+After `access[_-]?key` joined the always-on name list (`unit/w30b-mask` at bb4835c7), 10 of 25
+still leak: the three markup-wrapped keys, the XML element, `--db-password`, `SECRET_KEY=`,
+`DJANGO_SECRET_KEY=`, `AWS_SECRET_KEY=`, `PGPASSWORD=` and `DB_PASS=`. Both escaped-JSON keys and
+the `%2B` value are masked there.

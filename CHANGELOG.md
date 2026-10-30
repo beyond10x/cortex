@@ -43,6 +43,25 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   unit, and that home's source stopped running. `create`, `update` and `adopt` now refuse before
   changing anything, naming the unit, the home that holds it and its source or viewer there. A unit
   whose home no longer holds the instance it belongs to is still taken over (`units.taken_over`).
+- In a URL or record key, a raw `%` before an encoded `&` or `#` (`<token>%%26page=2`) no longer
+  carries the rest of the query into the masked value, so two URLs that differ after it stay two
+  documents. A twice-encoded `&` or `#` (`%2526`) ends a masked value too, and a `%` before
+  another escape or character (`%25%21`, `%%41`, `%2%41`, `%2%x`) stays in it.
+- Upgrading: a key 0.7.0 stored for a URL with `%%26` in its query
+  (`access_token=[masked:secret-assignment]`, the rest of the query inside the masked value)
+  matches no key after the change. Each such document is read once more after the upgrade,
+  under its new key, and the old key stays in the state file, matched by nothing.
+- Now masked: a password assigned with a twice percent-encoded name or separator
+  (`%253Faccess_token%253D<token>`), a JSON-quoted password inside a JSON string
+  (`{\"password\": \"<token>\"}`), and a URL password after a user name that holds a raw `@`
+  (`ftp://jane@corp.example:<password>@host`) when the password holds no `,` or `;`, so a user,
+  host and port before a list of addresses (`ops@mail.example:587,admin@example.org`) is kept.
+- Now masked without a redaction policy: a value assigned to an access key by name
+  (`AWS_SECRET_ACCESS_KEY=<v>`, `aws_secret_access_key = <v>`, `access-key: <v>`). 0.7.0 left
+  it in place unless the policy held the `Credential` class.
+- Masking a key that was masked already no longer masks it again when a `%3A`-separated
+  assignment follows a scheme (`x://password%3a<token>&u@h`); such a stored key is no longer
+  dropped on every load.
 
 ### Known limits
 
@@ -55,6 +74,19 @@ Each has a test kept `#[ignore]`d that names `story:ignored-adversary-limits`.
 - A run that failed before it applied a batch does not count the tokens its failed answers
   reported ([Limits](https://beyond10x.github.io/cortex/docs/limits),
   `tests/partial_counts_adversary.rs`).
+- A credential that ends in a raw `%` and one hex digit right before an encoded or raw `&` or `#`
+  (`<token>%2%26`, `<token>%2&`) keeps that `%` and digit in clear in a key
+  (`tests/w30b_mask_adversary.rs`).
+- In a URL with a user name and a port, a `)` and an address right after the port
+  (`(smtp://ops@mail.example:587)admin@example.org`) are masked as a password
+  (`tests/w30b_mask_adversary.rs`).
+
+Kept `#[ignore]`d under `story:credential-key-spellings`, for the next release:
+
+- A value assigned to `secret_key`, `SECRET_KEY` or another name with `secret` before its last
+  word is kept in clear, with or without a `Credential` policy (`tests/w30b_mask_adversary.rs`).
+- A URL password holding `,` or `;` after a user name with a raw `@` is kept in clear
+  (`tests/w30b_mask_adversary.rs`).
 
 ## 0.7.0 — 2026-10-30
 
