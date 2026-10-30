@@ -38,6 +38,11 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 ### Fixed
 
+- `cortex ask serve` with PostgreSQL answer records waited without bound on a records process
+  whose database stalled, holding every later ask, vote and review behind it until a restart. Each
+  record call now has a deadline of 30 seconds, a start of the records process included, and the
+  records process runs each statement with a `statement_timeout` of 30 seconds. A call past it
+  answers `store-failed`, the stalled process is stopped, and the next call starts another.
 - A run sent SIGTERM during its fetch ran the fetch out before it stopped. The fetch is now a safe
   point: the `connectors` call in flight is ended with its process group (SIGKILL after 5
   seconds), a paged or `files` read stops between pages and files, and the run ends `terminated`,
