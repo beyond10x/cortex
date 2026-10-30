@@ -33,9 +33,10 @@ use super::{
 /// `cortex` binary the records process runs. It needs no variable passed (`pass_env = []`).
 pub const CONSUMER: &str = "cortex-records";
 
-/// The deadline of one call of the records: the service's wait for the records process to start
-/// and answer, and each statement's `statement_timeout` in that process. A call past it fails
-/// (`store-failed`), and the records process is stopped and started again for the next one.
+/// The deadline of each wait of a record call: for earlier calls, for a start of the records
+/// process and for its answer to a statement; and each statement's `statement_timeout` in that
+/// process. A call past it fails (`store-failed`); a process that did not start or answer by then
+/// is stopped, and started again for the next call.
 pub const DEADLINE: Duration = Duration::from_secs(30);
 
 /// The schema of the records, one step per version as for `ask.sqlite`: step `i` takes version
@@ -439,7 +440,7 @@ pub struct Launch {
     pub ca_file: Option<String>,
     /// Variables the records process must not inherit: the gateway's token among them.
     pub remove: Vec<String>,
-    /// How long one call of the records process may take, its start included: [`DEADLINE`].
+    /// The deadline of each wait of a call of the records process: [`DEADLINE`].
     pub deadline: Duration,
 }
 
@@ -522,9 +523,10 @@ impl Drop for Proc {
 }
 
 /// The records process, started through Connectors: one statement at a time, one JSON line each
-/// way. Each call has the launch's deadline, its wait for an earlier call and a start of the
-/// process included; a process that ended, answered no line or did not answer by then is
-/// stopped, and started again for the next statement.
+/// way. The launch's deadline bounds three waits of a call, each on its own: for earlier calls (a
+/// call past it fails and leaves the process alone), for a start of the process, and for the
+/// answer, timed from the statement's sending. A process that ended, answered no line or did not
+/// answer by then is stopped, and started again for the next statement.
 pub struct Remote {
     launch: Launch,
     process: Mutex<Option<Proc>>,
@@ -606,28 +608,31 @@ impl Remote {
     }
 
     fn call(&self, request: Value) -> Result<Value, SqlError> {
-        let deadline = Instant::now() + self.launch.deadline;
-        let late = || -> SqlError {
-            format!(
-                "ask.records: the records process did not answer within {:?}",
-                self.launch.deadline
-            )
-            .into()
-        };
-        // The lock is held by an earlier call for at most that call's deadline.
+        let deadline = self.launch.deadline;
+        let queued_until = Instant::now() + deadline;
+        // The lock is held by an earlier call for at most a start and one exchange.
         let mut process = self
             .process
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if Instant::now() >= deadline {
-            return Err(late());
+        // A call that spent its deadline waiting for earlier ones fails without touching the
+        // process: a queue is no stall, and the process and its statement in flight are kept.
+        if Instant::now() >= queued_until {
+            return Err(format!(
+                "ask.records: the record call waited {deadline:?} behind earlier ones"
+            )
+            .into());
         }
+        // A start has a deadline of its own, never what is left of the caller's: a start cut
+        // short would be paid again by the next caller. The process it starts is kept.
         if process.is_none() {
-            *process = Some(Self::spawn(&self.launch, deadline)?);
+            *process = Some(Self::spawn(&self.launch, Instant::now() + deadline)?);
         }
         let p = process.as_mut().expect("started");
+        // The exchange is timed from the statement's sending: only a process that takes longer
+        // than the deadline to answer it is stalled.
         let exchanged = match p.requests.send(request.to_string()) {
-            Ok(()) => p.line(deadline),
+            Ok(()) => p.line(Instant::now() + deadline),
             Err(_) => Err(RecvTimeoutError::Disconnected),
         };
         let answer = match exchanged {
@@ -635,7 +640,10 @@ impl Remote {
             Err(RecvTimeoutError::Timeout) => {
                 // Stalled: the process is stopped, and the next statement starts another.
                 *process = None;
-                return Err(late());
+                return Err(format!(
+                    "ask.records: the records process did not answer within {deadline:?}"
+                )
+                .into());
             }
             Err(RecvTimeoutError::Disconnected) => None,
         };

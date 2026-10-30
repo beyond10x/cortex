@@ -39,10 +39,12 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 ### Fixed
 
 - `cortex ask serve` with PostgreSQL answer records waited without bound on a records process
-  whose database stalled, holding every later ask, vote and review behind it until a restart. Each
-  record call now has a deadline of 30 seconds, a start of the records process included, and the
-  records process runs each statement with a `statement_timeout` of 30 seconds. A call past it
-  answers `store-failed`, the stalled process is stopped, and the next call starts another.
+  whose database stalled, holding every later ask, vote and review behind it until a restart. A
+  record call now waits at most 30 seconds for the calls before it, for a start of the records
+  process and for the answer to its statement, and the records process runs each statement with a
+  `statement_timeout` of 30 seconds. A call past one of them answers `store-failed`. A process that
+  did not answer in time is stopped and the next call starts another; a call that only waited
+  behind others leaves the process alone.
 - The redacting MCP server of the eval `mcp` runner kept every connection it accepted open until
   the case ended, so a client making many short requests held one descriptor per request, and at
   the descriptor limit the server stopped accepting. A connection now leaves its open list once it

@@ -251,12 +251,12 @@ one JSON line each way on its standard input and output. A schema at a newer ver
 (the service exits 1). Only the records process reads the password; the service, its output and
 the instance directory never see it.
 
-Each record call has a deadline of 30 seconds, a start of the records process included, and the
-records process runs each statement with a `statement_timeout` of 30 seconds. While the database
-stalls, a vote, `GET /review` or a close answers `store-failed` (500) within that deadline, and an
-answer whose record cannot be kept still ends, its record logged as not kept. The stalled records
-process is stopped and the next call starts another, so no call waits behind it past its own
-deadline.
+A record call waits at most 30 seconds for the calls before it, for a start of the records process
+and for the answer to its statement, and the records process runs each statement with a
+`statement_timeout` of 30 seconds. While the database stalls, a vote, `GET /review` or a close
+answers `store-failed` (500), and an answer whose record cannot be kept still ends, its record
+logged as not kept. A records process that did not answer in time is stopped and the next call
+starts another; a call that only waited behind others fails without stopping it.
 
 The operator, once per deployment:
 
