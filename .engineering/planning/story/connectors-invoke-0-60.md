@@ -63,7 +63,7 @@ scope:
   path: tests/structured_compare_adv.rs
 - confidence: cited
   path: tests/structured_files.rs
-revision: 31
+revision: 32
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:00Z", actor: "human:timo", revision: 30}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:01Z", actor: "human:timo", revision: 31}
@@ -142,3 +142,4 @@ Taken 2026-10-30 by the wave coordinator from the scoper's open questions.
 - The `<connector>` comes from the list entry, not from the spec's `adapter`.
 - A non-object `result` is refused at `Connectors::invoke` with its JSON type named (R3-10); `walk_until` keeps its message for a missing array.
 - The new test file is `tests/connectors_invoke_0_60.rs`.
+- Correction (2026-10-30, wave coordinator): `connections list` carries `connector` and `instance` since Connectors 0.54.0, not 0.60.0 (`review-result:adversary-w30a-conn-pass-1`, run against a real 0.59.3 binary). The "0.60.0 or newer" in the refusal above is the version cortex requires for `connectors invoke`, not the version that added the two fields.

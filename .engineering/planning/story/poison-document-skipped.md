@@ -48,7 +48,7 @@ scope:
   path: website/docs/spec-file.md
 - confidence: inferred
   path: website/static/schemas
-revision: 23
+revision: 24
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 22}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 23}
@@ -139,3 +139,4 @@ Taken 2026-10-30 by the wave coordinator.
 - A changed `doc_hash` resets the document's count.
 - The skip is an UNMAPPED rule in `RunSource`; no new `SourceRan` field.
 - New test file `tests/poison_document.rs`.
+- Correction (2026-10-30, wave coordinator, D20): a failed batch of several documents is asked whole once more in the next run; only when it fails again are its documents asked alone. Only lone failures count toward the limit (`review-result:adversary-w30a-fail-pass-2`, finding 1).

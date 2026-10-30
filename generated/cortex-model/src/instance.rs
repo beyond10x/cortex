@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest a1985f8f3c719a34e29149abd79b27c00379600b80c7f19bacd9f1832d3491db
-// contract digest 24b3106592b3f21c336ecc59a60765cc68c4be0cb800ebc7f3da16d207199ac0
+// model digest c62105bd24d5d4a0d650b895b9c576a8e7066038a9961c9f0fcba15ca1d8b9f3
+// contract digest 1ad5072384a73590b57279a68f9f5499ad318a5cce767e782321013bc5c8c638
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -29,6 +29,10 @@ pub struct ChildCall {
     pub records: String,
     /// `paging` — `Optional<cortex.instance.Paging>`.
     pub paging: Option<Paging>,
+    /// `text` — `Optional<List<String>>`.
+    pub text: Option<Vec<String>>,
+    /// `follow` — `Optional<cortex.instance.FollowRule>`.
+    pub follow: Option<FollowRule>,
 }
 
 /// CompareLink — `cortex.instance.CompareLink`.
@@ -89,6 +93,8 @@ pub struct ConnectorsSource {
     pub records: String,
     /// `id` — `String`.
     pub id: String,
+    /// `key` — `Optional<String>`.
+    pub key: Option<String>,
     /// `time` — `Optional<String>`.
     pub time: Option<String>,
     /// `text` — `List<String>`.
@@ -279,6 +285,48 @@ pub struct FilesSource {
     pub glob: String,
     /// `records` — `Optional<cortex.instance.FileRecords>`.
     pub records: Option<FileRecords>,
+}
+
+/// FollowAtLeast — `cortex.instance.FollowAtLeast`.
+///
+/// Every value satisfies `number > 0` — declared here, enforced by whatever behaviour constructs one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FollowAtLeast {
+    /// `field` — `String`.
+    pub field: String,
+    /// `number` — `Integer`.
+    pub number: i64,
+}
+
+/// FollowEquals — `cortex.instance.FollowEquals`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FollowEquals {
+    /// `field` — `String`.
+    pub field: String,
+    /// `value` — `Json`.
+    pub value: crate::json::Value,
+}
+
+/// FollowRule — `cortex.instance.FollowRule`: one of a fixed set of shapes, tagged on the wire by `rule`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FollowRule {
+    /// Tagged `at_least` — `cortex.instance.FollowAtLeast`.
+    AtLeast(FollowAtLeast),
+    /// Tagged `equals` — `cortex.instance.FollowEquals`.
+    Equals(FollowEquals),
+    /// Tagged `within_days` — `cortex.instance.FollowWithinDays`.
+    WithinDays(FollowWithinDays),
+}
+
+/// FollowWithinDays — `cortex.instance.FollowWithinDays`.
+///
+/// Every value satisfies `days > 0` — declared here, enforced by whatever behaviour constructs one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FollowWithinDays {
+    /// `field` — `String`.
+    pub field: String,
+    /// `days` — `Integer`.
+    pub days: i64,
 }
 
 /// GateCheck — `cortex.instance.GateCheck`.
@@ -1005,6 +1053,8 @@ pub struct StructuredChild {
     pub time: Option<String>,
     /// `parent` — `String`.
     pub parent: String,
+    /// `follow` — `Optional<cortex.instance.FollowRule>`.
+    pub follow: Option<FollowRule>,
 }
 
 /// StructuredConnectors — `cortex.instance.StructuredConnectors`.

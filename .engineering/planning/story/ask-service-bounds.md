@@ -48,7 +48,7 @@ scope:
   path: website/docs/reference/ess/cortex-ask.md
 - confidence: inferred
   path: website/static/schemas/instance-spec.schema.json
-revision: 23
+revision: 24
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 22}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:02Z", actor: "human:timo", revision: 23}
@@ -151,3 +151,4 @@ Taken 2026-10-30 by the wave coordinator.
 - Vote, review and close bodies are limited to 64 KiB per route.
 - The gateway body is read with a 4 MiB cap.
 - Readers stay per question; the story records why (the two adversary invariants in `tests/ask_adversary.rs:569`, `:650`).
+- Correction (2026-10-30, wave coordinator): a reader that departs holds its `max_in_flight` slot until the answer's thread ends, not until it leaves (D14 reverses D4; `review-result:security-w30a-merged-pass-1`, finding 2).

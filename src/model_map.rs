@@ -437,7 +437,42 @@ fn structured_child(
         mapping: record_mapping(&child.mapping),
         time: opt(&child.time),
         parent: child.parent.clone(),
+        follow: follow(&child.follow, &format!("{at}.follow"))?,
     })
+}
+
+/// A child's `follow` rule; `days` and `number` above 0, as the rule's invariants declare.
+fn follow(
+    rule: &EssPresence<Box<s::CortexInstanceFollowRule>>,
+    at: &str,
+) -> Result<Option<m::FollowRule>, MapError> {
+    let EssPresence::Present(rule) = rule else {
+        return Ok(None);
+    };
+    let positive = |n: &serde_json::Number, name: &str| {
+        let n = int(n, at)?;
+        if n > 0 {
+            Ok(n)
+        } else {
+            Err(MapError(format!(
+                "{at}: {name} {n}: use a whole number above 0"
+            )))
+        }
+    };
+    Ok(Some(match &**rule {
+        s::CortexInstanceFollowRule::V0(r) => m::FollowRule::AtLeast(m::FollowAtLeast {
+            field: r.value.field.clone(),
+            number: positive(&r.value.number, "number")?,
+        }),
+        s::CortexInstanceFollowRule::V1(r) => m::FollowRule::Equals(m::FollowEquals {
+            field: r.value.field.clone(),
+            value: json(&r.value.value),
+        }),
+        s::CortexInstanceFollowRule::V2(r) => m::FollowRule::WithinDays(m::FollowWithinDays {
+            field: r.value.field.clone(),
+            days: positive(&r.value.days, "days")?,
+        }),
+    }))
 }
 
 fn compare_link(link: &s::CortexInstanceCompareLink, at: &str) -> Result<m::CompareLink, MapError> {
@@ -539,6 +574,7 @@ fn settings(
                 inputs: c.value.inputs.iter().map(json).collect(),
                 records: c.value.records.clone(),
                 id: c.value.id.clone(),
+                key: opt(&c.value.key),
                 time: opt(&c.value.time),
                 text: c.value.text.clone(),
                 paging: paging(
@@ -558,6 +594,8 @@ fn settings(
                             &format!("{at}.child"),
                             Some(STOP_ONLY_ON_SOURCE),
                         )?,
+                        text: opt(&child.text),
+                        follow: follow(&child.follow, &format!("{at}.child.follow"))?,
                     }),
                 },
             })

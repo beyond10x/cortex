@@ -37,7 +37,7 @@ scope:
   path: tests/connectors_walks.rs
 - confidence: cited
   path: website/docs/spec-file.md
-revision: 17
+revision: 18
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:04Z", actor: "human:timo", revision: 16}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:04Z", actor: "human:timo", revision: 17}
@@ -118,3 +118,4 @@ Taken 2026-10-30 by the wave coordinator.
 - The template is rendered by `render` with `{a.b}` for record fields and `{input.a}` for the input's fields; the key is `<adapter>:<operation>:<rendered>`.
 - A null or missing id (or a template field that resolves to nothing) is named in `skipped`; no `…:null` key.
 - `update-refuses-rekey` treats a change of `key` as a re-key.
+- Correction (2026-10-30, wave coordinator): the key renders with `structured::render_template`, not `render`; a template field missing from the record sends the record to `skipped`.

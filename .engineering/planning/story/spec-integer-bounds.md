@@ -21,7 +21,7 @@ scope:
   path: src/status.rs
 - confidence: cited
   path: tests/spec_forms.rs
-revision: 9
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 8}
 - {from: "proposed", to: "active", at: "2026-10-30T10:11:03Z", actor: "human:timo", revision: 9}
@@ -100,3 +100,4 @@ Taken 2026-10-30 by the wave coordinator.
 
 - Bounds in `spec::check`: `refresh_after_days` 0..=36500, hook `timeout_s` 1..=86400, `view_port` 0..=65535 (0 keeps "pick a free port").
 - `as u16` becomes `u16::try_from` at both sites.
+- Correction (2026-10-30, wave coordinator): the bounds are checked in `load_given` (`create`, `update`, `adopt`), not in `spec::check`, so a frozen copy from 0.6.1 with a value out of range still loads and its instance keeps running (`review-result:adversary-w30a-cli-pass-1`, findings 1 and 2). Running loads clamp the values instead. `cortex ask serve` loads through `load_served`, which does not check them (D19).

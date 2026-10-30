@@ -631,6 +631,38 @@ pub fn template_refusal(template: &str) -> Option<String> {
     template_parts(template).err()
 }
 
+/// The placeholders of `template` under `input`, as written and in order (`input.channel`,
+/// `$.input.channel`, `input`): a `connectors` source's `key` with any takes part of each key from
+/// the input a record was read with. None for a template that is no template.
+pub fn template_input_fields(template: &str) -> Vec<&str> {
+    template_parts(template).map_or_else(
+        |_| Vec::new(),
+        |parts| {
+            parts
+                .into_iter()
+                .filter_map(|p| match p {
+                    TemplatePart::Field(path) => {
+                        let bare = path.strip_prefix("$.").unwrap_or(path);
+                        (bare == "input" || bare.starts_with("input.")).then_some(path)
+                    }
+                    TemplatePart::Text(_) => None,
+                })
+                .collect()
+        },
+    )
+}
+
+/// What the `input` placeholders of `template` ([`template_input_fields`]) render from `input`,
+/// in their order, as [`render_template`] renders them: the text at each, or `None` where `input`
+/// holds no text, number or boolean there.
+pub fn input_projection(template: &str, input: &Value) -> Vec<Option<String>> {
+    let context = json!({ "input": input });
+    template_input_fields(template)
+        .into_iter()
+        .map(|path| text_at(&context, path))
+        .collect()
+}
+
 /// One structured source as a run maps it: its identity prefix, its mapping, its child operations
 /// and the instance's redaction policy.
 pub struct Source<'a> {
@@ -2363,6 +2395,7 @@ mod tests {
             },
             time: Some("$.at".into()),
             parent: "IN_PROJECT".into(),
+            follow: None,
         }
     }
 

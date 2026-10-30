@@ -685,6 +685,28 @@ fn process_in(
                 ),
             ));
         }
+        // A child call its `follow` rule left out: the parent's records of the operation are kept
+        // as after a failed call, and the run counts the parents per operation.
+        let mut not_followed: BTreeMap<&str, usize> = BTreeMap::new();
+        for (parent, op) in &fetched.not_followed {
+            let (_, prefix) = s.failed_child(parent, op);
+            held.extend(prefix.map(|prefix| structured::Held {
+                prefix,
+                relation: None,
+            }));
+            *not_followed.entry(op.as_str()).or_default() += 1;
+        }
+        for (op, n) in not_followed {
+            let (parents, their) = if n == 1 {
+                ("parent", "its")
+            } else {
+                ("parents", "their")
+            };
+            report.skipped.push(format!(
+                "{op}: {n} {parents} not followed by its rule; {their} {op} records were not \
+                 read, and none of {their} earlier ones is ended"
+            ));
+        }
         // A link not found in full for one parent: the run names the parent and the link, and
         // keeps the links of that relation its changes hold in the store; every other value of
         // those changes ends as it would without the link.

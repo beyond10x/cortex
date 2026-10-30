@@ -326,13 +326,26 @@ The records of any operation a Connectors adapter admits.
 | `inputs` | a list of JSON inputs; the operation is invoked once per input. `{since}`, `{until}`, `{since_epoch}` and `{until_epoch}` in a string value are replaced by the run's window |
 | `records` | dotted path to the array of records in the answer, for example `issues` |
 | `id` | dotted path to a record's stable id |
+| `key` | optional: a template the document's key is rendered from instead of `id`: `{a.b}` is a field of the record, `{input.a.b}` one of the input it was read with, its window filled in. `{input.channel}:{ts}` keeps two messages with one `ts` in two channels two documents |
 | `time` | optional dotted path to the record's publication time, which dates its evidence and the facts drawn from it ([how](./operating.md#what-one-run-does)) |
 | `text` | templates whose `{a.b}` placeholders are filled from the record; the non-empty results, joined, are the document's text |
 | `paging` | optional: how to read every page of the answer (below) |
-| `child` | optional: an operation invoked once per record, whose records are added to that record's text (below) |
+| `child` | optional: an operation invoked once per record (or per record its `follow` rule matches), whose records are added to that record's text (below) |
 
-A record without an id, or whose text is empty, is skipped. A document's key is
-`<adapter>:<operation>:<id>`; a key read twice in one run counts once.
+A document's key is `<adapter>:<operation>:<id>`, or `<adapter>:<operation>:<rendered key>` with
+`key`; a key read twice in one run counts once. A record whose id is missing or null, or one of
+whose `key` placeholders names a field it (or its input) lacks, holds as no scalar or as blank
+text, is left out and counted in the run's `skipped` by operation and reason
+(`` tracker.issues.list: 2 records skipped: no value at id `key` ``); no key ends in `null`. A record
+whose text is empty is skipped. A `key` that is not a template (empty, without a placeholder, or
+with an unclosed `{` or a stray `}`) is refused when the spec is read, and so is an `{input.…}`
+placeholder on a source without `inputs`, or one that some input does not hold as a text, number
+or boolean. Adding, removing or changing `key` re-keys the source: `cortex update` refuses it
+while the source has seen documents. While `key` names an `{input.…}`, `update` also refuses a
+respelled input: a change of `inputs` after which what one input rendered for those placeholders
+is gone and something new is rendered (`channel: C1` becoming `channel: general`). Adding an
+input, removing one, reordering them, or changing a field the key does not name (`limit`) keeps
+every remaining key and is accepted.
 
 **The window.** `{since}` and `{until}` are instants in RFC 3339, in UTC and to the second
 (`2026-10-05T12:34:56Z`). `{until}` is the start of this run. `{since}` is 5 minutes before the
@@ -425,9 +438,19 @@ provider for a sort that writes do not reorder, such as by creation time or id.
 
 **`child`** has the fields `operation` (on the same adapter and connection), `input` (JSON whose
 `{a.b}` placeholders are filled from the parent record), `records` (the dotted path to the array
-of records in its answer) and an optional `paging`, walked the same way. Each child record is
-added to the parent's text as one paragraph of JSON. The change hash covers the whole text,
-children included, so a child field that changes on every call (a duration, a signed URL) makes
+of records in its answer), an optional `paging`, walked the same way, and two optional fields:
+
+- `text`: templates rendered from each child record as a source's `text` is from its record; the
+  non-empty results, joined by a line break, are that record's paragraph, and a record that
+  renders to nothing adds none. `text: ["{author.displayName} {created}: {body}"]` adds one line
+  per comment. Without `text`, each child record is added as one paragraph of JSON.
+- `follow`: the child is called only for a parent record the rule matches, one of the rules a
+  `structured` source's [children](#kind-structured) take; `{rule: at_least, value: {field:
+  reply_count, number: 1}}` reads the replies of threads that have any. Another parent makes no
+  call, and its text is its own alone.
+
+Each child record is added to the parent's text as one paragraph. The change hash covers the
+whole text, children included, so a child field that changes on every call (a duration, a signed URL) makes
 the parent extracted again after each `refresh_after_days`.
 
 Child records count toward the document's `max_chars_per_document`. Text past it, child records
@@ -710,6 +733,7 @@ record the source read, whose records become nodes of their own, each linked to 
 | `mapping` | how a child record becomes an entity, as `mapping` above, relations included |
 | `time` | optional dotted path to the child record's publication time, which dates its evidence and the facts drawn from it ([how](./operating.md#what-one-run-does)); without it, a child's facts are dated by the run |
 | `parent` | the name of the relation from each child record's node to its parent's node |
+| `follow` | optional: a rule the parent record must match for the child to be called for it (below) |
 
 A child record's identity is `<prefix>/<operation>:<parent>:<id>`: the source's prefix, the child
 operation, its parent's identity after the source's prefix (the parent's id, or its digest), with
@@ -732,7 +756,22 @@ the `parent` relation from the child's node type to the parent's; children with 
 share one edge type.
 
 Every run calls each child once for every parent it reads (more with `paging`), whether or not the
-parent changed. A child call that fails for one parent (Connectors answers `forbidden`, say, or the
+parent changed, unless the child has a `follow` rule. Then it is called only for the parents the
+rule matches; `field` is a dotted path into the parent record, as `{a.b}` placeholders name one:
+
+| `follow` | the parent matches when |
+|---|---|
+| `{rule: equals, value: {field: archived, value: false}}` | the value at `field` equals `value`, of the same JSON kind: `false` is not `"false"`; numbers compare by value, whole numbers exactly |
+| `{rule: within_days, value: {field: last_activity_at, days: 30}}` | the value at `field` is a text holding an RFC 3339 instant, a date alone (midnight UTC) or epoch seconds, no earlier than `days` days before the run's start; `days` above 0 |
+| `{rule: at_least, value: {field: star_count, number: 1}}` | the value at `field` is a JSON number no less than `number`; `number` above 0 |
+
+A parent without the field, or with a value of another kind, does not match. A parent the rule
+does not match is still read and applied as a node; only its records of that child are not asked
+for, and none of its earlier ones is ended (`dropped: Supersede`), as after a failed call. The run
+counts those parents per child in `skipped`
+(`tags.list: 2 parents not followed by its rule; …`).
+
+A child call that fails for one parent (Connectors answers `forbidden`, say, or the
 answer has no array at `records`) does not fail the run: the parent and its other children are
 read and applied, and the run names the parent's identity and the operation, with the reason, in
 `skipped`. That parent's records of that operation are not read in that run, and none of its

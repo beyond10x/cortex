@@ -140,6 +140,51 @@ types:
       - {name: max_pages, type: Integer}
       - {name: stop_older_than_since, type: Optional<Boolean>}
 
+  # A rule a parent record must match for a child operation to be called for it
+  # (`cortex.instance.ChildCall.follow`, `cortex.instance.StructuredChild.follow`). `field` is a
+  # dotted path into the parent record (`$.` allowed before it), as `{a.b}` placeholders name one.
+  # `equals`: the value there equals `value`, of the same JSON kind (`false` is not `"false"`;
+  # numbers compare by value). `within_days`: the value there is a text holding an RFC 3339
+  # instant, a date alone (`2026-10-05`, midnight UTC) or epoch seconds, no earlier than `days`
+  # days before the run's start. `at_least`: the value there is a JSON number no less than
+  # `number`. A parent without the field, or with a value of another kind, does not match.
+  - name: cortex.instance.FollowRule
+    kind: union
+    tag: rule
+    variants:
+      equals: cortex.instance.FollowEquals
+      within_days: cortex.instance.FollowWithinDays
+      at_least: cortex.instance.FollowAtLeast
+
+  - name: cortex.instance.FollowEquals
+    kind: struct
+    fields:
+      - {name: field, type: String}
+      - {name: value, type: Json}
+
+  - name: cortex.instance.FollowWithinDays
+    kind: struct
+    fields:
+      - {name: field, type: String}
+      - {name: days, type: Integer}
+    invariants:
+      - days > 0
+
+  - name: cortex.instance.FollowAtLeast
+    kind: struct
+    fields:
+      - {name: field, type: String}
+      - {name: number, type: Integer}
+    invariants:
+      - number > 0
+
+  # `text`, as a source's own `text`: each template is rendered from one child record (`{a.b}`
+  # placeholders, a missing or non-scalar value rendering empty), the blank ones dropped and the
+  # rest joined by a line break, and each child record that renders to text is one paragraph
+  # after the parent's text. Absent means each child record's JSON is that paragraph.
+  # `follow`: the child operation is called only for a parent the rule matches
+  # (`cortex.instance.FollowRule`, measured from the run's start); for another, no call is made
+  # and the document's text is the parent's alone. Absent means every parent.
   - name: cortex.instance.ChildCall
     kind: struct
     fields:
@@ -147,6 +192,8 @@ types:
       - {name: input, type: Json}
       - {name: records, type: String}
       - {name: paging, type: Optional<cortex.instance.Paging>}
+      - {name: text, type: Optional<List<String>>}
+      - {name: follow, type: Optional<cortex.instance.FollowRule>}
     invariants:
       - paging.stop_older_than_since != true
 
@@ -167,6 +214,29 @@ types:
       - {name: inputs, type: List<Json>}
       - {name: records, type: String}
       - {name: id, type: String}
+      # `key`: a template a document's key is rendered from instead of the value at `id`, so two
+      # records with one id in two inputs stay two documents: `{a.b}` names a field of the
+      # record, `{input.a.b}` one of the input the record was read with, after its window is
+      # filled in (`{input.channel}:{ts}` keys a message by its channel and its time). The key is
+      # `<adapter>:<operation>:<rendered>`. Absent means the value at `id`.
+      # UNMAPPED: a record is left out of the fetch and counted in the run's `skipped`, by
+      # operation and reason, when the value at `id` is missing or null (without `key`), or when
+      # a placeholder of `key` names a field the record or its input lacks, or holds as no scalar
+      # or as blank text; no `<adapter>:<operation>:null` key is written. ESS has no construct for
+      # the rendering of a String from a record; src/sources.rs holds it and
+      # tests/connectors_walks.rs tests it.
+      # UNMAPPED: the spec check refuses (exit 2, naming the source and the key, for `create`,
+      # `update`, `adopt` and a run alike) a `key` that is no template by the grammar of
+      # `cortex.instance.RecordMapping.alias_templates`: empty, naming no field, or with an
+      # unclosed `{` or a stray `}`; and an `{input.…}` placeholder on a source without inputs, or
+      # one some input does not hold as a scalar. `cortex update` refuses a change of `key` on a
+      # source with seen documents as a re-key, and, while `key` names an `{input.…}` field, a
+      # change of `inputs` that drops what one input renders for those placeholders and adds
+      # another (a respelled input); adding, removing or reordering inputs, or changing a field
+      # the key does not name, is no re-key. ESS has no construct for the grammar of a String;
+      # `spec::check` and `src/main.rs` hold it, tests/w30a_shapes_adversary.rs,
+      # tests/w30a_shapes_adversary_pass2.rs and tests/connectors_walks.rs test it.
+      - {name: key, type: Optional<String>}
       - {name: time, type: Optional<String>}
       - {name: text, type: List<String>}
       - {name: paging, type: Optional<cortex.instance.Paging>}
@@ -304,6 +374,11 @@ types:
       - {name: aliases, type: List<String>}
       - {name: origin, type: cortex.instance.KnownOrigin}
 
+  # `follow`: the child operation is called only for a parent record the rule matches
+  # (`cortex.instance.FollowRule`). A parent it does not match is still read and applied as a
+  # node; its records of that operation are not asked for, and none of its earlier ones is ended
+  # (`dropped: Supersede`), as after a child call that failed. The run's `skipped` counts, per
+  # child operation, the parents its rule did not match. Absent means every parent.
   - name: cortex.instance.StructuredChild
     kind: struct
     fields:
@@ -314,6 +389,7 @@ types:
       - {name: mapping, type: cortex.instance.RecordMapping}
       - {name: time, type: Optional<String>}
       - {name: parent, type: String}
+      - {name: follow, type: Optional<cortex.instance.FollowRule>}
     invariants:
       - paging.stop_older_than_since != true
 

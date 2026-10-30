@@ -36,8 +36,38 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Added
+
+- A `structured` source's child may carry a `follow` rule (`equals`, `within_days` or
+  `at_least` on a field of the parent record), and the run calls that child only for the parents
+  the rule matches. A parent it does not match is still applied as a node; its children of that
+  operation are not asked for, and none of its earlier ones is ended. `equals` and `at_least`
+  compare whole numbers exactly, also above 2^53. The run's `skipped` counts
+  those parents per child operation. A child without `follow` is called for every parent, as
+  before.
+- A `connectors` source may give a `key` template (`{input.channel}:{ts}`) that a document's key
+  is rendered from instead of `id`, with `{input.…}` naming the input the record was read with, so
+  two records with one id in two inputs are both applied; before, the second was dropped.
+  `cortex update` refuses a change of `key` while the source has seen documents (`rekey-refused`),
+  including adding `key` where none was, and, while `key` names an `{input.…}`, a respelled input
+  (`channel: C1` becoming `channel: general`); adding, removing or reordering inputs, or changing
+  an input field the key does not name, is accepted. A `key` that is not a template (empty,
+  without a placeholder, or with an unclosed `{` or a stray `}`) is refused when the spec is read,
+  as an alias template is, and so is an `{input.…}` placeholder that some input does not hold as
+  a text, number or boolean, or one on a source without inputs.
+- A `connectors` source's `child` may give `text` templates, and each child record is then added
+  to the parent's text as its rendered lines instead of raw JSON, so more children fit under
+  `max_chars_per_document`. It may also carry a `follow` rule, the one `structured` children take
+  (`{rule: at_least, value: {field: reply_count, number: 1}}`), and is then called only for the
+  parents it matches; another parent's text is its own. A `child` without either behaves as
+  before. Adopting `text` changes every parent's text, so each is extracted once more.
+
 ### Fixed
 
+- A `connectors` record whose id was JSON null was keyed `<adapter>:<operation>:null`, so all
+  such records shared one document and all but one were dropped without a word; a record without
+  an id was dropped silently. Both are now left out and counted in the run's `skipped` with the
+  reason. A source whose seen state holds a `…:null` key no longer refreshes that document.
 - A document the model failed on every time stopped its source at the same batch on every run,
   and nothing counted failures per document. A batch of several documents the model answers it
   failed on still fails the run as before, after one call, and now counts one failed batch for

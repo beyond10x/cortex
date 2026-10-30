@@ -1464,3 +1464,393 @@ fn adversary_a_failed_run_does_not_move_the_window_past_a_change_it_held_back() 
         w.lines("issues.log")
     );
 }
+
+/// `issues.list` answers, for the `channel` it is given, two messages: one whose `ts` is the same
+/// in every channel, and one more. Without a channel it answers I-1, an issue whose `key` is null,
+/// and an issue without a `key`.
+const CHANNELS: &str = r#"  "invoke "*" issues.list "*'"channel"'*)
+    echo "$A" >> "$R/messages.log"
+    C=$(printf '%s' "$A" | sed -n 's/.*"channel":"\([^"]*\)".*/\1/p')
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"messages":[{"ts":"1767312000.000100","text":"deploy done in %s"},{"ts":"1767312060.000200","text":"thanks from %s"}]}}}\n' "$C" "$C" ;;
+  "invoke "*" issues.list "*)
+    echo "$A" >> "$R/issues.log"
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"issues":[{"key":"I-1","summary":"Issue I-1"},{"key":null,"summary":"Issue with a null key"},{"summary":"Issue with no key"}]}}}\n' ;;
+"#;
+
+/// Creates instance `name` whose `tracker` source reads the messages of channels C1 and C2,
+/// keyed by `key` when it is given, else by `ts`.
+fn create_channels(w: &World, name: &str, key: Option<&str>) {
+    let key = key.map_or(String::new(), |k| format!("\n        key: \"{k}\""));
+    let rest = format!(
+        r#"inputs: [{{channel: C1}}, {{channel: C2}}]
+        records: messages
+        id: ts{key}
+        text: ["{{text}}"]"#
+    );
+    create_source(w, name, &rest, 3, 5000, 50);
+}
+
+/// `story:record-key-template`, acceptance 1: a key template naming the input's `channel` and
+/// the record's `ts` keeps two messages with one `ts` in two channels two documents, and both are
+/// applied.
+#[test]
+fn two_records_with_one_id_in_two_inputs_are_both_applied_under_a_key_template() {
+    let w = world_with(CHANNELS);
+    create_channels(&w, "chat", Some("{input.channel}:{ts}"));
+    let ran = run(&w, "chat");
+    assert_eq!(ran["detail"]["documents_applied"], 4, "{ran}");
+    let docs = prompted(&w, "chat");
+    for (channel, ts) in [
+        ("C1", "1767312000.000100"),
+        ("C2", "1767312000.000100"),
+        ("C1", "1767312060.000200"),
+        ("C2", "1767312060.000200"),
+    ] {
+        let source = format!("Source: record:tracker:issues.list:{channel}:{ts}\n");
+        assert!(
+            docs.iter().any(|d| d.contains(&source)),
+            "no document {source:?} in {docs:#?}"
+        );
+    }
+    assert!(docs.iter().any(|d| d.contains("deploy done in C2")));
+    assert!(docs.iter().any(|d| d.contains("deploy done in C1")));
+    let seen = state(&w, "chat");
+    assert_eq!(seen["documents"].as_object().unwrap().len(), 4, "{seen}");
+}
+
+/// Without a key template the same two inputs collide on `ts`, as before: the second record of
+/// one `ts` is the same document as the first.
+#[test]
+fn without_a_key_template_records_are_keyed_by_their_id_as_before() {
+    let w = world_with(CHANNELS);
+    create_channels(&w, "plain", None);
+    let ran = run(&w, "plain");
+    assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
+    let docs = prompted(&w, "plain");
+    assert!(docs
+        .iter()
+        .any(|d| d.contains("Source: record:tracker:issues.list:1767312000.000100\n")));
+}
+
+/// `story:record-key-template`, acceptance 2: a record whose id is null, or missing, is named in
+/// `skipped` with the reason and never keyed `…:null`; the record with an id is applied.
+#[test]
+fn a_record_whose_id_is_null_is_named_in_skipped_and_never_keyed_null() {
+    let w = world_with(CHANNELS);
+    let rest = r#"inputs: [{}]
+        records: issues
+        id: key
+        text: ["{key}: {summary}"]"#;
+    create_source(&w, "nullid", rest, 3, 5000, 50);
+    let ran = run(&w, "nullid");
+    assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
+    let skipped: Vec<&str> = ran["detail"]["skipped"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    assert_eq!(
+        skipped,
+        ["tracker.issues.list: 2 records skipped: no value at id `key`"],
+        "{ran}"
+    );
+    let seen = state(&w, "nullid");
+    let keys: Vec<&String> = seen["documents"].as_object().unwrap().keys().collect();
+    assert_eq!(keys, ["tracker:issues.list:I-1"], "{seen}");
+    assert!(!prompted(&w, "nullid")
+        .iter()
+        .any(|d| d.contains("issues.list:null")));
+}
+
+/// A key template one of whose fields a record lacks skips that record, named in `skipped`.
+#[test]
+fn a_record_a_key_template_renders_nothing_for_is_named_in_skipped() {
+    let w = world_with(CHANNELS);
+    create_channels(&w, "nothread", Some("{input.channel}:{thread_ts}"));
+    let ran = run(&w, "nothread");
+    assert_eq!(ran["detail"]["documents_applied"], 0, "{ran}");
+    let skipped = ran["detail"]["skipped"].to_string();
+    assert!(
+        skipped.contains("tracker.issues.list: 4 records skipped: no value for key `{input.channel}:{thread_ts}`"),
+        "{ran}"
+    );
+}
+
+/// `cortex update` refuses a change of a `connectors` source's `key` while the source has seen
+/// documents: its seen keys would match nothing.
+#[test]
+fn an_update_that_changes_the_key_template_is_refused_as_a_rekey() {
+    let w = world_with(CHANNELS);
+    create_channels(&w, "rekey", None);
+    run(&w, "rekey");
+    let path = w.root.join("rekey.yaml");
+    let text = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("id: ts", "id: ts\n        key: \"{input.channel}:{ts}\"");
+    std::fs::write(&path, text).unwrap();
+    let (code, out) = w.cortex(&[
+        "update",
+        "rekey",
+        "--spec",
+        path.to_str().unwrap(),
+        "--no-units",
+    ]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("rekey-refused")),
+        "{out}"
+    );
+    assert_eq!(out["detail"]["field"], "key", "{out}");
+}
+
+/// Updates instance `name` with channel C1 of its spec renamed C3, as [`create_channels`] wrote it.
+fn update_renaming_channel(w: &World, name: &str) -> (i32, Value) {
+    update_replacing(w, name, "{channel: C1}", "{channel: C3}")
+}
+
+/// Updates instance `name` with `from` in its spec replaced by `to`.
+fn update_replacing(w: &World, name: &str, from: &str, to: &str) -> (i32, Value) {
+    let path = w.root.join(format!("{name}.yaml"));
+    let written = std::fs::read_to_string(&path).unwrap();
+    let text = written.replace(from, to);
+    assert_ne!(text, written, "the spec holds {from}");
+    std::fs::write(&path, text).unwrap();
+    w.cortex(&[
+        "update",
+        name,
+        "--spec",
+        path.to_str().unwrap(),
+        "--no-units",
+    ])
+}
+
+/// D24-D26 (adversary pass 1): under a key template with an `{input.…}` placeholder the inputs
+/// are part of every key, so changing an input value on a source with seen documents is refused
+/// as a re-key; under a plain `id` key the inputs key nothing and the change is accepted.
+#[test]
+fn an_input_change_is_a_rekey_only_under_a_key_template_that_names_the_input() {
+    let w = world_with(CHANNELS);
+    create_channels(&w, "inputkey", Some("{input.channel}:{ts}"));
+    run(&w, "inputkey");
+    let (code, out) = update_renaming_channel(&w, "inputkey");
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("rekey-refused")),
+        "{out}"
+    );
+    assert_eq!(out["detail"]["field"], "inputs", "{out}");
+
+    let w = world_with(CHANNELS);
+    create_channels(&w, "inputplain", None);
+    run(&w, "inputplain");
+    let (code, out) = update_renaming_channel(&w, "inputplain");
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (0, Some("updated")),
+        "{out}"
+    );
+}
+
+/// `spec::parse` of a spec with one `connectors` source reading `inputs` keyed by `key`.
+fn parsed_key(inputs: &str, key: &str) -> Result<(), String> {
+    let text = format!(
+        r#"format: cortex.instance/1
+name: keyed
+description: Test brain.
+ekr: {{version: "0.0.30", bin: "{ekr}"}}
+seed: {{documents: []}}
+model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
+sources:
+  - name: chat
+    schedule: daily
+    settings:
+      kind: connectors
+      value:
+        adapter: tracker
+        connection: conn_test
+        operation: messages.list
+        inputs: {inputs}
+        records: messages
+        id: ts
+        key: "{key}"
+        text: ["{{text}}"]
+    policy: {{refresh_after_days: 3, change: ContentHash, max_documents_per_run: 50, max_chars_per_document: 5000}}
+serve: {{view_port: 18996}}
+"#,
+        ekr = ekr().display()
+    );
+    cortex_cli::spec::parse(&text).map(|_| ())
+}
+
+/// D29 (adversary pass 2): every `{input.…}` placeholder of a `key` names a scalar every input of
+/// the source holds, or the spec is refused when it is read, naming the key and the placeholder.
+#[test]
+fn a_key_input_placeholder_must_name_a_scalar_every_input_holds() {
+    for (inputs, key) in [
+        ("[{channel: C1}, {channel: C2}]", "{input.channel}:{ts}"),
+        ("[{channel: C1, n: 3}]", "{$.input.n}-{ts}"),
+        ("[{q: {channel: C1}}]", "{input.q.channel}:{ts}"),
+        ("[{channel: C1, after: \"{since}\"}]", "{input.after}:{ts}"),
+        ("[]", "{ts}"),
+    ] {
+        assert_eq!(parsed_key(inputs, key), Ok(()), "{inputs} {key}");
+    }
+    for (inputs, key, named) in [
+        (
+            "[{channel: C1}]",
+            "{input.chanel}:{ts}",
+            "placeholder {input.chanel}",
+        ),
+        (
+            "[{channel: C1}, {chan: C2}]",
+            "{input.channel}:{ts}",
+            "placeholder {input.channel}",
+        ),
+        (
+            "[{q: {channel: C1}}]",
+            "{input.q}:{ts}",
+            "placeholder {input.q}",
+        ),
+        (
+            "[{channel: \"\"}]",
+            "{input.channel}:{ts}",
+            "placeholder {input.channel}",
+        ),
+        ("[{channel: C1}]", "{input}:{ts}", "placeholder {input}"),
+        ("[]", "{input.channel}:{ts}", "placeholder {input.channel}"),
+    ] {
+        let refused = parsed_key(inputs, key).expect_err(key);
+        assert!(
+            refused.contains("sources.chat.settings.value.key") && refused.contains(named),
+            "{inputs} {key}: {refused}"
+        );
+    }
+}
+
+/// D28 (adversary pass 2): under `{input.channel}:{ts}` an input is part of the keys only through
+/// its `channel`. Respelling `C1` as `general` drops C1's keys for new ones, so `update` refuses
+/// it as a re-key of `inputs`; reordering the inputs or removing one leaves every remaining key
+/// as it was, and `update` accepts both.
+#[test]
+fn under_an_input_key_a_respelled_input_is_a_rekey_and_a_reordered_or_removed_one_is_not() {
+    let w = world_with(CHANNELS);
+    create_channels(&w, "respell", Some("{input.channel}:{ts}"));
+    run(&w, "respell");
+    let (code, out) = update_replacing(&w, "respell", "{channel: C1}", "{channel: general}");
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("rekey-refused")),
+        "{out}"
+    );
+    assert_eq!(out["detail"]["field"], "inputs", "{out}");
+
+    let w = world_with(CHANNELS);
+    create_channels(&w, "shrink", Some("{input.channel}:{ts}"));
+    run(&w, "shrink");
+    for (from, to) in [
+        (
+            "[{channel: C1}, {channel: C2}]",
+            "[{channel: C2}, {channel: C1}]",
+        ),
+        ("[{channel: C2}, {channel: C1}]", "[{channel: C2}]"),
+    ] {
+        let (code, out) = update_replacing(&w, "shrink", from, to);
+        assert_eq!(
+            (code, out["outcome"].as_str()),
+            (0, Some("updated")),
+            "{from} -> {to}: {out}"
+        );
+    }
+}
+
+/// `issues.list` answers I-1 with no replies, I-2 with three and I-3 with no `reply_count`;
+/// `comments.list` answers two comments by their author, time and body for the `issue` it is
+/// given.
+const REPLIES: &str = r#"  "invoke "*" issues.list "*)
+    echo "$A" >> "$R/issues.log"
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"issues":[{"key":"I-1","summary":"Quiet issue","reply_count":0},{"key":"I-2","summary":"Busy issue","reply_count":3},{"key":"I-3","summary":"Unknown issue"}]}}}\n' ;;
+  "invoke "*" comments.list "*)
+    echo "$A" >> "$R/comments.log"
+    I=$(printf '%s' "$A" | sed -n 's/.*"issue":"\([^"]*\)".*/\1/p')
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"comments.list","revision":"r","result":{"comments":[{"author":{"displayName":"Ana"},"created":"2026-10-01","body":"first on %s"},{"author":{"displayName":"Ben"},"created":"2026-10-02","body":"second on %s"}]}}}\n' "$I" "$I" ;;
+"#;
+
+/// Creates instance `name` reading [`REPLIES`] with a `comments.list` child whose further fields
+/// are `child` (YAML flow mapping entries).
+fn create_replies(w: &World, name: &str, child: &str) {
+    let rest = format!(
+        r#"inputs: [{{}}]
+        records: issues
+        id: key
+        text: ["{{key}}: {{summary}}"]
+        child: {{operation: comments.list, input: {{issue: "{{key}}"}}, records: comments{child}}}"#
+    );
+    create_source(w, name, &rest, 3, 5000, 50);
+}
+
+/// The document a run showed the model for issue `key`.
+fn prompted_issue(w: &World, name: &str, key: &str) -> String {
+    let source = format!("Source: record:tracker:issues.list:{key}\n");
+    prompted(w, name)
+        .into_iter()
+        .find(|d| d.contains(&source))
+        .unwrap_or_else(|| panic!("no document for {key}"))
+}
+
+/// `story:child-text-and-filter`, acceptance 1: with `follow: at_least reply_count 1`, a parent
+/// with no replies, or without the field, makes no child call and its text is its own alone; one
+/// with replies makes one.
+#[test]
+fn a_child_follow_rule_calls_the_child_only_for_parents_with_replies() {
+    let w = world_with(REPLIES);
+    create_replies(
+        &w,
+        "replies",
+        ", follow: {rule: at_least, value: {field: reply_count, number: 1}}",
+    );
+    let ran = run(&w, "replies");
+    assert_eq!(ran["detail"]["documents_applied"], 3, "{ran}");
+    let calls = w.lines("comments.log");
+    assert_eq!(calls.len(), 1, "{calls:#?}");
+    assert!(calls[0].contains("\"issue\":\"I-2\""), "{}", calls[0]);
+    assert!(prompted_issue(&w, "replies", "I-2").contains("first on I-2"));
+    for quiet in ["I-1", "I-3"] {
+        let doc = prompted_issue(&w, "replies", quiet);
+        assert!(!doc.contains(" on I-"), "{doc}");
+    }
+}
+
+/// `story:child-text-and-filter`, acceptance 2: with `child.text`, each child record is one
+/// rendered line in the parent's text, and no raw JSON object.
+#[test]
+fn child_records_are_rendered_by_the_childs_text_template() {
+    let w = world_with(REPLIES);
+    create_replies(
+        &w,
+        "rendered",
+        r#", text: ["{author.displayName} {created}: {body}"]"#,
+    );
+    run(&w, "rendered");
+    let doc = prompted_issue(&w, "rendered", "I-2");
+    assert!(
+        doc.contains(
+            "I-2: Busy issue\n\nAna 2026-10-01: first on I-2\n\nBen 2026-10-02: second on I-2"
+        ),
+        "{doc}"
+    );
+    assert!(!doc.contains("{\""), "{doc}");
+    assert!(!doc.contains("displayName"), "{doc}");
+}
+
+/// `story:child-text-and-filter`, acceptance 3: a child without `text` or `follow` is called for
+/// every parent and appends each record's JSON, as before.
+#[test]
+fn a_child_without_text_or_follow_appends_json_for_every_parent() {
+    let w = world_with(REPLIES);
+    create_replies(&w, "asbefore", "");
+    run(&w, "asbefore");
+    assert_eq!(w.lines("comments.log").len(), 3);
+    let doc = prompted_issue(&w, "asbefore", "I-1");
+    assert!(doc.contains("\"displayName\":\"Ana\""), "{doc}");
+}

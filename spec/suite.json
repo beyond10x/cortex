@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "a1985f8f3c719a34e29149abd79b27c00379600b80c7f19bacd9f1832d3491db",
-    "contract_digest": "24b3106592b3f21c336ecc59a60765cc68c4be0cb800ebc7f3da16d207199ac0",
+    "spec_digest": "c62105bd24d5d4a0d650b895b9c576a8e7066038a9961c9f0fcba15ca1d8b9f3",
+    "contract_digest": "1ad5072384a73590b57279a68f9f5499ad318a5cce767e782321013bc5c8c638",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
@@ -11776,6 +11776,22 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.GateCheck"
         },
         {
@@ -12375,6 +12391,22 @@
         {
           "kind": "type",
           "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
         },
         {
           "kind": "type",
@@ -13569,6 +13601,22 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.GateCheck"
         },
         {
@@ -14167,6 +14215,22 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.GateCheck"
         },
         {
@@ -14762,6 +14826,22 @@
         {
           "kind": "type",
           "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
         },
         {
           "kind": "type",
@@ -18644,6 +18724,22 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.GateCheck"
         },
         {
@@ -19275,6 +19371,22 @@
         {
           "kind": "type",
           "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
         },
         {
           "kind": "type",
@@ -20970,6 +21082,22 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.GateCheck"
         },
         {
@@ -21565,6 +21693,22 @@
         {
           "kind": "type",
           "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
         },
         {
           "kind": "type",
@@ -50004,6 +50148,22 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.GateCheck"
         },
         {
@@ -50794,6 +50954,22 @@
         {
           "kind": "type",
           "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
         },
         {
           "kind": "type",
@@ -51832,6 +52008,22 @@
         },
         {
           "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
+        },
+        {
+          "kind": "type",
           "name": "cortex.instance.GateCheck"
         },
         {
@@ -52673,6 +52865,22 @@
         {
           "kind": "type",
           "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
         },
         {
           "kind": "type",

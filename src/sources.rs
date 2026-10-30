@@ -412,6 +412,10 @@ pub struct Fetched {
     /// A `structured` source's child calls that failed, one per parent and operation. The parent
     /// and the other children are read; the run names each in `skipped`.
     pub failed_children: Vec<ChildFailure>,
+    /// A `structured` source's child calls its `follow` rule left out, one per parent and
+    /// operation: `(parent raw id, operation)`. The run keeps the values of those children as for
+    /// a failed call, and counts them per operation in `skipped`.
+    pub not_followed: Vec<(String, String)>,
     /// What a `structured` source's `links` found: by the identity of each change linked, the
     /// link's relation and the identity of the tag it is linked to, in the order of `links`.
     pub links: BTreeMap<String, Vec<(String, String)>>,
@@ -644,7 +648,8 @@ fn fetch_structured_files(
 /// mapping is one document more, keyed `<child prefix>:<parent raw id>:<raw id>`
 /// ([`crate::structured::child_key`]). A child call that fails leaves that parent's records of
 /// the operation unread and is named in `failed_children`; the parent and its other children are
-/// read.
+/// read. A child with a `follow` rule is called only for a parent the rule matches ([`follows`],
+/// measured from the window's end, the run's start); another parent goes to `not_followed`.
 ///
 /// After its children, each of the source's `links` is found for the parent ([`compare_links`]):
 /// what it links goes to `links`, by the identities the run gives the records (`redactor` is the
@@ -662,6 +667,7 @@ fn fetch_structured(
     let mut unread = Vec::new();
     let mut keys = BTreeSet::new();
     let mut failed_children = Vec::new();
+    let mut not_followed = Vec::new();
     let mut links: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
     let mut failed_links = Vec::new();
     let prefix = crate::structured::prefix(st);
@@ -685,6 +691,10 @@ fn fetch_structured(
             // call read them all.
             let mut read: BTreeMap<&str, Read> = BTreeMap::new();
             for child in children {
+                if !follows(child.follow.as_ref(), record, window.until_ms) {
+                    not_followed.push((parent.clone(), child.operation.clone()));
+                    continue;
+                }
                 let mut left = Vec::new();
                 let found = walk(
                     &mut invoker(&child.operation),
@@ -749,6 +759,7 @@ fn fetch_structured(
         documents: docs,
         unread,
         failed_children,
+        not_followed,
         links,
         failed_links,
         ..Fetched::default()
@@ -1073,10 +1084,13 @@ fn invoker<'a>(
 /// The records of a `connectors` source, one document per record. Each input, with the run's
 /// window filled in, is walked page by page, ended with `stop_older_than_since` at the first
 /// record older than the window's start ([`StopAt`]); with a `child`, the child operation is invoked once
-/// per record, its input filled from the record, its pages walked the same way, and each of its
-/// records appended to the parent's text as one JSON paragraph. A parent whose child call fails
+/// per record its `follow` rule matches ([`follows`]), its input filled from the record, its pages
+/// walked the same way, and each of its records appended to the parent's text as one paragraph:
+/// its `text` templates rendered, or its JSON without them. A parent whose child call fails
 /// is left out of this fetch and named in `unread`; from its [`CHILD_FAILURE_LIMIT`]th consecutive
-/// failed run on, in `skipped` instead. A successful call clears the parent's count.
+/// failed run on, in `skipped` instead. A successful call clears the parent's count. A record's key
+/// is `<adapter>:<operation>:<id>` ([`record_id`]); a record with none is left out and counted in
+/// `skipped` by reason.
 fn fetch_records(
     c: &m::ConnectorsSource,
     connection: &str,
@@ -1099,22 +1113,27 @@ fn fetch_records(
             time,
             since_ms: window.since_ms,
         });
+    let what = format!("{}.{}", c.adapter, c.operation);
+    // Records left out for want of a key, counted by reason.
+    let mut unkeyed: BTreeMap<String, usize> = BTreeMap::new();
     for input in &c.inputs {
+        let input = with_window(&to_serde(input), window);
         let records = walk_until(
             &mut invoker(connectors, c, connection, &c.operation),
-            &format!("{}.{}", c.adapter, c.operation),
-            &with_window(&to_serde(input), window),
+            &what,
+            &input,
             &c.records,
             c.paging.as_ref(),
             stop,
             &mut unread,
         )?;
         for record in &records {
-            let Some(id) = at(record, &c.id).map(|v| match v {
-                Value::String(t) => t.clone(),
-                other => other.to_string(),
-            }) else {
-                continue;
+            let id = match record_id(c, record, &input) {
+                Ok(id) => id,
+                Err(why) => {
+                    *unkeyed.entry(why).or_default() += 1;
+                    continue;
+                }
             };
             let mut text = c
                 .text
@@ -1130,7 +1149,11 @@ fn fetch_records(
             if !keys.insert(key.clone()) {
                 continue;
             }
-            if let Some(child) = &c.child {
+            let child = c
+                .child
+                .as_ref()
+                .filter(|child| follows(child.follow.as_ref(), record, window.until_ms));
+            if let Some(child) = child {
                 let children = match walk(
                     &mut invoker(connectors, c, connection, &child.operation),
                     &format!("{}.{}", c.adapter, child.operation),
@@ -1161,9 +1184,20 @@ fn fetch_records(
                         continue;
                     }
                 };
-                for child in &children {
-                    text.push_str("\n\n");
-                    text.push_str(&child.to_string());
+                for record in &children {
+                    let paragraph = match &child.text {
+                        Some(templates) => templates
+                            .iter()
+                            .map(|t| render(t, record))
+                            .filter(|t| !t.trim().is_empty())
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                        None => record.to_string(),
+                    };
+                    if !paragraph.trim().is_empty() {
+                        text.push_str("\n\n");
+                        text.push_str(&paragraph);
+                    }
                 }
             }
             docs.push(Document {
@@ -1182,6 +1216,10 @@ fn fetch_records(
             });
         }
     }
+    for (why, n) in unkeyed {
+        let records = if n == 1 { "record" } else { "records" };
+        skipped.push(format!("{what}: {n} {records} skipped: {why}"));
+    }
     Ok(Fetched {
         documents: docs,
         unread,
@@ -1189,6 +1227,30 @@ fn fetch_records(
         child_failures: failures,
         ..Fetched::default()
     })
+}
+
+/// What a `connectors` record's key holds after `<adapter>:<operation>:`: its `key` template
+/// rendered from the record, with `{input.…}` from `input` (the input it was read with, its window
+/// filled in), or without one the value at `id`, text as it is and any other value as JSON. `Err`
+/// says why there is none: the id is missing or null, or a placeholder of the template names no
+/// scalar, or blank text ([`crate::structured::render_template`]).
+fn record_id(c: &m::ConnectorsSource, record: &Value, input: &Value) -> Result<String, String> {
+    match &c.key {
+        Some(template) => {
+            let mut context = match record {
+                Value::Object(fields) => fields.clone(),
+                _ => serde_json::Map::new(),
+            };
+            context.insert("input".into(), input.clone());
+            crate::structured::render_template(template, &Value::Object(context))
+                .ok_or_else(|| format!("no value for key `{template}`"))
+        }
+        None => match at(record, &c.id) {
+            None | Some(Value::Null) => Err(format!("no value at id `{}`", c.id)),
+            Some(Value::String(t)) => Ok(t.clone()),
+            Some(other) => Ok(other.to_string()),
+        },
+    }
 }
 
 /// `path` from a spec read against `base` with `~/` expanded, as `paths` and `lookup` are.
@@ -1496,6 +1558,86 @@ fn passes(f: &m::RecordFilter, record: &Value) -> bool {
     hit == f.include
 }
 
+/// Whether a child operation is called for the parent `record` under its `follow` rule
+/// (`cortex.instance.FollowRule`), `start_ms` being the run's start. `equals`: the value at the
+/// field is of the rule's JSON kind and equal to it, numbers by value. `within_days`: it is a text
+/// read as a document's time is ([`instant`]), no earlier than `days` days before `start_ms`.
+/// `at_least`: it is a JSON number no less than `number`. A missing field, or a value of another
+/// kind, does not match. No rule matches every parent. An integer compares exactly, however
+/// large, with an integer or with a number written with a fraction or an exponent; only two of
+/// the latter compare as `f64` ([`Num`]).
+pub fn follows(rule: Option<&m::FollowRule>, record: &Value, start_ms: i64) -> bool {
+    let Some(rule) = rule else {
+        return true;
+    };
+    match rule {
+        m::FollowRule::Equals(r) => {
+            let want = to_serde(&r.value);
+            at(record, &r.field).is_some_and(|got| match (Num::of(got), Num::of(&want)) {
+                (Some(a), Some(b)) => a.compare(b) == Some(std::cmp::Ordering::Equal),
+                _ => *got == want,
+            })
+        }
+        m::FollowRule::WithinDays(r) => at(record, &r.field)
+            .and_then(Value::as_str)
+            .and_then(instant)
+            .is_some_and(|t| t >= start_ms.saturating_sub(r.days.saturating_mul(86_400_000))),
+        m::FollowRule::AtLeast(r) => at(record, &r.field)
+            .and_then(Num::of)
+            .and_then(|n| n.compare(Num::Int(i128::from(r.number))))
+            .is_some_and(|o| o != std::cmp::Ordering::Less),
+    }
+}
+
+/// A JSON number as a `follow` rule compares it: an integer (any `i64` or `u64`) as itself,
+/// anything else as the `f64` JSON reads it as.
+#[derive(Clone, Copy)]
+enum Num {
+    Int(i128),
+    Float(f64),
+}
+
+impl Num {
+    fn of(v: &Value) -> Option<Self> {
+        let Value::Number(n) = v else {
+            return None;
+        };
+        n.as_i64()
+            .map(i128::from)
+            .or_else(|| n.as_u64().map(i128::from))
+            .map(Num::Int)
+            .or_else(|| n.as_f64().map(Num::Float))
+    }
+
+    /// Exact between two integers and between an integer and a float ([`int_against_float`]);
+    /// by `f64` only between two floats.
+    fn compare(self, other: Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (Num::Int(a), Num::Int(b)) => Some(a.cmp(&b)),
+            (Num::Int(a), Num::Float(b)) => int_against_float(a, b),
+            (Num::Float(a), Num::Int(b)) => {
+                int_against_float(b, a).map(std::cmp::Ordering::reverse)
+            }
+            (Num::Float(a), Num::Float(b)) => a.partial_cmp(&b),
+        }
+    }
+}
+
+/// `int` against `float` exactly, never casting `int` to `f64`: against the whole number below or
+/// at `float` (an `f64` floor is exact), and below `float` when equal to that floor and `float` has a
+/// fraction. The floor's cast saturates at the `i128` bounds, which no JSON integer (an `i64` or
+/// `u64`) reaches, so a float beyond them, or an infinite one, still orders right. `None` for NaN.
+fn int_against_float(int: i128, float: f64) -> Option<std::cmp::Ordering> {
+    if float.is_nan() {
+        return None;
+    }
+    let floor = float.floor();
+    Some(match int.cmp(&(floor as i128)) {
+        std::cmp::Ordering::Equal if floor < float => std::cmp::Ordering::Less,
+        order => order,
+    })
+}
+
 /// The text, number or boolean at `path` of `record`, as text; `None` for anything else or blank
 /// text.
 fn scalar(record: &Value, path: &str) -> Option<String> {
@@ -1636,6 +1778,147 @@ fn markdown_sections(content: &str) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 2026-10-30T00:00:00Z, and one day, in milliseconds.
+    const START: i64 = 1_793_318_400_000;
+    const DAY: i64 = 86_400_000;
+
+    #[test]
+    fn a_follow_rule_matches_a_parent_by_equal_value_recent_time_or_large_enough_number() {
+        let equals = |value: mj_value::Value| {
+            m::FollowRule::Equals(m::FollowEquals {
+                field: "archived".into(),
+                value,
+            })
+        };
+        let archived = |v: Value| json!({"archived": v});
+        let no = equals(mj_value::Value::Bool(false));
+        assert!(follows(Some(&no), &archived(json!(false)), START));
+        assert!(!follows(Some(&no), &archived(json!(true)), START));
+        assert!(!follows(Some(&no), &archived(json!("false")), START));
+        assert!(!follows(Some(&no), &json!({}), START));
+        let one = equals(mj_value::Value::Number("1".into()));
+        assert!(follows(Some(&one), &archived(json!(1.0)), START));
+        assert!(!follows(Some(&one), &archived(json!("1")), START));
+
+        let recent = m::FollowRule::WithinDays(m::FollowWithinDays {
+            field: "$.last.at".into(),
+            days: 30,
+        });
+        let at = |t: Value| json!({"last": {"at": t}});
+        assert!(follows(
+            Some(&recent),
+            &at(json!(rfc3339(START - 3 * DAY))),
+            START
+        ));
+        assert!(follows(Some(&recent), &at(json!("2026-10-27")), START));
+        assert!(follows(
+            Some(&recent),
+            &at(json!(rfc3339(START - 30 * DAY))),
+            START
+        ));
+        assert!(!follows(
+            Some(&recent),
+            &at(json!(rfc3339(START - 90 * DAY))),
+            START
+        ));
+        assert!(!follows(Some(&recent), &json!({"last": {}}), START));
+        assert!(!follows(Some(&recent), &at(json!(START / 1000)), START));
+        assert!(!follows(Some(&recent), &at(json!("yesterday")), START));
+
+        let stars = m::FollowRule::AtLeast(m::FollowAtLeast {
+            field: "stars".into(),
+            number: 5,
+        });
+        assert!(follows(Some(&stars), &json!({"stars": 5}), START));
+        assert!(follows(Some(&stars), &json!({"stars": 7.5}), START));
+        assert!(!follows(Some(&stars), &json!({"stars": 4}), START));
+        assert!(!follows(Some(&stars), &json!({"stars": "5"}), START));
+
+        assert!(follows(None, &json!({}), START));
+    }
+
+    /// D25: integers compare exactly, above 2^53 too, in `equals` and `at_least`; a number that
+    /// is not an integer still compares by value.
+    #[test]
+    fn a_follow_rule_compares_large_integers_exactly() {
+        let big: Value = serde_json::from_str(r#"{"n": 9007199254740993}"#).unwrap();
+        let below: Value = serde_json::from_str(r#"{"n": 9007199254740992}"#).unwrap();
+        let equals = m::FollowRule::Equals(m::FollowEquals {
+            field: "n".into(),
+            value: mj_value::Value::Number("9007199254740993".into()),
+        });
+        assert!(follows(Some(&equals), &big, START));
+        assert!(!follows(Some(&equals), &below, START));
+        let huge = m::FollowRule::Equals(m::FollowEquals {
+            field: "n".into(),
+            value: mj_value::Value::Number("18446744073709551615".into()),
+        });
+        let max: Value = serde_json::from_str(r#"{"n": 18446744073709551615}"#).unwrap();
+        assert!(follows(Some(&huge), &max, START));
+        assert!(!follows(Some(&huge), &big, START));
+        let at_least = m::FollowRule::AtLeast(m::FollowAtLeast {
+            field: "n".into(),
+            number: 9_007_199_254_740_993,
+        });
+        assert!(follows(Some(&at_least), &big, START));
+        assert!(!follows(Some(&at_least), &below, START));
+        let decimal: Value = serde_json::from_str(r#"{"n": 9007199254740993.5}"#).unwrap();
+        assert!(follows(Some(&at_least), &decimal, START));
+    }
+
+    /// D30 (adversary pass 2): an integer and a number written with a fraction or an exponent
+    /// compare exactly, never by casting the integer to `f64`.
+    #[test]
+    fn a_follow_rule_compares_an_integer_with_a_float_exactly() {
+        let n =
+            |text: &str| -> Value { serde_json::from_str(&format!(r#"{{"n": {text}}}"#)).unwrap() };
+        let equals = |v: &str| {
+            m::FollowRule::Equals(m::FollowEquals {
+                field: "n".into(),
+                value: mj_value::Value::Number(v.into()),
+            })
+        };
+        let at_least = |number: i64| {
+            m::FollowRule::AtLeast(m::FollowAtLeast {
+                field: "n".into(),
+                number,
+            })
+        };
+        let big = 9_007_199_254_740_993;
+        for (parent, eq, least) in [
+            ("9007199254740992.0", false, false),
+            ("9007199254740994.0", false, true),
+            ("9.007199254740992e15", false, false),
+            ("1e300", false, true),
+            ("-1e300", false, false),
+        ] {
+            let got = (
+                follows(Some(&equals("9007199254740993")), &n(parent), START),
+                follows(Some(&at_least(big)), &n(parent), START),
+            );
+            assert_eq!(got, (eq, least), "{parent}");
+        }
+        for (parent, eq, least) in [
+            ("3.0", true, true),
+            ("3e0", true, true),
+            ("2.5", false, false),
+            ("3.5", false, true),
+            ("-3.0", false, false),
+        ] {
+            let got = (
+                follows(Some(&equals("3")), &n(parent), START),
+                follows(Some(&at_least(3)), &n(parent), START),
+            );
+            assert_eq!(got, (eq, least), "{parent}");
+        }
+        assert!(follows(Some(&equals("-3")), &n("-3.0"), START));
+        assert!(!follows(Some(&equals("-3")), &n("-2.5"), START));
+        assert!(follows(Some(&equals("2.5")), &n("2.5"), START));
+        assert!(follows(Some(&equals("3.0")), &n("3"), START));
+    }
+
+    use cortex_model::json as mj_value;
 
     fn paging(style: m::PageStyle, next: Option<&str>, max_pages: i64) -> m::Paging {
         m::Paging {

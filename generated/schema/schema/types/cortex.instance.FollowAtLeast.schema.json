@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$ref": "#/$defs/cortex.instance.FollowAtLeast",
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "c62105bd24d5d4a0d650b895b9c576a8e7066038a9961c9f0fcba15ca1d8b9f3",
+    "contract_digest": "slice-sha256/2:cd9261d6bb235b11b33e460ade41df1acc284268180e3ff425b791b56db7099e",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.FollowAtLeast": {
+      "title": "FollowAtLeast",
+      "x-ess-name": "cortex.instance.FollowAtLeast",
+      "x-ess-kind": "struct",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "field",
+        "number"
+      ],
+      "additionalProperties": false,
+      "x-ess-invariants": [
+        "number > 0"
+      ]
+    }
+  }
+}

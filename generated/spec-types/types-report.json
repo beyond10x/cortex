@@ -1,12 +1,12 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "a1985f8f3c719a34e29149abd79b27c00379600b80c7f19bacd9f1832d3491db",
+  "source_digest": "c62105bd24d5d4a0d650b895b9c576a8e7066038a9961c9f0fcba15ca1d8b9f3",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:dbe3abc0d4a1f781a510510de9bcf4219c7f0fd77c1cb4d0dfa582e05b2eada9",
-    "projection_digest": "6fe049e98a887ecccbce20cd2d3fc3a94fead0b9a06a5d5a80c5abfe74b43d4b"
+    "contract_digest": "slice-sha256/2:c9a7c95ea6f9e7d92df78390768479145c780efc69b2d61aca8bcb1da6deb7c7",
+    "projection_digest": "18ea34a13695f6f052b1ab9660fc4a525ab46aaeaf35abae09e397a1498a9008"
   },
   "generator_version": "0.60.0",
   "target": "rust",
@@ -41,6 +41,10 @@
     "cortex.instance.FetchPolicy": "CortexInstanceFetchPolicy",
     "cortex.instance.FileRecords": "CortexInstanceFileRecords",
     "cortex.instance.FilesSource": "CortexInstanceFilesSource",
+    "cortex.instance.FollowAtLeast": "CortexInstanceFollowAtLeast",
+    "cortex.instance.FollowEquals": "CortexInstanceFollowEquals",
+    "cortex.instance.FollowRule": "CortexInstanceFollowRule",
+    "cortex.instance.FollowWithinDays": "CortexInstanceFollowWithinDays",
     "cortex.instance.GateCheck": "CortexInstanceGateCheck",
     "cortex.instance.InstanceName": "CortexInstanceInstanceName",
     "cortex.instance.InstanceSpec": "CortexInstanceInstanceSpec",
@@ -447,6 +451,86 @@
     },
     {
       "pointer": "/$defs/cortex.instance.FilesSource/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowEquals/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowEquals/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowEquals/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/oneOf/0/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/oneOf/1/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/oneOf/2/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/x-ess-name",
+      "rule": "x-ess-name",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule/x-ess-union-tag",
+      "rule": "x-ess-union-tag",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/title",
+      "rule": "title",
+      "detail": "retained in source.schema.json; no decoder behavior inferred"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/x-ess-kind",
+      "rule": "x-ess-kind",
+      "detail": "model identity and wire mapping retained in source.schema.json"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/x-ess-name",
       "rule": "x-ess-name",
       "detail": "model identity and wire mapping retained in source.schema.json"
     },
@@ -1471,6 +1555,66 @@
       "pointer": "/$defs/cortex.instance.FetchPolicy/properties/refresh_after_days",
       "rule": "rust_exact_numbers",
       "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/properties/number",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/properties/number",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/properties/number/minimum",
+      "rule": "minimum",
+      "detail": "validate this constraint against the source schema at runtime"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowAtLeast/x-ess-invariants",
+      "rule": "model_invariants",
+      "detail": "enforce the retained model invariant statements; structural codecs do not evaluate predicates"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowEquals/properties/value",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule",
+      "rule": "oneOf",
+      "detail": "validate exclusive branch membership against the source schema"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowRule",
+      "rule": "untagged_selection",
+      "detail": "native union decoding chooses the first structurally decodable alternative; it does not certify source branch constraints or external dispatch"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/properties/days",
+      "rule": "integer",
+      "detail": "serde_json::Number holds exact JSON numbers with the default `exact-numbers` feature and binary64 without it, and does not enforce integrality; validate the source constraint"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/properties/days",
+      "rule": "rust_exact_numbers",
+      "detail": "this value holds JSON numbers in serde_json; the generated crate's default-on `exact-numbers` feature enables serde_json/arbitrary_precision, and a consumer that turns default features off gets these numbers as binary64"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/properties/days/minimum",
+      "rule": "minimum",
+      "detail": "validate this constraint against the source schema at runtime"
+    },
+    {
+      "pointer": "/$defs/cortex.instance.FollowWithinDays/x-ess-invariants",
+      "rule": "model_invariants",
+      "detail": "enforce the retained model invariant statements; structural codecs do not evaluate predicates"
     },
     {
       "pointer": "/$defs/cortex.instance.GateCheck/properties/max/pattern",

@@ -6,7 +6,7 @@ status: draft
 title: A structured source calls a child operation only for the parents its rule matches
 relations:
 - serves: vision:self-updating-instances
-revision: 1
+revision: 2
 ---
 ## Outcome
 
@@ -55,3 +55,7 @@ it reads (`website/docs/spec-file.md`, "Children").
 
 - Rules combined with and/or, or a rule on the input's own records (a parent filter at the source
   is the operation's input).
+
+## Decisions
+
+- Correction (2026-10-30, wave coordinator): the spec form of a rule is `{rule: equals, value: {field, value}}`, ESS adjacent tagging (likewise `within_days {field, days}` and `at_least {field, number}`), not the shape this story's examples use. The rule is checked in `src/sources.rs` `follows()`, not in `src/structured.rs` as Work says.
