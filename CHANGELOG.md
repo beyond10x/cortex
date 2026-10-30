@@ -43,6 +43,12 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   seconds), a paged or `files` read stops between pages and files, and the run ends `terminated`,
   exit 8, with nothing marked seen and its window kept. A run stopped in the wait before a model
   call is asked again says so in its reason, instead of saying a call was ended.
+- A run reads the store once (`ekr snapshot` at its first batch) instead of once per batch, and
+  twice per batch under a `refuse_if_left` policy. The nodes each batch applies are added to what
+  it read, so the next batch is still shown them as in the store; a commit another writer makes
+  during the run is seen by the next run. On a large store each snapshot took minutes. Batch 0 is
+  no longer pseudonymised twice under `refuse_if_left`, and the store's ontology is read again
+  only after an apply.
 
 ## 0.6.1 — 2026-10-17
 

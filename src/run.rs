@@ -953,19 +953,30 @@ fn process_in(
         .map(|d| evidence::issue(d, &operator, started))
         .collect();
     let batches = batches(issued, size);
+    // The store's nodes the batches name, from one `ekr snapshot` at the first batch, grown by
+    // what each batch applies.
+    let mut lookup = crate::known::Lookup::default();
+    // The store's ontology, read again only after an apply, which can widen it.
+    let mut held_ontology: Option<serde_json::Value> = None;
     // `refuse_if_left`: every batch is checked as the model would be shown it before the first
     // model call, so a refusal fails the run with nothing sent and nothing stored.
     // The known entities are checked too, each batch's store hits included.
+    // Batch 0 as the check pseudonymised it, which the loop sends unless it splits it first.
+    let mut first = None;
     if let Some(r) = redactor.as_ref().filter(|r| r.refuses()) {
-        let ontology = store.ontology().map_err(Failure::Apply)?;
+        let ontology = &*held_ontology.insert(store.ontology().map_err(Failure::Apply)?);
         for batch in &batches {
             let mut p = r.batch();
-            let known = crate::known::for_batch(&store, &ontology, batch, &entities)
+            let known = lookup
+                .for_batch(&store, ontology, batch, &entities)
                 .map_err(Failure::Apply)?;
-            let known = Known::from_ontology(&ontology, known);
+            let known = Known::from_ontology(ontology, known);
             let (shown, known) = pseudonymise(&mut p, batch, &uncut, &known);
             if let Some(why) = refused(&p, &shown, &known) {
                 return Err(Failure::Extract(why));
+            }
+            if first.is_none() {
+                first = Some((p, shown, known));
             }
         }
     }
@@ -1002,15 +1013,35 @@ fn process_in(
                 break;
             }
         };
-        let ontology = store.ontology().map_err(Failure::Apply)?;
+        // The first batch popped is batch 0, unsplit: the pre-check's pseudonymised copy of it
+        // holds, as nothing was applied since.
+        let checked = first.take();
+        if held_ontology.is_none() {
+            held_ontology = Some(store.ontology().map_err(Failure::Apply)?);
+        }
+        let ontology = held_ontology.as_ref().expect("read above");
         // The store's nodes the batch names, of any type, then the run's own names.
-        let known = crate::known::for_batch(&store, &ontology, &batch, &entities)
-            .map_err(Failure::Apply)?;
+        let known = match &checked {
+            Some(_) => Vec::new(),
+            None => lookup
+                .for_batch(&store, ontology, &batch, &entities)
+                .map_err(Failure::Apply)?,
+        };
         // With the store's ontology names, masked and one-line.
-        let known = Known::from_ontology(&ontology, known);
+        let known = Known::from_ontology(ontology, known);
         // The model is shown the batch with personal data replaced by placeholders; the mapping
         // stays in `pseudonyms`, in memory, until this batch's answer is restored.
         let ((prompt, fixed), pseudonyms) = match &redactor {
+            Some(_) if checked.is_some() => {
+                let (p, shown, known) = checked.expect("matched");
+                let prompt = extract::prompt_split(
+                    &spec.description,
+                    instructions.as_deref(),
+                    &known,
+                    &shown,
+                );
+                (prompt, Some(p))
+            }
             None => {
                 let prompt = extract::prompt_split(
                     &spec.description,
@@ -1186,6 +1217,9 @@ fn process_in(
             }
         };
         before.committed();
+        // The next batch sees what this one applied without reading the store again.
+        lookup.applied(&doc, &applied);
+        held_ontology = None;
         if !pseudonymised {
             let _ = std::fs::write(
                 dir.join("report.json"),
