@@ -1486,6 +1486,59 @@ fn viewer_resolves_anew(ctx: &Ctx, name: &str, store: &ekr::Store, units: Units)
         .is_ok_and(|id| id != written)
 }
 
+/// The fields a source's document keys are derived from, by name: its kind, then, for a
+/// `connectors` source, its `adapter`, `operation` and `id` path, and for a `structured` source,
+/// where its records come from and, from Connectors, its `adapter` and `operation`.
+fn keyed_by(settings: &m::SourceSettings) -> Vec<(&'static str, &str)> {
+    let kind = match settings {
+        m::SourceSettings::Web(_) => "web",
+        m::SourceSettings::Connectors(_) => "connectors",
+        m::SourceSettings::Files(_) => "files",
+        m::SourceSettings::Structured(_) => "structured",
+    };
+    let mut fields = vec![("kind", kind)];
+    match settings {
+        m::SourceSettings::Connectors(c) => fields.extend([
+            ("adapter", c.adapter.as_str()),
+            ("operation", c.operation.as_str()),
+            ("id", c.id.as_str()),
+        ]),
+        m::SourceSettings::Structured(s) => match &s.input {
+            m::StructuredInput::Connectors(c) => fields.extend([
+                ("input", "connectors"),
+                ("adapter", c.adapter.as_str()),
+                ("operation", c.operation.as_str()),
+            ]),
+            m::StructuredInput::Files(_) => fields.push(("input", "files")),
+        },
+        m::SourceSettings::Web(_) | m::SourceSettings::Files(_) => {}
+    }
+    fields
+}
+
+/// The first source the frozen spec `old` and `new` both name whose documents `new` keys another
+/// way while its seen state holds a document: its name and the first field that changed. A source
+/// with no state file, or one with no document, is not; a state file that cannot be read counts
+/// as holding one.
+fn rekeyed(
+    layout: &Layout,
+    old: &m::InstanceSpec,
+    new: &m::InstanceSpec,
+) -> Option<(String, &'static str)> {
+    new.sources.iter().find_map(|source| {
+        let was = old.sources.iter().find(|s| s.name == source.name)?;
+        let (before, after) = (keyed_by(&was.settings), keyed_by(&source.settings));
+        let field = after
+            .iter()
+            .zip(&before)
+            .find(|(a, b)| a != b)
+            .map(|(a, _)| a.0)?;
+        let seen = cortex_cli::state::SeenState::load(&layout.seen(&source.name))
+            .map_or(true, |state| !state.documents.is_empty());
+        seen.then(|| (source.name.clone(), field))
+    })
+}
+
 fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> ExitCode {
     let loaded = match spec::load_given(path) {
         Ok(l) => l,
@@ -1533,6 +1586,18 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
             refusal = structured::spec_refusal(&spec, &ontology);
         }
     }
+    // A source whose documents the new spec keys another way while its seen state holds one is
+    // refused (`rekey-refused`): its seen keys would match nothing, and every document would be
+    // extracted again. A frozen spec that cannot be read is left to the error below.
+    if let Ok(old) = layout.load_spec() {
+        if let Some((source, field)) = rekeyed(&layout, &old, &spec) {
+            let mut shared = ctx.shared.borrow_mut();
+            shared
+                .external
+                .insert(("cortex.instance.UpdateInstance", "rekey-refused"), true);
+            shared.strings.extend([source, field.to_string()]);
+        }
+    }
     let seed_digest = match &refusal {
         Some(reason) => format!("refused: {reason}"),
         None => home::seed_digest(&loaded.dir, &spec),
@@ -1570,6 +1635,11 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
             outcome: "not-active",
             ok: false,
             detail: json!({"name": name}),
+        },
+        Ok(m::UpdateInstanceOutcome::RekeyRefused { error }) => Done {
+            outcome: "rekey-refused",
+            ok: false,
+            detail: json!({"name": error.name.0, "source": error.source, "field": error.field}),
         },
         Ok(m::UpdateInstanceOutcome::NoSuchInstance { error }) => Done {
             outcome: "no-such-instance",

@@ -635,6 +635,13 @@ impl Scenario {
                     Some(("SeedChangeRefused", json!({"name": error.name.0}))),
                 ),
                 m::UpdateInstanceOutcome::Updated { .. } => ("updated", None),
+                m::UpdateInstanceOutcome::RekeyRefused { error } => (
+                    "rekey-refused",
+                    Some((
+                        "RekeyRefused",
+                        json!({"name": error.name.0, "source": error.source, "field": error.field}),
+                    )),
+                ),
                 m::UpdateInstanceOutcome::NotActive { error } => (
                     "not-active",
                     Some((
@@ -1571,7 +1578,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        118,
+        119,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RekeyRefused payload",
+  "description": "An update may not change how a source keys its documents while the source has seen documents: its seen state would no longer match, and every document would be extracted again. To re-key on purpose, remove the source's `state/<source>.json` first.",
+  "x-ess-name": "cortex.instance.RekeyRefused",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "name": {
+      "$ref": "#/$defs/cortex.instance.InstanceName"
+    },
+    "source": {
+      "type": "string"
+    },
+    "field": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "source",
+    "field"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "800bd5c5e935090f8ca8d3241638d236e0a6f34c66d67bb300f9d7e2f4a564cf",
+    "contract_digest": "slice-sha256/2:80a69daed6ce5064c56cb0c62bb46b0260403372436fb1f8c0422abd414d269f",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.InstanceName": {
+      "title": "InstanceName",
+      "x-ess-name": "cortex.instance.InstanceName",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

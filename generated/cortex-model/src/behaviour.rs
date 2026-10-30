@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 427380fdb0fd63ec80516983202c1bf3e63d3ab0984514104cfc2ab4ee1c4aa4
-// contract digest 19b1d7e629d64c70fa03c2817003c7027a2ab9b6e646533c2127d2a273409b83
+// model digest 800bd5c5e935090f8ca8d3241638d236e0a6f34c66d67bb300f9d7e2f4a564cf
+// contract digest 8e20b98e78e0efd2c479ef15481406883332155583a9ae3fb8206839abd6d802
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -127,6 +127,8 @@ pub enum ExternalCommand<'a> {
     CortexInstanceRestoreSnapshot(&'a crate::instance::RestoreSnapshot),
     /// The executing `cortex.instance.RunEval` input.
     CortexInstanceRunEval(&'a crate::instance::RunEval),
+    /// The executing `cortex.instance.UpdateInstance` input.
+    CortexInstanceUpdateInstance(&'a crate::instance::UpdateInstance),
 }
 
 impl ExternalCommand<'_> {
@@ -145,6 +147,7 @@ impl ExternalCommand<'_> {
             Self::CortexInstanceRejectSchemaProposals(_) => "cortex.instance.RejectSchemaProposals",
             Self::CortexInstanceRestoreSnapshot(_) => "cortex.instance.RestoreSnapshot",
             Self::CortexInstanceRunEval(_) => "cortex.instance.RunEval",
+            Self::CortexInstanceUpdateInstance(_) => "cortex.instance.UpdateInstance",
         }
     }
 }
@@ -921,6 +924,10 @@ where
         // `not-active`: selected by the addressed row.
         if decided(equal(Some(&held.state).map(|value| match value { crate::instance::InstanceState::Active => "Active", crate::instance::InstanceState::Removed => "Removed" }.to_owned()), Some("Removed".to_owned())), "cortex.instance.UpdateInstance")? {
             return Ok(crate::instance::UpdateInstanceOutcome::NotActive { error: crate::instance::InstanceNotActive { state: self.ports.try_generate_cortex_instance_instance_state()? } });
+        }
+        // `rekey-refused`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceUpdateInstance(&input), "rekey-refused")? {
+            return Ok(crate::instance::UpdateInstanceOutcome::RekeyRefused { error: crate::instance::RekeyRefused { name: input.name.clone(), source: self.ports.try_generate_string()?, field: self.ports.try_generate_string()? } });
         }
         // `updated`: the default.
         let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {

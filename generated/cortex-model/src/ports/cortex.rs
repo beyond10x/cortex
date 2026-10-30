@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 427380fdb0fd63ec80516983202c1bf3e63d3ab0984514104cfc2ab4ee1c4aa4
-// contract digest 19b1d7e629d64c70fa03c2817003c7027a2ab9b6e646533c2127d2a273409b83
+// model digest 800bd5c5e935090f8ca8d3241638d236e0a6f34c66d67bb300f9d7e2f4a564cf
+// contract digest 8e20b98e78e0efd2c479ef15481406883332155583a9ae3fb8206839abd6d802
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -388,6 +388,7 @@ where
         match &outcome {
             crate::instance::UpdateInstanceOutcome::SeedChangeRefused { .. } => {}
             crate::instance::UpdateInstanceOutcome::NotActive { .. } => {}
+            crate::instance::UpdateInstanceOutcome::RekeyRefused { .. } => {}
             crate::instance::UpdateInstanceOutcome::Updated { instance_updated, .. } => {
                 self.outbox.push(PublishedEvent::InstanceUpdated(instance_updated.clone()));
             }

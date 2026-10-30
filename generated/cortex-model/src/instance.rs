@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 427380fdb0fd63ec80516983202c1bf3e63d3ab0984514104cfc2ab4ee1c4aa4
-// contract digest 19b1d7e629d64c70fa03c2817003c7027a2ab9b6e646533c2127d2a273409b83
+// model digest 800bd5c5e935090f8ca8d3241638d236e0a6f34c66d67bb300f9d7e2f4a564cf
+// contract digest 8e20b98e78e0efd2c479ef15481406883332155583a9ae3fb8206839abd6d802
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -2729,6 +2729,13 @@ pub enum UpdateInstanceOutcome {
         /// Why it was refused: `cortex.instance.InstanceNotActive`.
         error: InstanceNotActive,
     },
+    /// `rekey-refused` — externally decided (A source the frozen spec and the new one both name, whose `state/<source>.json` holds a seen document, changes a field its documents are keyed by: its `kind`; a `connectors` source's `adapter`, `operation` or `id`; a `structured` source's `connectors` input's `adapter` or `operation`).
+    ///
+    /// Nothing changed; the frozen spec and every source's seen state are as they were.
+    RekeyRefused {
+        /// Why it was refused: `cortex.instance.RekeyRefused`.
+        error: RekeyRefused,
+    },
     /// `updated` — otherwise.
     ///
     /// The frozen spec is replaced; sources, model and serve settings take effect on the next run. The viewer unit holds the connection id resolved at the last create, adopt or update: it is rewritten when the store's connection changed, or when its profile now resolves to another id.
@@ -3203,6 +3210,19 @@ pub struct NameTaken {
 pub struct ProposeFailed {
     /// `reason` — `String`.
     pub reason: String,
+}
+
+/// The declared error `cortex.instance.RekeyRefused`.
+///
+/// An update may not change how a source keys its documents while the source has seen documents: its seen state would no longer match, and every document would be extracted again. To re-key on purpose, remove the source's `state/<source>.json` first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RekeyRefused {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `source` — `String`.
+    pub source: String,
+    /// `field` — `String`.
+    pub field: String,
 }
 
 /// The declared error `cortex.instance.RestoreUnsupported`.

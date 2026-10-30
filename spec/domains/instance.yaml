@@ -1153,6 +1153,16 @@ errors:
     fields:
       - {name: name, type: cortex.instance.InstanceName}
 
+  - name: cortex.instance.RekeyRefused
+    summary: >-
+      An update may not change how a source keys its documents while the source has seen
+      documents: its seen state would no longer match, and every document would be extracted
+      again. To re-key on purpose, remove the source's `state/<source>.json` first.
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: source, type: String}
+      - {name: field, type: String}
+
   - name: cortex.instance.InstanceNotActive
     summary: The instance is removed, so nothing changed.
     fields:
@@ -1600,6 +1610,20 @@ commands:
           cortex.instance.InstanceNotActive:
             state: {generated: true}
         summary: The instance is removed; nothing changed.
+
+      - name: rekey-refused
+        external: >-
+          A source the frozen spec and the new one both name, whose `state/<source>.json` holds a
+          seen document, changes a field its documents are keyed by: its `kind`; a `connectors`
+          source's `adapter`, `operation` or `id`; a `structured` source's `connectors` input's
+          `adapter` or `operation`
+        error: cortex.instance.RekeyRefused
+        payload:
+          cortex.instance.RekeyRefused:
+            name: input.name
+            source: {generated: true}
+            field: {generated: true}
+        summary: Nothing changed; the frozen spec and every source's seen state are as they were.
 
       - name: updated
         updates: cortex.instance.Instance

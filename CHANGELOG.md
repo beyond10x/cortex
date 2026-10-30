@@ -38,6 +38,13 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 ### Fixed
 
+- `cortex update` accepted a spec that changed how a source keys its documents, so the source's
+  seen state matched nothing and its next run extracted every document again. An update that
+  changes a source's `kind`, a `connectors` source's `adapter`, `operation` or `id`, or a
+  `structured` source's input or its `adapter` or `operation`, while `state/<source>.json` holds a
+  seen document, is now refused as `rekey-refused`, exit 1, naming the source and the field;
+  nothing is written. A source with no seen document is updated as before. To re-key on purpose,
+  remove the source's state file first.
 - A run sent SIGTERM during its fetch ran the fetch out before it stopped. The fetch is now a safe
   point: the `connectors` call in flight is ended with its process group (SIGKILL after 5
   seconds), a paged or `files` read stops between pages and files, and the run ends `terminated`,
