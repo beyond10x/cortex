@@ -56,18 +56,25 @@ the source of truth for every noun, command, outcome, error and event.
   `spec/suite.json` by hand; `task drift` fails when they differ from what `spec/` generates.
 - `task compat` compares `spec/` with `spec/` at the newest release tag (`git describe --tags
   --abbrev=0 --match 'v[0-9]*'`, so CI checks out with `fetch-depth: 0`) through
-  `ess verify diff --fail-on breaking-or-unknown`, and exits 4 on a breaking or unknown change
+  `ess verify diff --fail-on breaking-or-unknown`, and fails on a breaking or unknown change
   that `spec/compat-ack.json` does not acknowledge. Review each such change, add its id to
   `compat-ack.json` and its reason as a row of `spec/compat-ack.md` (`tests/compat_ack.rs` holds
   the two files to each other). The acknowledgements are bound to the spec digests of both sides,
-  so every change to `spec/` also rewrites `after` in `compat-ack.json`: `task compat` refuses a
-  stale one with exit 1 and names the digest it compared. Never acknowledge a change you have not
-  reviewed to make the gate pass.
+  so every change to `spec/` also rewrites `after` in `compat-ack.json`; a stale file is refused,
+  and the refusal names the digest it compared. Never acknowledge a change you have not reviewed
+  to make the gate pass.
+- Exit statuses of `task compat`: `ess verify diff` exits 0 when the gate passes, 4 on an
+  unacknowledged change (each named on a `fails --fail-on` line) and 1 when it refuses the
+  acknowledgements file (stale digests, an id the delta does not hold, an id twice). `task compat`
+  reports both failures as 201 (`task: Failed to run task "compat": exit status <n>`); run
+  `task -x compat` to get ess's own status. Branch on that status, or on the `fails --fail-on`
+  and `refused:` lines it prints: 4 means review and acknowledge, 1 means rewrite the file's
+  digests.
 - **Reset the acknowledgements after each release.** Once the tag `v<version>` is pushed, the next
   change to `main` sets `before` and `after` in `spec/compat-ack.json` to the digests `ess verify
   diff --from <spec at the tag> --to spec --format json` prints, empties `acknowledged`, and
-  empties the table of `spec/compat-ack.md`. Until then `task compat` refuses the old file with
-  exit 1.
+  empties the table of `spec/compat-ack.md`. Until then `task compat` refuses the old file (ess
+  exit 1, `task` exit 201).
 - `generated/cortex-model` (`ess generate synthesize --target rust --layout crate`) holds the
   model types and the command behaviours. Two behaviours are obligations the code implements:
   `RunSource` and `RecordFailure` (`generated/cortex-model/PLAN.md`).
