@@ -36,6 +36,18 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Known limits
+
+Each has a test kept `#[ignore]`d that names `story:ignored-adversary-limits`.
+
+- `cortex update` does not refuse a redaction rule that rewrites the ids of a `structured` source
+  with seen records, though the rewrite re-keys them (`tests/rekey_adversary_pass2.rs`).
+- A record member literally named `$` and the whole record id `$` are one key path
+  (`tests/rekey_adversary_pass2.rs`).
+- A run that failed before it applied a batch does not count the tokens its failed answers
+  reported ([Limits](https://beyond10x.github.io/cortex/docs/limits),
+  `tests/partial_counts_adversary.rs`).
+
 ## 0.7.0 — 2026-10-30
 
 0.7.0 needs Connectors 0.60.0 or newer: a Connectors source refuses an older one, naming the version.

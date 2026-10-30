@@ -143,7 +143,7 @@ fn registry_source() -> String {
 /// record, though no source field changed. The correction says every change to a field that goes
 /// into a seen key is refused; this one is accepted.
 #[test]
-#[ignore = "follow-up: redaction rules feed structured seen keys"]
+#[ignore = "story:ignored-adversary-limits: a redaction rule that rewrites structured ids of a source with seen records is not refused"]
 fn a_redaction_rule_that_rewrites_structured_ids_with_seen_records_is_refused() {
     let w = World::new();
     executable(&w.bin.join("claude"), CLAUDE);
@@ -360,7 +360,7 @@ fn issues_source(id: &str) -> String {
 /// `sources::at` reads `$` as the whole record and `$.$` as its member named `$`: two different
 /// values. `record_path` maps both to `$`, so the change compares equal and is accepted.
 #[test]
-#[ignore = "infeasible: needs a member literally named $"]
+#[ignore = "story:ignored-adversary-limits: the whole record id `$` and a member literally named `$` are one path"]
 fn the_whole_record_id_and_a_member_named_dollar_are_two_paths() {
     let w = World::new();
     let spec = instance_spec(&w, "d", &issues_source("$"), "");

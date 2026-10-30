@@ -181,7 +181,7 @@ exec "$R/bin/claude" "$@"
 /// "whatever outcome the run ended with", and the ports keep a failed run's report only when a
 /// document was applied, so these tokens are never counted.
 #[test]
-#[ignore = "out of scope of story:partial-run-counts (limits.md documents it): a run that failed \
+#[ignore = "story:ignored-adversary-limits: out of scope of story:partial-run-counts (limits.md documents it): a run that failed \
             before it applied a batch drops the tokens its failed answers reported \
             (src/ports.rs, `partial.documents_applied > 0`)"]
 fn a_failed_first_answer_that_reported_tokens_counts_them() {
