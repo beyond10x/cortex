@@ -2,13 +2,15 @@
 format: aep.planning-md/3
 id: story:key-template-checked-at-load
 kind: story
-status: draft
+status: archived
 title: A malformed connectors key template is refused when the spec loads
 tags:
 - review-20261030
 relations:
 - decomposes: epic:standalone-1-0
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "archived", at: "2026-10-30T14:50:59Z", actor: "human:timo", revision: 4}
 ---
 ## Outcome
 
@@ -28,3 +30,7 @@ at run time, as it does today.
 - Wave 20261030a coordinator review of the unit reports.
 - `story:record-key-template`: the key renders with `structured::render_template`
   (`src/structured.rs:618`), which answers `None` for a missing field.
+
+## Outcome of review
+
+Archived on 2026-10-30: covered by D24 in unit shapes of wave 20261030a. A malformed connectors key template is refused when the spec is read; tests/w30a_shapes_adversary.rs a_key_that_is_no_template_is_refused_when_the_spec_is_read.

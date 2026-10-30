@@ -1,17 +1,8 @@
 {
   "format": "ess-diff-acknowledgements/1",
   "before": "0f7251f0c444abe6dc1366bd90cef115ffd6b3c2bd521752108a810a42d41fc1",
-  "after": "b67f3f98215ce3eb40675cbc0752e3c6ff62343f78add75e0b29acc90d064397",
+  "after": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
   "acknowledged": [
-    "type/cortex.ask.AnswerOutcome/variant-added/client-closed",
-    "type/cortex.ask.AnswerOutcome/variant-added/cut-off",
-    "type/cortex.ask.AskLimits/field-added/max_tool_calls",
-    "type/cortex.ask.AskSpec/field-added/max_in_flight",
-    "type/cortex.instance.ChildCall/field-added/follow",
-    "type/cortex.instance.ChildCall/field-added/text",
-    "type/cortex.instance.ConnectorsSource/field-added/key",
-    "type/cortex.instance.RecordMapping/field-added/store_lookup",
-    "type/cortex.instance.StructuredChild/field-added/follow",
     "command/cortex.ask.Ask/outcome-added/busy",
     "command/cortex.ask.Ask/outcome-added/client-closed",
     "command/cortex.ask.Ask/outcome-added/cut-off",
@@ -24,6 +15,16 @@
     "command/cortex.instance.ProposeSchemaChanges/outcome-condition-changed/propose-failed",
     "command/cortex.instance.RunSource/outcome-response-payload-changed/ran",
     "command/cortex.instance.UpdateInstance/outcome-added/rekey-refused",
-    "event/cortex.instance.SourceRan/field-added/facts_reapplied"
+    "event/cortex.instance.SourceRan/field-added/facts_reapplied",
+    "type/cortex.ask.AnswerOutcome/variant-added/client-closed",
+    "type/cortex.ask.AnswerOutcome/variant-added/cut-off",
+    "type/cortex.ask.AskLimits/field-added/max_tool_calls",
+    "type/cortex.ask.AskSpec/field-added/max_in_flight",
+    "type/cortex.instance.ChildCall/field-added/follow",
+    "type/cortex.instance.ChildCall/field-added/text",
+    "type/cortex.instance.ConnectorsSource/field-added/key",
+    "type/cortex.instance.InstanceSpec/field-added/runs",
+    "type/cortex.instance.RecordMapping/field-added/store_lookup",
+    "type/cortex.instance.StructuredChild/field-added/follow"
   ]
 }
