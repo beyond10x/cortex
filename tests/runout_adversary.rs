@@ -296,15 +296,59 @@ fn a_run_sent_sigterm_while_it_waits_to_ask_again_ends_within_a_bounded_time() {
     );
 }
 
-/// A fetch is no safe point either: a run sent SIGTERM while its fetch is slow runs the fetch
-/// out before it stops. The spec says so ("before a fetch result is used"); the story's reason
-/// for the outcome (a Job's deadline, then SIGKILL after the grace period) is not met by it.
+/// The reason a run sent SIGTERM in the wait before a model call is asked again gives names the
+/// wait: no model call was in flight, so none was ended.
 #[test]
-#[ignore = "finding: SIGTERM during a slow fetch is not handled until the fetch ends"]
+fn a_run_sent_sigterm_while_it_waits_to_ask_again_says_so_in_its_reason() {
+    let w = World::new();
+    create(&w, &spec(&w, "", "monitoring: {metrics: true}\n"));
+    let claude = error_claude(&w, "claude-down", "API Error: Connection error.");
+    let child = start(&w, &claude, &w.bin.join("connectors"), "30000");
+    wait_for(&w.root.join("asked"));
+    std::thread::sleep(Duration::from_millis(500));
+    sigterm(&child);
+    let (status, out, stderr, _) = finish(child, Duration::from_secs(45));
+    assert_eq!(
+        (status.code(), out["outcome"].as_str()),
+        (Some(8), Some("terminated")),
+        "{out} {stderr}"
+    );
+    let reason = out["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.contains("while it waited to ask the model again for batch 0"),
+        "{reason}"
+    );
+    assert!(!reason.contains("call was ended"), "{reason}");
+}
+
+/// A fetch is a safe point: a run sent SIGTERM while its fetch is slow ends the `connectors`
+/// child (its process group) and stops at once, `terminated`, exit 8. Nothing is marked seen,
+/// the source's failures are not counted and the next run's window starts where it would have.
+#[test]
 fn a_run_sent_sigterm_during_a_slow_fetch_ends_within_a_bounded_time() {
     let w = World::new();
     create(&w, &spec(&w, "", "monitoring: {metrics: true}\n"));
-    let connectors = connectors_with(&w, "touch \"$R/fetching\"; sleep 20");
+    // A first run succeeds, so the window's `since` stands still from one run to the next.
+    let (status, out, _) = run_with(&w, &w.bin.join("claude"));
+    assert_eq!(status.code(), Some(0), "{out}");
+    let since = || {
+        let (code, out) = w.cortex(&["run", "t/news", "--fetch-only"]);
+        assert_eq!(code, 0, "{out}");
+        out["detail"]["window"]["since"].clone()
+    };
+    let seen_path = w.home.join("instances/t/state/news.json");
+    let seen = || {
+        let text = std::fs::read_to_string(&seen_path).unwrap();
+        serde_json::from_str::<Value>(&text).unwrap()["documents"].clone()
+    };
+    let (since_before, seen_before) = (since(), seen());
+    assert!(since_before.is_string(), "{since_before}");
+    let failures_before = news(&w)["consecutive_failures"].clone();
+    // The stand-in's `sleep` is a child of its own: only an end of the process group ends it.
+    let connectors = connectors_with(
+        &w,
+        "sleep 20 & echo $! > \"$R/sleep.pid\"; touch \"$R/fetching\"; wait; exit 0",
+    );
     let child = start(&w, &w.bin.join("claude"), &connectors, "10");
     wait_for(&w.root.join("fetching"));
     sigterm(&child);
@@ -313,7 +357,36 @@ fn a_run_sent_sigterm_during_a_slow_fetch_ends_within_a_bounded_time() {
         took < STOP_BOUND,
         "the run took {took:?} to end after SIGTERM: {status:?} {out} {stderr}"
     );
-    assert_eq!(status.code(), Some(8), "{out}");
+    assert_eq!(
+        (status.code(), out["outcome"].as_str()),
+        (Some(8), Some("terminated")),
+        "{out} {stderr}"
+    );
+    let reason = out["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(reason.contains("while it fetched"), "{reason}");
+    assert_eq!(news(&w)["consecutive_failures"], failures_before);
+    assert_eq!(seen(), seen_before, "nothing is marked seen");
+    assert_eq!(since(), since_before, "the window does not move");
+    let sleep = std::fs::read_to_string(w.root.join("sleep.pid")).unwrap();
+    assert!(gone(sleep.trim()), "the fetch's own child outlived the run");
+}
+
+/// Whether the process `pid` names is gone (or a zombie no one reaped yet), waiting 5 s at most.
+fn gone(pid: &str) -> bool {
+    let until = Instant::now() + Duration::from_secs(5);
+    loop {
+        let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
+        let state = stat
+            .rsplit_once(") ")
+            .and_then(|(_, rest)| rest.chars().next());
+        if stat.is_empty() || state == Some('Z') {
+            return true;
+        }
+        if Instant::now() > until {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 /// A second SIGTERM ends the process at once with 143 and records nothing, even while the run is
@@ -459,12 +532,10 @@ fn a_model_unavailable_reason_is_masked_and_bounded() {
 }
 
 /// A run that applied a batch before its model became unavailable spent tokens and applied a
-/// document; `metrics.prom` counts neither (only runs that ended `ran`), so
-/// `cortex_source_model_tokens_total` under-reports what the model cost and
-/// `cortex_source_documents_total{kind="applied"}` what the store holds. The story's series are
-/// "the model tokens it spent" and "the documents it read and applied".
+/// document; `metrics.prom` counts both, as for a run that ended `ran`, so
+/// `cortex_source_model_tokens_total` holds what the model cost and
+/// `cortex_source_documents_total{kind="applied"}` what the store holds.
 #[test]
-#[ignore = "finding: tokens spent and documents applied by a run that did not end ran are never counted in metrics.prom"]
 fn a_partial_model_unavailable_run_counts_the_tokens_it_spent_and_documents_it_applied() {
     let w = World::new();
     long_pages(&w);

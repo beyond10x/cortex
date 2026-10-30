@@ -36,6 +36,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Fixed
+
+- A run sent SIGTERM during its fetch ran the fetch out before it stopped. The fetch is now a safe
+  point: the `connectors` call in flight is ended with its process group (SIGKILL after 5
+  seconds), a paged or `files` read stops between pages and files, and the run ends `terminated`,
+  exit 8, with nothing marked seen and its window kept. A run stopped in the wait before a model
+  call is asked again says so in its reason, instead of saying a call was ended.
+
 ## 0.6.1 — 2026-10-17
 
 ### Added

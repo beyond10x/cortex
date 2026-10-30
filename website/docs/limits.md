@@ -37,8 +37,8 @@ stand; [Status](./status.mdx) lists what is planned.
   the names it lists in `known_names`, rare capitalised words (`RareName`), and whatever its own
   regular-expression `rules` match, with placeholders such as `[Email-1]`, `[Url-1]` and
   `[Name-1]` in what the model is shown. That covers a document's text, title, description and
-  source line, and the known entity names; the question and every tool result of the
-  [ask service](./ask-service.md#redaction) and of the eval `mcp` runner. Before the answer is
+  source line, the store's ontology names and the known entity names; the question and every
+  tool result of the [ask service](./ask-service.md#redaction) and of the eval `mcp` runner. Before the answer is
   applied or returned, each placeholder is put
   back. The store and its evidence therefore hold the personal data and stay searchable for it;
   only the model does not see it. A placeholder the model changed or invented stays as written
@@ -109,6 +109,16 @@ stand; [Status](./status.mdx) lists what is planned.
   whose text changed is extracted again only after `refresh_after_days`; cortex retracts nothing
   it applied from the earlier text. A record read from a file, and a `structured` change whose
   links to tags alone changed, are applied again on the next run.
+- **A structured record meets nodes of another type only with `store_lookup: AnyType`.** By
+  default EKR resolves a record's aliases, its alias templates included, within the mapping's
+  `node_type` only, so a store node of another type holding the same alias gets a second node
+  beside it. With `AnyType` the run reads the store before each batch and writes the record onto
+  that node. Names are compared lowercased, not case-folded. A record whose name or aliases
+  match nodes of more than one type is refused, and so is one whose matched node's type declares a
+  mapped property in another value kind; neither is merged. A relation names a record written
+  onto another type's node as that node only when the record is applied in the same run;
+  otherwise it names it in the mapping's own type. cortex never merges two nodes that already
+  hold the same alias.
 - **Text only.** A files source skips files that are not UTF-8 text; web sources read the text the
   websearch adapter returns.
 
@@ -134,11 +144,12 @@ stand; [Status](./status.mdx) lists what is planned.
   [When the model cannot be reached](./operating.md#when-the-model-cannot-be-reached)); an outage
   a gateway words otherwise, or a call that times out, ends `extraction-failed` and is counted.
   The run does not retry the model beyond the one repeat of an error that cost zero.
-- **A run's figures count completed runs only.** `metrics.prom` adds the documents and model
-  tokens of runs that ended `ran`; a run that stopped (`batch-too-large`, `model-unavailable`,
-  `terminated`) after applying batches adds none of them, though its tokens were spent.
-- **SIGTERM does not interrupt a fetch.** A run sent SIGTERM during a Connectors read stops when
-  the read returns; only a model call is ended at once.
+- **A run's figures count only what was reported after a batch was applied.** `metrics.prom` adds
+  the documents and model tokens of a run that ended `ran` or applied a batch before it ended
+  otherwise; a run that ended before it applied a batch adds none of them, though a failed model
+  call may have spent tokens, and a model call ended by SIGTERM never reports its tokens.
+- **A stopped fetch keeps nothing.** A run sent SIGTERM during its fetch ends the Connectors call
+  in flight and drops the pages it already read: the next run reads the whole window again.
 - **The daily ceiling is per instance.** `daily_ceiling_usd` bounds what one instance's model calls
   spend in a UTC day; nothing bounds the instances of a home together. An answer that states no
   cost adds nothing to the spend of the day.

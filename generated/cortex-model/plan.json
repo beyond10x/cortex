@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d",
-    "contract_digest": "45be6012d6ca07f5842ea4b833a0421e5880da4b6a06706d61c0d0abe43f7aab"
+    "source_digest": "5a29cefca25e2266b019b8b5b6031137a2e3440abb9403edfa5363b3e1284768",
+    "contract_digest": "813e9e892f7c25641e646e3a1ef94f827001f7769520922c88de4f5af1cb5113"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -713,6 +713,13 @@
     {
       "kind": "domain_type",
       "source": "cortex.instance.SqliteStore",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "domain_type",
+      "source": "cortex.instance.StoreLookup",
       "disposition": {
         "disposition": "generated"
       }

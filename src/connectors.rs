@@ -2,12 +2,14 @@
 //! never sees a credential; Connectors signs every call.
 
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
 
 use serde_json::Value;
+
+use crate::terminate::Waited;
 
 pub struct Connectors {
     pub bin: PathBuf,
@@ -118,6 +120,9 @@ pub enum InvokeError {
     /// Connectors answered a retryable failure (`kind` `operational`, `next_action`
     /// `retry_explicitly`) to every attempt of a revalidation, before any invocation answered.
     Unavailable(String),
+    /// The run was sent SIGTERM ([`crate::terminate`]) during a call, which was ended, or during a
+    /// wait between attempts: what it stopped.
+    Terminated(String),
 }
 
 impl std::fmt::Display for InvokeError {
@@ -127,6 +132,7 @@ impl std::fmt::Display for InvokeError {
             Self::Lapsed(m) => write!(f, "connection evidence lapsed: {m}"),
             Self::Failed(m) => write!(f, "connectors failed: {m}"),
             Self::Unavailable(m) => write!(f, "connection unavailable: {m}"),
+            Self::Terminated(m) => f.write_str(m),
         }
     }
 }
@@ -202,13 +208,35 @@ impl Connectors {
         }
     }
 
-    /// The JSON document `connectors` answered, success or refusal.
+    /// The JSON document `connectors` answered, success or refusal. The call runs in a process
+    /// group of its own and is waited for as a model call is ([`crate::terminate::wait`]): a run
+    /// sent SIGTERM ends it, and its group, and answers [`InvokeError::Terminated`].
     fn answer(&self, args: &[&str], what: &str) -> Result<Value, InvokeError> {
-        let out = Command::new(&self.bin)
+        use std::os::unix::process::CommandExt;
+        if crate::terminate::requested() {
+            return Err(InvokeError::Terminated(format!(
+                "the {what} call was not made"
+            )));
+        }
+        let mut child = Command::new(&self.bin)
             .args(args)
             .args(["--output", "json"])
-            .output()
+            // A group of its own is not the terminal's foreground group: it reads no stdin.
+            .process_group(0)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .map_err(|e| InvokeError::Failed(format!("cannot run connectors: {e}")))?;
+        let out = match crate::terminate::wait(&mut child, None, "connectors") {
+            Waited::Done(out) => out,
+            Waited::Failed(e) => return Err(InvokeError::Failed(e)),
+            Waited::Terminated => {
+                return Err(InvokeError::Terminated(format!(
+                    "the {what} call was ended"
+                )))
+            }
+        };
         // A refusal's JSON envelope goes to stderr, with nothing on stdout.
         let answer = if out.stdout.iter().all(u8::is_ascii_whitespace) {
             &out.stderr
@@ -298,8 +326,12 @@ impl Connectors {
         let mut attempt = 1;
         loop {
             match attempt_once() {
-                Err(InvokeError::Unavailable(_)) if attempt < attempts => {
-                    std::thread::sleep(pause);
+                Err(InvokeError::Unavailable(m)) if attempt < attempts => {
+                    if crate::terminate::sleep(pause) {
+                        return Err(InvokeError::Terminated(format!(
+                            "it waited to try again after {m}"
+                        )));
+                    }
                     pause = pause.saturating_mul(2);
                     attempt += 1;
                 }
@@ -372,8 +404,10 @@ impl Connectors {
         let pause = Duration::from_millis(setting("CORTEX_STATUS_POLL_MS", 5000));
         let mut state = String::from("unknown");
         for read in 0..polls {
-            if read > 0 {
-                std::thread::sleep(pause);
+            if read > 0 && crate::terminate::sleep(pause) {
+                return Err(InvokeError::Terminated(format!(
+                    "it waited to read the status of {connection} again"
+                )));
             }
             let status = self.json(
                 &[

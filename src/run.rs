@@ -59,6 +59,10 @@ pub struct Report {
     /// recorded and they were not extracted ([`SeenState::hash_unhashed`]).
     pub hashed: usize,
     pub documents_applied: i64,
+    /// Whether the run's applied batches were undone afterwards (its gate refused it, or a gated
+    /// run ended terminated or store-outcome-unknown): `documents_applied` is then `0`, the
+    /// store holding none of them, and the tokens the run spent stay counted.
+    pub undone: bool,
     /// `0` when no model was asked, the sum when every answer carried a cost, `None` as soon as
     /// one answer carried none: a missing cost is never written as `0`.
     pub cost_usd: Option<f64>,
@@ -83,7 +87,9 @@ pub struct Report {
     /// [`sources::CHILD_FAILURE_LIMIT`] or more consecutive runs; and structured records refused
     /// because their mapped values alone are over EKR's evidence bound.
     pub skipped: Vec<String>,
-    /// Applied documents a part EKR rejected belongs to, each with EKR's refusal.
+    /// Applied documents a part EKR rejected belongs to, each with EKR's refusal, and structured
+    /// records refused before their batch because they meet store nodes of more than one type
+    /// (`store_lookup: AnyType`), each with that refusal.
     pub rejected: Vec<Rejected>,
     /// Structured records left out because a mapped value does not convert to its property's
     /// kind (`structured::convert`); neither applied nor marked seen, so the next run reads them
@@ -102,6 +108,9 @@ pub struct Report {
     /// The tokens those calls reported, summed with the rule of [`add_cost`]: `0` when no model
     /// was asked, `None` as soon as one answer did not carry the count.
     pub usage: extract::Usage,
+    /// The tokens those calls reported, each count summed over the answers that carried it: an
+    /// answer that did not carry a count adds nothing to it. What `metrics.prom` counts.
+    pub reported: extract::Usage,
     /// The input tokens (cache reads and writes included) apportioned by bytes to the fixed part
     /// of each request and to its documents ([`extract::split_tokens`]); `None` as the input is.
     pub fixed_input_tokens: Option<i64>,
@@ -169,6 +178,7 @@ impl Default for Report {
             documents_new: 0,
             hashed: 0,
             documents_applied: 0,
+            undone: false,
             cost_usd: Some(0.0),
             cost_counted: true,
             facts_refused: 0,
@@ -186,6 +196,7 @@ impl Default for Report {
             daily_ceiling_reached: false,
             model_calls: 0,
             usage: extract::Usage::ZERO,
+            reported: extract::Usage::ZERO,
             fixed_input_tokens: Some(0),
             documents_input_tokens: Some(0),
             batch_chars: BATCH_CHARS,
@@ -201,6 +212,21 @@ impl Report {
     pub fn add_calls(&mut self, calls: i64, usage: extract::Usage, fixed: usize, documents: usize) {
         self.model_calls += calls;
         self.usage = self.usage.plus(usage);
+        let known = |total: Option<i64>, part: Option<i64>| {
+            Some(total.unwrap_or(0).saturating_add(part.unwrap_or(0)))
+        };
+        self.reported = extract::Usage {
+            input_tokens: known(self.reported.input_tokens, usage.input_tokens),
+            cache_creation_input_tokens: known(
+                self.reported.cache_creation_input_tokens,
+                usage.cache_creation_input_tokens,
+            ),
+            cache_read_input_tokens: known(
+                self.reported.cache_read_input_tokens,
+                usage.cache_read_input_tokens,
+            ),
+            output_tokens: known(self.reported.output_tokens, usage.output_tokens),
+        };
         let split = usage
             .all_input()
             .map(|tokens| extract::split_tokens(tokens, fixed, documents));
@@ -377,10 +403,7 @@ impl Planned {
             source.policy.max_chars_per_document.max(0) as usize,
             redactor.as_ref(),
         )
-        .map_err(|e| match e {
-            FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
-            FetchError::Unavailable(m) => Failure::ConnectionUnavailable(m),
-        })
+        .map_err(fetch_failure)
     }
 }
 
@@ -407,18 +430,31 @@ pub fn count(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<C
         planned.structured(),
         false,
         &mut Undo::new(BeforeApply::none()),
+        &mut Report::default(),
         Some(&mut counts),
     )?;
     Ok(counts)
 }
 
-pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Report, Failure> {
+///
+/// `partial` is left holding the run's report as it stood when the run failed: the documents it
+/// read and applied and the tokens it spent before it ended ([`Report::default`] when it failed
+/// before it processed anything).
+pub fn run(
+    layout: &Layout,
+    tools: &Tools,
+    source: &m::SourceData,
+    partial: &mut Report,
+) -> Result<Report, Failure> {
     let planned = Planned::of(layout, source)?;
     let (window, seen_path) = (planned.window, planned.seen_path.clone());
     // A stop of the whole unit (`systemctl stop`, a pod's deadline) ends the `connectors` child
     // too: a fetch that failed after SIGTERM is the stop, not a failure of the source.
+    // A fetch the run ended itself says so ([`FetchError::Terminated`]).
     let fetched = planned.fetch(tools).or_else(|failure| {
-        stop_point("while it fetched")?;
+        if !matches!(failure, Failure::Terminated(_)) {
+            stop_point("while it fetched")?;
+        }
         Err(failure)
     });
     let ran = fetched.and_then(|fetched| {
@@ -433,6 +469,7 @@ pub fn run(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Rep
             Some(window),
             planned.structured(),
             true,
+            partial,
         )
     });
     if ran.is_err() {
@@ -493,10 +530,7 @@ fn seed_documents(layout: &Layout, tools: &Tools, undoable: bool) -> Result<Repo
         policy.max_chars_per_document as usize,
         None,
     )
-    .map_err(|e| match e {
-        FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
-        FetchError::Unavailable(m) => Failure::ConnectionUnavailable(m),
-    })?;
+    .map_err(fetch_failure)?;
     process(
         layout,
         tools,
@@ -507,6 +541,7 @@ fn seed_documents(layout: &Layout, tools: &Tools, undoable: bool) -> Result<Repo
         None,
         None,
         undoable,
+        &mut Report::default(),
     )
 }
 
@@ -538,6 +573,7 @@ fn process(
     window: Option<Window>,
     structured_source: Option<&m::StructuredSource>,
     undoable: bool,
+    partial: &mut Report,
 ) -> Result<Report, Failure> {
     // A staged run that was killed left its stage and the `state/` from before it.
     Staged::recover(layout, spec)?;
@@ -553,9 +589,16 @@ fn process(
         structured_source,
         undoable,
         &mut before,
+        partial,
         None,
     );
-    settle(layout, spec, label, ran, before)
+    let settled = settle(layout, spec, label, ran, &mut before);
+    // The tokens the run spent stay counted; the documents of an undone run are not in the store.
+    if before.undone && settled.is_err() {
+        partial.documents_applied = 0;
+        partial.undone = true;
+    }
+    settled
 }
 
 /// [`process`], with the run's snapshot and stage in `before`, which [`settle`] settles once the
@@ -575,13 +618,14 @@ fn process_in(
     structured_source: Option<&m::StructuredSource>,
     undoable: bool,
     before: &mut Undo,
+    partial: &mut Report,
     counts: Option<&mut Counts>,
 ) -> Result<Report, Failure> {
     let started = now_ms();
     let applied_at = window.map_or(started, |w| w.until_ms);
     let redactor = redact::compile(spec.redaction.as_ref()).map_err(Failure::Extract)?;
     // A message the fetch built can name a document key; it is masked as the key is.
-    let mut report = Report {
+    *partial = Report {
         skipped: fetched
             .skipped
             .iter()
@@ -590,6 +634,8 @@ fn process_in(
         cost_counted: spend::counts_dollars(&spec.model),
         ..Report::default()
     };
+    // The run's report as it grows: what a failure after a batch was applied reports ([`process`]).
+    let report = partial;
     // The keys of documents cut at `max_chars_per_document`: counted as they reach the model.
     let mut cut: HashSet<String> = HashSet::new();
     report.redacted = redactor.as_ref().map(Redactor::counts);
@@ -780,7 +826,7 @@ fn process_in(
             .iter()
             .map(|u| masked_key(redactor.as_ref(), u))
             .collect();
-        return Ok(report);
+        return Ok(std::mem::take(report));
     }
     let selected = seen.select(
         docs,
@@ -793,13 +839,13 @@ fn process_in(
     // A run with nothing new still compares the store with what the source lists, when it ends
     // what the source no longer lists.
     if selected.is_empty() && listed.is_none() {
-        unread(&mut report, &fetched.unread, redactor.as_ref());
+        unread(report, &fetched.unread, redactor.as_ref());
         let failures = fetched.child_failures.clone();
         finish(
-            &mut seen, &seen_path, &report, wanted, held_since, window, failures,
+            &mut seen, &seen_path, report, wanted, held_since, window, failures,
         )?;
-        log(layout, label, &report, started);
-        return Ok(report);
+        log(layout, label, report, started);
+        return Ok(std::mem::take(report));
     }
 
     let mut store = layout.store_handle(spec);
@@ -839,28 +885,22 @@ fn process_in(
             held: &held,
         };
         apply_records(
-            layout,
-            &records,
-            selected,
-            &mut seen,
-            &seen_path,
-            &mut report,
-            before,
+            layout, &records, selected, &mut seen, &seen_path, report, before,
         )?;
         // A fetch that left records unread lists only part of the source: nothing is ended.
         if let Some(listed) = listed.as_deref().filter(|_| fetched.unread.is_empty()) {
-            end_dropped(&records, listed, &seen, &mut report, before)?;
+            end_dropped(&records, listed, &seen, report, before)?;
         }
-        unread(&mut report, &fetched.unread, redactor.as_ref());
+        unread(report, &fetched.unread, redactor.as_ref());
         if undoable {
-            held_to_gate(layout, spec, &store, label, &report, None, before, started)?;
+            held_to_gate(layout, spec, &store, label, report, None, before, started)?;
         }
         let failures = fetched.child_failures.clone();
         finish(
-            &mut seen, &seen_path, &report, wanted, held_since, window, failures,
+            &mut seen, &seen_path, report, wanted, held_since, window, failures,
         )?;
-        log(layout, label, &report, started);
-        return Ok(report);
+        log(layout, label, report, started);
+        return Ok(std::mem::take(report));
     }
     let schema = crate::ekr::Binary(store.bin.clone())
         .model_schema()
@@ -922,6 +962,7 @@ fn process_in(
             let mut p = r.batch();
             let known = crate::known::for_batch(&store, &ontology, batch, &entities)
                 .map_err(Failure::Apply)?;
+            let known = Known::from_ontology(&ontology, known);
             let (shown, known) = pseudonymise(&mut p, batch, &uncut, &known);
             if let Some(why) = refused(&p, &shown, &known) {
                 return Err(Failure::Extract(why));
@@ -965,11 +1006,12 @@ fn process_in(
         // The store's nodes the batch names, of any type, then the run's own names.
         let known = crate::known::for_batch(&store, &ontology, &batch, &entities)
             .map_err(Failure::Apply)?;
+        // With the store's ontology names, masked and one-line.
+        let known = Known::from_ontology(&ontology, known);
         // The model is shown the batch with personal data replaced by placeholders; the mapping
         // stays in `pseudonyms`, in memory, until this batch's answer is restored.
         let ((prompt, fixed), pseudonyms) = match &redactor {
             None => {
-                let known = Known::from_ontology(&ontology, known);
                 let prompt = extract::prompt_split(
                     &spec.description,
                     instructions.as_deref(),
@@ -989,7 +1031,6 @@ fn process_in(
                     report.stopped = Some(why);
                     break;
                 }
-                let known = Known::from_ontology(&ontology, known);
                 let prompt = extract::prompt_split(
                     &spec.description,
                     instructions.as_deref(),
@@ -1039,7 +1080,14 @@ fn process_in(
         report.add_calls(calls, usage, fixed_bytes, prompt.len() - fixed);
         let answer = match asked {
             Ok(answer) => answer,
-            Err(refused) if refused.terminated => {
+            Err(refused) if refused.terminated == Some(extract::Stopped::Wait) => {
+                return Err(Failure::Terminated(format!(
+                    "the run was sent SIGTERM while it waited to ask the model again for batch \
+                     {}; no call was in flight",
+                    n - 1
+                )))
+            }
+            Err(refused) if refused.terminated.is_some() => {
                 return Err(Failure::Terminated(format!(
                     "the run was sent SIGTERM while the model was asked for batch {}; the call \
                      was ended",
@@ -1184,14 +1232,14 @@ fn process_in(
         }
         report.stopped = Some(why.clone());
     }
-    unread(&mut report, &fetched.unread, redactor.as_ref());
+    unread(report, &fetched.unread, redactor.as_ref());
     if undoable {
         held_to_gate(
             layout,
             spec,
             &store,
             label,
-            &report,
+            report,
             too_large
                 .as_deref()
                 .or(unreachable.as_ref().map(|(_, why)| why.as_str())),
@@ -1201,13 +1249,13 @@ fn process_in(
     }
     let failures = fetched.child_failures.clone();
     finish(
-        &mut seen, &seen_path, &report, wanted, held_since, window, failures,
+        &mut seen, &seen_path, report, wanted, held_since, window, failures,
     )?;
-    log(layout, label, &report, started);
+    log(layout, label, report, started);
     match (too_large, unreachable) {
         (Some(why), _) => Err(Failure::BatchTooLarge(why)),
         (None, Some((cause, why))) => Err(Failure::ModelUnavailable(cause, why)),
-        (None, None) => Ok(report),
+        (None, None) => Ok(std::mem::take(report)),
     }
 }
 
@@ -1219,6 +1267,9 @@ struct Undo {
     /// The snapshot's name, once the first `apply-extraction` committed and it was kept.
     kept: Option<String>,
     applied: bool,
+    /// Whether the run's applied batches were undone (a gate refusal, a gated run stopped or
+    /// unknown): the store does not hold its documents, so none is counted as applied.
+    undone: bool,
     /// The stage the run runs in, until the gate publishes or abandons it, or [`settle`] does.
     staged: Option<Staged>,
 }
@@ -1229,6 +1280,7 @@ impl Undo {
             before,
             kept: None,
             applied: false,
+            undone: false,
             staged: None,
         }
     }
@@ -1262,15 +1314,20 @@ fn settle(
     spec: &m::InstanceSpec,
     label: &str,
     ran: Result<Report, Failure>,
-    mut before: Undo,
+    before: &mut Undo,
 ) -> Result<Report, Failure> {
     // A run sent SIGTERM is undone when it is gated: its stage abandoned, or its kept snapshot
     // restored, as a run its gate refuses is; an ungated run keeps the batches it applied.
     if let Err(Failure::Terminated(why)) = &ran {
         return Err(Failure::Terminated(match before.staged.take() {
-            Some(staged) => format!("{why}; {}", staged.abandon()),
+            Some(staged) => {
+                before.undone = before.applied;
+                format!("{why}; {}", staged.abandon())
+            }
             None if gated(spec) && before.kept.is_some() => {
-                undo_stopped(layout, spec, label, "terminated", why, &before)
+                let (done, reason) = undo_stopped(layout, spec, label, "terminated", why, before);
+                before.undone = done;
+                reason
             }
             None if before.applied => {
                 format!("{why}; the batches applied before it stay applied and seen")
@@ -1283,7 +1340,7 @@ fn settle(
             // A gated run outside a stage whose write was unknown: an earlier batch committed
             // and the run never reached its gate, so it is undone as a run its gate refuses is.
             Err(Failure::StoreOutcomeUnknown(why)) if gated(spec) && before.kept.is_some() => {
-                Err(undo_unknown(layout, spec, label, why, &before))
+                Err(undo_unknown(layout, spec, label, why, before))
             }
             ran => ran,
         };
@@ -1336,16 +1393,11 @@ fn undo_unknown(
     spec: &m::InstanceSpec,
     label: &str,
     why: String,
-    before: &Undo,
+    before: &mut Undo,
 ) -> Failure {
-    Failure::StoreOutcomeUnknown(undo_stopped(
-        layout,
-        spec,
-        label,
-        "store-outcome-unknown",
-        &why,
-        before,
-    ))
+    let (done, reason) = undo_stopped(layout, spec, label, "store-outcome-unknown", &why, before);
+    before.undone = done;
+    Failure::StoreOutcomeUnknown(reason)
 }
 
 /// Undoes a gated run outside a stage that ended as `outcome` after a batch committed, from its
@@ -1358,7 +1410,7 @@ fn undo_stopped(
     outcome: &str,
     why: &str,
     before: &Undo,
-) -> String {
+) -> (bool, String) {
     let home = layout
         .dir
         .parent()
@@ -1378,7 +1430,19 @@ fn undo_stopped(
         "restored": restored,
         "reason": reason,
     }));
-    reason
+    (restored.is_some(), reason)
+}
+
+/// The failure a fetch's error is. A fetch the run stopped because it was sent SIGTERM
+/// ([`FetchError::Terminated`]) is [`Failure::Terminated`], saying what was ended.
+fn fetch_failure(e: FetchError) -> Failure {
+    match e {
+        FetchError::Missing(m) | FetchError::Failed(m) => Failure::Fetch(m),
+        FetchError::Unavailable(m) => Failure::ConnectionUnavailable(m),
+        FetchError::Terminated(m) => Failure::Terminated(format!(
+            "the run was sent SIGTERM and stopped while it fetched; {m}"
+        )),
+    }
 }
 
 /// A safe point of the run: [`Failure::Terminated`] once the run was sent SIGTERM, saying where
@@ -1670,6 +1734,7 @@ fn held_to_gate(
         .parent()
         .and_then(std::path::Path::parent)
         .unwrap_or(&layout.dir);
+    let staged_abandoned = before.staged.is_some();
     let (restored, undone) = match before.staged.take() {
         Some(staged) => (None, staged.abandon()),
         None => undo(
@@ -1679,6 +1744,7 @@ fn held_to_gate(
             &Systemd::from_env(home),
         ),
     };
+    before.undone = staged_abandoned || restored.is_some();
     let mut why = format!("{}; {undone}", gate::reason(&failed));
     if !report.too_large.is_empty() {
         why.push_str(&format!(
@@ -1905,6 +1971,10 @@ struct Records<'a> {
 /// seen, as its next run would refuse it again. A record with a mapped value that does not convert
 /// to its property's kind ([`structured::Source::unconverted`]) is left out of its batch, named in
 /// `unconverted`, and marked seen like an applied one, so it is skipped until its text changes.
+/// With a mapping of `store_lookup: AnyType`, the store is read before each batch
+/// ([`structured::Source::lookup`]): a record is written onto the store node of another type its
+/// name or aliases meet, and one meeting nodes of more than one type is left out of its batch,
+/// named in `rejected` and not marked seen.
 fn apply_records(
     layout: &Layout,
     r: &Records<'_>,
@@ -1953,7 +2023,29 @@ fn apply_records(
     let index = r.source.index(&issued, r.parents);
     for (n, batch) in batches(issued, BATCH_CHARS).into_iter().enumerate() {
         stop_point(&format!("before record batch {n}"))?;
-        let mapped = r.source.document(&batch, &index);
+        // `store_lookup: AnyType`: the store is read once per batch, and a record whose name or
+        // aliases meet nodes of more than one type is refused alone, named in `rejected` and not
+        // marked seen; the rest of the batch is applied.
+        let lookup = if r.source.looks_up() {
+            let snapshot = r.store.snapshot().map_err(Failure::Apply)?;
+            let ontology = r.store.ontology().map_err(Failure::Apply)?;
+            r.source.lookup(&index, &snapshot, &ontology)
+        } else {
+            structured::Lookup::default()
+        };
+        let (refused, batch): (Vec<_>, Vec<_>) = batch
+            .into_iter()
+            .partition(|issued| lookup.refused(&issued.doc.key).is_some());
+        for issued in &refused {
+            let why = lookup.refused(&issued.doc.key).unwrap_or_default();
+            report
+                .rejected
+                .push(Rejected::new(&issued.doc.key, &[why.to_string()]));
+        }
+        if batch.is_empty() {
+            continue;
+        }
+        let mapped = r.source.document(&batch, &index, &lookup);
         let (doc, refused) = extract::merge(&mapped.document, &batch);
         report.facts_refused += refused;
         let dir = r.run_dir.join(format!("batch-{n}"));
@@ -2101,13 +2193,9 @@ fn masked_key(redactor: Option<&Redactor>, key: &str) -> String {
 }
 
 /// Why the run refuses a batch: the classes `refuse_if_left` names that are still detected in
-/// what the model would be shown of it (`shown`, the known entity names `known`). Names the
-/// classes, never a value.
-fn refused(
-    p: &redact::Batch<'_>,
-    shown: &[evidence::Issued],
-    known: &[m::KnownEntity],
-) -> Option<String> {
+/// what the model would be shown of it (`shown`, the ontology and known entity names `known`).
+/// Names the classes, never a value.
+fn refused(p: &redact::Batch<'_>, shown: &[evidence::Issued], known: &Known) -> Option<String> {
     let mut left = BTreeSet::new();
     for issued in shown {
         let d = &issued.doc;
@@ -2119,10 +2207,7 @@ fn refused(
             left.extend(p.left(text));
         }
     }
-    for name in known
-        .iter()
-        .flat_map(|e| std::iter::once(&e.name).chain(&e.aliases))
-    {
+    for name in known_names(known) {
         left.extend(p.left(name));
     }
     (!left.is_empty()).then(|| {
@@ -2266,17 +2351,28 @@ struct Uncut {
     scrubbed: BTreeMap<String, usize>,
 }
 
-/// What the model is shown of `batch`, and the known entity names, with every value the
-/// redaction policy finds replaced by its placeholder in `p`: the document key (the `Source:`
-/// line), title, description and text. The text is the kept part of the text before the cut
-/// (`uncut`), so a value the cut splits is replaced too. What the irreversible rules replaced
-/// before storage is counted in `p` here, as the document is sent.
+/// Every name of `known` the prompt shows: the ontology's node type and relation lines, then each
+/// known entity's name and aliases.
+fn known_names(known: &Known) -> impl Iterator<Item = &String> {
+    known.node_types.iter().chain(&known.edge_types).chain(
+        known
+            .entities
+            .iter()
+            .flat_map(|e| std::iter::once(&e.name).chain(&e.aliases)),
+    )
+}
+
+/// What the model is shown of `batch`, and of `known` (the ontology names and the known entity
+/// names), with every value the redaction policy finds replaced by its placeholder in `p`: the
+/// document key (the `Source:` line), title, description and text. The text is the kept part of
+/// the text before the cut (`uncut`), so a value the cut splits is replaced too. What the
+/// irreversible rules replaced before storage is counted in `p` here, as the document is sent.
 fn pseudonymise(
     p: &mut redact::Batch<'_>,
     batch: &[evidence::Issued],
     uncut: &HashMap<String, Vec<Uncut>>,
-    entities: &[m::KnownEntity],
-) -> (Vec<evidence::Issued>, Vec<m::KnownEntity>) {
+    known: &Known,
+) -> (Vec<evidence::Issued>, Known) {
     let find = |doc: &sources::Document| -> Option<&Uncut> {
         uncut
             .get(&doc.key)
@@ -2319,10 +2415,7 @@ fn pseudonymise(
             p.reserve(&text);
         }
     }
-    for name in entities
-        .iter()
-        .flat_map(|e| std::iter::once(&e.name).chain(&e.aliases))
-    {
+    for name in known_names(known) {
         p.reserve_name(name);
     }
     let shown = batch
@@ -2344,14 +2437,19 @@ fn pseudonymise(
             }
         })
         .collect();
-    let known = entities
-        .iter()
-        .map(|e| m::KnownEntity {
-            name: p.replace(&e.name),
-            aliases: e.aliases.iter().map(|a| p.replace(a)).collect(),
-            ..e.clone()
-        })
-        .collect();
+    let known = Known {
+        node_types: known.node_types.iter().map(|t| p.replace(t)).collect(),
+        edge_types: known.edge_types.iter().map(|t| p.replace(t)).collect(),
+        entities: known
+            .entities
+            .iter()
+            .map(|e| m::KnownEntity {
+                name: p.replace(&e.name),
+                aliases: e.aliases.iter().map(|a| p.replace(a)).collect(),
+                ..e.clone()
+            })
+            .collect(),
+    };
     (shown, known)
 }
 

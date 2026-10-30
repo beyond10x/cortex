@@ -242,10 +242,24 @@ types:
   # `update`, `adopt` and a run alike) an empty template, a template that names no field, and a
   # template whose placeholders are not `{path}` with a dotted path of ASCII letters, digits, `_`
   # and `-` (an unclosed `{`, a lone `}`, `{}`, a nested `{`, or another character in a path, a
-  # non-ASCII letter included). A template alias matches a store node of the mapping's own
-  # `node_type` only. ESS
-  # has no construct for the grammar of a String; `spec::check` holds it and
-  # `tests/known_entities.rs` tests it.
+  # non-ASCII letter included). ESS has no construct for the grammar of a String; `spec::check`
+  # holds it and `tests/known_entities.rs` tests it.
+  # `store_lookup` is how a record meets the store's nodes (`cortex.instance.StoreLookup`); absent
+  # means `OwnType`.
+  # UNMAPPED: with `AnyType`, before each batch the run reads the store once (`ekr snapshot`) and
+  # takes, for every record of the run under that mapping, the nodes of any type whose canonical
+  # name or one of whose aliases equals the record's name or one of its aliases (its
+  # `alias_templates` included), both lowercased. A record whose matches are all of one type other
+  # than its `node_type` is written onto that node: its entity, properties and relations take that
+  # node's type and are named by that node's canonical name before the record's aliases, and a
+  # relation or a child's parent relation naming the record names that node. A record matching
+  # nodes of more than one type (its own included) is refused alone, naming the types: it is left
+  # out of its batch, named with its key in the run's `rejected` and not marked seen, and the rest
+  # of the batch is applied. So is a record whose matched node's type declares a mapped property in
+  # another value kind than the mapping writes, naming the type, the property and both kinds. A
+  # record matching no node, or nodes of its own type only, is written as with `OwnType`. ESS has
+  # no construct for a read of the store's graph; `src/structured.rs` holds it and
+  # `tests/known_entities_adversary.rs` tests it.
   - name: cortex.instance.RecordMapping
     kind: struct
     fields:
@@ -256,6 +270,15 @@ types:
       - {name: properties, type: List<cortex.instance.PropertyMapping>}
       - {name: relations, type: List<cortex.instance.RelationMapping>}
       - {name: alias_templates, type: Optional<List<String>>}
+      - {name: store_lookup, type: Optional<cortex.instance.StoreLookup>}
+
+  # How a structured record meets the store's nodes. `OwnType`: by its aliases, as EKR resolves
+  # them, within the mapping's `node_type` only (a template alias matches a store node of that
+  # type only). `AnyType`: by its name or one of its aliases, against nodes of every type
+  # (`cortex.instance.RecordMapping`).
+  - name: cortex.instance.StoreLookup
+    kind: enum
+    variants: [OwnType, AnyType]
 
   # Where a known entity shown to the model came from: `Store`, a node the store holds that one
   # of the batch's keys or aliases names; `Run`, a name cortex's own earlier runs extracted.
@@ -688,13 +711,21 @@ types:
   #   it recorded its outcome;
   # - `cortex_source_last_run_documents{source, kind}` (gauge), the last run's documents: `read`,
   #   the new or changed documents it selected to extract (`SourceRan.documents_new`), and
-  #   `applied` (`SourceRan.documents_applied`); present only when the last run ended `ran`;
+  #   `applied` (`SourceRan.documents_applied`); present when the last run ended `ran`, and when
+  #   it applied a batch and then ended with another outcome (`extraction-failed`,
+  #   `apply-refused`, `store-outcome-unknown`, `batch-too-large`, `terminated`,
+  #   `model-unavailable`), which reports what it read and applied before it ended; a run whose
+  #   applied batches were undone afterwards (its gate refused it, `apply-refused`, or a gated
+  #   run ended `terminated` or `store-outcome-unknown` and was undone) reports `applied` 0,
+  #   the store holding none of them, and still the documents it read and the tokens it spent;
   # - `cortex_source_documents_total{source, kind}` (counter), the same, added up over every run
-  #   that ended `ran`;
+  #   that reports them; a run that ended before it applied a batch adds nothing, and a run
+  #   that was undone adds no applied documents;
   # - `cortex_source_model_tokens_total{source, kind}` (counter), the model tokens those runs
   #   reported: `input` (`input_tokens` and `cache_creation_input_tokens`), `cached`
-  #   (`cache_read_input_tokens`) and `output` (`output_tokens`); a run whose answers did not
-  #   report a count adds nothing to it.
+  #   (`cache_read_input_tokens`) and `output` (`output_tokens`), each summed over the answers
+  #   that reported it, a failed answer included; an answer that did not report a count adds
+  #   nothing to it.
   # Every label is the source id or a fixed name: no series holds a credential, a prompt, a
   # question or document content. A source's status file (`status/<source>.json`) keeps these
   # figures, so the whole file is rewritten from the status files. A metric file cortex cannot
@@ -1245,10 +1276,10 @@ errors:
   - name: cortex.instance.RunTerminated
     summary: >-
       The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended,
-      and stopped at the next safe point: a model call in flight was ended. A gated run is undone
-      (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it
-      applied, and a later run extracts the rest. Nothing about the source was wrong: the failure
-      is not counted against it.
+      and stopped at the next safe point: a fetch or a model call in flight was ended. A gated run
+      is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the
+      batches it applied, and a later run extracts the rest. Nothing about the source was wrong:
+      the failure is not counted against it.
     fields:
       - {name: reason, type: String}
 
@@ -1691,7 +1722,8 @@ commands:
       # the Rust tests check it (a second run over unchanged input applies nothing). beyond10x/ess#459.
       # UNMAPPED: after every outcome that names a source, the instance's `monitoring` reports it:
       # `metrics.prom` is rewritten with the source's run counted under its outcome, its duration,
-      # and for `ran` its documents and model tokens (`cortex.instance.MonitoringSpec`), and for
+      # and for `ran`, or any outcome reached after a batch was applied, its documents and model
+      # tokens (`cortex.instance.MonitoringSpec`), and for
       # `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`,
       # `connection-unavailable`, `batch-too-large`, `terminated` and `model-unavailable` the hook
       # is called once, with
@@ -1714,11 +1746,18 @@ commands:
       # or another control character in it is written as a space. Behind a model window the
       # batch size counts the store hits' lines in the request's fixed part: a batch of more
       # than one document whose documents and known-entity lines exceed the size is split in
-      # two before it is sent. ESS has no construct for a read of the store's graph or for what
-      # a prompt holds; `src/run.rs` holds it and `tests/known_entities.rs` tests it.
+      # two before it is sent. The store's ontology names the prompt shows (`ekr ontology`: node
+      # type names, their property names and value kinds, edge type names with their source and
+      # target types) are masked for credential shapes and written on one line in the same way,
+      # with or without a redaction policy, and then pass through the instance's redaction like
+      # every known name. ESS has no construct for a read of the store's graph or for what
+      # a prompt holds; `src/run.rs` and `src/extract.rs` hold it and `tests/known_entities.rs`
+      # tests it.
       # A structured source calls no model; `alias_templates` reach the store as aliases of its
-      # entities, by which EKR resolves them to a node of their type: a template alias matches a
-      # store node of the mapping's own type only.
+      # entities, by which EKR resolves them to a node of their type: with the mapping's
+      # `store_lookup` absent or `OwnType`, a template alias matches a store node of the mapping's
+      # own type only; with `AnyType`, the run reads the store before each batch and writes a
+      # record onto the node of another type it names (`cortex.instance.RecordMapping`).
       # UNMAPPED: with `fetch_only` (`cortex run --fetch-only`), `fetched` exits 0 and
       # `fetch-only-failed` exits 1 and prints `fetch-failed`. Neither writes the source's status
       # file, `metrics.prom`, `cortex.log`, the seen documents or the window (`pending_since`),
@@ -1935,9 +1974,16 @@ commands:
           A part of one document is not this outcome: the run leaves it out and goes on.
 
       # UNMAPPED: the signal and the safe point. `cortex run` (not `--fetch-only`) handles SIGTERM:
-      # the run stops at its next safe point, before a fetch result is used, before each batch, or
-      # by ending the model call in flight (its process group is sent SIGTERM, then SIGKILL after
-      # 5 s); a structured source stops before each record batch. A gated run is undone as a run
+      # the run stops at its next safe point: during the fetch, by ending the `connectors` call in
+      # flight (its process group is sent SIGTERM, then SIGKILL after 5 s), before each page of a
+      # paged read, before each file of a `files` read and in a wait between Connectors attempts,
+      # with nothing marked seen and the window's `since` unchanged; before a fetch result is
+      # used; before each batch; in the wait before a model call is asked again; or by ending the
+      # model call in flight as a fetch's call is ended. A structured source stops before each
+      # record batch. The reason names the point: `stopped while it fetched`, `stopped before it
+      # used the documents it fetched`, `stopped before batch <n>`, `stopped before record batch
+      # <n>`, `while it waited to ask the model again for batch <n>; no call was in flight`, or
+      # `while the model was asked for batch <n>; the call was ended`. A gated run is undone as a run
       # its gate refuses is: its stage abandoned and `state/` put back, or its kept snapshot
       # restored; an ungated run keeps the batches it applied, each marked seen, and its window
       # is kept pending, as a failed run's is. A second SIGTERM ends the process at once, exit

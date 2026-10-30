@@ -2463,16 +2463,7 @@ fn run_source(
     let (done, failure) = match outcome {
         m::RunSourceOutcome::Ran { source_ran } => {
             let report = ctx.shared.borrow_mut().last_run.take().unwrap_or_default();
-            let count = |n: Option<i64>| n.and_then(|n| u64::try_from(n).ok());
-            figures = Some(cortex_cli::status::Figures {
-                read: count(Some(source_ran.documents_new)).unwrap_or(0),
-                applied: count(Some(source_ran.documents_applied)).unwrap_or(0),
-                input_tokens: count(source_ran.input_tokens)
-                    .zip(count(source_ran.cache_creation_input_tokens))
-                    .map(|(a, b)| a.saturating_add(b)),
-                cached_tokens: count(source_ran.cache_read_input_tokens),
-                output_tokens: count(source_ran.output_tokens),
-            });
+            figures = Some(run_figures(&report));
             let mut detail = json!({
                 "source_id": source_ran.source_id.0,
                 "documents_new": source_ran.documents_new,
@@ -2688,6 +2679,12 @@ fn run_source(
             None,
         ),
     };
+    // A run that applied a batch and then failed left its report: its documents and tokens are
+    // counted as a run's that ended `ran` are.
+    if figures.is_none() {
+        let partial = ctx.shared.borrow_mut().last_run.take();
+        figures = partial.as_ref().map(run_figures);
+    }
     print("run", &done);
     let disabled = match (record, &failure) {
         (true, Some(reason)) => record_failure(app, ctx, source_id, reason).1,
@@ -2698,6 +2695,22 @@ fn run_source(
         report_run(ctx, source_id, disabled, figures);
     }
     ExitCode::from(status)
+}
+
+/// What a run read, applied and spent, as `metrics.prom` counts it, whether it ended `ran` or
+/// failed after it applied a batch: the tokens its answers reported (`Report::reported`).
+fn run_figures(report: &run::Report) -> cortex_cli::status::Figures {
+    let count = |n: Option<i64>| n.and_then(|n| u64::try_from(n).ok());
+    let usage = &report.reported;
+    cortex_cli::status::Figures {
+        read: count(Some(report.documents_new)).unwrap_or(0),
+        applied: count(Some(report.documents_applied)).unwrap_or(0),
+        input_tokens: count(usage.input_tokens)
+            .zip(count(usage.cache_creation_input_tokens))
+            .map(|(a, b)| a.saturating_add(b)),
+        cached_tokens: count(usage.cache_read_input_tokens),
+        output_tokens: count(usage.output_tokens),
+    }
 }
 
 /// Writes the source's status from the outcome the run recorded on it, then the metric file and

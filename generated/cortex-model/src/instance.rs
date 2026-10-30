@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 7ccf330472ee77d5d7927ee6cbe52d97a814952deb8feb02ebc8e5db1a66db2d
-// contract digest 45be6012d6ca07f5842ea4b833a0421e5880da4b6a06706d61c0d0abe43f7aab
+// model digest 5a29cefca25e2266b019b8b5b6031137a2e3440abb9403edfa5363b3e1284768
+// contract digest 813e9e892f7c25641e646e3a1ef94f827001f7769520922c88de4f5af1cb5113
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -605,6 +605,8 @@ pub struct RecordMapping {
     pub relations: Vec<RelationMapping>,
     /// `alias_templates` — `Optional<List<String>>`.
     pub alias_templates: Option<Vec<String>>,
+    /// `store_lookup` — `Optional<cortex.instance.StoreLookup>`.
+    pub store_lookup: Option<StoreLookup>,
 }
 
 /// RedactionClass — `cortex.instance.RedactionClass`: one of a closed set of names.
@@ -964,6 +966,15 @@ pub struct SourceSpec {
 pub struct SqliteStore {
     /// `path` — `Optional<String>`.
     pub path: Option<String>,
+}
+
+/// StoreLookup — `cortex.instance.StoreLookup`: one of a closed set of names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StoreLookup {
+    /// `OwnType`.
+    OwnType,
+    /// `AnyType`.
+    AnyType,
 }
 
 /// StoreSpec — `cortex.instance.StoreSpec`: one of a fixed set of shapes, tagged on the wire by `backend`.
@@ -3205,7 +3216,7 @@ pub struct RestoreUnsupported {
 
 /// The declared error `cortex.instance.RunTerminated`.
 ///
-/// The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended, and stopped at the next safe point: a model call in flight was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about the source was wrong: the failure is not counted against it.
+/// The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) before it ended, and stopped at the next safe point: a fetch or a model call in flight was ended. A gated run is undone (its stage abandoned, or its kept snapshot restored); an ungated run keeps the batches it applied, and a later run extracts the rest. Nothing about the source was wrong: the failure is not counted against it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunTerminated {
     /// `reason` — `String`.

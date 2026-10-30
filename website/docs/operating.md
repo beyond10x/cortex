@@ -140,16 +140,19 @@ run's. A `store-outcome-unknown`, `connection-unavailable`, `batch-too-large`,
 ## Stopping a run
 
 `cortex run` handles SIGTERM, which a Kubernetes Job's deadline or `systemctl stop` sends. The
-run stops at its next safe point: once its fetch returns, before each batch, or at once during a
-model call, whose process group is sent SIGTERM and, after 5 seconds, SIGKILL. A structured
-source stops before each record batch. A gated run is then undone as a run its gate refuses is:
+run stops at its next safe point: at once during its fetch or a model call, whose process (with
+its process group) is sent SIGTERM and, after 5 seconds, SIGKILL; between the pages of a paged
+read and the files of a `files` source; before it uses what it fetched; before each batch; and in
+the wait before a model call is asked again. A structured source stops before each record batch.
+A run stopped during its fetch marks nothing seen and keeps its window, so the next run asks for
+the same `since`. A gated run is then undone as a run its gate refuses is:
 on `postgres` its stage is abandoned and `state/` put back, on `sqlite` its kept snapshot is
 restored once a batch committed. An ungated run keeps the batches it applied, each marked seen,
 and the next run extracts the rest. The run prints `terminated` with a `reason` saying where it
 stopped and what was undone, records it in the source's status, the metric file and the hook,
-and exits 8. A fetch from Connectors is not interrupted: the run stops when it returns, so leave
-a grace period (Kubernetes' `terminationGracePeriodSeconds`, systemd's `TimeoutStopSec`) longer
-than a fetch takes. A second SIGTERM ends the process at once with exit status 143, recording
+and exits 8. Leave a grace period (Kubernetes' `terminationGracePeriodSeconds`, systemd's
+`TimeoutStopSec`) of more than 5 seconds, so a child that ignores SIGTERM is killed before the
+run is. A second SIGTERM ends the process at once with exit status 143, recording
 nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
 
 ## What one run does
@@ -219,7 +222,10 @@ listed. Matching is exact after lowercasing (`str::to_lowercase`, not full case 
 does not match `Straße`); a similar name is not a hit. A store node's name and aliases are another
 writer's text: they are masked for credential shapes on every run, with or without a `redaction`
 policy, and then pass through the policy like every known name; a line break or another control
-character in a type, name or alias is written as a space, so each type keeps its one line. Behind
+character in a type, name or alias is written as a space, so each type keeps its one line. The
+store's ontology names the prompt lists (node types with their properties and value kinds,
+relations with their source and target types) are treated the same way: masked, then the
+policy, and each written on one line. Behind
 a model window, a batch whose store hits make its prompt's fixed part longer than the batch size
 allowed for is split in two before it is sent (see
 [the batch size](./spec-file.md#the-batch-size)). `ekr snapshot` reads the
@@ -368,12 +374,17 @@ cortex_source_model_tokens_total{source="example/news",kind="output"} 6120
 | `cortex_source_runs_total{source, outcome}` | counter | the source's runs under each outcome (`ran`, `fetch-failed`, `extraction-failed`, `apply-refused`, `store-outcome-unknown`, `connection-unavailable`, `batch-too-large`, `terminated`, `model-unavailable`, `disabled`), every outcome written, 0 for one that never happened |
 | `cortex_source_last_run_timestamp_seconds{source}` | gauge | when the last run started |
 | `cortex_source_last_run_duration_seconds{source}` | gauge | how long the last run took, to the moment it recorded its outcome, whatever the outcome |
-| `cortex_source_last_run_documents{source, kind}` | gauge | the last run's documents: `read`, the new or changed documents it selected to extract (`documents_new`), and `applied` (`documents_applied`). Present only when the last run ended `ran` |
-| `cortex_source_documents_total{source, kind}` | counter | the same, added up over the runs that ended `ran` |
-| `cortex_source_model_tokens_total{source, kind}` | counter | the model tokens those runs reported: `input` (`input_tokens` and `cache_creation_input_tokens`), `cached` (`cache_read_input_tokens`) and `output` (`output_tokens`). A run whose answers did not report a count adds nothing to it |
+| `cortex_source_last_run_documents{source, kind}` | gauge | the last run's documents: `read`, the new or changed documents it selected to extract (`documents_new`), and `applied` (`documents_applied`). Present when the last run ended `ran`, and when it applied a batch and then ended with another outcome (`extraction-failed`, `apply-refused`, `store-outcome-unknown`, `batch-too-large`, `terminated`, `model-unavailable`): then it reports what the run read and applied before it ended. Absent after a run that ended before it applied a batch |
+| `cortex_source_documents_total{source, kind}` | counter | the same, added up over every run that reports them, whatever its outcome; a run that ended before it applied a batch adds nothing |
+| `cortex_source_model_tokens_total{source, kind}` | counter | the model tokens those runs reported: `input` (`input_tokens` and `cache_creation_input_tokens`), `cached` (`cache_read_input_tokens`) and `output` (`output_tokens`), each summed over the answers that reported it, a failed answer included. An answer that did not report a count adds nothing to it |
 
-A run that did not end `ran` adds no documents or tokens, even when it applied batches before it
-stopped (`batch-too-large`, `model-unavailable`, `terminated`). Every label is the source id or a
+A run that applied batches and then ended with another outcome (`extraction-failed`,
+`apply-refused`, `store-outcome-unknown`, `batch-too-large`, `terminated` or `model-unavailable`)
+and kept its batches adds the documents it read and applied
+and the tokens its answers reported, as a run that ended `ran` does; a run that ended before it
+applied a batch adds none. A run that was undone afterwards (its gate refused it, or a gated run
+ended `terminated` or `store-outcome-unknown` and was undone) adds the documents it read and the
+tokens it spent but no applied document, as the store holds none of them. Every label is the source id or a
 fixed name: no series holds a credential, a prompt, a question or a document's content. The
 figures are kept in the status file and start from the first run cortex recorded them for.
 
