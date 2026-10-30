@@ -1410,3 +1410,60 @@ fn a_document_not_applied_whose_time_cannot_be_read_keeps_the_window_start() {
     assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
     assert_eq!(state(&w, "untimed-advance")["pending_since"], pending);
 }
+
+/// Adversary: a run that fails holds back a change by `refresh_after_days` (I-1, changed 20 hours
+/// ago, applied a day ago) and fails on a newer document (I-2, an hour ago). Its failure path
+/// moves `pending_since` to I-2's time less the overlap, past I-1's change, and records no
+/// `held_since` for it (only `finish` does). Once the refresh time passes, the next run asks from
+/// after I-1's change, and the change never reaches the model.
+#[test]
+#[ignore = "adversary: a failed run moves pending_since past a change it held back and records no held_since, so the change is never read"]
+fn adversary_a_failed_run_does_not_move_the_window_past_a_change_it_held_back() {
+    let w = world_with(FILTERING);
+    let wrapped = w.bin.join("claude-wrapped");
+    executable(
+        &wrapped,
+        &FAILS_ON_POISON
+            .replace("@ROOT@", &w.root.display().to_string())
+            .replace("@INNER@", &w.bin.join("claude").display().to_string()),
+    );
+    write_rows(&w, &[(now_ms() - 2 * DAY_MS, "I-1", "v1".to_string())]);
+    let timed = WINDOWED.replace("id: key\n", "id: key\n        time: updated\n");
+    create_source(&w, "heldfail", &timed, 3, 5000, 50);
+    sleep_past_a_second();
+    run(&w, "heldfail");
+    pass_a_day(&w, "heldfail");
+
+    let now = now_ms();
+    write_rows(
+        &w,
+        &[
+            (now - 20 * 3_600_000, "I-1", "v2".to_string()),
+            (now - 3_600_000, "I-2", "POISON issue".to_string()),
+        ],
+    );
+    sleep_past_a_second();
+    let (code, ran) = w.cortex(&[
+        "--claude",
+        wrapped.to_str().unwrap(),
+        "run",
+        "heldfail/tracker",
+    ]);
+    assert_eq!(
+        (code, ran["outcome"].as_str()),
+        (1, Some("extraction-failed")),
+        "{ran}"
+    );
+
+    // The refresh time passes, and the model answers again.
+    age(&w, "heldfail", 4);
+    sleep_past_a_second();
+    run(&w, "heldfail");
+    let docs = prompted(&w, "heldfail");
+    assert!(
+        docs.iter().any(|d| d.contains("I-1: v2")),
+        "the change to I-1 never reached the model; state {}; asked {:#?}",
+        state(&w, "heldfail"),
+        w.lines("issues.log")
+    );
+}

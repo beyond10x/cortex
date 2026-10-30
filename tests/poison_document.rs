@@ -352,3 +352,133 @@ fn an_error_answer_that_cost_nothing_is_not_split_and_counts_no_document() {
     );
     assert!(failures(&w).is_null(), "{}", failures(&w));
 }
+
+/// Adversary: the stand-in `claude` wrapped as [`WRAPPER`] is, with two more modes. While the
+/// file `outage` exists, every call outlives `model.timeout_s` and is ended by `timeout`, as a
+/// model that is slow for a few hours is. With the file `burns-budget`, a prompt holding `POISON`
+/// is answered with an error that spent the run's whole `budget_usd` (1).
+const ADVERSARY_WRAPPER: &str = r#"R="@ROOT@"
+cat > "$R/req.txt"
+echo call >> "$R/wrapped-calls.log"
+if [ -e "$R/outage" ]; then exec sleep 5; fi
+if grep -q POISON "$R/req.txt"; then
+  if [ -e "$R/burns-budget" ]; then
+    echo '{"type":"result","subtype":"error_max_budget_usd","is_error":true,"result":"","total_cost_usd":1}'
+  else
+    echo '{"type":"result","subtype":"success","is_error":true,"result":"The model could not answer this batch.","total_cost_usd":0.01}'
+  fi
+  exit 1
+fi
+exec "@INNER@" "$@" < "$R/req.txt"
+"#;
+
+/// A world as [`world_edited`] makes it, whose wrapped `claude` is [`ADVERSARY_WRAPPER`].
+fn adversary_world(texts: &[&str], edit: impl Fn(String) -> String) -> World {
+    let w = World::new();
+    executable(
+        &w.bin.join("claude-wrapped"),
+        &ADVERSARY_WRAPPER
+            .replace("@ROOT@", &w.root.display().to_string())
+            .replace("@INNER@", &w.bin.join("claude").display().to_string()),
+    );
+    serve(&w, texts);
+    let spec = w.spec("p", "conn_test");
+    let text = std::fs::read_to_string(&spec).unwrap();
+    std::fs::write(&spec, edit(text)).unwrap();
+    let (code, created) = w.cortex(&["create", "--spec", spec.to_str().unwrap(), "--no-units"]);
+    assert_eq!(code, 0, "{created}");
+    w
+}
+
+/// The source's seen keys, none when no run wrote its state.
+fn seen_keys_if_any(w: &World) -> Vec<String> {
+    match std::fs::read(instance(w).join("state/news.json")) {
+        Ok(bytes) => serde_json::from_slice::<Value>(&bytes).unwrap()["documents"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Adversary: a model that times out for a few hours (here four runs in a row) is not a fault
+/// of any document. Every call is ended by `timeout`, which leaves no JSON answer: an uncosted
+/// failure, so not a free error answer, so marked, split and counted. On the fourth run the
+/// first document of the batch reaches the limit and is skipped until its text changes, though
+/// nothing is wrong with it; once the model answers again it is never asked.
+#[test]
+#[ignore = "adversary: a model that times out on consecutive runs gets a healthy document skipped until its text changes"]
+fn adversary_a_model_timing_out_on_consecutive_runs_skips_no_healthy_document() {
+    let w = adversary_world(
+        &[
+            CLEAN,
+            "Example Labs ships the Gadget runtime.",
+            "Example Labs ships the Sprocket toolkit.",
+            "Example Labs ships the Gizmo service.",
+        ],
+        |s| {
+            assert!(s.contains("timeout_s: 60}"), "{s}");
+            s.replacen("timeout_s: 60}", "timeout_s: 1}", 1)
+        },
+    );
+    std::fs::write(w.root.join("outage"), "").unwrap();
+    for _ in 0..=DOCUMENT_FAILURE_LIMIT {
+        let (code, ran) = run(&w);
+        assert_eq!(code, 1, "every run of the outage fails: {ran}");
+    }
+    std::fs::remove_file(w.root.join("outage")).unwrap();
+    let (code, ran) = run(&w);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(
+        seen_keys_if_any(&w),
+        [key(0), key(1), key(2), key(3)],
+        "a document was left out after the outage: skipped {}; failures {}",
+        ran["detail"]["skipped"],
+        failures(&w)
+    );
+}
+
+/// Adversary: a document the model fails on every time, whose text changes on every run (a page
+/// with a view counter, a thread that gains a reply). Each changed text starts its count again
+/// and is not marked, so it never reaches the limit; and every split of its batch puts it first
+/// and stops the run at it before the documents after it are asked. The source stays blocked
+/// for good, as before the change.
+#[test]
+#[ignore = "adversary: a poison document whose text changes every run is never skipped and blocks the documents after it for good"]
+fn adversary_a_poison_document_whose_text_changes_every_run_blocks_no_other_document() {
+    let w = world(&[POISONED, CLEAN, CLEAN], "");
+    for n in 0..6 {
+        let poisoned = format!("{POISONED} Read {n} times.");
+        serve(&w, &[&poisoned, CLEAN, CLEAN]);
+        run(&w);
+    }
+    assert_eq!(
+        seen_keys_if_any(&w),
+        [key(1), key(2)],
+        "after 6 runs; failures {}",
+        failures(&w)
+    );
+}
+
+/// Adversary: a batch on which the model spends the run's whole `budget_usd` before it fails
+/// (`error_max_budget_usd`, the call bounded by `--max-budget-usd`). Each later run splits it and
+/// stops at the budget before either half is asked, so the poison document never fails alone,
+/// is never counted, and the healthy document beside it is never applied.
+#[test]
+#[ignore = "adversary: a failing batch that spends the run's budget is split on every run and neither half is ever asked"]
+fn adversary_a_failing_batch_that_spends_the_run_budget_does_not_block_the_source_for_good() {
+    let w = adversary_world(&[CLEAN, POISONED], |s| s);
+    std::fs::write(w.root.join("burns-budget"), "").unwrap();
+    for _ in 0..6 {
+        run(&w);
+    }
+    assert_eq!(
+        seen_keys_if_any(&w),
+        [key(0)],
+        "after 6 runs, {} calls; failures {}",
+        w.lines("wrapped-calls.log").len(),
+        failures(&w)
+    );
+}
