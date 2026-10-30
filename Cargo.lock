@@ -297,7 +297,7 @@ version = "1.0.0"
 
 [[package]]
 name = "cortex-cli"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "axum",
  "clap",
