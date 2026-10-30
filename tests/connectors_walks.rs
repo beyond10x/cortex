@@ -1321,7 +1321,7 @@ fn the_window_advances_to_the_earliest_document_not_applied() {
         "{seen}"
     );
 
-    // Run 2 asks from there, splits the batch, applies I-1 and stops at I-2, which fails alone:
+    // Run 2 asks from there, asks each marked document alone, applies I-1 and stops at I-2, which fails alone:
     // the window moves to I-2's time.
     sleep_past_a_second();
     let (code, ran) = run_wrapped();
@@ -1334,14 +1334,12 @@ fn the_window_advances_to_the_earliest_document_not_applied() {
     assert!(seen.get("last_success_started_at").is_none(), "{seen}");
     assert_eq!(seen["pending_since"], expected, "{seen}");
 
-    // Run 3 asks from there, fails at I-2 before anything is applied, and leaves the same window.
+    // Run 3 asks from there, applies I-3 (asked alone before I-2, which failed alone before),
+    // stops at I-2, and leaves the same window.
     sleep_past_a_second();
     let (code, ran) = run_wrapped();
-    assert_eq!(
-        (code, ran["outcome"].as_str()),
-        (1, Some("extraction-failed")),
-        "{ran}"
-    );
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
     let third = field(w.lines("issues.log").last().unwrap(), "updated_since");
     assert_eq!(third, rfc3339(expected));
     assert!(third > second, "{third} > {second}");
@@ -1351,7 +1349,7 @@ fn the_window_advances_to_the_earliest_document_not_applied() {
     sleep_past_a_second();
     let (code, ran) = run_wrapped();
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
-    assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 0, "{ran}");
     assert!(ran["detail"]["stopped"].is_null(), "{ran}");
     let seen = state(&w, "advance");
     assert!(seen.get("pending_since").is_none(), "{seen}");
@@ -1417,7 +1415,6 @@ fn a_document_not_applied_whose_time_cannot_be_read_keeps_the_window_start() {
 /// `held_since` for it (only `finish` does). Once the refresh time passes, the next run asks from
 /// after I-1's change, and the change never reaches the model.
 #[test]
-#[ignore = "adversary: a failed run moves pending_since past a change it held back and records no held_since, so the change is never read"]
 fn adversary_a_failed_run_does_not_move_the_window_past_a_change_it_held_back() {
     let w = world_with(FILTERING);
     let wrapped = w.bin.join("claude-wrapped");

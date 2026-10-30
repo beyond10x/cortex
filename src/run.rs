@@ -846,6 +846,14 @@ fn process_in(
     // outside `state/`, so a run that is undone does not reset them.
     let failures_path = crate::state::failures_path(&layout.dir, label);
     let mut failures = Failures::load(&failures_path).map_err(Failure::Fetch)?;
+    // A run that read the source's whole listing (no window, nothing unread) drops the counts of
+    // documents the source no longer lists.
+    if window.is_none() && fetched.unread.is_empty() {
+        let keys: BTreeSet<&str> = docs.iter().map(|d| d.key.as_str()).collect();
+        if failures.listed_only(&keys) {
+            failures.save(&failures_path).map_err(Failure::Apply)?;
+        }
+    }
     let refresh = policy.refresh_after_days;
     let docs: Vec<_> = docs
         .into_iter()
@@ -871,6 +879,7 @@ fn process_in(
             .filter(|d| seen.wants(d, started, refresh))
             .map(Wanted::of)
             .collect(),
+        held_since,
     };
     let selected = seen.select(
         docs,
@@ -1022,10 +1031,24 @@ fn process_in(
     let mut too_large: Option<String> = None;
     // Why the run ended `model-unavailable`, when the model could not be reached.
     let mut unreachable: Option<(extract::Unavailable, String)> = None;
-    // Why a batch the run split failed, the first time one did: the run's failure when it then
-    // stops at a limit with nothing applied.
-    let mut split_failure: Option<String> = None;
     while let Some((batch, depth)) = queue.pop_front() {
+        // A batch that holds a document of a batch that failed before is not asked whole again:
+        // its other documents are asked together first, then each such document alone, those
+        // that failed alone on fewer runs first. So a document that fails every time is counted
+        // and stops no other, and a failing call that spends the run's budget still leaves the
+        // next run one document further.
+        if batch.len() > 1 && batch.iter().any(|i| failures.marked(&i.doc)) {
+            let (mut marked, rest): (Vec<_>, Vec<_>) =
+                batch.into_iter().partition(|i| failures.marked(&i.doc));
+            marked.sort_by_key(|i| failures.runs(&i.doc));
+            for issued in marked.into_iter().rev() {
+                queue.push_front((vec![issued], depth));
+            }
+            if !rest.is_empty() {
+                queue.push_front((rest, depth));
+            }
+            continue;
+        }
         stop_point(&format!("before batch {n}"))?;
         // Behind a gateway no dollar amount bounds the call, and none is passed to `claude`.
         let remaining = match budget {
@@ -1191,27 +1214,13 @@ fn process_in(
                 ));
                 break;
             }
-            // The model was asked and failed on a batch of several documents that holds one that
-            // failed before: the batch is split in two and each half asked, down to one
-            // document, so one document that fails every time stops no other. An error answer
-            // that cost nothing came before any model was asked (a sign-in or a usage limit): not
-            // the batch's fault, never split or counted.
-            Err(refused)
-                if !refused.free_error_answer()
-                    && batch.len() > 1
-                    && batch.iter().any(|i| failures.marked(&i.doc)) =>
-            {
-                split_failure.get_or_insert(refused.message);
-                let mut first = batch;
-                let second = first.split_off(first.len() / 2);
-                queue.push_front((second, depth));
-                queue.push_front((first, depth));
-                continue;
-            }
-            // A batch of several documents, none of which failed before, that fails for the
-            // first time: its documents are marked, so a later run splits it if it fails again,
-            // and the run stops at it as at any failed batch. A transient failure costs no split.
-            Err(refused) if !refused.free_error_answer() && batch.len() > 1 => {
+            // The model answered that it failed on a batch of several documents, none of which
+            // failed before: its documents are marked, so a later run asks each alone, and the
+            // run stops at it as at any failed batch. Only an answer marks or counts: an error
+            // answer that cost nothing came before any model was asked (a sign-in or a usage
+            // limit), and a call that timed out, crashed or left no JSON says nothing of the
+            // documents, as an unreachable model does not.
+            Err(refused) if refused.model_failed_on_request() && batch.len() > 1 => {
                 let reason = masked_key(redactor.as_ref(), &refused.message);
                 for issued in &batch {
                     failures.failed_in_batch(&issued.doc, &reason);
@@ -1226,7 +1235,7 @@ fn process_in(
             // A document that failed alone is counted, outside `state/`; from its
             // `DOCUMENT_FAILURE_LIMIT`th consecutive run on it is skipped, holds no window, and
             // the batches after it run. Below that, the run stops at it, as at any failed batch.
-            Err(refused) if !refused.free_error_answer() => {
+            Err(refused) if refused.model_failed_on_request() => {
                 let doc = &batch[0].doc;
                 let reason = masked_key(redactor.as_ref(), &refused.message);
                 let runs = failures.failed(doc, &reason);
@@ -1402,16 +1411,6 @@ fn process_in(
             report.stopped = Some(why);
             break;
         }
-    }
-    // A failed batch was split, and the run stopped at a limit (its budget, its tokens, the day's
-    // ceiling) before any part was applied: the failure stays the run's answer, as without the
-    // split, with the stop said beside it.
-    if let (Some(failure), Some(stopped), true) = (
-        &split_failure,
-        &report.stopped,
-        report.documents_applied == 0 && too_large.is_none() && unreachable.is_none(),
-    ) {
-        return Err(Failure::Extract(format!("{failure}; {stopped}")));
     }
     if let Some(why) = &too_large {
         if report.documents_applied == 0 {

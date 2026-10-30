@@ -121,6 +121,10 @@ pub struct Refused {
     pub cost_usd: Option<f64>,
     /// The backend answered, and its answer was an error (`is_error`).
     pub error_answer: bool,
+    /// The backend answered in JSON, as a model that was asked does: an error answer, or an
+    /// answer with no structured output. A call that timed out, crashed, was ended or left no
+    /// JSON did not.
+    pub answered: bool,
     /// The error answer said the request did not fit the model's window ([`unfit`]).
     pub unfit: Option<Unfit>,
     /// The run was sent SIGTERM ([`crate::terminate`]): where it was when it stopped.
@@ -221,6 +225,7 @@ impl Refused {
             message,
             cost_usd: Some(0.0),
             error_answer: false,
+            answered: false,
             unfit: None,
             terminated: None,
             unavailable: None,
@@ -235,6 +240,7 @@ impl Refused {
             message,
             cost_usd: None,
             error_answer: false,
+            answered: false,
             unfit: None,
             terminated: None,
             unavailable: None,
@@ -268,8 +274,15 @@ impl Refused {
 
     /// An error answer that cost zero: the shape of an answer given before any model was asked
     /// (a sign-in or a usage limit), worth asking once more. A missing cost is not zero.
-    pub fn free_error_answer(&self) -> bool {
+    fn free_error_answer(&self) -> bool {
         self.error_answer && self.cost_usd == Some(0.0) && self.unfit.is_none()
+    }
+
+    /// The model was asked and answered that it failed on the request: an answer in JSON
+    /// ([`Refused::answered`]) that is not a free error answer. A timeout, a crash or a call
+    /// that left no JSON is not the request's fault, as an unreachable model is not.
+    pub fn model_failed_on_request(&self) -> bool {
+        self.answered && !self.free_error_answer()
     }
 }
 
@@ -843,6 +856,7 @@ impl Model {
                 message,
                 cost_usd,
                 error_answer: true,
+                answered: true,
                 unfit,
                 terminated: None,
                 unavailable,
@@ -864,6 +878,7 @@ impl Model {
                 ),
                 cost_usd,
                 error_answer: false,
+                answered: true,
                 unfit: None,
                 terminated: None,
                 unavailable: None,

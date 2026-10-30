@@ -1,10 +1,11 @@
 //! `story:poison-document-skipped`: a document whose extraction fails the same way on consecutive
-//! runs stops blocking the source. A batch of several documents that fails for the first time
-//! marks them and fails as before; a failing batch that holds a marked document is split in two
-//! and each half asked; a document is counted only when it fails alone. Its count lives in
-//! `failures/<source>.json` beside `state/`, so a run that is undone does not reset it; from the
-//! [`DOCUMENT_FAILURE_LIMIT`]th consecutive failure on, the document is left out, named in
-//! `skipped` with its count and reason, and the batches after it run. A changed text asks it again.
+//! runs stops blocking the source. A batch of several documents that the model answers it failed
+//! on for the first time marks them and fails as before; a later run asks each marked document
+//! alone, those that failed alone on fewer runs first; a document is counted only when it fails
+//! alone. Its count lives in `failures/<source>.json` beside `state/`, so a run that is undone
+//! does not reset it; from the [`DOCUMENT_FAILURE_LIMIT`]th consecutive failure on, the document
+//! is left out, named in `skipped` with its count and reason, and the batches after it run. A
+//! changed text is asked once more alone and keeps the count.
 
 mod common;
 
@@ -17,7 +18,8 @@ use serde_json::{json, Value};
 /// The stand-in `claude` wrapped: a prompt holding `POISON` is answered with an error that cost
 /// something (the model was asked and failed on it); with the file `free` present, every prompt is
 /// answered with an error that cost nothing (a sign-in or a usage limit, before any model was
-/// asked). Anything else is answered as `tests/common`'s stand-in does. Every call is appended to
+/// asked); with the file `unstructured` present, a prompt holding `POISON` is answered with no
+/// structured output. Anything else is answered as `tests/common`'s stand-in does. Every call is appended to
 /// `wrapped-calls.log`, and its prompt to `prompts.log`.
 const WRAPPER: &str = r#"R="@ROOT@"
 cat > "$R/req.txt"
@@ -28,6 +30,10 @@ if [ -e "$R/free" ]; then
   exit 1
 fi
 if grep -q POISON "$R/req.txt"; then
+  if [ -e "$R/unstructured" ]; then
+    echo '{"type":"result","subtype":"success","is_error":false,"result":"","total_cost_usd":0.01}'
+    exit 0
+  fi
   echo '{"type":"result","subtype":"success","is_error":true,"result":"The model could not answer this batch.","total_cost_usd":0.01}'
   exit 1
 fi
@@ -144,8 +150,8 @@ fn a_document_failing_alone_on_consecutive_runs_is_skipped_and_later_batches_run
         assert_eq!(runs_of(&w, i), 0, "{}", failures(&w));
     }
 
-    // Run 2: the batch holds marked documents and fails again: it is halved, then halved again,
-    // down to d1 alone; d0, before it, is applied, and the run stops at d1, its first failure.
+    // Run 2: the batch holds marked documents, so it is not asked whole again: each is asked
+    // alone. d0 is applied, and the run stops at d1, its first failure alone, counted.
     let (code, ran) = run(&w);
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
     assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
@@ -154,29 +160,31 @@ fn a_document_failing_alone_on_consecutive_runs_is_skipped_and_later_batches_run
         stopped.contains("The model could not answer this batch.") && stopped.contains(&key(1)),
         "{ran}"
     );
-    assert_eq!(
-        w.lines("wrapped-calls.log").len(),
-        1 + 4,
-        "[0-3], [0-1], [0], [1]"
-    );
+    assert_eq!(w.lines("wrapped-calls.log").len(), 1 + 2, "[0-3], [0], [1]");
     assert_eq!(runs_of(&w, 1), 1, "{}", failures(&w));
     assert!(runs_of(&w, 0).is_null(), "applied: {}", failures(&w));
     assert_eq!(seen_keys(&w), [key(0)]);
 
-    // Run 3: d1 fails alone again before anything is applied: the run fails, counted.
-    let (code, ran) = run(&w);
-    assert_eq!(
-        (code, ran["outcome"].as_str()),
-        (1, Some("extraction-failed")),
-        "{ran}"
-    );
-    assert_eq!(runs_of(&w, 1), 2, "{}", failures(&w));
-
-    // Run N+1: d1 fails alone a third time, is skipped, and the batches after it run: every
-    // other document is applied, and d1 is named in `skipped` with its count and the reason.
+    // Run 3: d2 and d3, marked with no count, are asked alone before d1 and applied; d1 fails
+    // alone again, counted, and the run stops at it.
     let (code, ran) = run(&w);
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
     assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
+    assert!(
+        ran["detail"]["stopped"]
+            .as_str()
+            .is_some_and(|s| s.contains(&key(1))),
+        "{ran}"
+    );
+    assert_eq!(w.lines("wrapped-calls.log").len(), 3 + 3, "[2], [3], [1]");
+    assert_eq!(runs_of(&w, 1), 2, "{}", failures(&w));
+    assert_eq!(seen_keys(&w), [key(0), key(2), key(3)]);
+
+    // Run N+1: d1 fails alone a third time and is skipped; the run does not stop at it, every
+    // other document is applied, and d1 is named in `skipped` with its count and the reason.
+    let (code, ran) = run(&w);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 0, "{ran}");
     assert!(ran["detail"]["stopped"].is_null(), "{ran}");
     let skipped = ran["detail"]["skipped"].to_string();
     assert!(
@@ -225,7 +233,8 @@ fn a_document_failing_alone_on_consecutive_runs_is_skipped_and_later_batches_run
         .contains_key(&key(1)));
     assert_eq!(seen_keys(&w), [key(0), key(2), key(3), key(4)]);
 
-    // Its text changed: d1 is asked again, applied, and its count removed.
+    // Its text changed and the model answers it: d1 is asked again, applied, and its count
+    // removed.
     serve(
         &w,
         &[
@@ -246,10 +255,11 @@ fn a_document_failing_alone_on_consecutive_runs_is_skipped_and_later_batches_run
     assert!(runs_of(&w, 1).is_null(), "{}", failures(&w));
 }
 
-/// A changed text starts the count again: two failures, a change, and two more do not reach the
-/// limit.
+/// A changed text is asked again, alone, and keeps the count: two failures, a change that fails
+/// too, and the document is left out at the limit; the same text is then not asked, a further
+/// change is asked once more, and a text the model answers is applied and drops the count.
 #[test]
-fn a_changed_text_starts_the_count_again() {
+fn a_changed_text_is_asked_once_more_alone_and_keeps_its_count() {
     let w = world(&[POISONED], "");
     for _ in 0..2 {
         run(&w);
@@ -260,12 +270,37 @@ fn a_changed_text_starts_the_count_again() {
         &["Example Labs develops the Widget engine. POISON, changed"],
     );
     let (code, ran) = run(&w);
-    assert_eq!(
-        (code, ran["outcome"].as_str()),
-        (1, Some("extraction-failed")),
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert!(
+        ran["detail"]["skipped"]
+            .to_string()
+            .contains("3 consecutive runs"),
         "{ran}"
     );
-    assert_eq!(runs_of(&w, 0), 1, "{}", failures(&w));
+    assert_eq!(runs_of(&w, 0), 3, "{}", failures(&w));
+    assert_eq!(w.lines("wrapped-calls.log").len(), 3);
+
+    run(&w);
+    assert_eq!(
+        w.lines("wrapped-calls.log").len(),
+        3,
+        "the same text is not asked"
+    );
+
+    serve(
+        &w,
+        &["Example Labs develops the Widget engine. POISON, changed again"],
+    );
+    let (code, ran) = run(&w);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(w.lines("wrapped-calls.log").len(), 4, "asked once more");
+    assert_eq!(runs_of(&w, 0), 4, "{}", failures(&w));
+
+    serve(&w, &[CLEAN]);
+    let (code, ran) = run(&w);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
+    assert!(runs_of(&w, 0).is_null(), "{}", failures(&w));
 }
 
 /// A run its gate refuses puts `state/` back; the failure count is outside it and stays.
@@ -299,38 +334,31 @@ fn a_run_its_gate_refuses_keeps_the_failure_count() {
     }
 }
 
-/// A batch split after its second failure, whose parts a limit then keeps from being asked (here
-/// the run's token budget, which an answer with no `usage` stops): the run applied nothing and
-/// fails as the batch did, with the stop said beside it, not `ran`.
+/// An answer with no structured output is the model failing on the request, as an error answer
+/// is: the batch's documents are marked, the next run asks each alone and counts the one it fails
+/// on, and the others are applied.
 #[test]
-fn a_split_batch_stopped_by_a_limit_before_any_part_fails_as_the_batch_did() {
-    let w = world_edited(&[CLEAN, POISONED], |s| {
-        assert!(s.contains("timeout_s: 60}"), "{s}");
-        s.replacen(
-            "timeout_s: 60}",
-            "timeout_s: 60, budget_tokens: 1000000}",
-            1,
-        )
-    });
+fn an_answer_with_no_structured_output_marks_and_counts_as_an_error_answer_does() {
+    let w = world(&[CLEAN, POISONED], "");
+    std::fs::write(w.root.join("unstructured"), "").unwrap();
     let (code, ran) = run(&w);
     assert_eq!(
         (code, ran["outcome"].as_str()),
         (1, Some("extraction-failed")),
         "{ran}"
     );
-    let (code, ran) = run(&w);
-    assert_eq!(
-        (code, ran["outcome"].as_str()),
-        (1, Some("extraction-failed")),
-        "{ran}"
-    );
-    let reason = ran["detail"]["reason"].as_str().unwrap_or_default();
     assert!(
-        reason.contains("The model could not answer this batch.")
-            && reason.contains("token budget"),
+        ran["detail"]["reason"]
+            .as_str()
+            .is_some_and(|r| r.contains("no structured output")),
         "{ran}"
     );
-    assert_eq!(w.lines("wrapped-calls.log").len(), 2, "no part was asked");
+    assert_eq!((runs_of(&w, 0), runs_of(&w, 1)), (json!(0), json!(0)));
+    let (code, ran) = run(&w);
+    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
+    assert_eq!(seen_keys(&w), [key(0)]);
+    assert_eq!(runs_of(&w, 1), 1, "{}", failures(&w));
+    assert_eq!(w.lines("wrapped-calls.log").len(), 1 + 2, "[0-1], [0], [1]");
 }
 
 /// An error answer that cost nothing came before any model was asked: the batch is not split and
@@ -409,7 +437,6 @@ fn seen_keys_if_any(w: &World) -> Vec<String> {
 /// first document of the batch reaches the limit and is skipped until its text changes, though
 /// nothing is wrong with it; once the model answers again it is never asked.
 #[test]
-#[ignore = "adversary: a model that times out on consecutive runs gets a healthy document skipped until its text changes"]
 fn adversary_a_model_timing_out_on_consecutive_runs_skips_no_healthy_document() {
     let w = adversary_world(
         &[
@@ -446,7 +473,6 @@ fn adversary_a_model_timing_out_on_consecutive_runs_skips_no_healthy_document() 
 /// and stops the run at it before the documents after it are asked. The source stays blocked
 /// for good, as before the change.
 #[test]
-#[ignore = "adversary: a poison document whose text changes every run is never skipped and blocks the documents after it for good"]
 fn adversary_a_poison_document_whose_text_changes_every_run_blocks_no_other_document() {
     let w = world(&[POISONED, CLEAN, CLEAN], "");
     for n in 0..6 {
@@ -467,7 +493,6 @@ fn adversary_a_poison_document_whose_text_changes_every_run_blocks_no_other_docu
 /// stops at the budget before either half is asked, so the poison document never fails alone,
 /// is never counted, and the healthy document beside it is never applied.
 #[test]
-#[ignore = "adversary: a failing batch that spends the run's budget is split on every run and neither half is ever asked"]
 fn adversary_a_failing_batch_that_spends_the_run_budget_does_not_block_the_source_for_good() {
     let w = adversary_world(&[CLEAN, POISONED], |s| s);
     std::fs::write(w.root.join("burns-budget"), "").unwrap();

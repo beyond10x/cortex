@@ -39,21 +39,25 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 ### Fixed
 
 - A document the model failed on every time stopped its source at the same batch on every run,
-  and nothing counted failures per document. A batch of several documents that fails again after
-  a failed run is now split in two and each half asked, down to one document (its first failure
-  still fails the run as before, after one call, and marks its documents). A document that fails
-  alone is counted in `failures/<source>.json`, beside `state/`, so a run its gate undoes keeps
-  the count; from its third consecutive failure with the same text it is skipped, named in
-  `skipped` with its count and the reason, not sent to the model, and the batches after it run.
-  A changed text is asked again. An error answer that cost nothing (a sign-in or a usage limit)
-  is neither split nor counted.
+  and nothing counted failures per document. A batch of several documents the model answers it
+  failed on still fails the run as before, after one call, and now marks its documents; a later
+  run asks each marked document alone, those that failed alone fewer times first, so a failing
+  call that spends the run's budget still leaves the next run a document further. A document that
+  fails alone is counted in `failures/<source>.json`, beside `state/`, so a run its gate undoes
+  keeps the count; from its third consecutive failure it is skipped while its text is the one
+  that last failed, named in `skipped` with its count and the reason, not sent to the model, and
+  the batches after it run. A changed text keeps the count and is asked once more alone. Only an
+  answer marks or counts: an error answer that cost nothing (a sign-in or a usage limit) and a
+  call that timed out, crashed or left no JSON answer do not. A run that read the source's whole
+  listing drops the counts of documents it no longer lists.
 - Under a backlog, a source's window stayed at its start for good: one document that kept failing
   held every later run's `{since}` there, also before the first successful run. A run that does
   not succeed now moves `pending_since` to the earliest record time of a wanted document it did
   not apply, less 5 minutes, when it read every record and each such time is readable, and the
   next run asks from there; a failed run follows the same rule. A run that left records unread or
   a document without a readable `time` keeps its `{since}` as before, and a document skipped
-  after failing alone holds no window.
+  after failing alone holds no window. The window never moves past a change the run held back
+  by `refresh_after_days`, also when the run fails.
 - A run sent SIGTERM during its fetch ran the fetch out before it stopped. The fetch is now a safe
   point: the `connectors` call in flight is ended with its process group (SIGKILL after 5
   seconds), a paged or `files` read stops between pages and files, and the run ends `terminated`,

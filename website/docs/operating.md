@@ -262,22 +262,26 @@ calls have used `model.budget_tokens`, when the instance's tokens of the UTC day
 its tokens could not be counted (see [the spec file](./spec-file.md#limits-in-tokens)). Each stop is checked before a
 batch, keeps the batches before it applied, and names the limit in `stopped`.
 
-When the model is asked and fails on a batch of several documents for the first time, the run
-stops there as at any failed batch (after one call), and the batch's documents are marked. When a
-batch that holds a marked document fails again, it is split in two and each half asked, down to
-one document, so one document that fails every time does not stop the others. An error answer
-that cost nothing came before any model was asked (a sign-in or a usage limit) and is neither
-split, marked nor counted. A split batch whose parts a limit keeps from being asked, with nothing
-applied, fails as the batch did. A document that fails alone is counted in
+When the model answers that it failed on a batch of several documents (an error answer, or an
+answer with no structured output), the run stops there as at any failed batch (after one call),
+and the batch's documents are marked. A later run does not ask that batch whole again: it asks
+its unmarked documents together, then each marked document alone, those that failed alone fewer
+times first, so one document that fails every time does not stop the others, and a failing call
+that spends the run's `budget_usd` still leaves the next run a document further. Only an answer
+marks or counts a document: an error answer that cost nothing came before any model was asked (a
+sign-in or a usage limit), and a call that timed out, crashed or left no JSON answer says nothing
+about the documents; neither marks nor counts one. A document that fails alone is counted in
 `failures/<source>.json` in the instance directory, beside `state/` and not in it, so a run its
 gate undoes keeps the count. Below 3 consecutive failures the run stops at that document: when an
 earlier document was applied, the run ends as `ran` with `stopped` set, naming the document and its
 count; when none was, nothing was applied and the run fails as `extraction-failed`. From the third
-consecutive failure of the same text on, the document is skipped: it is named in `skipped`
-(`<key>: extraction failed with the document alone on 3 consecutive runs (<reason>); skipped until
-its text changes`), in the run's result and in `cortex.log`, it is not sent to the model, it holds
-no window, and the batches after it run. A changed text is asked again and counted from one; an
-applied document drops its count.
+consecutive failure on, while its text is the one that last failed, the document is skipped: it
+is named in `skipped` (`<key>: extraction failed with the document alone on 3 consecutive runs
+(<reason>); skipped until its text changes`), in the run's result and in `cortex.log`, it is not
+sent to the model, it holds no window, and the batches after it run. A changed text keeps the
+count and is asked once more alone: applied, it drops the count; failed, it is skipped again. A
+run that read the source's whole listing (no window, nothing left unread) drops the counts of
+documents the source no longer lists.
 
 ### Counting what a run would extract
 

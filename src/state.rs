@@ -6,7 +6,7 @@
 //! ([`Origin::FileRecord`]), which is delivered again as soon as it changed, or a structured
 //! source's change whose text changed only in its links ([`SeenState::unlinked`]).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use cortex_model::instance as m;
@@ -287,8 +287,15 @@ impl SeenState {
     /// earliest record time of a document it wanted and did not apply, less [`OVERLAP_MS`], when
     /// its fetch read every record of the window and that time is readable for every such
     /// document; the window's start otherwise, and when it left no wanted document unapplied. It
-    /// is never before the window's start nor after its end.
+    /// is never before the window's start nor after its end, and never after the `held_since` the
+    /// run computed, so a run that fails before it records `held_since` leaves no held change
+    /// behind its window.
     pub fn pending_after(&self, backlog: &Backlog, window: Window) -> i64 {
+        let pending = self.unapplied_since(backlog, window);
+        backlog.held_since.map_or(pending, |held| pending.min(held))
+    }
+
+    fn unapplied_since(&self, backlog: &Backlog, window: Window) -> i64 {
         if !backlog.complete {
             return window.since_ms;
         }
@@ -316,6 +323,9 @@ pub struct Backlog {
     /// Every document the run wanted, as it fetched it; a document skipped after failing on
     /// [`DOCUMENT_FAILURE_LIMIT`] consecutive runs is not one of them.
     pub wanted: Vec<Wanted>,
+    /// The earliest applied time, less the overlap, of a document the run holds back by
+    /// `refresh_after_days`, as `held_since` records it.
+    pub held_since: Option<i64>,
 }
 
 /// A document a windowed run wanted: its key, its hash ([`doc_hash`]) and its record time
@@ -347,11 +357,13 @@ pub fn failures_path(instance_dir: &Path, source: &str) -> PathBuf {
 }
 
 /// Consecutive runs whose extraction of a document failed with the document alone in its
-/// request, per key: the hash of the text that failed, the count, and the last reason. A document
-/// of a batch of several that failed is marked with a count of `0` ([`Failures::failed_in_batch`]),
-/// so a later run splits a failing batch that holds it ([`Failures::marked`]). A changed text
-/// starts the count again; an applied document drops its entry. From [`DOCUMENT_FAILURE_LIMIT`]
-/// on, a run leaves the document out ([`Failures::skips`]).
+/// request, per key: the hash of the text that last failed, the count, and the last reason. A
+/// document of a batch of several that failed is marked with a count of `0`
+/// ([`Failures::failed_in_batch`]), so a later run asks it alone ([`Failures::marked`]). The count
+/// is kept per key across text changes; an applied document drops its entry. From
+/// [`DOCUMENT_FAILURE_LIMIT`] on, a run leaves the document out while its text is the one that
+/// last failed ([`Failures::skips`]): a changed text is asked once more alone, and a failure
+/// leaves it out again.
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Failures {
     pub format: String,
@@ -392,22 +404,22 @@ impl Failures {
         crate::home::write_atomic(path, text.as_bytes())
     }
 
-    /// The entry that leaves `doc` out of a run: its text failed alone on
-    /// [`DOCUMENT_FAILURE_LIMIT`] or more consecutive runs.
+    /// The entry that leaves `doc` out of a run: it failed alone on [`DOCUMENT_FAILURE_LIMIT`] or
+    /// more consecutive runs, the last with the text it has now.
     pub fn skips(&self, doc: &Document) -> Option<&Failed> {
         self.documents
             .get(&doc.key)
             .filter(|f| f.runs >= DOCUMENT_FAILURE_LIMIT && f.hash == doc_hash(doc))
     }
 
-    /// Counts one more failure of `doc` alone, for `reason`, and answers the count: one more than
-    /// before for the same text, `1` for a text that changed.
+    /// Counts one more failure of `doc` alone, for `reason`, with its text now, and answers the
+    /// count: one more than before, whatever text failed before.
     pub fn failed(&mut self, doc: &Document, reason: &str) -> u32 {
         let hash = doc_hash(doc);
-        let runs = match self.documents.get(&doc.key) {
-            Some(f) if f.hash == hash => f.runs.saturating_add(1),
-            _ => 1,
-        };
+        let runs = self
+            .documents
+            .get(&doc.key)
+            .map_or(1, |f| f.runs.saturating_add(1));
         self.documents.insert(
             doc.key.clone(),
             Failed {
@@ -420,28 +432,37 @@ impl Failures {
     }
 
     /// Marks `doc`, of a batch of several documents that failed, for `reason`: a count of `0`,
-    /// unless its text already has one.
+    /// unless it already has one.
     pub fn failed_in_batch(&mut self, doc: &Document, reason: &str) {
-        let hash = doc_hash(doc);
-        if self.documents.get(&doc.key).is_some_and(|f| f.hash == hash) {
+        if self.documents.contains_key(&doc.key) {
             return;
         }
         self.documents.insert(
             doc.key.clone(),
             Failed {
-                hash,
+                hash: doc_hash(doc),
                 runs: 0,
                 reason: reason.to_string(),
             },
         );
     }
 
-    /// Whether `doc`'s text failed before, alone or in a batch: a failing batch that holds it is
-    /// split.
+    /// Whether `doc` failed before, alone or in a batch, with any text: a run asks it alone.
     pub fn marked(&self, doc: &Document) -> bool {
-        self.documents
-            .get(&doc.key)
-            .is_some_and(|f| f.hash == doc_hash(doc))
+        self.documents.contains_key(&doc.key)
+    }
+
+    /// How many consecutive runs `doc` failed alone: `0` when it did not.
+    pub fn runs(&self, doc: &Document) -> u32 {
+        self.documents.get(&doc.key).map_or(0, |f| f.runs)
+    }
+
+    /// Drops the entries of documents the source no longer lists, `listed` being every key it
+    /// lists; answers whether one was dropped.
+    pub fn listed_only(&mut self, listed: &BTreeSet<&str>) -> bool {
+        let before = self.documents.len();
+        self.documents.retain(|k, _| listed.contains(k.as_str()));
+        self.documents.len() != before
     }
 
     /// Drops the count of an applied document; answers whether it had one.
@@ -808,6 +829,7 @@ mod tests {
         );
         let backlog = Backlog {
             complete: true,
+            held_since: None,
             wanted: [&a, &b, &c].into_iter().map(Wanted::of).collect(),
         };
         let mut state = SeenState::default();
@@ -837,11 +859,13 @@ mod tests {
         let state = SeenState::default();
         let unread = Backlog {
             complete: false,
+            held_since: None,
             wanted: vec![Wanted::of(&a)],
         };
         assert_eq!(state.pending_after(&unread, WINDOW), WINDOW.since_ms);
         let unreadable = Backlog {
             complete: true,
+            held_since: None,
             wanted: vec![Wanted::of(&a), Wanted::of(&untimed)],
         };
         assert_eq!(state.pending_after(&unreadable, WINDOW), WINDOW.since_ms);
@@ -851,6 +875,7 @@ mod tests {
         );
         let none_left = Backlog {
             complete: true,
+            held_since: None,
             wanted: vec![],
         };
         assert_eq!(state.pending_after(&none_left, WINDOW), WINDOW.since_ms);
@@ -858,13 +883,43 @@ mod tests {
         let late = timed("l", "three", Some("2030-01-01"));
         let ahead = Backlog {
             complete: true,
+            held_since: None,
             wanted: vec![Wanted::of(&late)],
         };
         assert_eq!(state.pending_after(&ahead, WINDOW), WINDOW.until_ms);
     }
 
+    /// A change the run held back by `refresh_after_days` keeps the window no later than its
+    /// `held_since`, so a run that fails before it records `held_since` leaves the change ahead.
+    #[test]
+    fn the_pending_window_is_never_after_a_change_the_run_held_back() {
+        let a = timed("a", "one", Some("2001-09-11T01:46:40Z"));
+        let held = WINDOW.since_ms + 3_600_000;
+        let backlog = Backlog {
+            complete: true,
+            held_since: Some(held),
+            wanted: vec![Wanted::of(&a)],
+        };
+        let state = SeenState::default();
+        assert_eq!(state.pending_after(&backlog, WINDOW), held);
+        let earlier = Backlog {
+            held_since: Some(WINDOW.since_ms - 1),
+            ..backlog.clone()
+        };
+        assert_eq!(state.pending_after(&earlier, WINDOW), WINDOW.since_ms - 1);
+        let later = Backlog {
+            held_since: Some(WINDOW.until_ms),
+            ..backlog
+        };
+        assert_eq!(
+            state.pending_after(&later, WINDOW),
+            1_000_172_800_000 - OVERLAP_MS
+        );
+    }
+
     /// `story:poison-document-skipped`: a document is skipped from its third consecutive failure
-    /// with the same text; a changed text starts again at one; an applied document drops it.
+    /// alone while its text is the one that last failed; a changed text is asked once more and
+    /// keeps the count; an applied document drops it.
     #[test]
     fn a_document_is_skipped_from_its_limit_th_failure_with_the_same_text() {
         let x = doc("https://example.org/x", "poison");
@@ -880,16 +935,27 @@ mod tests {
             (DOCUMENT_FAILURE_LIMIT, "refused again")
         );
         let changed = doc("https://example.org/x", "poison, edited");
-        assert!(failures.skips(&changed).is_none());
-        assert!(!failures.marked(&changed));
-        assert_eq!(failures.failed(&changed, "refused"), 1);
+        assert!(
+            failures.skips(&changed).is_none(),
+            "a changed text is asked"
+        );
+        assert!(failures.marked(&changed), "alone");
+        assert_eq!(
+            failures.failed(&changed, "refused"),
+            DOCUMENT_FAILURE_LIMIT + 1
+        );
+        assert!(failures.skips(&changed).is_some(), "and left out again");
+        assert!(
+            failures.skips(&x).is_none(),
+            "the text that failed is now the changed one"
+        );
         assert!(failures.applied(&changed.key));
         assert!(!failures.applied(&changed.key));
         assert!(failures.documents.is_empty());
     }
 
-    /// A document of a failed batch of several is marked with no count; a mark keeps a count its
-    /// text already has, and the next failure alone counts one.
+    /// A document of a failed batch of several is marked with no count; a mark keeps a count the
+    /// document already has, whatever its text, and the next failure alone counts one.
     #[test]
     fn a_document_of_a_failed_batch_is_marked_and_keeps_its_count() {
         let x = doc("https://example.org/x", "poison");
@@ -904,8 +970,25 @@ mod tests {
         assert_eq!(failures.documents[&x.key].runs, 2);
         let changed = doc("https://example.org/x", "poison, edited");
         failures.failed_in_batch(&changed, "batch refused");
-        assert_eq!(failures.documents[&x.key].runs, 0);
-        assert!(failures.marked(&changed) && !failures.marked(&x));
+        assert_eq!(failures.documents[&x.key].runs, 2);
+        assert!(failures.marked(&changed) && failures.marked(&x));
+        assert_eq!(failures.runs(&changed), 2);
+        assert_eq!(failures.runs(&doc("https://example.org/y", "fine")), 0);
+    }
+
+    /// With the source's full listing, the entries of documents it no longer lists are dropped.
+    #[test]
+    fn entries_of_documents_no_longer_listed_are_dropped() {
+        let mut failures = Failures::default();
+        failures.failed(&doc("https://example.org/x", "poison"), "refused");
+        failures.failed_in_batch(&doc("https://example.org/y", "fine"), "refused");
+        let listed = BTreeSet::from(["https://example.org/x", "https://example.org/y"]);
+        assert!(!failures.listed_only(&listed));
+        assert!(failures.listed_only(&BTreeSet::from(["https://example.org/y"])));
+        assert_eq!(
+            failures.documents.keys().collect::<Vec<_>>(),
+            ["https://example.org/y"]
+        );
     }
 
     /// The failures file lives beside `state/`, not in it; a missing one holds none, and a key

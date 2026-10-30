@@ -363,9 +363,11 @@ succeeds, so the next run asks again for what it did not apply. When the run rea
 and every new or changed document it did not apply has a readable `time`, that `{since}` is the
 earliest of those times less 5 minutes, never before the run's own `{since}`: under a backlog
 the window moves forward past what was applied, and one document that keeps failing holds it
-only at its own time. Otherwise it is the run's own `{since}`. That holds before the first
-successful run too: the window does not slide with the clock. A document skipped after failing
-alone on 3 consecutive runs (see [Operating](./operating.md#what-one-run-does)) holds no window. Records are left unread by a walk
+only at its own time. Otherwise it is the run's own `{since}`. It is never after a change the run
+held back by `refresh_after_days`, so a run that fails leaves that change in the next window.
+That holds before the first successful run too: the window does not slide with the clock. A
+document skipped after failing alone on 3 consecutive runs (see
+[Operating](./operating.md#what-one-run-does)) holds no window. Records are left unread by a walk
 that reaches `max_pages` with pages left, by an empty page that still names a next one, by a
 `NextLink` link without its parameter, and by a child call that fails for a record, which leaves
 that record out of the run. Each of these says so in `stopped`, in the run's result and in
