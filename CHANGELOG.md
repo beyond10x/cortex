@@ -64,6 +64,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 ### Fixed
 
+- A `connectors` call that hung held its run until something outside ended it. Every call is now
+  waited for at most `CORTEX_CONNECTORS_TIMEOUT_S` seconds (default 120); past it the call is
+  killed and fails as `timeout`, which fails the run as `fetch-failed`.
+- A `files` source read every file whole, however large, and left out a file it could not read
+  or that was not UTF-8 text without a word. A file over 16 MiB, unreadable or not UTF-8 text is
+  now named in the run's `skipped` with the reason. A `structured` source's file over 16 MiB fails
+  the fetch, naming the file, as an unreadable one already did, so `dropped: Supersede` never ends
+  the values of a file it did not read. A `records` lookup file over 16 MiB fails the fetch too.
 - A `connectors` record whose id was JSON null was keyed `<adapter>:<operation>:null`, so all
   such records shared one document and all but one were dropped without a word; a record without
   an id was dropped silently. Both are now left out and counted in the run's `skipped` with the

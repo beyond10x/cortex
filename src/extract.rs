@@ -814,6 +814,10 @@ impl Model {
             Waited::Failed(_) if sigterm => return Err(Refused::terminated()),
             Waited::Failed(e) => return Err(Refused::uncosted(e)),
             Waited::Terminated => return Err(Refused::terminated()),
+            // `wait_finished` sets no deadline; the model call is bounded by `timeout`.
+            Waited::TimedOut => {
+                return Err(Refused::uncosted("claude ran past its deadline".into()))
+            }
         };
         let answer: Value = serde_json::from_slice(&out.stdout).map_err(|_| {
             let stderr = String::from_utf8_lossy(&out.stderr);

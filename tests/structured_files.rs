@@ -311,6 +311,55 @@ fn a_registry_file_that_is_not_json_fails_the_run_and_ends_nothing() {
     }
 }
 
+/// `story:connectors-call-deadline` acceptance 2, for a `structured` source: a registry file over
+/// the 16 MiB cap, or one that cannot be read, fails the fetch naming the file and the reason, and
+/// ends nothing. It is not skipped, since with `dropped: Supersede` a skipped file's records would
+/// read as no longer listed and be retracted.
+#[test]
+fn a_registry_file_over_the_cap_or_unreadable_fails_the_run_and_ends_nothing() {
+    use std::os::unix::fs::PermissionsExt;
+    let w = world();
+    before(&w);
+    create(&w, "c", Some("Supersede"));
+    run(&w, "c");
+    let first = teams(&w, "c");
+
+    let huge = w.root.join("registry/huge.json");
+    std::fs::File::create(&huge)
+        .unwrap()
+        .set_len(16 * 1024 * 1024 + 1)
+        .unwrap();
+    let (code, ran) = w.cortex(&["run", "c/registry"]);
+    assert_eq!(
+        (code, ran["outcome"].as_str()),
+        (1, Some("fetch-failed")),
+        "{ran}"
+    );
+    let reason = ran["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.contains("huge.json") && reason.contains("16 MiB"),
+        "{reason}"
+    );
+    std::fs::remove_file(&huge).unwrap();
+
+    let people = w.root.join("registry/people.json");
+    std::fs::set_permissions(&people, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let (code, ran) = w.cortex(&["run", "c/registry"]);
+    std::fs::set_permissions(&people, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(
+        (code, ran["outcome"].as_str()),
+        (1, Some("fetch-failed")),
+        "{ran}"
+    );
+    let reason = ran["detail"]["reason"].as_str().unwrap_or_default();
+    assert!(reason.contains("people.json"), "{reason}");
+
+    let after = teams(&w, "c");
+    for who in [ADA, GRACE, LINUS] {
+        assert_eq!(active(&after[who]), active(&first[who]), "{who}");
+    }
+}
+
 /// The `MEMBER_OF` relations of the store: `(person, team, lifecycle)` per assertion, and
 /// `(person, team)` per edge.
 #[allow(clippy::type_complexity)]

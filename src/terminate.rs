@@ -46,6 +46,9 @@ pub enum Waited {
     Failed(String),
     /// The run was sent SIGTERM, and the child was ended.
     Terminated,
+    /// The child was still running at its deadline ([`wait_within`]): it was killed, with its
+    /// process group, and reaped.
+    TimedOut,
 }
 
 /// Sends `input`, when given, to `child`'s piped stdin and waits for it, reading its output on
@@ -55,7 +58,19 @@ pub enum Waited {
 /// closes the pipe; its exit status and stderr say why, so a broken pipe is not the error
 /// reported. `name` names the child in a failure.
 pub fn wait(child: &mut std::process::Child, input: Option<&[u8]>, name: &str) -> Waited {
-    wait_with(child, input, name, false, requested).0
+    wait_with(child, input, name, false, requested, None).0
+}
+
+/// [`wait`], at most `limit` from now: a child still running then is sent SIGKILL, with its
+/// process group, reaped, and answered as [`Waited::TimedOut`].
+pub fn wait_within(
+    child: &mut std::process::Child,
+    input: Option<&[u8]>,
+    name: &str,
+    limit: Duration,
+) -> Waited {
+    let deadline = Instant::now() + limit;
+    wait_with(child, input, name, false, requested, Some(deadline)).0
 }
 
 /// [`wait`], except that a child found already exited when the run's SIGTERM is seen is read,
@@ -67,16 +82,18 @@ pub fn wait_finished(
     input: Option<&[u8]>,
     name: &str,
 ) -> (Waited, bool) {
-    wait_with(child, input, name, true, requested)
+    wait_with(child, input, name, true, requested, None)
 }
 
-/// [`wait`] and [`wait_finished`], with `requested` read for the run's SIGTERM.
+/// [`wait`], [`wait_finished`] and [`wait_within`], with `requested` read for the run's SIGTERM
+/// and the child killed once it runs past `deadline`.
 fn wait_with(
     child: &mut std::process::Child,
     input: Option<&[u8]>,
     name: &str,
     keep_finished: bool,
     requested: impl Fn() -> bool,
+    deadline: Option<Instant>,
 ) -> (Waited, bool) {
     use std::io::{Read, Write};
     let mut seen = false;
@@ -124,6 +141,10 @@ fn wait_with(
                 end(child);
                 return (Waited::Terminated, false);
             }
+            Ok(None) if deadline.is_some_and(|d| Instant::now() >= d) => {
+                kill(child);
+                return (Waited::TimedOut, false);
+            }
             Ok(None) => std::thread::sleep(Duration::from_millis(20)),
             Err(e) => {
                 end(child);
@@ -167,6 +188,15 @@ pub fn end(child: &mut std::process::Child) {
         std::thread::sleep(Duration::from_millis(20));
     }
     signal(Signal::KILL);
+    let _ = child.wait();
+}
+
+/// Kills a child and its process group at once (SIGKILL), and reaps it.
+fn kill(child: &mut std::process::Child) {
+    use rustix::process::{kill_process, kill_process_group, Pid, Signal};
+    let pid = Pid::from_child(child);
+    let _ = kill_process_group(pid, Signal::KILL);
+    let _ = kill_process(pid, Signal::KILL);
     let _ = child.wait();
 }
 
@@ -221,11 +251,11 @@ mod tests {
     #[test]
     fn a_child_that_exited_before_sigterm_was_seen_is_read_when_asked() {
         let mut child = exited(r#"{"total_cost_usd":0.4}"#);
-        let (waited, seen) = wait_with(&mut child, None, "sh", false, || true);
+        let (waited, seen) = wait_with(&mut child, None, "sh", false, || true, None);
         assert!(matches!(waited, Waited::Terminated) && !seen);
 
         let mut child = exited(r#"{"total_cost_usd":0.4}"#);
-        let (waited, seen) = wait_with(&mut child, None, "sh", true, || true);
+        let (waited, seen) = wait_with(&mut child, None, "sh", true, || true, None);
         let Waited::Done(out) = waited else {
             panic!("the finished child's output is read");
         };
@@ -233,7 +263,7 @@ mod tests {
         assert_eq!(out.stdout, br#"{"total_cost_usd":0.4}"#);
 
         let mut child = exited("ok");
-        let (waited, seen) = wait_with(&mut child, None, "sh", true, || false);
+        let (waited, seen) = wait_with(&mut child, None, "sh", true, || false, None);
         assert!(matches!(waited, Waited::Done(_)) && !seen);
     }
 }

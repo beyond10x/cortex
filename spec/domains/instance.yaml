@@ -1991,6 +1991,15 @@ commands:
           rest. No model was asked, and nothing was written: not the store, the seen documents,
           the source's status or `cortex.log`; no snapshot or stage was taken and no run counted.
 
+      # UNMAPPED: the bound of a `connectors` call. Every call a run makes through the `connectors`
+      # binary is waited for at most `CORTEX_CONNECTORS_TIMEOUT_S` seconds (120, at least 1); past
+      # it the call and its process group are killed and reaped, and the call fails as `timeout`,
+      # not retried, which an invocation answers as `fetch-failed`. A file a `files` source reads
+      # that cannot be read, is over 16 MiB or is not UTF-8 text is named in `skipped`; one of a
+      # `structured` source's `files` input fails the fetch instead, so that `dropped: Supersede`
+      # never reads its records as no longer listed. ESS has no deadline or size construct;
+      # tests/connectors_call_deadline.rs, tests/file_records.rs and tests/structured_files.rs
+      # hold it.
       - name: fetch-failed
         external: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first
         error: cortex.instance.FetchFailed

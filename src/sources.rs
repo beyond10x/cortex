@@ -378,6 +378,26 @@ fn percent_decode(text: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
+/// The largest file a `files` or `structured` source reads, and a `records` lookup file: 16 MiB.
+pub const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+
+/// The bytes of the file at `path`, read up to [`MAX_FILE_BYTES`] and no further; why not, when it
+/// cannot be read (`cannot be read: <error>`) or is larger (`larger than the 16 MiB cap`).
+fn read_capped(path: &Path) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .and_then(|file| file.take(MAX_FILE_BYTES + 1).read_to_end(&mut bytes))
+        .map_err(|e| format!("cannot be read: {e}"))?;
+    if bytes.len() as u64 > MAX_FILE_BYTES {
+        return Err(format!(
+            "larger than the {} MiB cap",
+            MAX_FILE_BYTES / (1024 * 1024)
+        ));
+    }
+    Ok(bytes)
+}
+
 /// Adds `why` to `unread` unless it is there already.
 fn note(unread: &mut Vec<String>, why: String) {
     if !unread.contains(&why) {
@@ -581,8 +601,9 @@ fn mapped_records<'r>(
 /// The records of a `structured` source's `files` input: every file under `paths` (read against
 /// `base`, `~/` expanded) whose path below its root matches `glob`, in file name order, each a
 /// JSON document whose `records` path holds the list (a leading byte-order mark is ignored), read
-/// as [`structured_records`] reads a page. A root, a file or a list that cannot be read fails the
-/// fetch, naming the file, and so does a root under which no file matches `glob`: a source that
+/// as [`structured_records`] reads a page. A root, a file or a list that cannot be read, or a file
+/// over [`MAX_FILE_BYTES`], fails the fetch, naming the file, and so does a root under which no
+/// file matches `glob`: a source that
 /// leaves a record out of a run must not have it read as no longer listed (`dropped: Supersede`).
 fn fetch_structured_files(
     st: &m::StructuredSource,
@@ -610,8 +631,9 @@ fn fetch_structured_files(
             matched = true;
             let path = entry.path().display();
             stop_before(|| "the next file".into())?;
-            let bytes = std::fs::read(entry.path())
-                .map_err(|e| FetchError::Failed(format!("{path}: {e}")))?;
+            // Not skipped: a file left out would have its records read as no longer listed.
+            let bytes = read_capped(entry.path())
+                .map_err(|why| FetchError::Failed(format!("{path}: {why}")))?;
             let unmarked = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
             let answer: Value = serde_json::from_slice(unmarked)
                 .map_err(|e| FetchError::Failed(format!("{path}: not JSON: {e}")))?;
@@ -1265,11 +1287,11 @@ fn under(base: &Path, path: &str) -> std::path::PathBuf {
 
 /// The lookup file of a `records` spec, a JSON object of strings (an id to a name), read as a
 /// record file is: a leading byte-order mark is ignored, and a blank id or name is no value
-/// ([`scalar`]), so the id it would map is kept. A file that cannot be read, or holds anything
-/// else, fails the fetch with an error naming the file.
+/// ([`scalar`]), so the id it would map is kept. A file that cannot be read, is over
+/// [`MAX_FILE_BYTES`], or holds anything else, fails the fetch with an error naming the file.
 fn read_lookup(path: &Path) -> Result<BTreeMap<String, String>, FetchError> {
-    let bytes = std::fs::read(path)
-        .map_err(|e| FetchError::Failed(format!("lookup {}: {e}", path.display())))?;
+    let bytes = read_capped(path)
+        .map_err(|why| FetchError::Failed(format!("lookup {}: {why}", path.display())))?;
     let unmarked = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
     let lookup: BTreeMap<String, String> = serde_json::from_slice(unmarked).map_err(|e| {
         FetchError::Failed(format!(
@@ -1284,8 +1306,10 @@ fn read_lookup(path: &Path) -> Result<BTreeMap<String, String>, FetchError> {
 }
 
 /// The files of a `files` source: one document per file, or with `records`, one per record of
-/// each file ([`file_records`]), and what was left out as `skipped`. A record's thread context
-/// holds at most `max_context` characters. A `records` lookup file is read once, before any file.
+/// each file ([`file_records`]), and what was left out as `skipped`: a file that cannot be read,
+/// is over [`MAX_FILE_BYTES`] or is not UTF-8 text is named there with the reason. A record's
+/// thread context holds at most `max_context` characters. A `records` lookup file is read once,
+/// before any file.
 fn fetch_files(
     f: &m::FilesSource,
     base: &Path,
@@ -1313,10 +1337,14 @@ fn fetch_files(
                 continue;
             }
             stop_before(|| "the next file".into())?;
-            let Ok(bytes) = std::fs::read(entry.path()) else {
-                continue;
-            };
             let path = entry.path().display().to_string();
+            let bytes = match read_capped(entry.path()) {
+                Ok(bytes) => bytes,
+                Err(why) => {
+                    note(&mut skipped, format!("{path}: {why}; skipped"));
+                    continue;
+                }
+            };
             let title = entry.file_name().to_str();
             match &f.records {
                 Some(r) => docs.extend(file_records(
@@ -1328,16 +1356,25 @@ fn fetch_files(
                     &mut read,
                     &mut skipped,
                 )),
-                None => docs.extend(whole_file(path, title, bytes)),
+                None => docs.extend(whole_file(path, title, bytes, &mut skipped)),
             }
         }
     }
     Ok((docs, skipped))
 }
 
-/// A file as one document, keyed by its path; none when it is not UTF-8 text or is blank.
-fn whole_file(path: String, title: Option<&str>, bytes: Vec<u8>) -> Option<Document> {
-    let text = String::from_utf8(bytes).ok()?;
+/// A file as one document, keyed by its path; none when it is blank, or when it is not UTF-8
+/// text, which is named in `skipped`.
+fn whole_file(
+    path: String,
+    title: Option<&str>,
+    bytes: Vec<u8>,
+    skipped: &mut Vec<String>,
+) -> Option<Document> {
+    let Ok(text) = String::from_utf8(bytes) else {
+        note(skipped, format!("{path}: not UTF-8 text; skipped"));
+        return None;
+    };
     if text.trim().is_empty() {
         return None;
     }
@@ -1437,7 +1474,7 @@ fn file_records(
     let unmarked = content.strip_prefix(b"\xef\xbb\xbf").unwrap_or(content);
     let records = match r.format {
         m::RecordFormat::WholeFile => {
-            return whole_file(path.into(), title, content.to_vec())
+            return whole_file(path.into(), title, content.to_vec(), skipped)
                 .into_iter()
                 .collect();
         }

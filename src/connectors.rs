@@ -220,7 +220,9 @@ impl Connectors {
     /// child's standard input, written whole and closed; otherwise it reads none. The call runs in
     /// a process group of its own and is waited for as a model call is
     /// ([`crate::terminate::wait`]): a run sent SIGTERM ends it, and its group, and answers
-    /// [`InvokeError::Terminated`].
+    /// [`InvokeError::Terminated`]. It is waited for at most `CORTEX_CONNECTORS_TIMEOUT_S` seconds
+    /// (120, at least 1); past that it is killed, with its group, and fails as `timeout`
+    /// ([`InvokeError::Failed`]).
     fn answer(
         &self,
         args: &[&str],
@@ -248,12 +250,21 @@ impl Connectors {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| InvokeError::Failed(format!("cannot run connectors: {e}")))?;
-        let out = match crate::terminate::wait(&mut child, input, "connectors") {
+        let limit = Duration::from_secs(setting("CORTEX_CONNECTORS_TIMEOUT_S", 120).max(1));
+        let out = match crate::terminate::wait_within(&mut child, input, "connectors", limit) {
             Waited::Done(out) => out,
             Waited::Failed(e) => return Err(InvokeError::Failed(e)),
             Waited::Terminated => {
                 return Err(InvokeError::Terminated(format!(
                     "the {what} call was ended"
+                )))
+            }
+            // Not `TIMEOUT_AT_ADMISSION`: a call that hung is not tried again.
+            Waited::TimedOut => {
+                return Err(InvokeError::Failed(format!(
+                    "{what}: timeout after {} s (CORTEX_CONNECTORS_TIMEOUT_S); the connectors \
+                     call was killed",
+                    limit.as_secs()
                 )))
             }
         };

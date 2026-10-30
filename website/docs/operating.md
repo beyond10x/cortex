@@ -372,6 +372,13 @@ and hook report it as any failed run's do, and the next scheduled run starts as 
 revalidation that fails after the run fetched documents (a lapse renewed mid-run) is retried the
 same way and, if it still fails, fails the run as `fetch-failed`, counted.
 
+Every `connectors` call of a run (a list, a revalidation, a status read, an invocation) is waited
+for at most `CORTEX_CONNECTORS_TIMEOUT_S` seconds (default 120, at least 1). A call still running
+then is killed with what it started and fails as `timeout`
+(`<operation>: timeout after <n> s (CORTEX_CONNECTORS_TIMEOUT_S); the connectors call was killed`);
+it is not retried, and an invocation that fails so fails the run as `fetch-failed`, counted. The
+long-lived `connectors connections launch` of a store's `ekr` is not bounded by it.
+
 A run that fails a check of the spec's `gate` fails as `apply-refused` and is counted the same
 way. Its `reason` names each failed check with its measure and value
 (`facts_refused = 1 (max 0)`). On a `sqlite` store the run is undone first: the store and

@@ -474,6 +474,10 @@ earlier version holds the hash of the cut text, so every document longer than
 | `records` | optional: read each file as records, one document per record (below). Without it, each file is one document |
 
 Files that are not UTF-8 text, or are empty, are skipped. A document's key is the file's path.
+A file that cannot be read, is larger than 16 MiB or is not UTF-8 text is named in `skipped`, in
+the run's result and in `cortex.log` (`<path>: cannot be read: <why>; skipped`,
+`<path>: larger than the 16 MiB cap; skipped`, `<path>: not UTF-8 text; skipped`), with
+`records` too; an empty file is named nowhere.
 
 **`records`** has the fields:
 
@@ -557,8 +561,10 @@ a structured run costs 0.
 | `mapping` | how a record becomes an entity (below) |
 | `dropped` | optional: `Keep` (the default) leaves every value the source asserted earlier; `Supersede` ends each value the source no longer lists (below) |
 
-A file of a `from: files` input that cannot be read, is not JSON, or holds no array at `records`
-fails the run with `fetch-failed`, naming the file, and nothing is applied or ended. So does a
+A file of a `from: files` input that cannot be read, is larger than 16 MiB, is not JSON, or holds
+no array at `records` fails the run with `fetch-failed`, naming the file, and nothing is applied
+or ended. It is not skipped: with `dropped: Supersede`, a skipped file's records would read as no
+longer listed and their values be ended. So does a
 path under which no file matches `glob` (a file moved away, a mount not there yet), naming the
 path and the glob.
 
