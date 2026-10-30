@@ -1,8 +1,7 @@
 //! Adversary cases for unit `mask` of wave 20261030b (`story:mask-percent-before-encoded-amp`),
-//! run through the public `cortex_cli::mask` and `cortex_cli::state` APIs a run uses. Each
-//! breaking case is marked `#[ignore = "adversary: …"]` so the branch stays green; run them with
-//! `--ignored`. Credential-shaped values are assembled at runtime so no such literal sits in the
-//! source.
+//! run through the public `cortex_cli::mask` and `cortex_cli::state` APIs a run uses. The two
+//! cases that broke were committed `#[ignore]`d and run since their fix in the same story.
+//! Credential-shaped values are assembled at runtime so no such literal sits in the source.
 
 use std::time::{Duration, Instant};
 
@@ -39,7 +38,6 @@ fn fastest(mut f: impl FnMut()) -> Duration {
 /// value was masked. A masked key shown in a log line keeps it too: `mask` takes the token
 /// followed by `%2%…` as already masked.
 #[test]
-#[ignore = "adversary: a raw % and one hex digit before another % ends a key value, the rest of the credential stays in clear"]
 fn a_percent_and_one_hex_digit_before_a_percent_stays_in_a_key_value() {
     let (h, t) = (head(), tail());
     for mid in ["%2%41", "%a%41", "%2%x", "%252%41", "%2%%41"] {
@@ -57,7 +55,6 @@ fn a_percent_and_one_hex_digit_before_a_percent_stays_in_a_key_value() {
 /// the next address's local part read as a password and are masked. Before the change neither
 /// was.
 #[test]
-#[ignore = "adversary: a URL with user and port before a comma and an address is masked as a password"]
 fn a_url_with_a_user_and_a_port_before_a_comma_and_an_address_is_kept() {
     for kept in [
         "smtp://ops@mail.example:587,admin@example.org",

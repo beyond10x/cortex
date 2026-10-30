@@ -23,10 +23,10 @@ enum Keep {
     User,
 }
 
-/// A credential's name, with any `<word>_` prefix (`DB_PASSWORD`, `client_secret`), starting at a
-/// word boundary or after a percent-encoded byte, encoded once or more (`%3Faccess_token`,
-/// `%253Faccess_token`).
-const NAME: &str = r"((?:\b|%(?:25)*[0-9a-f]{2})(?:[a-z0-9]+_)*(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token))";
+/// A credential's name, with any `<word>_` prefix (`DB_PASSWORD`, `client_secret`,
+/// `AWS_SECRET_ACCESS_KEY`), starting at a word boundary or after a percent-encoded byte,
+/// encoded once or more (`%3Faccess_token`, `%253Faccess_token`).
+const NAME: &str = r"((?:\b|%(?:25)*[0-9a-f]{2})(?:[a-z0-9]+_)*(?:password|passwd|secret|api[_-]?key|access[_-]?key|access[_-]?token|auth[_-]?token))";
 /// `=`, `:` or `=>`, raw or percent-encoded once or more, after the quote that closes a quoted
 /// name (`"password": `, `\"password\": ` inside a JSON string), as the opt-in `Credential`
 /// class of `crate::redact` reads it.
@@ -35,11 +35,13 @@ const SEPARATOR: &str = r#"((?:\\?["']|%(?:25)*2[27])?\s*(?:=>|[:=]|%(?:25)*3[ad
 const TEXT_VALUE: &str = r#"([^\s"']{6,})"#;
 /// One character of an assigned value in a key. A value ends at a space, a quote, `&` or `#`,
 /// raw or percent-encoded once or more (`%26`, `%2526`). A `%` that starts no escape (`ab%zz`)
-/// is part of the value, and so is a run of them before an escape (`%%41`, `%25%21`); a run
-/// before an encoded `&` or `#` (`%%26`) ends the value there, so the query after it is kept.
+/// is part of the value, and so is a run of them, each alone, encoded or with one hex digit,
+/// before an escape or another character (`%%41`, `%25%21`, `%2%41`, `%2%x`); a run before an
+/// encoded `&` or `#` (`%%26`, `%2%26`) ends the value there, so the query after it is kept. The
+/// run reads a hex digit only with a `%` after it, so it never splits `%26` into `%2` and `6`.
 macro_rules! key_unit {
     () => {
-        r#"(?:[^\s"'&#%]|%(?:%|25)*(?:[013-9a-f][0-9a-f]|2[0-247-9a-f]|[0-9a-f]?[^0-9a-f\s"'&#%]))"#
+        r#"(?:[^\s"'&#%]|%(?:%|25|[0-9a-f]%)*(?:[013-9a-f][0-9a-f]|2[0-247-9a-f]|[0-9a-f]?[^0-9a-f\s"'&#%]))"#
     };
 }
 /// An assigned value in a key: six or more of `key_unit!`.
@@ -102,9 +104,16 @@ fn build(value: &str) -> Vec<(&'static str, Keep, Regex)> {
             Keep::User,
             // The password runs to the last `@` before the path: it may hold a raw `@`. It holds
             // no character a URL never holds raw (`"`, `<`, `{`), so it ends with its URL in a
-            // JSON string, before an address later in the text. The user name may hold a raw `@`
-            // too (`jane@corp.example:<password>@host`), and none of those characters.
-            r#"(?i)\b([a-z][a-z0-9+.\-]*://[^\s/?#:"<>`{}|\\^]*:)([^\s/?#"<>`{}|\\^]+)@"#.into(),
+            // JSON string, before an address later in the text.
+            r#"(?i)\b([a-z][a-z0-9+.\-]*://[^\s/?#@:]*:)([^\s/?#"<>`{}|\\^]+)@"#.into(),
+        ),
+        (
+            "url-password",
+            Keep::User,
+            // A user name holding a raw `@` (`jane@corp.example:<password>@host`). Its password
+            // holds no `,` or `;` either, so a user, host and port before a list of addresses
+            // (`ops@mail.example:587,admin@example.org`) is not read as one.
+            r#"(?i)\b([a-z][a-z0-9+.\-]*://[^\s/?#:"<>`{}|\\^]*@[^\s/?#:"<>`{}|\\^]*:)([^\s/?#"<>`{}|\\^,;]+)@"#.into(),
         ),
         ("secret-assignment", Keep::Name, assignment),
     ]
@@ -274,6 +283,26 @@ mod tests {
         );
     }
 
+    /// An access key assigned by name, as a cloud provider's environment and config files write
+    /// it, is masked in a text and in a key.
+    #[test]
+    fn an_access_key_name_is_masked() {
+        let v = format!("wJa{}", "Lr9Xq".repeat(6));
+        for kept in [
+            "AWS_SECRET_ACCESS_KEY=",
+            "aws_secret_access_key = ",
+            "access-key: ",
+        ] {
+            let input = format!("{kept}{v}");
+            assert_eq!(
+                mask(&input),
+                (format!("{kept}[masked:secret-assignment]"), 1),
+                "{input}"
+            );
+            assert!(!mask_key(&input).0.contains(&v), "{input}");
+        }
+    }
+
     #[test]
     fn a_prefixed_name_is_masked_and_ordinary_words_are_not() {
         let t = secret();
@@ -428,6 +457,8 @@ mod tests {
             (name, format!("ab%25%21{t}"), "&page=2"),
             (name, format!("ab%%41{t}"), "&page=2"),
             (name, format!("ab%2525zz{t}"), "#top"),
+            (name, format!("ab%2%41{t}"), "&page=2"),
+            (name, format!("ab%252%41%a%x{t}"), "&page=2"),
             (
                 "next=%252Fapi%253Faccess_token%253D",
                 t.clone(),
@@ -464,6 +495,7 @@ mod tests {
         }
         for kept in [
             "ssh://git@host.example:22/repo.git and https://jane@corp.example:8443/a?x=1",
+            "smtp://ops@mail.example:587,admin@example.org",
             r#"{\"user\": \"jane@corp.example\", \"note\": \"the password policy\"}"#,
         ] {
             assert_eq!(mask(kept), (kept.to_string(), 0), "{kept}");

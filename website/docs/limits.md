@@ -25,7 +25,8 @@ stand; [Status](./status.mdx) lists what is planned.
   text is masked for credential shapes on every run: private keys, cloud, forge, chat and API
   token shapes, JSON Web Tokens, the password in a URL such as `https://user:password@host` (a
   raw `@` in it or in the user name included), a private key whose `END` line was cut off, and
-  `password=`-style assignments, also with a prefix (`DB_PASSWORD=`, `client_secret=`), quoted
+  `password=`-style assignments, also with a prefix (`DB_PASSWORD=`, `client_secret=`,
+  `AWS_SECRET_ACCESS_KEY=`), quoted
   (`"password": "…"`, also inside a JSON string as `\"password\": \"…\"`), with `=>`, or
   percent-encoded once or twice (`access_token%3D`, `access_token%3A`, `access_token%253D`).
   That covers a document's text, title, description and URL,
