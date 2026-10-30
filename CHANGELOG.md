@@ -36,6 +36,10 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+## 0.7.0 — 2026-10-30
+
+0.7.0 needs Connectors 0.60.0 or newer: a Connectors source refuses an older one, naming the version.
+
 ### Added
 
 - An input of a `connectors` or `structured` source may use `{since_minutes_ago}`: the whole
