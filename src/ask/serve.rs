@@ -9,9 +9,7 @@ use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use axum::body::Bytes;
-use axum::extract::rejection::BytesRejection;
-use axum::extract::DefaultBodyLimit;
+use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::sse::{Event, Sse};
@@ -162,19 +160,62 @@ const BODY_LIMIT: usize = 1024 * 1024;
 /// with 413.
 const RECORD_BODY_LIMIT: usize = 64 * 1024;
 
+/// The most bytes of a body the service reads, kept or discarded, before it answers a body above
+/// its route's limit. A client that sends its whole body before it reads gets the refusal only if
+/// the service reads that body to its end: closing the connection with bytes unread resets it, and
+/// the client's write fails instead. Past this the refusal is sent and the connection closed.
+const DRAIN_LIMIT: usize = 16 * 1024 * 1024;
+
+/// The longest the service reads the rest of a body above its route's limit.
+const DRAIN_TIME: Duration = Duration::from_secs(10);
+
+/// Why a request's body was not read.
+enum BodyRefused {
+    /// Above the route's limit.
+    TooLarge,
+    /// The connection failed while the body was read.
+    Unreadable,
+}
+
+/// The body of a request, up to `limit` bytes. A body above it is refused, and its rest is read
+/// and discarded, up to [`DRAIN_LIMIT`] bytes in all and for [`DRAIN_TIME`], so a client still
+/// sending it reads the refusal.
+async fn read_body(body: Body, limit: usize) -> Result<Bytes, BodyRefused> {
+    let mut chunks = body.into_data_stream();
+    let mut kept = Vec::new();
+    while let Some(chunk) = chunks.next().await {
+        let chunk = chunk.map_err(|_| BodyRefused::Unreadable)?;
+        if kept.len() + chunk.len() <= limit {
+            kept.extend_from_slice(&chunk);
+            continue;
+        }
+        let mut read = kept.len() + chunk.len();
+        drop(kept);
+        let _ = tokio::time::timeout(DRAIN_TIME, async {
+            while read <= DRAIN_LIMIT {
+                match chunks.next().await {
+                    Some(Ok(chunk)) => read += chunk.len(),
+                    _ => break,
+                }
+            }
+        })
+        .await;
+        return Err(BodyRefused::TooLarge);
+    }
+    Ok(Bytes::from(kept))
+}
+
 /// The body of a record route, or its refusal: 413 above [`RECORD_BODY_LIMIT`], 400 when it
 /// cannot be read.
-fn record_body(body: Result<Bytes, BytesRejection>) -> Result<Bytes, Box<Response>> {
+fn record_body(body: Result<Bytes, BodyRefused>) -> Result<Bytes, Box<Response>> {
     match body {
         Ok(body) => Ok(body),
-        Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
-            Err(Box::new(json_error(
-                StatusCode::PAYLOAD_TOO_LARGE,
-                "bad-request",
-                format!("the body is above {RECORD_BODY_LIMIT} bytes"),
-            )))
-        }
-        Err(_) => Err(Box::new(json_error(
+        Err(BodyRefused::TooLarge) => Err(Box::new(json_error(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "bad-request",
+            format!("the body is above {RECORD_BODY_LIMIT} bytes"),
+        ))),
+        Err(BodyRefused::Unreadable) => Err(Box::new(json_error(
             StatusCode::BAD_REQUEST,
             "bad-request",
             "the body cannot be read",
@@ -201,11 +242,8 @@ impl super::Stream for Events {
     }
 }
 
-async fn ask(
-    State(service): State<Arc<Service>>,
-    headers: HeaderMap,
-    body: Result<Bytes, BytesRejection>,
-) -> Response {
+async fn ask(State(service): State<Arc<Service>>, headers: HeaderMap, body: Body) -> Response {
+    let body = read_body(body, BODY_LIMIT).await;
     let header = &service.settings.ask.identity_header;
     let Some(identity) = identity_of(&service, &headers) else {
         return refusal(
@@ -219,7 +257,7 @@ async fn ask(
     };
     let body = match body {
         Ok(body) => body,
-        Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+        Err(BodyRefused::TooLarge) => {
             return refusal(
                 StatusCode::PAYLOAD_TOO_LARGE,
                 ma::AskEvent::Error(ma::AskError {
@@ -229,7 +267,7 @@ async fn ask(
                 }),
             )
         }
-        Err(_) => return bad_request("the body cannot be read"),
+        Err(BodyRefused::Unreadable) => return bad_request("the body cannot be read"),
     };
     let question = match serde_json::from_slice::<Value>(&body) {
         Ok(v) => match v.get("question").and_then(Value::as_str).map(str::trim) {
@@ -326,8 +364,9 @@ async fn vote(
     State(service): State<Arc<Service>>,
     Path(answer_id): Path<String>,
     headers: HeaderMap,
-    body: Result<Bytes, BytesRejection>,
+    body: Body,
 ) -> Response {
+    let body = read_body(body, RECORD_BODY_LIMIT).await;
     let Some(identity) = identity_of(&service, &headers) else {
         return unidentified(&service);
     };
@@ -439,8 +478,9 @@ async fn close(
     State(service): State<Arc<Service>>,
     Path(review_id): Path<String>,
     headers: HeaderMap,
-    body: Result<Bytes, BytesRejection>,
+    body: Body,
 ) -> Response {
+    let body = read_body(body, RECORD_BODY_LIMIT).await;
     if identity_of(&service, &headers).is_none() {
         return unidentified(&service);
     }
@@ -564,16 +604,12 @@ pub fn serve(settings: Settings, keeper: Keeper) -> Result<(), String> {
                 }
             }
         });
-        let record_limit = || DefaultBodyLimit::max(RECORD_BODY_LIMIT);
+        // Each route reads its body itself (`read_body`), with its own limit.
         let app = Router::new()
             .route("/ask", post(ask))
-            .route("/ask/{answer_id}/vote", post(vote).layer(record_limit()))
-            .route("/review", get(review).layer(record_limit()))
-            .route(
-                "/review/{review_id}/close",
-                post(close).layer(record_limit()),
-            )
-            .layer(DefaultBodyLimit::max(BODY_LIMIT))
+            .route("/ask/{answer_id}/vote", post(vote))
+            .route("/review", get(review))
+            .route("/review/{review_id}/close", post(close))
             .with_state(service);
         println!("{}", json!({"listening": address.to_string()}));
         axum::serve(listener, app)

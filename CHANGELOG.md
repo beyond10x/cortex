@@ -36,6 +36,15 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Fixed
+
+- A client of `cortex ask serve` that sent a body above a route's limit (1 MiB for `/ask`, 64 KiB
+  for a vote or a close) could lose the 413 refusal: the service answered and closed the
+  connection with the body unread, which reset it while the client was still writing. The service
+  now reads the rest of a refused body, up to 16 MiB and for at most 10 seconds, before it
+  answers. The eval `mcp` runner's redacting server likewise reads up to 16 MiB of the declared
+  body before its 401, 404, 405 and 413 refusals.
+
 ## 0.7.0 — 2026-10-30
 
 0.7.0 needs Connectors 0.60.0 or newer: a Connectors source refuses an older one, naming the version.
