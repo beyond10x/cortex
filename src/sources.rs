@@ -1081,7 +1081,9 @@ fn invoker<'a>(
 /// per record, its input filled from the record, its pages walked the same way, and each of its
 /// records appended to the parent's text as one JSON paragraph. A parent whose child call fails
 /// is left out of this fetch and named in `unread`; from its [`CHILD_FAILURE_LIMIT`]th consecutive
-/// failed run on, in `skipped` instead. A successful call clears the parent's count.
+/// failed run on, in `skipped` instead. A successful call clears the parent's count. A record's key
+/// is `<adapter>:<operation>:<id>` ([`record_id`]); a record with none is left out and counted in
+/// `skipped` by reason.
 fn fetch_records(
     c: &m::ConnectorsSource,
     connection: &str,
@@ -1104,22 +1106,27 @@ fn fetch_records(
             time,
             since_ms: window.since_ms,
         });
+    let what = format!("{}.{}", c.adapter, c.operation);
+    // Records left out for want of a key, counted by reason.
+    let mut unkeyed: BTreeMap<String, usize> = BTreeMap::new();
     for input in &c.inputs {
+        let input = with_window(&to_serde(input), window);
         let records = walk_until(
             &mut invoker(connectors, c, connection, &c.operation),
-            &format!("{}.{}", c.adapter, c.operation),
-            &with_window(&to_serde(input), window),
+            &what,
+            &input,
             &c.records,
             c.paging.as_ref(),
             stop,
             &mut unread,
         )?;
         for record in &records {
-            let Some(id) = at(record, &c.id).map(|v| match v {
-                Value::String(t) => t.clone(),
-                other => other.to_string(),
-            }) else {
-                continue;
+            let id = match record_id(c, record, &input) {
+                Ok(id) => id,
+                Err(why) => {
+                    *unkeyed.entry(why).or_default() += 1;
+                    continue;
+                }
             };
             let mut text = c
                 .text
@@ -1187,6 +1194,10 @@ fn fetch_records(
             });
         }
     }
+    for (why, n) in unkeyed {
+        let records = if n == 1 { "record" } else { "records" };
+        skipped.push(format!("{what}: {n} {records} skipped: {why}"));
+    }
     Ok(Fetched {
         documents: docs,
         unread,
@@ -1194,6 +1205,30 @@ fn fetch_records(
         child_failures: failures,
         ..Fetched::default()
     })
+}
+
+/// What a `connectors` record's key holds after `<adapter>:<operation>:`: its `key` template
+/// rendered from the record, with `{input.…}` from `input` (the input it was read with, its window
+/// filled in), or without one the value at `id`, text as it is and any other value as JSON. `Err`
+/// says why there is none: the id is missing or null, or a placeholder of the template names no
+/// scalar, or blank text ([`crate::structured::render_template`]).
+fn record_id(c: &m::ConnectorsSource, record: &Value, input: &Value) -> Result<String, String> {
+    match &c.key {
+        Some(template) => {
+            let mut context = match record {
+                Value::Object(fields) => fields.clone(),
+                _ => serde_json::Map::new(),
+            };
+            context.insert("input".into(), input.clone());
+            crate::structured::render_template(template, &Value::Object(context))
+                .ok_or_else(|| format!("no value for key `{template}`"))
+        }
+        None => match at(record, &c.id) {
+            None | Some(Value::Null) => Err(format!("no value at id `{}`", c.id)),
+            Some(Value::String(t)) => Ok(t.clone()),
+            Some(other) => Ok(other.to_string()),
+        },
+    }
 }
 
 /// `path` from a spec read against `base` with `~/` expanded, as `paths` and `lookup` are.

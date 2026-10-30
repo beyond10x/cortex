@@ -44,9 +44,17 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   operation are not asked for, and none of its earlier ones is ended. The run's `skipped` counts
   those parents per child operation. A child without `follow` is called for every parent, as
   before.
+- A `connectors` source may give a `key` template (`{input.channel}:{ts}`) that a document's key
+  is rendered from instead of `id`, with `{input.…}` naming the input the record was read with, so
+  two records with one id in two inputs are both applied; before, the second was dropped.
+  `cortex update` refuses a change of `key` while the source has seen documents (`rekey-refused`).
 
 ### Fixed
 
+- A `connectors` record whose id was JSON null was keyed `<adapter>:<operation>:null`, so all
+  such records shared one document and all but one were dropped without a word; a record without
+  an id was dropped silently. Both are now left out and counted in the run's `skipped` with the
+  reason. A source whose seen state holds a `…:null` key no longer refreshes that document.
 - A document the model failed on every time stopped its source at the same batch on every run,
   and nothing counted failures per document. A batch of several documents the model answers it
   failed on still fails the run as before, after one call, and now marks its documents; a later

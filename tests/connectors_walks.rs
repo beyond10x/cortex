@@ -1464,3 +1464,142 @@ fn adversary_a_failed_run_does_not_move_the_window_past_a_change_it_held_back() 
         w.lines("issues.log")
     );
 }
+
+/// `issues.list` answers, for the `channel` it is given, two messages: one whose `ts` is the same
+/// in every channel, and one more. Without a channel it answers I-1, an issue whose `key` is null,
+/// and an issue without a `key`.
+const CHANNELS: &str = r#"  "invoke "*" issues.list "*'"channel"'*)
+    echo "$A" >> "$R/messages.log"
+    C=$(printf '%s' "$A" | sed -n 's/.*"channel":"\([^"]*\)".*/\1/p')
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"messages":[{"ts":"1767312000.000100","text":"deploy done in %s"},{"ts":"1767312060.000200","text":"thanks from %s"}]}}}\n' "$C" "$C" ;;
+  "invoke "*" issues.list "*)
+    echo "$A" >> "$R/issues.log"
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"issues":[{"key":"I-1","summary":"Issue I-1"},{"key":null,"summary":"Issue with a null key"},{"summary":"Issue with no key"}]}}}\n' ;;
+"#;
+
+/// Creates instance `name` whose `tracker` source reads the messages of channels C1 and C2,
+/// keyed by `key` when it is given, else by `ts`.
+fn create_channels(w: &World, name: &str, key: Option<&str>) {
+    let key = key.map_or(String::new(), |k| format!("\n        key: \"{k}\""));
+    let rest = format!(
+        r#"inputs: [{{channel: C1}}, {{channel: C2}}]
+        records: messages
+        id: ts{key}
+        text: ["{{text}}"]"#
+    );
+    create_source(w, name, &rest, 3, 5000, 50);
+}
+
+/// `story:record-key-template`, acceptance 1: a key template naming the input's `channel` and
+/// the record's `ts` keeps two messages with one `ts` in two channels two documents, and both are
+/// applied.
+#[test]
+fn two_records_with_one_id_in_two_inputs_are_both_applied_under_a_key_template() {
+    let w = world_with(CHANNELS);
+    create_channels(&w, "chat", Some("{input.channel}:{ts}"));
+    let ran = run(&w, "chat");
+    assert_eq!(ran["detail"]["documents_applied"], 4, "{ran}");
+    let docs = prompted(&w, "chat");
+    for (channel, ts) in [
+        ("C1", "1767312000.000100"),
+        ("C2", "1767312000.000100"),
+        ("C1", "1767312060.000200"),
+        ("C2", "1767312060.000200"),
+    ] {
+        let source = format!("Source: record:tracker:issues.list:{channel}:{ts}\n");
+        assert!(
+            docs.iter().any(|d| d.contains(&source)),
+            "no document {source:?} in {docs:#?}"
+        );
+    }
+    assert!(docs.iter().any(|d| d.contains("deploy done in C2")));
+    assert!(docs.iter().any(|d| d.contains("deploy done in C1")));
+    let seen = state(&w, "chat");
+    assert_eq!(seen["documents"].as_object().unwrap().len(), 4, "{seen}");
+}
+
+/// Without a key template the same two inputs collide on `ts`, as before: the second record of
+/// one `ts` is the same document as the first.
+#[test]
+fn without_a_key_template_records_are_keyed_by_their_id_as_before() {
+    let w = world_with(CHANNELS);
+    create_channels(&w, "plain", None);
+    let ran = run(&w, "plain");
+    assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
+    let docs = prompted(&w, "plain");
+    assert!(docs
+        .iter()
+        .any(|d| d.contains("Source: record:tracker:issues.list:1767312000.000100\n")));
+}
+
+/// `story:record-key-template`, acceptance 2: a record whose id is null, or missing, is named in
+/// `skipped` with the reason and never keyed `…:null`; the record with an id is applied.
+#[test]
+fn a_record_whose_id_is_null_is_named_in_skipped_and_never_keyed_null() {
+    let w = world_with(CHANNELS);
+    let rest = r#"inputs: [{}]
+        records: issues
+        id: key
+        text: ["{key}: {summary}"]"#;
+    create_source(&w, "nullid", rest, 3, 5000, 50);
+    let ran = run(&w, "nullid");
+    assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
+    let skipped: Vec<&str> = ran["detail"]["skipped"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    assert_eq!(
+        skipped,
+        ["tracker.issues.list: 2 records skipped: no value at id `key`"],
+        "{ran}"
+    );
+    let seen = state(&w, "nullid");
+    let keys: Vec<&String> = seen["documents"].as_object().unwrap().keys().collect();
+    assert_eq!(keys, ["tracker:issues.list:I-1"], "{seen}");
+    assert!(!prompted(&w, "nullid")
+        .iter()
+        .any(|d| d.contains("issues.list:null")));
+}
+
+/// A key template one of whose fields a record lacks skips that record, named in `skipped`.
+#[test]
+fn a_record_a_key_template_renders_nothing_for_is_named_in_skipped() {
+    let w = world_with(CHANNELS);
+    create_channels(&w, "nothread", Some("{input.channel}:{thread_ts}"));
+    let ran = run(&w, "nothread");
+    assert_eq!(ran["detail"]["documents_applied"], 0, "{ran}");
+    let skipped = ran["detail"]["skipped"].to_string();
+    assert!(
+        skipped.contains("tracker.issues.list: 4 records skipped: no value for key `{input.channel}:{thread_ts}`"),
+        "{ran}"
+    );
+}
+
+/// `cortex update` refuses a change of a `connectors` source's `key` while the source has seen
+/// documents: its seen keys would match nothing.
+#[test]
+fn an_update_that_changes_the_key_template_is_refused_as_a_rekey() {
+    let w = world_with(CHANNELS);
+    create_channels(&w, "rekey", None);
+    run(&w, "rekey");
+    let path = w.root.join("rekey.yaml");
+    let text = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("id: ts", "id: ts\n        key: \"{input.channel}:{ts}\"");
+    std::fs::write(&path, text).unwrap();
+    let (code, out) = w.cortex(&[
+        "update",
+        "rekey",
+        "--spec",
+        path.to_str().unwrap(),
+        "--no-units",
+    ]);
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("rekey-refused")),
+        "{out}"
+    );
+    assert_eq!(out["detail"]["field"], "key", "{out}");
+}

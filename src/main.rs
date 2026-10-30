@@ -1584,7 +1584,7 @@ fn record_path(path: &str) -> String {
 }
 
 /// The fields a source's document keys are derived from, by name: its kind, then
-/// - for a `connectors` source, its `adapter`, `operation` and `id` path;
+/// - for a `connectors` source, its `adapter`, `operation`, `id` path and `key` template;
 /// - for a `files` source, whether it keys whole files (no `records`, or `records` in
 ///   `WholeFile` format) or records of a format, and for records their `id` path;
 /// - for a `structured` source, where its records come from (`input`), from Connectors its
@@ -1608,6 +1608,7 @@ fn keyed_by(settings: &m::SourceSettings) -> Vec<(&'static str, String)> {
             ("adapter", c.adapter.clone()),
             ("operation", c.operation.clone()),
             ("id", record_path(&c.id)),
+            ("key", c.key.clone().unwrap_or_default()),
         ]),
         m::SourceSettings::Files(f) => match &f.records {
             Some(r) if r.format != m::RecordFormat::WholeFile => fields.extend([

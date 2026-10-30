@@ -326,13 +326,19 @@ The records of any operation a Connectors adapter admits.
 | `inputs` | a list of JSON inputs; the operation is invoked once per input. `{since}`, `{until}`, `{since_epoch}` and `{until_epoch}` in a string value are replaced by the run's window |
 | `records` | dotted path to the array of records in the answer, for example `issues` |
 | `id` | dotted path to a record's stable id |
+| `key` | optional: a template the document's key is rendered from instead of `id`: `{a.b}` is a field of the record, `{input.a.b}` one of the input it was read with, its window filled in. `{input.channel}:{ts}` keeps two messages with one `ts` in two channels two documents |
 | `time` | optional dotted path to the record's publication time, which dates its evidence and the facts drawn from it ([how](./operating.md#what-one-run-does)) |
 | `text` | templates whose `{a.b}` placeholders are filled from the record; the non-empty results, joined, are the document's text |
 | `paging` | optional: how to read every page of the answer (below) |
 | `child` | optional: an operation invoked once per record, whose records are added to that record's text (below) |
 
-A record without an id, or whose text is empty, is skipped. A document's key is
-`<adapter>:<operation>:<id>`; a key read twice in one run counts once.
+A document's key is `<adapter>:<operation>:<id>`, or `<adapter>:<operation>:<rendered key>` with
+`key`; a key read twice in one run counts once. A record whose id is missing or null, or one of
+whose `key` placeholders names a field it (or its input) lacks, holds as no scalar or as blank
+text, is left out and counted in the run's `skipped` by operation and reason
+(`` tracker.issues.list: 2 records skipped: no value at id `key` ``); no key ends in `null`. A record
+whose text is empty is skipped. Adding, removing or changing `key` re-keys the source: `cortex
+update` refuses it while the source has seen documents.
 
 **The window.** `{since}` and `{until}` are instants in RFC 3339, in UTC and to the second
 (`2026-10-05T12:34:56Z`). `{until}` is the start of this run. `{since}` is 5 minutes before the

@@ -574,6 +574,7 @@ fn settings(
                 inputs: c.value.inputs.iter().map(json).collect(),
                 records: c.value.records.clone(),
                 id: c.value.id.clone(),
+                key: opt(&c.value.key),
                 time: opt(&c.value.time),
                 text: c.value.text.clone(),
                 paging: paging(

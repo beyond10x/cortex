@@ -205,6 +205,18 @@ types:
       - {name: inputs, type: List<Json>}
       - {name: records, type: String}
       - {name: id, type: String}
+      # `key`: a template a document's key is rendered from instead of the value at `id`, so two
+      # records with one id in two inputs stay two documents: `{a.b}` names a field of the
+      # record, `{input.a.b}` one of the input the record was read with, after its window is
+      # filled in (`{input.channel}:{ts}` keys a message by its channel and its time). The key is
+      # `<adapter>:<operation>:<rendered>`. Absent means the value at `id`.
+      # UNMAPPED: a record is left out of the fetch and counted in the run's `skipped`, by
+      # operation and reason, when the value at `id` is missing or null (without `key`), or when
+      # a placeholder of `key` names a field the record or its input lacks, or holds as no scalar
+      # or as blank text; no `<adapter>:<operation>:null` key is written. ESS has no construct for
+      # the rendering of a String from a record; src/sources.rs holds it and
+      # tests/connectors_walks.rs tests it.
+      - {name: key, type: Optional<String>}
       - {name: time, type: Optional<String>}
       - {name: text, type: List<String>}
       - {name: paging, type: Optional<cortex.instance.Paging>}

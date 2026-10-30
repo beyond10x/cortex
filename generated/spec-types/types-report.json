@@ -1,12 +1,12 @@
 {
   "format": "ess-types-report/3",
-  "source_digest": "b733dddb295079d310a1946d28f401adadd80a0173c9c13c2515f7cfdd4b5028",
+  "source_digest": "5d5d5055c688f814fb48969a2e304e66644af56f839f0683ba20370250fe2024",
   "input": {
     "kind": "model",
     "system": "cortex",
     "specification_version": "v1",
-    "contract_digest": "slice-sha256/2:d62de1107b6bbd8ad167d03db7843705c21ac5f855ae82b6382c0aa3060a4813",
-    "projection_digest": "db0c1c126bb12d9dd0f452d34a22262927bf7e6eff93246ec063e9cfea440108"
+    "contract_digest": "slice-sha256/2:1120be52780c06d2d85e4ca200c15fca6eeae43c3a99eba3e0ececc98e5d1cce",
+    "projection_digest": "61f5993e750c8b506e62411a2daf2453f23589539570ebef7768369437c4a5ca"
   },
   "generator_version": "0.60.0",
   "target": "rust",
