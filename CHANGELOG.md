@@ -49,9 +49,12 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   is rendered from instead of `id`, with `{input.…}` naming the input the record was read with, so
   two records with one id in two inputs are both applied; before, the second was dropped.
   `cortex update` refuses a change of `key` while the source has seen documents (`rekey-refused`),
-  including adding `key` where none was, and, while `key` names an `{input.…}`, a change of
-  `inputs`. A `key` that is not a template (empty, without a placeholder, or with an unclosed `{`
-  or a stray `}`) is refused when the spec is read, as an alias template is.
+  including adding `key` where none was, and, while `key` names an `{input.…}`, a respelled input
+  (`channel: C1` becoming `channel: general`); adding, removing or reordering inputs, or changing
+  an input field the key does not name, is accepted. A `key` that is not a template (empty,
+  without a placeholder, or with an unclosed `{` or a stray `}`) is refused when the spec is read,
+  as an alias template is, and so is an `{input.…}` placeholder that some input does not hold as
+  a text, number or boolean, or one on a source without inputs.
 - A `connectors` source's `child` may give `text` templates, and each child record is then added
   to the parent's text as its rendered lines instead of raw JSON, so more children fit under
   `max_chars_per_document`. It may also carry a `follow` rule, the one `structured` children take

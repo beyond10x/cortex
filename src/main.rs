@@ -1604,22 +1604,12 @@ fn keyed_by(settings: &m::SourceSettings) -> Vec<(&'static str, String)> {
     };
     let mut fields = vec![("kind", kind.to_string())];
     match settings {
-        m::SourceSettings::Connectors(c) => {
-            fields.extend([
-                ("adapter", c.adapter.clone()),
-                ("operation", c.operation.clone()),
-                ("id", record_path(&c.id)),
-                ("key", format!("{:?}", c.key)),
-            ]);
-            // An `{input.…}` placeholder puts the input's values in every key.
-            if c.key
-                .as_deref()
-                .is_some_and(cortex_cli::structured::template_names_input)
-            {
-                let inputs = c.inputs.iter().map(model_map::to_serde).collect();
-                fields.push(("inputs", serde_json::Value::Array(inputs).to_string()));
-            }
-        }
+        m::SourceSettings::Connectors(c) => fields.extend([
+            ("adapter", c.adapter.clone()),
+            ("operation", c.operation.clone()),
+            ("id", record_path(&c.id)),
+            ("key", format!("{:?}", c.key)),
+        ]),
         m::SourceSettings::Files(f) => match &f.records {
             Some(r) if r.format != m::RecordFormat::WholeFile => fields.extend([
                 ("records", format!("{:?}", r.format)),
@@ -1701,6 +1691,30 @@ fn respelled_root(base: &Path, old: &m::FilesSource, new: &m::FilesSource) -> bo
         })
 }
 
+/// Whether `new` respells an input that `old`'s documents are keyed by: under one `key` with
+/// `{input.…}` placeholders, each input projects onto what those placeholders render from it, and
+/// a projection of `old` is gone while one `new` adds appeared. Adding, removing or reordering
+/// inputs, or changing a field the key does not name, leaves every remaining document's key as
+/// it was.
+fn respelled_inputs(old: &m::ConnectorsSource, new: &m::ConnectorsSource) -> bool {
+    let Some(key) = new.key.as_deref() else {
+        return false;
+    };
+    if old.key.as_deref() != Some(key)
+        || cortex_cli::structured::template_input_fields(key).is_empty()
+    {
+        return false;
+    }
+    let project = |c: &m::ConnectorsSource| -> std::collections::BTreeSet<Vec<Option<String>>> {
+        c.inputs
+            .iter()
+            .map(|input| cortex_cli::structured::input_projection(key, &model_map::to_serde(input)))
+            .collect()
+    };
+    let (before, after) = (project(old), project(new));
+    before.difference(&after).next().is_some() && after.difference(&before).next().is_some()
+}
+
 /// The first source the frozen spec `old` and `new` both name whose documents `new` keys another
 /// way while its seen state holds a document: its name and the first field that changed. A source
 /// with no state file, or one with no document, is not; a state file that cannot be read counts
@@ -1728,6 +1742,11 @@ fn rekeyed(
                     if respelled_root(&base, o, n) =>
                 {
                     Some("paths")
+                }
+                (m::SourceSettings::Connectors(o), m::SourceSettings::Connectors(n))
+                    if respelled_inputs(o, n) =>
+                {
+                    Some("inputs")
                 }
                 _ => None,
             })?;

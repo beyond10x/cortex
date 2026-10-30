@@ -228,10 +228,14 @@ types:
       # UNMAPPED: the spec check refuses (exit 2, naming the source and the key, for `create`,
       # `update`, `adopt` and a run alike) a `key` that is no template by the grammar of
       # `cortex.instance.RecordMapping.alias_templates`: empty, naming no field, or with an
-      # unclosed `{` or a stray `}`. `cortex update` refuses a change of `key` on a source with
-      # seen documents as a re-key, and, while `key` names an `{input.…}` field, a change of
-      # `inputs` too. ESS has no construct for the grammar of a String; `spec::check` and
-      # `src/main.rs` hold it, tests/w30a_shapes_adversary.rs and tests/connectors_walks.rs test it.
+      # unclosed `{` or a stray `}`; and an `{input.…}` placeholder on a source without inputs, or
+      # one some input does not hold as a scalar. `cortex update` refuses a change of `key` on a
+      # source with seen documents as a re-key, and, while `key` names an `{input.…}` field, a
+      # change of `inputs` that drops what one input renders for those placeholders and adds
+      # another (a respelled input); adding, removing or reordering inputs, or changing a field
+      # the key does not name, is no re-key. ESS has no construct for the grammar of a String;
+      # `spec::check` and `src/main.rs` hold it, tests/w30a_shapes_adversary.rs,
+      # tests/w30a_shapes_adversary_pass2.rs and tests/connectors_walks.rs test it.
       - {name: key, type: Optional<String>}
       - {name: time, type: Optional<String>}
       - {name: text, type: List<String>}

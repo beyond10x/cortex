@@ -453,15 +453,42 @@ fn alias_template_refusal(spec: &m::InstanceSpec) -> Option<String> {
 /// Why a `connectors` source's `key` is no template: it is rendered by the grammar of an alias
 /// template ([`crate::structured::template_refusal`]), so an empty key, one without a `{field}`
 /// placeholder, or one with an unclosed `{` or a stray `}` is refused here, naming the place and
-/// the key. This is the `UNMAPPED:` rule of `cortex.instance.ConnectorsSource.key`.
+/// the key. So is an `{input.…}` placeholder on a source without inputs, or one that some input
+/// does not hold as a text, number or boolean, naming the placeholder and the input. This is the
+/// `UNMAPPED:` rule of `cortex.instance.ConnectorsSource.key`.
 fn key_template_refusal(spec: &m::InstanceSpec) -> Option<String> {
     spec.sources.iter().find_map(|source| {
         let m::SourceSettings::Connectors(c) = &source.settings else {
             return None;
         };
         let key = c.key.as_deref()?;
-        crate::structured::template_refusal(key)
-            .map(|why| format!("sources.{}.settings.value.key: {key:?}: {why}", source.name))
+        let at = format!("sources.{}.settings.value.key: {key:?}", source.name);
+        if let Some(why) = crate::structured::template_refusal(key) {
+            return Some(format!("{at}: {why}"));
+        }
+        // An `{input.…}` placeholder is rendered from the spec's own inputs (a run fills in only
+        // their window values), so one that some input does not hold as a scalar is known now.
+        let fields = crate::structured::template_input_fields(key);
+        let first = fields.first()?;
+        if c.inputs.is_empty() {
+            return Some(format!(
+                "{at}: the placeholder {{{first}}} names an input, and the source has no inputs"
+            ));
+        }
+        c.inputs.iter().enumerate().find_map(|(n, input)| {
+            let rendered =
+                crate::structured::input_projection(key, &crate::model_map::to_serde(input));
+            fields
+                .iter()
+                .zip(rendered)
+                .find(|(_, text)| text.is_none())
+                .map(|(field, _)| {
+                    format!(
+                        "{at}: the placeholder {{{field}}} names no text, number or boolean in \
+                         inputs[{n}]"
+                    )
+                })
+        })
     })
 }
 

@@ -149,11 +149,7 @@ fn changing_an_input_field_the_key_does_not_name_is_not_a_rekey() {
     let w = world();
     let key = "{input.channel}:{ts}";
     let path = created_and_run(&w, "limit", "[{channel: C1, limit: 10}]", key);
-    std::fs::write(
-        &path,
-        spec_text("limit", "[{channel: C1, limit: 20}]", key),
-    )
-    .unwrap();
+    std::fs::write(&path, spec_text("limit", "[{channel: C1, limit: 20}]", key)).unwrap();
     let (code, updated) = w.cortex(&[
         "update",
         "limit",
@@ -181,7 +177,10 @@ fn a_key_naming_an_input_field_no_input_holds_is_refused_when_the_spec_is_read()
         spec_text("typo", "[{channel: C1}]", "{input.chanel}:{ts}"),
     )
     .unwrap();
-    let (code, created) = status(&w, &["create", "--spec", path.to_str().unwrap(), "--no-units"]);
+    let (code, created) = status(
+        &w,
+        &["create", "--spec", path.to_str().unwrap(), "--no-units"],
+    );
     let ran = if code == 0 {
         w.cortex(&["run", "typo/chat"]).1.to_string()
     } else {

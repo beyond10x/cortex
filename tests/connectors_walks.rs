@@ -1606,10 +1606,15 @@ fn an_update_that_changes_the_key_template_is_refused_as_a_rekey() {
 
 /// Updates instance `name` with channel C1 of its spec renamed C3, as [`create_channels`] wrote it.
 fn update_renaming_channel(w: &World, name: &str) -> (i32, Value) {
+    update_replacing(w, name, "{channel: C1}", "{channel: C3}")
+}
+
+/// Updates instance `name` with `from` in its spec replaced by `to`.
+fn update_replacing(w: &World, name: &str, from: &str, to: &str) -> (i32, Value) {
     let path = w.root.join(format!("{name}.yaml"));
     let written = std::fs::read_to_string(&path).unwrap();
-    let text = written.replace("{channel: C1}", "{channel: C3}");
-    assert_ne!(text, written, "the spec names channel C1");
+    let text = written.replace(from, to);
+    assert_ne!(text, written, "the spec holds {from}");
     std::fs::write(&path, text).unwrap();
     w.cortex(&[
         "update",
@@ -1645,6 +1650,118 @@ fn an_input_change_is_a_rekey_only_under_a_key_template_that_names_the_input() {
         (0, Some("updated")),
         "{out}"
     );
+}
+
+/// `spec::parse` of a spec with one `connectors` source reading `inputs` keyed by `key`.
+fn parsed_key(inputs: &str, key: &str) -> Result<(), String> {
+    let text = format!(
+        r#"format: cortex.instance/1
+name: keyed
+description: Test brain.
+ekr: {{version: "0.0.30", bin: "{ekr}"}}
+seed: {{documents: []}}
+model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
+sources:
+  - name: chat
+    schedule: daily
+    settings:
+      kind: connectors
+      value:
+        adapter: tracker
+        connection: conn_test
+        operation: messages.list
+        inputs: {inputs}
+        records: messages
+        id: ts
+        key: "{key}"
+        text: ["{{text}}"]
+    policy: {{refresh_after_days: 3, change: ContentHash, max_documents_per_run: 50, max_chars_per_document: 5000}}
+serve: {{view_port: 18996}}
+"#,
+        ekr = ekr().display()
+    );
+    cortex_cli::spec::parse(&text).map(|_| ())
+}
+
+/// D29 (adversary pass 2): every `{input.…}` placeholder of a `key` names a scalar every input of
+/// the source holds, or the spec is refused when it is read, naming the key and the placeholder.
+#[test]
+fn a_key_input_placeholder_must_name_a_scalar_every_input_holds() {
+    for (inputs, key) in [
+        ("[{channel: C1}, {channel: C2}]", "{input.channel}:{ts}"),
+        ("[{channel: C1, n: 3}]", "{$.input.n}-{ts}"),
+        ("[{q: {channel: C1}}]", "{input.q.channel}:{ts}"),
+        ("[{channel: C1, after: \"{since}\"}]", "{input.after}:{ts}"),
+        ("[]", "{ts}"),
+    ] {
+        assert_eq!(parsed_key(inputs, key), Ok(()), "{inputs} {key}");
+    }
+    for (inputs, key, named) in [
+        (
+            "[{channel: C1}]",
+            "{input.chanel}:{ts}",
+            "placeholder {input.chanel}",
+        ),
+        (
+            "[{channel: C1}, {chan: C2}]",
+            "{input.channel}:{ts}",
+            "placeholder {input.channel}",
+        ),
+        (
+            "[{q: {channel: C1}}]",
+            "{input.q}:{ts}",
+            "placeholder {input.q}",
+        ),
+        (
+            "[{channel: \"\"}]",
+            "{input.channel}:{ts}",
+            "placeholder {input.channel}",
+        ),
+        ("[{channel: C1}]", "{input}:{ts}", "placeholder {input}"),
+        ("[]", "{input.channel}:{ts}", "placeholder {input.channel}"),
+    ] {
+        let refused = parsed_key(inputs, key).expect_err(key);
+        assert!(
+            refused.contains("sources.chat.settings.value.key") && refused.contains(named),
+            "{inputs} {key}: {refused}"
+        );
+    }
+}
+
+/// D28 (adversary pass 2): under `{input.channel}:{ts}` an input is part of the keys only through
+/// its `channel`. Respelling `C1` as `general` drops C1's keys for new ones, so `update` refuses
+/// it as a re-key of `inputs`; reordering the inputs or removing one leaves every remaining key
+/// as it was, and `update` accepts both.
+#[test]
+fn under_an_input_key_a_respelled_input_is_a_rekey_and_a_reordered_or_removed_one_is_not() {
+    let w = world_with(CHANNELS);
+    create_channels(&w, "respell", Some("{input.channel}:{ts}"));
+    run(&w, "respell");
+    let (code, out) = update_replacing(&w, "respell", "{channel: C1}", "{channel: general}");
+    assert_eq!(
+        (code, out["outcome"].as_str()),
+        (1, Some("rekey-refused")),
+        "{out}"
+    );
+    assert_eq!(out["detail"]["field"], "inputs", "{out}");
+
+    let w = world_with(CHANNELS);
+    create_channels(&w, "shrink", Some("{input.channel}:{ts}"));
+    run(&w, "shrink");
+    for (from, to) in [
+        (
+            "[{channel: C1}, {channel: C2}]",
+            "[{channel: C2}, {channel: C1}]",
+        ),
+        ("[{channel: C2}, {channel: C1}]", "[{channel: C2}]"),
+    ] {
+        let (code, out) = update_replacing(&w, "shrink", from, to);
+        assert_eq!(
+            (code, out["outcome"].as_str()),
+            (0, Some("updated")),
+            "{from} -> {to}: {out}"
+        );
+    }
 }
 
 /// `issues.list` answers I-1 with no replies, I-2 with three and I-3 with no `reply_count`;

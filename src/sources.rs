@@ -1557,8 +1557,9 @@ fn passes(f: &m::RecordFilter, record: &Value) -> bool {
 /// field is of the rule's JSON kind and equal to it, numbers by value. `within_days`: it is a text
 /// read as a document's time is ([`instant`]), no earlier than `days` days before `start_ms`.
 /// `at_least`: it is a JSON number no less than `number`. A missing field, or a value of another
-/// kind, does not match. No rule matches every parent. Two integers compare exactly, however
-/// large; only a number that is not an integer is compared as `f64` ([`Num`]).
+/// kind, does not match. No rule matches every parent. An integer compares exactly, however
+/// large, with an integer or with a number written with a fraction or an exponent; only two of
+/// the latter compare as `f64` ([`Num`]).
 pub fn follows(rule: Option<&m::FollowRule>, record: &Value, start_ms: i64) -> bool {
     let Some(rule) = rule else {
         return true;
@@ -1582,8 +1583,8 @@ pub fn follows(rule: Option<&m::FollowRule>, record: &Value, start_ms: i64) -> b
     }
 }
 
-/// A JSON number as a `follow` rule compares it: an integer exactly (any `i64` or `u64`), anything
-/// else as `f64`.
+/// A JSON number as a `follow` rule compares it: an integer (any `i64` or `u64`) as itself,
+/// anything else as the `f64` JSON reads it as.
 #[derive(Clone, Copy)]
 enum Num {
     Int(i128),
@@ -1602,20 +1603,33 @@ impl Num {
             .or_else(|| n.as_f64().map(Num::Float))
     }
 
-    /// Exact between two integers; by `f64` when either is not one.
+    /// Exact between two integers and between an integer and a float ([`int_against_float`]);
+    /// by `f64` only between two floats.
     fn compare(self, other: Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Num::Int(a), Num::Int(b)) => Some(a.cmp(&b)),
-            (a, b) => a.float().partial_cmp(&b.float()),
+            (Num::Int(a), Num::Float(b)) => int_against_float(a, b),
+            (Num::Float(a), Num::Int(b)) => {
+                int_against_float(b, a).map(std::cmp::Ordering::reverse)
+            }
+            (Num::Float(a), Num::Float(b)) => a.partial_cmp(&b),
         }
     }
+}
 
-    fn float(self) -> f64 {
-        match self {
-            Num::Int(n) => n as f64,
-            Num::Float(f) => f,
-        }
+/// `int` against `float` exactly, never casting `int` to `f64`: against the whole number below or
+/// at `float` (an `f64` floor is exact), and below `float` when equal to that floor and `float` has a
+/// fraction. The floor's cast saturates at the `i128` bounds, which no JSON integer (an `i64` or
+/// `u64`) reaches, so a float beyond them, or an infinite one, still orders right. `None` for NaN.
+fn int_against_float(int: i128, float: f64) -> Option<std::cmp::Ordering> {
+    if float.is_nan() {
+        return None;
     }
+    let floor = float.floor();
+    Some(match int.cmp(&(floor as i128)) {
+        std::cmp::Ordering::Equal if floor < float => std::cmp::Ordering::Less,
+        order => order,
+    })
 }
 
 /// The text, number or boolean at `path` of `record`, as text; `None` for anything else or blank
@@ -1845,6 +1859,57 @@ mod tests {
         assert!(!follows(Some(&at_least), &below, START));
         let decimal: Value = serde_json::from_str(r#"{"n": 9007199254740993.5}"#).unwrap();
         assert!(follows(Some(&at_least), &decimal, START));
+    }
+
+    /// D30 (adversary pass 2): an integer and a number written with a fraction or an exponent
+    /// compare exactly, never by casting the integer to `f64`.
+    #[test]
+    fn a_follow_rule_compares_an_integer_with_a_float_exactly() {
+        let n =
+            |text: &str| -> Value { serde_json::from_str(&format!(r#"{{"n": {text}}}"#)).unwrap() };
+        let equals = |v: &str| {
+            m::FollowRule::Equals(m::FollowEquals {
+                field: "n".into(),
+                value: mj_value::Value::Number(v.into()),
+            })
+        };
+        let at_least = |number: i64| {
+            m::FollowRule::AtLeast(m::FollowAtLeast {
+                field: "n".into(),
+                number,
+            })
+        };
+        let big = 9_007_199_254_740_993;
+        for (parent, eq, least) in [
+            ("9007199254740992.0", false, false),
+            ("9007199254740994.0", false, true),
+            ("9.007199254740992e15", false, false),
+            ("1e300", false, true),
+            ("-1e300", false, false),
+        ] {
+            let got = (
+                follows(Some(&equals("9007199254740993")), &n(parent), START),
+                follows(Some(&at_least(big)), &n(parent), START),
+            );
+            assert_eq!(got, (eq, least), "{parent}");
+        }
+        for (parent, eq, least) in [
+            ("3.0", true, true),
+            ("3e0", true, true),
+            ("2.5", false, false),
+            ("3.5", false, true),
+            ("-3.0", false, false),
+        ] {
+            let got = (
+                follows(Some(&equals("3")), &n(parent), START),
+                follows(Some(&at_least(3)), &n(parent), START),
+            );
+            assert_eq!(got, (eq, least), "{parent}");
+        }
+        assert!(follows(Some(&equals("-3")), &n("-3.0"), START));
+        assert!(!follows(Some(&equals("-3")), &n("-2.5"), START));
+        assert!(follows(Some(&equals("2.5")), &n("2.5"), START));
+        assert!(follows(Some(&equals("3.0")), &n("3"), START));
     }
 
     use cortex_model::json as mj_value;

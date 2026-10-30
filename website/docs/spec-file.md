@@ -338,9 +338,14 @@ whose `key` placeholders names a field it (or its input) lacks, holds as no scal
 text, is left out and counted in the run's `skipped` by operation and reason
 (`` tracker.issues.list: 2 records skipped: no value at id `key` ``); no key ends in `null`. A record
 whose text is empty is skipped. A `key` that is not a template (empty, without a placeholder, or
-with an unclosed `{` or a stray `}`) is refused when the spec is read. Adding, removing or
-changing `key` re-keys the source, and so does changing `inputs` while `key` names an
-`{input.…}`: `cortex update` refuses it while the source has seen documents.
+with an unclosed `{` or a stray `}`) is refused when the spec is read, and so is an `{input.…}`
+placeholder on a source without `inputs`, or one that some input does not hold as a text, number
+or boolean. Adding, removing or changing `key` re-keys the source: `cortex update` refuses it
+while the source has seen documents. While `key` names an `{input.…}`, `update` also refuses a
+respelled input: a change of `inputs` after which what one input rendered for those placeholders
+is gone and something new is rendered (`channel: C1` becoming `channel: general`). Adding an
+input, removing one, reordering them, or changing a field the key does not name (`limit`) keeps
+every remaining key and is accepted.
 
 **The window.** `{since}` and `{until}` are instants in RFC 3339, in UTC and to the second
 (`2026-10-05T12:34:56Z`). `{until}` is the start of this run. `{since}` is 5 minutes before the
