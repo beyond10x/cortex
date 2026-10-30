@@ -359,12 +359,11 @@ fn an_env_style_password_in_a_text_is_masked() {
 /// and whose child call fails for every record.
 const RECORD_CONNECTORS: &str = r#"R="@ROOT@"
 case "$*" in
-  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"tracker","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"tracker","connector":"tracker","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
   *"connections revalidate"*) echo '{"ok":true,"result":{}}' ;;
-  *"operations describe"*) echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
-  *"--operation hooks.list"*)
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"hooks.list","revision":"r","result":{"hooks":[{"url":"https://hooks.example.org/in?access_token=@TOKEN@","summary":"Inbound hook"}]}}}\n' ;;
-  *"--operation deliveries.list"*)
+  "invoke "*" hooks.list "*)
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"hooks.list","revision":"r","result":{"hooks":[{"url":"https://hooks.example.org/in?access_token=@TOKEN@","summary":"Inbound hook"}]}}}\n' ;;
+  "invoke "*" deliveries.list "*)
     echo '{"ok":false,"error":{"code":"failure","data":{"code":"unavailable","stage":"execution"}}}'; exit 1 ;;
   *) echo '{"ok":false}'; exit 2 ;;
 esac

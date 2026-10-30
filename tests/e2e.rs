@@ -39,10 +39,11 @@ fn an_instance_is_created_run_twice_and_removed() {
     );
     let invoked = w.lines("invocations.log").join("\n");
     assert!(
-        invoked.contains("--adapter tavily") && invoked.contains("--operation websearch.search"),
+        invoked.contains("invoke tavily/main websearch.search --connection conn_test"),
         "the web source invokes the websearch contract: {invoked}"
     );
-    assert!(invoked.contains(r#""content":"full""#), "{invoked}");
+    let input = w.lines("inputs.log").join("\n");
+    assert!(input.contains(r#""content":"full""#), "{input}");
     // The connection was pending, so the run revalidated it once before reading.
     let revalidated = w.lines("revalidations.log");
     assert_eq!(revalidated.len(), 1, "{revalidated:?}");

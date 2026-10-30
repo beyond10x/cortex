@@ -14,7 +14,7 @@ use serde_json::Value;
 /// A stand-in `connectors` whose `connections list --adapter <a>` answers the entries in
 /// `<root>/list-<a>.json` (written by [`list`]). Every argument list goes to
 /// `<root>/connectors-argv.log`, every invocation to `<root>/invocations.log`. An invocation
-/// answers `<root>/answer-<adapter>.json`. `connections launch --consumer ekr --args '<JSON>'`
+/// answers `<root>/answer-<connector>.json`. `connections launch --consumer ekr --args '<JSON>'`
 /// opens `<state>/<connection>.json` on descriptor 3 and runs `ekr` with the array's elements and
 /// only the `EKR_*` variables; a connection with no such file is refused.
 const CONNECTORS: &str = r#"R="@ROOT@"; STATE="@STATE@"; EKR="@EKR@"
@@ -23,10 +23,9 @@ case "$1 $2" in
   "connections list")
     printf '{"ok":true,"result":{"connections":[%s]}}' "$(cat "$R/list-$4.json" 2>/dev/null)" ;;
   "connections revalidate") echo '{"ok":true,"result":{}}' ;;
-  "operations describe") echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
-  "operations invoke")
+  "invoke "*)
     printf '%s\n' "$*" >> "$R/invocations.log"
-    cat "$R/answer-$4.json" ;;
+    cat "$R/answer-${2%%/*}.json" ;;
   "connections launch")
     shift 2; C=""; CONSUMER=""; ARGS="[]"
     while [ $# -gt 0 ]; do
@@ -82,7 +81,7 @@ fn list(w: &World, adapter: &str, entries: &[(&str, &str, &str)]) {
     let entries: Vec<String> = entries
         .iter()
         .map(|(id, profile, state)| {
-            serde_json::json!({"adapter": adapter, "instance_id": "local", "connection": id,
+            serde_json::json!({"adapter": adapter, "connector": adapter, "instance": "main", "instance_id": "local", "connection": id,
                 "profile": profile, "revision": "rev1", "state": state})
             .to_string()
         })
@@ -355,14 +354,14 @@ fn connectors_and_structured_sources_named_by_profile_invoke_their_resolved_id()
     );
     std::fs::write(
         w.root.join("answer-tracker.json"),
-        serde_json::json!({"ok": true, "result": {"adapter": "tracker", "operation": "issues.list",
+        serde_json::json!({"ok": true, "result": {"connector": "tracker", "instance": "main", "operation": "issues.list",
             "revision": "r", "result": {"issues": [{"key": "I-1", "summary": "Widget engine"}]}}})
         .to_string(),
     )
     .unwrap();
     std::fs::write(
         w.root.join("answer-directory.json"),
-        serde_json::json!({"ok": true, "result": {"adapter": "directory",
+        serde_json::json!({"ok": true, "result": {"connector": "directory", "instance": "main",
             "operation": "people.list", "revision": "r",
             "result": {"people": [{"id": "P-1", "name": "Ada Lovelace"}]}}})
         .to_string(),
@@ -432,11 +431,11 @@ serve: {{view_port: 18994}}
     let invocations = w.lines("invocations.log");
     let tracker: Vec<_> = invocations
         .iter()
-        .filter(|l| l.contains("--adapter tracker "))
+        .filter(|l| l.contains("invoke tracker/main "))
         .collect();
     let directory: Vec<_> = invocations
         .iter()
-        .filter(|l| l.contains("--adapter directory "))
+        .filter(|l| l.contains("invoke directory/main "))
         .collect();
     assert!(
         !tracker.is_empty() && !directory.is_empty(),

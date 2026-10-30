@@ -192,7 +192,7 @@ fn error_claude(w: &World, name: &str, result: &str) -> PathBuf {
     path
 }
 
-/// `connectors` that is the world's own, except that `operations invoke` first runs `before`.
+/// `connectors` that is the world's own, except that `invoke` first runs `before`.
 fn connectors_with(w: &World, before: &str) -> PathBuf {
     let path = w.bin.join("connectors-adv");
     executable(
@@ -200,7 +200,7 @@ fn connectors_with(w: &World, before: &str) -> PathBuf {
         &format!(
             r#"R="{root}"
 case "$*" in
-  *"operations invoke"*) {before} ;;
+  "invoke "*) {before} ;;
 esac
 exec "$R/bin/connectors" "$@"
 "#,

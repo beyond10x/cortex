@@ -43,6 +43,13 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   seconds), a paged or `files` read stops between pages and files, and the run ends `terminated`,
   exit 8, with nothing marked seen and its window kept. A run stopped in the wait before a model
   call is asked again says so in its reason, instead of saying a call was ended.
+- A Connectors source failed every run against Connectors 0.60.0, which removed `operations
+  invoke`. cortex now calls `connectors invoke <connector>/<instance> <operation> --connection
+  <id> --input-stdin`, with the connector and instance read from the connection's `connections
+  list` entry, and needs Connectors 0.60.0 or newer: an entry without them fails the run naming
+  the connection and that version. The input goes on standard input, so no record field or
+  cursor is in the process list, and each call is one `invoke`, without a description read
+  before it. A `result` that is not a JSON object fails the call naming its JSON type.
 
 ## 0.6.1 — 2026-10-17
 

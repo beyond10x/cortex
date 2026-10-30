@@ -6,8 +6,9 @@ mod common;
 
 use common::{executable, World};
 
-/// The world's stand-in `connectors`, with `operations invoke` timing out at admission while the
-/// file `timeouts` holds a line; each such invocation removes one.
+/// The world's stand-in `connectors` (0.60.0), with `invoke` timing out at admission while the
+/// file `timeouts` holds a line; each such invocation removes one. Every call's argv goes to
+/// `calls.log`, an invocation's argv to `invocations.log` and its standard input to `inputs.log`.
 fn world() -> World {
     let w = World::new();
     let root = w.root.display().to_string();
@@ -15,13 +16,13 @@ fn world() -> World {
         &w.bin.join("connectors"),
         &format!(
             r#"R="{root}"
+echo "$*" >> "$R/calls.log"
 case "$*" in
-  *"connections list"*) printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily","connection":"conn_test","state":"ready","revision":"rev1"}}]}}}}' ;;
+  *"connections list"*) printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily","connector":"tavily","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}}]}}}}' ;;
   *"connections revalidate"*) echo "$*" >> "$R/revalidations.log"; echo '{{"ok":true,"result":{{}}}}' ;;
   *"connections status"*) printf '{{"ok":true,"result":{{"connection":{{"summary":{{"state":"ready"}}}}}}}}' ;;
-  *"operations describe"*) echo "$*" >> "$R/describes.log"; echo '{{"ok":true,"result":{{"schema":"s","revision":"r"}}}}' ;;
-  *"operations invoke"*)
-    echo "$*" >> "$R/invocations.log"
+  "invoke "*)
+    echo "$*" >> "$R/invocations.log"; cat >> "$R/inputs.log"; echo >> "$R/inputs.log"
     if [ -s "$R/timeouts" ]; then
       sed -i '1d' "$R/timeouts"
       echo '{{"ok":false,"error":{{"code":"failure","data":{{"code":"timeout","stage":"admission"}}}}}}' >&2; exit 1
@@ -51,8 +52,20 @@ fn an_invocation_that_times_out_at_admission_once_is_retried_and_the_run_applies
     assert_eq!(ran["detail"]["documents_applied"], 2, "{ran}");
     let invocations = w.lines("invocations.log");
     assert_eq!(invocations.len(), 2, "retried exactly once");
-    assert_eq!(invocations[0], invocations[1], "the same input both times");
-    assert_eq!(w.lines("describes.log").len(), 2, "a fresh describe");
+    assert_eq!(
+        invocations[0], invocations[1],
+        "the same command line both times"
+    );
+    let inputs = w.lines("inputs.log");
+    assert_eq!(inputs.len(), 2, "{inputs:?}");
+    assert_eq!(inputs[0], inputs[1], "the same input both times");
+    // One spawn per call: each attempt is one `invoke`, with no description read before it.
+    let besides_readiness: Vec<String> = w
+        .lines("calls.log")
+        .into_iter()
+        .filter(|c| !c.starts_with("connections "))
+        .collect();
+    assert_eq!(besides_readiness, invocations, "only the two invokes");
 }
 
 #[test]

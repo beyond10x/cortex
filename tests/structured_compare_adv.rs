@@ -20,20 +20,21 @@ use serde_json::{json, Value};
 /// `fail-compare-<project>-<to>` exists. Every invocation is logged to `invocations.log`, a
 /// compare as `compare <project> <from>-><to>`, and a page above 1 with ` p<n>` after it.
 const CONNECTORS: &str = r#"R="@ROOT@"
-ARGS="$*"
+# Connectors 0.60.0 reads an invoke's input from standard input: A is the argv and that input.
+IN=""; if [ "$1" = invoke ]; then IN=$(cat); fi; A="$* $IN"
+ARGS="$A"
 field() { printf '%s\n' "$ARGS" | sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"; }
 P=$(field project); F=$(field from); T=$(field to)
 N=$(printf '%s\n' "$ARGS" | sed -n 's/.*"page":\([0-9][0-9]*\).*/\1/p')
 if [ -n "$N" ] && [ "$N" != 1 ]; then S="-p$N"; L=" p$N"; else S=""; L=""; fi
-answer() { if [ -e "$2" ]; then B=$(cat "$2"); else B="$3"; fi; printf '{"ok":true,"result":{"adapter":"forge","operation":"%s","revision":"r","result":%s}}\n' "$1" "$B"; }
+answer() { if [ -e "$2" ]; then B=$(cat "$2"); else B="$3"; fi; printf '{"ok":true,"result":{"connector":"forge","instance":"main","operation":"%s","revision":"r","result":%s}}\n' "$1" "$B"; }
 case "$ARGS" in
-  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"forge","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"forge","connector":"forge","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
   *"connections revalidate"*) echo '{"ok":true,"result":{}}' ;;
-  *"operations describe"*) echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
-  *"--operation projects.list"*) echo "projects.list" >> "$R/invocations.log"; answer projects.list "$R/projects.json" '{"projects":[]}' ;;
-  *"--operation tags.list"*) echo "tags.list $P$L" >> "$R/invocations.log"; answer tags.list "$R/tags-$P$S.json" '{"tags":[]}' ;;
-  *"--operation changes.list"*) echo "changes.list $P" >> "$R/invocations.log"; answer changes.list "$R/changes-$P.json" '{"changes":[]}' ;;
-  *"--operation compare"*)
+  "invoke "*" projects.list "*) echo "projects.list" >> "$R/invocations.log"; answer projects.list "$R/projects.json" '{"projects":[]}' ;;
+  "invoke "*" tags.list "*) echo "tags.list $P$L" >> "$R/invocations.log"; answer tags.list "$R/tags-$P$S.json" '{"tags":[]}' ;;
+  "invoke "*" changes.list "*) echo "changes.list $P" >> "$R/invocations.log"; answer changes.list "$R/changes-$P.json" '{"changes":[]}' ;;
+  "invoke "*" compare "*)
     echo "compare $P $F->$T$L" >> "$R/invocations.log"
     if [ -e "$R/fail-compare-$P-$T" ]; then echo '{"ok":false,"error":{"code":"failure","data":{"code":"forbidden","stage":"execution"}}}'; exit 1; fi
     answer compare "$R/compare-$P-$T$S.json" '{"commits":[]}' ;;

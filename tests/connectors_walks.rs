@@ -19,29 +19,30 @@ const DAY_MS: i64 = 86_400_000;
 /// by token (`after`) for the `issue` it is given: the first comment with `next_after` c2, then
 /// the second with none. Every invocation's arguments go to `issues.log` or `comments.log`.
 const CONNECTORS: &str = r#"R="@ROOT@"
+# Connectors 0.60.0 reads an invoke's input from standard input: A is the argv and that input.
+IN=""; if [ "$1" = invoke ]; then IN=$(cat); fi; A="$* $IN"
 issue() {
   printf '{"key":"%s","summary":"Issue %s"}' "$1" "$1"
 }
-case "$*" in
-  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"tracker","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
+case "$A" in
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"tracker","connector":"tracker","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
   *"connections revalidate"*) echo '{"ok":true,"result":{}}' ;;
-  *"operations describe"*) echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
-  *"--operation issues.list"*)
-    echo "$*" >> "$R/issues.log"
-    case "$*" in
+  "invoke "*" issues.list "*)
+    echo "$A" >> "$R/issues.log"
+    case "$A" in
       *'"cursor":"t3"'*) PAGE="$(issue I-5),$(issue I-6)"; NEXT='' ;;
       *'"cursor":"t2"'*) PAGE="$(issue I-3),$(issue I-4)"; NEXT=',"next":"t3"' ;;
       *) PAGE="$(issue I-1),$(issue I-2)"; NEXT=',"next":"t2"' ;;
     esac
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"issues.list","revision":"r","result":{"issues":[%s]%s}}}\n' "$PAGE" "$NEXT" ;;
-  *"--operation comments.list"*)
-    echo "$*" >> "$R/comments.log"
-    I=$(printf '%s' "$*" | sed -n 's/.*"issue":"\([^"]*\)".*/\1/p')
-    case "$*" in
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"issues":[%s]%s}}}\n' "$PAGE" "$NEXT" ;;
+  "invoke "*" comments.list "*)
+    echo "$A" >> "$R/comments.log"
+    I=$(printf '%s' "$A" | sed -n 's/.*"issue":"\([^"]*\)".*/\1/p')
+    case "$A" in
       *'"after":"c2"'*) BODY="second note on $I"; NEXT='' ;;
       *) BODY="first note on $I"; NEXT=',"next_after":"c2"' ;;
     esac
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"comments.list","revision":"r","result":{"comments":[{"body":"%s"}]%s}}}\n' "$BODY" "$NEXT" ;;
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"comments.list","revision":"r","result":{"comments":[{"body":"%s"}]%s}}}\n' "$BODY" "$NEXT" ;;
   *) echo '{"ok":false}'; exit 2 ;;
 esac
 "#;
@@ -57,10 +58,11 @@ fn world() -> World {
 
 /// The connection part of a stand-in `connectors` whose operations are given separately.
 const HEAD: &str = r#"R="@ROOT@"
-case "$*" in
-  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"tracker","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
+# Connectors 0.60.0 reads an invoke's input from standard input: A is the argv and that input.
+IN=""; if [ "$1" = invoke ]; then IN=$(cat); fi; A="$* $IN"
+case "$A" in
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"tracker","connector":"tracker","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
   *"connections revalidate"*) echo '{"ok":true,"result":{}}' ;;
-  *"operations describe"*) echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
 "#;
 
 const TAIL: &str = r#"  *) echo '{"ok":false}'; exit 2 ;;
@@ -72,11 +74,11 @@ esac
 /// `pagesize` lines (all of them when absent) by `page` number. When the file
 /// `move-after-first-page` exists, serving page 1 updates I-1 (new stamp, " moved" summary), as a
 /// write landing between two page requests does.
-const FILTERING: &str = r#"  *"--operation issues.list"*)
-    echo "$*" >> "$R/issues.log"
-    SINCE=$(printf '%s' "$*" | sed -n 's/.*"updated_since":"\([^"]*\)".*/\1/p')
-    UNTIL=$(printf '%s' "$*" | sed -n 's/.*"updated_until":"\([^"]*\)".*/\1/p')
-    PAGE=$(printf '%s' "$*" | sed -n 's/.*"page":\([0-9]*\).*/\1/p'); [ -n "$PAGE" ] || PAGE=1
+const FILTERING: &str = r#"  "invoke "*" issues.list "*)
+    echo "$A" >> "$R/issues.log"
+    SINCE=$(printf '%s' "$A" | sed -n 's/.*"updated_since":"\([^"]*\)".*/\1/p')
+    UNTIL=$(printf '%s' "$A" | sed -n 's/.*"updated_until":"\([^"]*\)".*/\1/p')
+    PAGE=$(printf '%s' "$A" | sed -n 's/.*"page":\([0-9]*\).*/\1/p'); [ -n "$PAGE" ] || PAGE=1
     SIZE=$(cat "$R/pagesize" 2>/dev/null || echo 1000)
     FIRST=$(( (PAGE - 1) * SIZE + 1 )); LAST=$(( PAGE * SIZE ))
     ITEMS=$(sort "$R/db" | awk -F'\t' -v s="$SINCE" -v u="$UNTIL" -v f="$FIRST" -v l="$LAST" '
@@ -87,59 +89,59 @@ const FILTERING: &str = r#"  *"--operation issues.list"*)
       awk -F'\t' -v OFS='\t' -v t="$NOW" '$2 == "I-1" { $1 = t; $3 = $3 " moved" } { print }' "$R/db" > "$R/db.new"
       mv "$R/db.new" "$R/db"
     fi
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"issues.list","revision":"r","result":{"issues":[%s]}}}\n' "$ITEMS" ;;
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"issues":[%s]}}}\n' "$ITEMS" ;;
 "#;
 
 /// `issues.list` answers I-1 alone; `comments.list` answers every line of `comments` as one
 /// comment body, in one page.
-const COMMENTS_FILE: &str = r#"  *"--operation issues.list"*)
-    echo "$*" >> "$R/issues.log"
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"issues.list","revision":"r","result":{"issues":[{"key":"I-1","summary":"Issue I-1"}]}}}\n' ;;
-  *"--operation comments.list"*)
-    echo "$*" >> "$R/comments.log"
+const COMMENTS_FILE: &str = r#"  "invoke "*" issues.list "*)
+    echo "$A" >> "$R/issues.log"
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"issues":[{"key":"I-1","summary":"Issue I-1"}]}}}\n' ;;
+  "invoke "*" comments.list "*)
+    echo "$A" >> "$R/comments.log"
     ITEMS=$(awk '{ printf "%s{\"body\":\"%s\"}", (NR > 1 ? "," : ""), $0 }' "$R/comments")
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"comments.list","revision":"r","result":{"comments":[%s]}}}\n' "$ITEMS" ;;
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"comments.list","revision":"r","result":{"comments":[%s]}}}\n' "$ITEMS" ;;
 "#;
 
 /// `issues.list` by token `cursor`: no cursor answers I-1 and I-2 with `next` t2; t2 answers an
 /// empty page that still names `next` t3; t3 answers I-5 and I-6 and no `next`.
-const EMPTY_MIDDLE_PAGE: &str = r#"  *"--operation issues.list"*)
-    echo "$*" >> "$R/issues.log"
-    case "$*" in
+const EMPTY_MIDDLE_PAGE: &str = r#"  "invoke "*" issues.list "*)
+    echo "$A" >> "$R/issues.log"
+    case "$A" in
       *'"cursor":"t3"'*) PAGE='{"key":"I-5","summary":"Issue I-5"},{"key":"I-6","summary":"Issue I-6"}'; NEXT='' ;;
       *'"cursor":"t2"'*) PAGE=''; NEXT=',"next":"t3"' ;;
       *) PAGE='{"key":"I-1","summary":"Issue I-1"},{"key":"I-2","summary":"Issue I-2"}'; NEXT=',"next":"t2"' ;;
     esac
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"issues.list","revision":"r","result":{"issues":[%s]%s}}}\n' "$PAGE" "$NEXT" ;;
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"issues":[%s]%s}}}\n' "$PAGE" "$NEXT" ;;
 "#;
 
 /// `issues.list` answers I-1 alone; `comments.list` by token `after` cycles: no token answers
 /// "first" with c2, c2 answers "second" with c3, c3 answers "third" with c2 again.
-const CHILD_CYCLE: &str = r#"  *"--operation issues.list"*)
-    echo "$*" >> "$R/issues.log"
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"issues.list","revision":"r","result":{"issues":[{"key":"I-1","summary":"Issue I-1"}]}}}\n' ;;
-  *"--operation comments.list"*)
-    echo "$*" >> "$R/comments.log"
-    case "$*" in
+const CHILD_CYCLE: &str = r#"  "invoke "*" issues.list "*)
+    echo "$A" >> "$R/issues.log"
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"issues":[{"key":"I-1","summary":"Issue I-1"}]}}}\n' ;;
+  "invoke "*" comments.list "*)
+    echo "$A" >> "$R/comments.log"
+    case "$A" in
       *'"after":"c3"'*) BODY=third; NEXT=c2 ;;
       *'"after":"c2"'*) BODY=second; NEXT=c3 ;;
       *) BODY=first; NEXT=c2 ;;
     esac
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"comments.list","revision":"r","result":{"comments":[{"body":"%s note"}],"next_after":"%s"}}}\n' "$BODY" "$NEXT" ;;
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"comments.list","revision":"r","result":{"comments":[{"body":"%s note"}],"next_after":"%s"}}}\n' "$BODY" "$NEXT" ;;
 "#;
 
 /// `issues.list` answers I-1 to I-3; `comments.list` answers one comment, and fails for the issue
 /// named in the file `fail-for` while it exists.
-const CHILD_FAILS: &str = r#"  *"--operation issues.list"*)
-    echo "$*" >> "$R/issues.log"
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"issues.list","revision":"r","result":{"issues":[{"key":"I-1","summary":"Issue I-1"},{"key":"I-2","summary":"Issue I-2"},{"key":"I-3","summary":"Issue I-3"}]}}}\n' ;;
-  *"--operation comments.list"*)
-    echo "$*" >> "$R/comments.log"
-    I=$(printf '%s' "$*" | sed -n 's/.*"issue":"\([^"]*\)".*/\1/p')
+const CHILD_FAILS: &str = r#"  "invoke "*" issues.list "*)
+    echo "$A" >> "$R/issues.log"
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"issues":[{"key":"I-1","summary":"Issue I-1"},{"key":"I-2","summary":"Issue I-2"},{"key":"I-3","summary":"Issue I-3"}]}}}\n' ;;
+  "invoke "*" comments.list "*)
+    echo "$A" >> "$R/comments.log"
+    I=$(printf '%s' "$A" | sed -n 's/.*"issue":"\([^"]*\)".*/\1/p')
     if [ -e "$R/fail-for" ] && [ "$(cat "$R/fail-for")" = "$I" ]; then
       echo '{"ok":false,"error":{"code":"failure","data":{"code":"unavailable","stage":"execution"}}}'; exit 1
     fi
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"comments.list","revision":"r","result":{"comments":[{"body":"note on %s"}]}}}\n' "$I" ;;
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"comments.list","revision":"r","result":{"comments":[{"body":"note on %s"}]}}}\n' "$I" ;;
 "#;
 
 /// A world whose stand-in `connectors` answers `operations`.
@@ -1035,9 +1037,9 @@ fn a_first_run_reads_refresh_after_days_of_history_and_none_with_zero() {
 
 /// `issues.list` logs its arguments and answers no records, as a chat-history operation with
 /// nothing new does.
-const NOTHING_NEW: &str = r#"  *"--operation issues.list"*)
-    echo "$*" >> "$R/issues.log"
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"issues.list","revision":"r","result":{"issues":[]}}}\n' ;;
+const NOTHING_NEW: &str = r#"  "invoke "*" issues.list "*)
+    echo "$A" >> "$R/issues.log"
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"issues":[]}}}\n' ;;
 "#;
 
 /// `{since_epoch}` and `{until_epoch}` render the run's window as whole epoch seconds, the same
@@ -1084,16 +1086,16 @@ fn the_window_fills_since_epoch_and_until_epoch_as_whole_epoch_seconds() {
 /// with an absolute link to cursor `a/b` (percent-encoded); `a/b` answers P-6 and no link. Every
 /// record is stamped at `version.createdAt` with the instant in the file `new`, except P-6 and
 /// P-4, stamped with the one in `old`, P-4 only when the file `p4-old` exists.
-const LINKED: &str = r#"  *"--operation issues.list"*)
-    echo "$*" >> "$R/issues.log"
+const LINKED: &str = r#"  "invoke "*" issues.list "*)
+    echo "$A" >> "$R/issues.log"
     NEW=$(cat "$R/new"); OLD=$(cat "$R/old"); P4=$NEW; [ -e "$R/p4-old" ] && P4=$OLD
     rec() { printf '{"id":"%s","title":"Page %s","version":{"createdAt":"%s"}}' "$1" "$1" "$2"; }
-    case "$*" in
+    case "$A" in
       *'"cursor":"a/b"'*) PAGE="$(rec P-6 "$OLD")"; NEXT='null' ;;
       *'"cursor":"abc"'*) PAGE="$(rec P-3 "$NEW"),$(rec P-4 "$P4"),$(rec P-5 "$NEW")"; NEXT='"https://host/api/pages?limit=50&cursor=a%2Fb"' ;;
       *) PAGE="$(rec P-1 "$NEW"),$(rec P-2 "$NEW")"; NEXT='"/api/pages?cursor=abc&limit=50"' ;;
     esac
-    printf '{"ok":true,"result":{"adapter":"tracker","operation":"issues.list","revision":"r","result":{"results":[%s],"_links":{"next":%s}}}}\n' "$PAGE" "$NEXT" ;;
+    printf '{"ok":true,"result":{"connector":"tracker","instance":"main","operation":"issues.list","revision":"r","result":{"results":[%s],"_links":{"next":%s}}}}\n' "$PAGE" "$NEXT" ;;
 "#;
 
 /// The settings of a `connectors` source over [`LINKED`], reading at most `max_pages` pages, with

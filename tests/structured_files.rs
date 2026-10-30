@@ -675,8 +675,7 @@ serve: {{view_port: 18992}}
     executable(
         &w.bin.join("connectors"),
         r#"case "$*" in
-  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"directory","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
-  *"operations describe"*) echo '{"ok":true,"result":{"schema":"s","revision":"r"}}' ;;
+  *"connections list"*) echo '{"ok":true,"result":{"connections":[{"adapter":"directory","connector":"directory","instance":"main","connection":"conn_test","state":"ready","revision":"rev1"}]}}' ;;
   *) echo '{"ok":false}'; exit 2 ;;
 esac
 "#,
