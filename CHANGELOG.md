@@ -43,6 +43,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   seconds), a paged or `files` read stops between pages and files, and the run ends `terminated`,
   exit 8, with nothing marked seen and its window kept. A run stopped in the wait before a model
   call is asked again says so in its reason, instead of saying a call was ended.
+- `cortex ask serve` recorded an answer whose reader closed the stream as `model-failed`, with no
+  tokens, and opened a review item for it. It is now recorded with the outcome `client-closed`,
+  the token counts and steps of the model calls already made, and no review item.
+- `cortex ask serve` streamed and recorded a model reply cut off at its token limit or by a
+  content filter as an answer. Such a reply (`finish_reason` `length` or `content_filter`) now
+  ends the stream with an `error` event, reason `cut-off`, is recorded with the outcome `cut-off`
+  and its tokens, and opens a `failed` review item. An older cortex cannot read a record with
+  either new outcome.
 
 ## 0.6.1 — 2026-10-17
 

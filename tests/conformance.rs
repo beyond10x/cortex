@@ -1071,6 +1071,33 @@ impl Scenario {
                     "reader-failed",
                     Some(("cortex.ask.ReaderFailed", json!({"reason": error.reason}))),
                 ),
+                ma::AskOutcome::CutOff { error } => (
+                    "cut-off",
+                    Some((
+                        "cortex.ask.CutOff",
+                        json!({
+                            "finish_reason": error.finish_reason,
+                            "steps": error.steps,
+                            "input_tokens": error.input_tokens,
+                            "output_tokens": error.output_tokens,
+                            "cached_tokens": error.cached_tokens,
+                            "context_tokens": error.context_tokens,
+                        }),
+                    )),
+                ),
+                ma::AskOutcome::ClientClosed { error } => (
+                    "client-closed",
+                    Some((
+                        "cortex.ask.ClientClosed",
+                        json!({
+                            "steps": error.steps,
+                            "input_tokens": error.input_tokens,
+                            "output_tokens": error.output_tokens,
+                            "cached_tokens": error.cached_tokens,
+                            "context_tokens": error.context_tokens,
+                        }),
+                    )),
+                ),
             },
             "cortex.ask.RecordAnswer" => {
                 let tool_calls = input
@@ -1104,14 +1131,8 @@ impl Scenario {
                         question: s("question"),
                         answer: optional("answer"),
                         reason: optional("reason"),
-                        outcome: [
-                            ma::AnswerOutcome::Answered,
-                            ma::AnswerOutcome::Failed,
-                            ma::AnswerOutcome::Limited,
-                        ]
-                        .into_iter()
-                        .find(|o| records::outcome_name(*o) == outcome)
-                        .unwrap_or_else(|| panic!("unknown answer outcome {outcome}")),
+                        outcome: records::outcome_of(&outcome)
+                            .unwrap_or_else(|| panic!("unknown answer outcome {outcome}")),
                         tool_calls,
                         latency_ms: int("latency_ms"),
                         input_tokens: int("input_tokens"),
@@ -1543,7 +1564,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     }
     assert_eq!(
         scenarios.len(),
-        115,
+        117,
         "the suite's scenario count moved; update this floor"
     );
     assert!(

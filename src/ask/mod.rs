@@ -383,6 +383,19 @@ pub fn final_event(outcome: &ma::AskOutcome) -> ma::AskEvent {
             },
             None,
         ),
+        ma::AskOutcome::CutOff { error: e } => error(
+            "cut-off",
+            format!(
+                "the model's reply was cut off ({}); it is no answer",
+                e.finish_reason
+            ),
+            None,
+        ),
+        ma::AskOutcome::ClientClosed { .. } => error(
+            "client-closed",
+            "the reader closed the stream before the answer".into(),
+            None,
+        ),
         ma::AskOutcome::ModelFailed { error: e } => error("model-failed", e.reason.clone(), None),
         ma::AskOutcome::ReaderFailed { error: e } => error("reader-failed", e.reason.clone(), None),
     }
@@ -408,6 +421,50 @@ fn model_failed(reason: String) -> ma::AskOutcome {
     }
 }
 
+/// What the model calls of an answer spent so far: how many were made, their `usage` added up,
+/// and the prompt tokens of the last one.
+#[derive(Clone, Copy, Debug, Default)]
+struct Spent {
+    steps: i64,
+    usage: model::Usage,
+    context: i64,
+}
+
+impl Spent {
+    fn add(&mut self, usage: &model::Usage) {
+        self.steps += 1;
+        self.usage.add(usage);
+        self.context = usage.input;
+    }
+}
+
+/// The reader closed the stream: the answer stops, with what it spent.
+fn client_closed(spent: &Spent) -> ma::AskOutcome {
+    ma::AskOutcome::ClientClosed {
+        error: ma::ClientClosed {
+            steps: spent.steps,
+            input_tokens: spent.usage.input,
+            output_tokens: spent.usage.output,
+            cached_tokens: spent.usage.cached,
+            context_tokens: spent.context,
+        },
+    }
+}
+
+/// The model's reply was cut off for `finish_reason`: no answer, with what it spent.
+fn cut_off(finish_reason: &str, spent: &Spent) -> ma::AskOutcome {
+    ma::AskOutcome::CutOff {
+        error: ma::CutOff {
+            finish_reason: finish_reason.into(),
+            steps: spent.steps,
+            input_tokens: spent.usage.input,
+            output_tokens: spent.usage.output,
+            cached_tokens: spent.usage.cached,
+            context_tokens: spent.context,
+        },
+    }
+}
+
 /// Answers `question` for `identity`, under `answer_id`: the tool loop. Each event before the last is handed to
 /// `emit` as it happens; `emit` answers false once nobody reads the stream, which ends the loop.
 /// The outcome is the answer or why there is none; [`final_event`] makes it the last event.
@@ -423,7 +480,7 @@ pub fn answer(
     let seconds = (limits.max_seconds as u64).min(10 * 365 * 24 * 3600);
     let deadline = Instant::now() + Duration::from_secs(seconds);
     let max_bytes = limits.max_result_bytes as usize;
-    let gone = || model_failed("the request was closed before the answer".into());
+    let mut spent = Spent::default();
     let status = |step: i64, message: &str| {
         ma::AskEvent::Status(ma::AskStatus {
             format: EVENTS_FORMAT.into(),
@@ -445,7 +502,7 @@ pub fn answer(
         None => question.to_string(),
     };
     if !emit(status(0, "starting the reader")) {
-        return gone();
+        return client_closed(&spent);
     }
     let mut reader = match mcp::Reader::start(&settings.reader, deadline) {
         Ok(r) => r,
@@ -478,21 +535,25 @@ pub fn answer(
         json!({"role": "system", "content": settings.system}),
         json!({"role": "user", "content": question}),
     ];
-    let mut usage = model::Usage::default();
     for step in 1..=limits.max_steps {
         if Instant::now() >= deadline {
             return limit("time-limit");
         }
         if !emit(status(step, "asking the model")) {
-            return gone();
+            return client_closed(&spent);
         }
         let reply = match gateway.chat(&messages, &tools, deadline) {
             Ok(r) => r,
             Err(CallError::Timeout) => return limit("time-limit"),
             Err(CallError::Failed(reason)) => return model_failed(reason),
         };
-        usage.add(&reply.usage);
-        let context = reply.usage.input;
+        spent.add(&reply.usage);
+        let (usage, context) = (spent.usage, spent.context);
+        // A reply cut off by the token limit or a filter is no answer, and its tool calls may
+        // be cut too: nothing of it is streamed or run.
+        if let Some(finish_reason) = reply.cut_off() {
+            return cut_off(finish_reason, &spent);
+        }
         if reply.tool_calls.is_empty() {
             let text = reply.content.unwrap_or_default();
             let cited = cite::cite(&text, settings.ask.link_templates.as_ref());
@@ -517,7 +578,7 @@ pub fn answer(
             for piece in pieces.into_iter().filter(|p| !p.is_empty()) {
                 answer.push_str(&piece);
                 if !emit(ma::AskEvent::Delta(ma::AskDelta { text: piece })) {
-                    return gone();
+                    return client_closed(&spent);
                 }
             }
             return ma::AskOutcome::Answered {
@@ -544,7 +605,7 @@ pub fn answer(
             if !emit(ma::AskEvent::Delta(ma::AskDelta { text }))
                 || !emit(ma::AskEvent::Discard(ma::AskDiscard { step }))
             {
-                return gone();
+                return client_closed(&spent);
             }
         }
         if step == limits.max_steps {
@@ -570,7 +631,7 @@ pub fn answer(
                 failed,
                 withheld,
             })) {
-                return gone();
+                return client_closed(&spent);
             }
             messages.push(json!({"role": "tool", "tool_call_id": call.id, "content": shown}));
         }

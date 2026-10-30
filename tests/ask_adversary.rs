@@ -16,6 +16,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use common::executable;
+use cortex_cli::ask::records::{self, Records};
+use cortex_model::ask as ma;
 use serde_json::{json, Value};
 
 const TOKEN_ENV: &str = "ASK_ADV_GATEWAY_TOKEN";
@@ -690,6 +692,136 @@ fn a_closed_request_stops_the_loop_and_its_reader() {
     );
     for pid in service.reader_pids() {
         assert!(!alive(pid), "reader {pid} outlived its closed request");
+    }
+}
+
+/// The answer records `service` kept, read with the service's own store once it holds `n`
+/// (`story:ask-outcome-truthful`).
+fn kept(service: &Service, n: usize) -> (Records, Vec<ma::AnswerRecordData>) {
+    let file = service.root.join("home/instances/asker/ask.sqlite");
+    let started = Instant::now();
+    loop {
+        if file.exists() {
+            let records = Records::open(&file).expect("ask.sqlite opens");
+            let answers = records.answers().unwrap();
+            if answers.len() >= n || started.elapsed() > Duration::from_secs(20) {
+                assert_eq!(answers.len(), n, "{answers:?}");
+                return (records, answers);
+            }
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "no ask.sqlite after 20 s"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// A reader who closes the stream mid-answer is recorded as `client-closed`, never as the
+/// gateway failing (`model-failed`), with the tokens and steps of the model calls already made,
+/// and opens no review item (`story:ask-outcome-truthful`, R1-01).
+#[test]
+fn a_reader_who_leaves_mid_answer_is_recorded_as_client_closed_with_its_tokens() {
+    let gateway = Gateway::start(vec![tool_reply(1, SEARCH)], Duration::from_millis(300));
+    let service = serve(
+        &gateway,
+        Setup {
+            limits: "{max_steps: 50, max_result_bytes: 4096, max_seconds: 60, \
+                     per_identity_per_minute: 10}",
+            ..Setup::default()
+        },
+    );
+    let body = json!({"question": "Leave?"}).to_string();
+    let mut stream = TcpStream::connect(&service.addr).unwrap();
+    write!(
+        stream,
+        "POST /ask HTTP/1.1\r\nhost: x\r\n{HEADER}: dana\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{body}",
+        body.len()
+    )
+    .unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    let mut seen = Vec::new();
+    let mut buf = [0; 4096];
+    // One whole step: its model call, then its `tool` event.
+    while !String::from_utf8_lossy(&seen).contains("event: tool") {
+        let n = stream.read(&mut buf).unwrap();
+        assert!(n > 0, "the stream ended before its first tool event");
+        seen.extend_from_slice(&buf[..n]);
+    }
+    drop(stream);
+    let (store, answers) = kept(&service, 1);
+    let record = &answers[0];
+    assert_eq!(
+        records::outcome_name(record.outcome),
+        "client-closed",
+        "{record:?}"
+    );
+    assert_eq!(record.reason.as_deref(), Some("client-closed"));
+    assert_eq!(record.answer, None);
+    assert!(record.steps >= 1, "{record:?}");
+    assert_eq!(record.input_tokens, 10 * record.steps, "{record:?}");
+    assert_eq!(record.output_tokens, record.steps, "{record:?}");
+    assert_eq!(record.context_tokens, 10, "{record:?}");
+    let reviews = store.reviews(&record.answer_id.0).unwrap();
+    assert!(
+        reviews.is_empty(),
+        "a reader leaving is no review: {reviews:?}"
+    );
+}
+
+/// A model reply cut off by its token limit (`finish_reason: "length"`) or by a content filter
+/// (`"content_filter"`) is no answer: the stream ends with `error` `cut-off`, the record's outcome
+/// is `cut-off` with the tokens spent, and each opens a review item (`story:ask-outcome-truthful`,
+/// R1-02).
+#[test]
+fn a_cut_off_model_reply_is_recorded_as_cut_off_and_opens_a_review() {
+    let finished = |text: &str, finish_reason: &str| {
+        let mut reply = text_reply(text);
+        reply["choices"][0]["finish_reason"] = json!(finish_reason);
+        reply
+    };
+    let gateway = Gateway::start(
+        vec![
+            finished("The widget is made by", "length"),
+            finished("", "content_filter"),
+        ],
+        Duration::ZERO,
+    );
+    let service = serve(&gateway, Setup::default());
+    for question in ["Who makes it?", "And now?"] {
+        let answer = ask(&service, "alice", question);
+        assert_eq!(answer.status, 200);
+        let (name, error) = answer.terminal();
+        assert_eq!(name, "error", "{:?}", answer.events);
+        assert_eq!(error["reason"], "cut-off", "{error}");
+        assert!(
+            !answer.names().contains(&"delta"),
+            "a cut-off reply is not streamed as the answer: {:?}",
+            answer.events
+        );
+    }
+    let (store, answers) = kept(&service, 2);
+    for record in &answers {
+        assert_eq!(
+            records::outcome_name(record.outcome),
+            "cut-off",
+            "{record:?}"
+        );
+        assert_eq!(record.reason.as_deref(), Some("cut-off"));
+        assert_eq!(record.answer, None);
+        assert_eq!(
+            (record.input_tokens, record.output_tokens, record.steps),
+            (10, 1, 1)
+        );
+        let causes: Vec<_> = store
+            .reviews(&record.answer_id.0)
+            .unwrap()
+            .into_iter()
+            .map(|r| records::cause_name(r.data.cause))
+            .collect();
+        assert_eq!(causes, ["failed"], "{record:?}");
     }
 }
 

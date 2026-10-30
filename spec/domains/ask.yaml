@@ -136,11 +136,14 @@ types:
 
   # What became of a question: `answered` when the stream ended with `done`; `limited` when it
   # ended at the step or time limit (`cortex.ask.LimitReached`); `failed` when the model or the
-  # reader failed (`cortex.ask.ModelFailed`, `cortex.ask.ReaderFailed`). A refusal before the
-  # answer starts (401, 429, 400) is no answer and leaves no record.
+  # reader failed (`cortex.ask.ModelFailed`, `cortex.ask.ReaderFailed`); `client-closed` when the
+  # reader closed the stream before its last event (`cortex.ask.ClientClosed`), which is no failure
+  # of the model; `cut-off` when the model's reply ended because of its token limit or a content
+  # filter (`cortex.ask.CutOff`), which is no answer. A refusal before the answer starts (401, 429,
+  # 400) is no answer and leaves no record.
   - name: cortex.ask.AnswerOutcome
     kind: enum
-    variants: [answered, failed, limited]
+    variants: [answered, failed, limited, client-closed, cut-off]
 
   # A reader's verdict on an answer.
   - name: cortex.ask.VoteValue
@@ -148,7 +151,7 @@ types:
     variants: [up, down]
 
   # Why an answer is in the review queue: a `down` vote (`voted-down`), an outcome other than
-  # `answered` (`failed`), or a latency past `slow_after_ms` (`slow`).
+  # `answered` and `client-closed` (`failed`), or a latency past `slow_after_ms` (`slow`).
   - name: cortex.ask.ReviewCause
     kind: enum
     variants: [voted-down, failed, slow]
@@ -224,8 +227,10 @@ types:
       - {name: unrestored, type: Integer}
 
   # The last event of an answer that has none. `reason` is one of `unidentified`, `rate-limit`,
-  # `step-limit`, `time-limit`, `model-failed`, `reader-failed` and `bad-request`; `message` says
-  # more, for a person; `retry_after` is given with `rate-limit` only, in whole seconds.
+  # `step-limit`, `time-limit`, `model-failed`, `reader-failed`, `cut-off`, `client-closed` and
+  # `bad-request`; `message` says more, for a person; `retry_after` is given with `rate-limit`
+  # only, in whole seconds. `client-closed` is the reason an answer is recorded with when its
+  # reader left; nobody is left to read its event.
   - name: cortex.ask.AskError
     kind: struct
     fields:
@@ -339,7 +344,9 @@ entities:
   # never the store's, for `retention_days`. `identity` is the asker's;
   # `answer` the answer as `done` carried it, absent unless `outcome` is `answered`; `reason` the
   # `error` event's reason otherwise. `tool_calls` are the `tool` events of the answer, in order.
-  # The token counts and `steps` are those of the `done` event (0 without one); `latency_ms` the
+  # The token counts and `steps` are those of the `done` event; for `client-closed` and `cut-off`
+  # they are those of the model calls made before the answer ended (`cortex.ask.ClientClosed`,
+  # `cortex.ask.CutOff`); otherwise 0. `latency_ms` the
   # milliseconds from the question to the last event; `at` when the question was asked.
   # `question` and `answer` are kept with every credential shape masked (`[masked:<shape>]`,
   # `crate::mask`), whatever the instance's `redaction` policy, as everywhere cortex writes text;
@@ -490,6 +497,32 @@ errors:
     fields:
       - {name: reason, type: String}
 
+  - name: cortex.ask.ClientClosed
+    summary: >-
+      The reader closed the stream before its last event; the answer stops at once and opens no
+      review item. `steps` counts the model calls made, and the token counts add up their `usage`
+      as `cortex.ask.AskDone` does; `context_tokens` is the prompt tokens of the last one.
+    fields:
+      - {name: steps, type: Integer}
+      - {name: input_tokens, type: Integer}
+      - {name: output_tokens, type: Integer}
+      - {name: cached_tokens, type: Integer}
+      - {name: context_tokens, type: Integer}
+
+  - name: cortex.ask.CutOff
+    summary: >-
+      The model's reply ended because of its token limit (`finish_reason` `length`) or a content
+      filter (`content_filter`), so its text is no answer and is not streamed. `finish_reason` is
+      the one the gateway gave; `steps` and the token counts are those of the model calls made,
+      as for `cortex.ask.ClientClosed`.
+    fields:
+      - {name: finish_reason, type: String}
+      - {name: steps, type: Integer}
+      - {name: input_tokens, type: Integer}
+      - {name: output_tokens, type: Integer}
+      - {name: cached_tokens, type: Integer}
+      - {name: context_tokens, type: Integer}
+
   - name: cortex.ask.AnswerNotFound
     summary: No answer record carries this id, or it was purged; it answers 404.
     fields:
@@ -584,6 +617,31 @@ commands:
             reason: {generated: true}
         summary: The stream ends with an `error` event, and no `done`.
 
+      - name: cut-off
+        external: The model's reply ends because of its token limit or a content filter
+        error: cortex.ask.CutOff
+        payload:
+          cortex.ask.CutOff:
+            finish_reason: {generated: true}
+            steps: {generated: true}
+            input_tokens: {generated: true}
+            output_tokens: {generated: true}
+            cached_tokens: {generated: true}
+            context_tokens: {generated: true}
+        summary: The stream ends with an `error` event whose `reason` is `cut-off`, and no `done`.
+
+      - name: client-closed
+        external: The reader closes the stream before its last event
+        error: cortex.ask.ClientClosed
+        payload:
+          cortex.ask.ClientClosed:
+            steps: {generated: true}
+            input_tokens: {generated: true}
+            output_tokens: {generated: true}
+            cached_tokens: {generated: true}
+            context_tokens: {generated: true}
+        summary: The answer stops; nobody reads its last event.
+
       - name: answered
         emits:
           - cortex.ask.Answered
@@ -599,7 +657,8 @@ commands:
       display: Record an answer
     # The service records every question it began to answer, once its stream ended: the outcome
     # of `cortex.ask.Ask` and what its events carried. After the record, it opens a review item
-    # (`cortex.ask.OpenReview`) with cause `failed` for an outcome other than `answered`, and with
+    # (`cortex.ask.OpenReview`) with cause `failed` for an outcome other than `answered` and
+    # `client-closed` (a reader leaving is no fault of the answer), and with
     # cause `slow` for a `latency_ms` past the spec's `slow_after_ms`. A record that cannot be
     # written is logged on standard error and changes nothing the asker was streamed.
     input:

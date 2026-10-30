@@ -105,6 +105,12 @@ answer's UUIDv7, the id its record and its votes carry.
 | `time-limit` | 200 | the answer passed `max_seconds` |
 | `model-failed` | 200 | the gateway could not be reached, answered an error or no message |
 | `reader-failed` | 200 | the reader could not be started or stopped answering |
+| `cut-off` | 200 | the model's reply ended at its token limit (`finish_reason` `length`) or at a content filter (`content_filter`); its text is no answer and is not streamed |
+
+A reader who closes the stream before its last event stops the answer at once: no model is
+asked again and the reader process is stopped. The answer is recorded as `client-closed`, with
+the token counts and steps of the model calls already made; it is no failure and opens no review
+item.
 
 A tool result is rewritten into compact text (each text that is JSON written without whitespace)
 and cut at a character boundary to `max_result_bytes`; its `tool` event says whether it was cut.
@@ -155,8 +161,9 @@ data: {"event":"done","value":{"answer":"…","answer_id":"0192f3a1-7c2e-7d41-9b
 
 Every answer the service gives, and every one that failed or hit a limit, is kept as a record
 (`cortex.ask.AnswerRecord`) before its last event is sent: the question, the identity, the answer or
-the reason there is none, the outcome (`answered`, `failed`, `limited`), the `tool` events, the
-latency, the token counts of its `done` event and the time. A request refused before it started
+the reason there is none, the outcome (`answered`, `failed`, `limited`, `client-closed`,
+`cut-off`), the `tool` events, the latency, the token counts and steps (of its `done` event; for
+`client-closed` and `cut-off`, of the model calls made before it ended; otherwise 0) and the time. A request refused before it started
 (401, 429, 400) leaves no record. The records are cortex's own, never in the EKR store: on a `sqlite`
 store they live in `instances/<name>/ask.sqlite` in the instance directory, on a `postgres` store in
 a schema of their own ([below](#records-on-a-postgresql-store)). Either carries its schema version,
@@ -181,7 +188,7 @@ cause, and an item, once opened, stays as it was whatever happens after:
 | cause | opened when |
 |---|---|
 | `voted-down` | a `down` vote is cast on the answer, by anyone |
-| `failed` | the answer's outcome is `failed` or `limited` |
+| `failed` | the answer's outcome is `failed`, `limited` or `cut-off` (a `client-closed` answer opens none) |
 | `slow` | the answer took longer than `slow_after_ms` |
 
 A vote or a close that meets a purge or another close keeps to these answers: a vote whose answer

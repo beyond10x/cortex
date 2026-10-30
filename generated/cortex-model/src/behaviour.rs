@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 5a29cefca25e2266b019b8b5b6031137a2e3440abb9403edfa5363b3e1284768
-// contract digest 813e9e892f7c25641e646e3a1ef94f827001f7769520922c88de4f5af1cb5113
+// model digest 3cb764fa6058c327300de7d63b53b82b3ed86189c61ff97550848ad850d64bcf
+// contract digest 5daf559cd61a381fbf6ce9233bce2e7d477c4713ee671105b36029ab93dc414a
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -289,6 +289,14 @@ where
         // `reader-failed`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "reader-failed")? {
             return Ok(crate::ask::AskOutcome::ReaderFailed { error: crate::ask::ReaderFailed { reason: self.ports.try_generate_string()? } });
+        }
+        // `cut-off`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "cut-off")? {
+            return Ok(crate::ask::AskOutcome::CutOff { error: crate::ask::CutOff { finish_reason: self.ports.try_generate_string()?, steps: self.ports.try_generate_integer()?, input_tokens: self.ports.try_generate_integer()?, output_tokens: self.ports.try_generate_integer()?, cached_tokens: self.ports.try_generate_integer()?, context_tokens: self.ports.try_generate_integer()? } });
+        }
+        // `client-closed`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "client-closed")? {
+            return Ok(crate::ask::AskOutcome::ClientClosed { error: crate::ask::ClientClosed { steps: self.ports.try_generate_integer()?, input_tokens: self.ports.try_generate_integer()?, output_tokens: self.ports.try_generate_integer()?, cached_tokens: self.ports.try_generate_integer()?, context_tokens: self.ports.try_generate_integer()? } });
         }
         // `answered`: the default.
         return Ok(crate::ask::AskOutcome::Answered { answered: crate::ask::Answered { identity: input.identity.clone(), done: self.ports.try_generate_cortex_ask_ask_done()? } });

@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "5a29cefca25e2266b019b8b5b6031137a2e3440abb9403edfa5363b3e1284768",
-    "contract_digest": "813e9e892f7c25641e646e3a1ef94f827001f7769520922c88de4f5af1cb5113"
+    "source_digest": "3cb764fa6058c327300de7d63b53b82b3ed86189c61ff97550848ad850d64bcf",
+    "contract_digest": "5daf559cd61a381fbf6ce9233bce2e7d477c4713ee671105b36029ab93dc414a"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -1353,6 +1353,20 @@
     {
       "kind": "error_type",
       "source": "cortex.ask.AnswerNotFound",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.ask.ClientClosed",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.ask.CutOff",
       "disposition": {
         "disposition": "generated"
       }

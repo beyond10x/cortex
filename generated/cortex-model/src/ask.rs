@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 5a29cefca25e2266b019b8b5b6031137a2e3440abb9403edfa5363b3e1284768
-// contract digest 813e9e892f7c25641e646e3a1ef94f827001f7769520922c88de4f5af1cb5113
+// model digest 3cb764fa6058c327300de7d63b53b82b3ed86189c61ff97550848ad850d64bcf
+// contract digest 5daf559cd61a381fbf6ce9233bce2e7d477c4713ee671105b36029ab93dc414a
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Answers — `cortex.ask`.
@@ -22,6 +22,10 @@ pub enum AnswerOutcome {
     Failed,
     /// `limited`.
     Limited,
+    /// `client-closed`.
+    ClientClosed,
+    /// `cut-off`.
+    CutOff,
 }
 
 /// The states of `cortex.ask.AnswerRecord`, as runtime values.
@@ -871,6 +875,20 @@ pub enum AskOutcome {
         /// Why it was refused: `cortex.ask.ReaderFailed`.
         error: ReaderFailed,
     },
+    /// `cut-off` — externally decided (The model's reply ends because of its token limit or a content filter).
+    ///
+    /// The stream ends with an `error` event whose `reason` is `cut-off`, and no `done`.
+    CutOff {
+        /// Why it was refused: `cortex.ask.CutOff`.
+        error: CutOff,
+    },
+    /// `client-closed` — externally decided (The reader closes the stream before its last event).
+    ///
+    /// The answer stops; nobody reads its last event.
+    ClientClosed {
+        /// Why it was refused: `cortex.ask.ClientClosed`.
+        error: ClientClosed,
+    },
     /// `answered` — otherwise.
     ///
     /// The stream ends with a `done` event carrying the answer and what it cites.
@@ -1162,6 +1180,42 @@ pub struct Voted {
 pub struct AnswerNotFound {
     /// `answer_id` — `cortex.ask.AnswerId`.
     pub answer_id: AnswerId,
+}
+
+/// The declared error `cortex.ask.ClientClosed`.
+///
+/// The reader closed the stream before its last event; the answer stops at once and opens no review item. `steps` counts the model calls made, and the token counts add up their `usage` as `cortex.ask.AskDone` does; `context_tokens` is the prompt tokens of the last one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientClosed {
+    /// `steps` — `Integer`.
+    pub steps: i64,
+    /// `input_tokens` — `Integer`.
+    pub input_tokens: i64,
+    /// `output_tokens` — `Integer`.
+    pub output_tokens: i64,
+    /// `cached_tokens` — `Integer`.
+    pub cached_tokens: i64,
+    /// `context_tokens` — `Integer`.
+    pub context_tokens: i64,
+}
+
+/// The declared error `cortex.ask.CutOff`.
+///
+/// The model's reply ended because of its token limit (`finish_reason` `length`) or a content filter (`content_filter`), so its text is no answer and is not streamed. `finish_reason` is the one the gateway gave; `steps` and the token counts are those of the model calls made, as for `cortex.ask.ClientClosed`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CutOff {
+    /// `finish_reason` — `String`.
+    pub finish_reason: String,
+    /// `steps` — `Integer`.
+    pub steps: i64,
+    /// `input_tokens` — `Integer`.
+    pub input_tokens: i64,
+    /// `output_tokens` — `Integer`.
+    pub output_tokens: i64,
+    /// `cached_tokens` — `Integer`.
+    pub cached_tokens: i64,
+    /// `context_tokens` — `Integer`.
+    pub context_tokens: i64,
 }
 
 /// The declared error `cortex.ask.FigureInvalid`.

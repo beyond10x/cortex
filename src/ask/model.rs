@@ -50,6 +50,18 @@ pub struct Reply {
     pub content: Option<String>,
     pub tool_calls: Vec<ToolCall>,
     pub usage: Usage,
+    /// Why the model stopped (`/choices/0/finish_reason`), when the gateway says.
+    pub finish_reason: Option<String>,
+}
+
+impl Reply {
+    /// The finish reason when the reply was cut off: by the model's token limit (`length`) or a
+    /// content filter (`content_filter`). Its text is then no answer.
+    pub fn cut_off(&self) -> Option<&str> {
+        self.finish_reason
+            .as_deref()
+            .filter(|r| matches!(*r, "length" | "content_filter"))
+    }
 }
 
 pub struct Gateway {
@@ -179,6 +191,10 @@ pub fn parse(text: &str) -> Result<Reply, String> {
             output: count(&usage["completion_tokens"]),
             cached: count(&usage["prompt_tokens_details"]["cached_tokens"]),
         },
+        finish_reason: value
+            .pointer("/choices/0/finish_reason")
+            .and_then(Value::as_str)
+            .map(str::to_string),
         message,
     })
 }
