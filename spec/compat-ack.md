@@ -7,7 +7,7 @@
 reasons. Each acknowledged change has its reason here, one row each; `tests/compat_ack.rs` fails
 when an id has no row or a row no id.
 
-The comparison: `v0.7.0` against the release being prepared. After a release, both files are
+The comparison: `v0.7.1` against the release being prepared. After a release, both files are
 reset (AGENTS.md, "The specification comes first").
 
 | change | reason |

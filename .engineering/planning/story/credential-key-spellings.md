@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:credential-key-spellings
 kind: story
-status: proposed
+status: active
 title: A credential under a common key spelling is masked or refused
 tags:
 - downstream-request
@@ -10,9 +10,10 @@ tags:
 relations:
 - decomposes: epic:standalone-1-0
 - serves: vision:self-updating-instances
-revision: 4
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-30T15:57:08Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-10-30T16:50:18Z", actor: "human:timo", revision: 6}
 ---
 ## Outcome
 
@@ -53,3 +54,15 @@ After `access[_-]?key` joined the always-on name list (`unit/w30b-mask` at bb483
 still leak: the three markup-wrapped keys, the XML element, `--db-password`, `SECRET_KEY=`,
 `DJANGO_SECRET_KEY=`, `AWS_SECRET_KEY=`, `PGPASSWORD=` and `DB_PASS=`. Both escaped-JSON keys and
 the `%2B` value are masked there.
+
+## Scope in wave 20261030c
+
+Taken up first after 0.7.1 at the chef session's request (its decision D286, 2026-10-30): fix the
+10 spellings that still leak in 0.7.1 and the two cases 0.7.1 left ignored under this story in
+`tests/w30b_mask_adversary.rs` (`secret_key = <v>`, and a URL password holding `,` or `;` after a
+user name with a raw `@`), remove those two ignores, and release. One integration branch, one pull
+request, one release.
+
+The 25 spellings become a committed test, `tests/credential_key_spellings.rs`, each with a fake
+value assembled at run time, checked both through `mask::mask` alone and through a policy of
+`classes: [Credential]`, `refuse_if_left: [Credential]`.
