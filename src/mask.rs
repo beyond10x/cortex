@@ -3,9 +3,9 @@
 //!
 //! [`mask`] is for text and [`mask_key`] for a document key (a URL, a file path or a record key).
 //! They differ in one place: in a key, an assigned value ends at `&`, `#` and their
-//! percent-encoded forms, so the query parameters after a masked token are kept and two URLs that
-//! differ only after it stay two keys. Masking is idempotent: a `[masked:<shape>]` value is left
-//! as it is and not counted again.
+//! percent-encoded forms (encoded once or more), so the query parameters after a masked token
+//! are kept and two URLs that differ only after it stay two keys. Masking is idempotent: a
+//! `[masked:<shape>]` value is left as it is and not counted again.
 
 use std::sync::OnceLock;
 
@@ -24,17 +24,26 @@ enum Keep {
 }
 
 /// A credential's name, with any `<word>_` prefix (`DB_PASSWORD`, `client_secret`), starting at a
-/// word boundary or after a percent-encoded byte (`%3Faccess_token`).
-const NAME: &str = r"((?:\b|%[0-9a-f]{2})(?:[a-z0-9]+_)*(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token))";
-/// `=`, `:` or `=>`, raw or percent-encoded, after the quote that closes a quoted name
-/// (`"password": `), as the opt-in `Credential` class of `crate::redact` reads it.
-const SEPARATOR: &str = r#"((?:["']|%2[27])?\s*(?:=>|[:=]|%3[ad])\s*)"#;
+/// word boundary or after a percent-encoded byte, encoded once or more (`%3Faccess_token`,
+/// `%253Faccess_token`).
+const NAME: &str = r"((?:\b|%(?:25)*[0-9a-f]{2})(?:[a-z0-9]+_)*(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token))";
+/// `=`, `:` or `=>`, raw or percent-encoded once or more, after the quote that closes a quoted
+/// name (`"password": `, `\"password\": ` inside a JSON string), as the opt-in `Credential`
+/// class of `crate::redact` reads it.
+const SEPARATOR: &str = r#"((?:\\?["']|%(?:25)*2[27])?\s*(?:=>|[:=]|%(?:25)*3[ad])\s*)"#;
 /// An assigned value in text: up to the next space or quote.
 const TEXT_VALUE: &str = r#"([^\s"']{6,})"#;
-/// An assigned value in a key: also up to `&` or `#`, raw or percent-encoded. A `%` that starts
-/// no escape (`ab%zz`) is part of the value.
-const KEY_VALUE: &str =
-    r#"((?:[^\s"'&#%]|%(?:[013-9a-f][0-9a-f]|2[0-24-57-9a-f]|[0-9a-f]?[^0-9a-f\s"'&#])){6,})"#;
+/// One character of an assigned value in a key. A value ends at a space, a quote, `&` or `#`,
+/// raw or percent-encoded once or more (`%26`, `%2526`). A `%` that starts no escape (`ab%zz`)
+/// is part of the value, and so is a run of them before an escape (`%%41`, `%25%21`); a run
+/// before an encoded `&` or `#` (`%%26`) ends the value there, so the query after it is kept.
+macro_rules! key_unit {
+    () => {
+        r#"(?:[^\s"'&#%]|%(?:%|25)*(?:[013-9a-f][0-9a-f]|2[0-247-9a-f]|[0-9a-f]?[^0-9a-f\s"'&#%]))"#
+    };
+}
+/// An assigned value in a key: six or more of `key_unit!`.
+const KEY_VALUE: &str = concat!("((?:", key_unit!(), "){6,})");
 /// A private key's base64 lines after its `BEGIN` line when its `END` line is missing (a provider
 /// cut the text after it): every line of 16 or more base64 characters, the last line of the text
 /// whatever its length, and the `Proc-Type` and `DEK-Info` lines of an encrypted key. A line
@@ -42,7 +51,7 @@ const KEY_VALUE: &str =
 const KEY_LINES: &str = r"(?:(?:\s|\\[rn])+(?:(?:Proc-Type|DEK-Info):[^\r\n\\]*|[A-Za-z0-9+/=]{16,}|[A-Za-z0-9+/=]+\s*\z))*";
 
 fn build(value: &str) -> Vec<(&'static str, Keep, Regex)> {
-    let assignment = format!(r#"(?i){NAME}{SEPARATOR}["']?{value}"#);
+    let assignment = format!(r#"(?i){NAME}{SEPARATOR}(?:\\?["'])?{value}"#);
     // A whole key first, then a key without its `END` line: two rules, because one with both as
     // alternatives reads to the end of the text for every `BEGIN` line without an `END` line.
     [
@@ -93,8 +102,9 @@ fn build(value: &str) -> Vec<(&'static str, Keep, Regex)> {
             Keep::User,
             // The password runs to the last `@` before the path: it may hold a raw `@`. It holds
             // no character a URL never holds raw (`"`, `<`, `{`), so it ends with its URL in a
-            // JSON string, before an address later in the text.
-            r#"(?i)\b([a-z][a-z0-9+.\-]*://[^\s/?#@:]*:)([^\s/?#"<>`{}|\\^]+)@"#.into(),
+            // JSON string, before an address later in the text. The user name may hold a raw `@`
+            // too (`jane@corp.example:<password>@host`), and none of those characters.
+            r#"(?i)\b([a-z][a-z0-9+.\-]*://[^\s/?#:"<>`{}|\\^]*:)([^\s/?#"<>`{}|\\^]+)@"#.into(),
         ),
         ("secret-assignment", Keep::Name, assignment),
     ]
@@ -113,10 +123,18 @@ fn key_rules() -> &'static [(&'static str, Keep, Regex)] {
     RULES.get_or_init(|| build(KEY_VALUE))
 }
 
+/// Whether `text` starts with a character of an assigned value in a key (`key_unit!`).
+fn starts_a_key_value(text: &str) -> bool {
+    static UNIT: OnceLock<Regex> = OnceLock::new();
+    UNIT.get_or_init(|| Regex::new(concat!(r"(?i)\A", key_unit!())).expect("a valid pattern"))
+        .is_match(text)
+}
+
 /// Whether `value` is a `[masked:<shape>]` token, followed by nothing or by what ends a value in
-/// a key (`&`, `#`, `%26`, `%23`), as a masked key shown in a text has it. A token followed by
-/// anything else holds the rest of a credential an earlier mask missed (`[masked:url-password]@ss`
-/// for a password with a raw `@`), and is masked again.
+/// a key (`&`, `#`, `%26`, `%%26`, `%2526`; whatever `key_unit!` does not read), as a masked
+/// key shown in a text has it. A token followed by anything else holds the rest of a credential
+/// an earlier mask missed (`[masked:url-password]@ss` for a password with a raw `@`), and is
+/// masked again.
 fn already_masked(value: &str) -> bool {
     let Some((shape, rest)) = value
         .strip_prefix("[masked:")
@@ -128,12 +146,7 @@ fn already_masked(value: &str) -> bool {
         && shape
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
-    let ends = rest.is_empty()
-        || rest.starts_with(['&', '#'])
-        || rest
-            .get(..3)
-            .is_some_and(|p| p.eq_ignore_ascii_case("%26") || p.eq_ignore_ascii_case("%23"));
-    token && ends
+    token && !starts_a_key_value(rest)
 }
 
 fn apply(rules: &[(&'static str, Keep, Regex)], text: &str) -> (String, usize) {
@@ -146,7 +159,12 @@ fn apply(rules: &[(&'static str, Keep, Regex)], text: &str) -> (String, usize) {
                 Keep::Name => &c[3],
                 Keep::User => &c[2],
             };
-            if already_masked(value) {
+            // A user name ending in `[masked:` is a masked value's own `:` read as the end of a
+            // user name (`x://password%3a[masked:secret-assignment]&u@h`): the token is whole.
+            let token_split_at_its_colon = matches!(keep, Keep::User)
+                && c[1].ends_with("[masked:")
+                && already_masked(&format!("[masked:{}", &c[2]));
+            if already_masked(value) || token_split_at_its_colon {
                 return c[0].to_string();
             }
             count += 1;
@@ -167,7 +185,8 @@ pub fn mask(text: &str) -> (String, usize) {
 }
 
 /// A document key masked as [`mask`] masks text, except that an assigned value ends at `&`, `#`,
-/// `%26` and `%23`, so the rest of a URL's query and its fragment are kept.
+/// `%26` and `%23` (also encoded twice, `%2526`, or after a raw `%`, `%%26`), so the rest of a
+/// URL's query and its fragment are kept.
 pub fn mask_key(key: &str) -> (String, usize) {
     apply(key_rules(), key)
 }
@@ -389,6 +408,66 @@ mod tests {
             assert_eq!(mask_key(&once), (once.clone(), 0));
             let (once, _) = mask(&input);
             assert_eq!(mask(&once), (once.clone(), 0));
+        }
+    }
+
+    /// In a key, `&` and `#` end a value also when encoded twice (`%2526`) or after a raw `%`
+    /// (`%%26`); an encoded or raw `%` before any other escape stays in the value. The masked
+    /// key is masked again to itself, as a key and in a text.
+    #[test]
+    fn a_percent_before_an_encoded_separator_ends_a_key_value_and_one_before_an_escape_does_not() {
+        let t = secret();
+        let base = "https://example.org/a?";
+        let m = "[masked:secret-assignment]";
+        let name = "access_token=";
+        for (name, value, rest) in [
+            (name, t.clone(), "%%26page=2"),
+            (name, t.clone(), "%%%23top"),
+            (name, t.clone(), "%2526page=2"),
+            (name, t.clone(), "%2%26page=2"),
+            (name, format!("ab%25%21{t}"), "&page=2"),
+            (name, format!("ab%%41{t}"), "&page=2"),
+            (name, format!("ab%2525zz{t}"), "#top"),
+            (
+                "next=%252Fapi%253Faccess_token%253D",
+                t.clone(),
+                "%2526page%253D2",
+            ),
+        ] {
+            let key = format!("{base}{name}{value}{rest}");
+            let masked = format!("{base}{name}{m}{rest}");
+            assert_eq!(mask_key(&key), (masked.clone(), 1), "{key}");
+            assert_eq!(mask_key(&masked), (masked.clone(), 0), "{masked}");
+            let shown = format!("see {masked} now");
+            assert_eq!(mask(&shown), (shown.clone(), 0), "{shown}");
+        }
+    }
+
+    /// A user name holding a raw `@` and a JSON string's escaped quotes are read as their
+    /// unescaped forms; a URL with a port and no password, and prose, are kept.
+    #[test]
+    fn a_user_name_with_an_at_sign_and_an_escaped_quote_are_masked_and_ports_are_kept() {
+        let t = secret();
+        for (input, masked) in [
+            (
+                format!("ftp://jane@corp.example:{t}@files.example/x"),
+                "ftp://jane@corp.example:[masked:url-password]@files.example/x".to_string(),
+            ),
+            (
+                format!(r#"{{\"password\": \"{t}\"}}"#),
+                r#"{\"password\": [masked:secret-assignment]"}"#.to_string(),
+            ),
+        ] {
+            assert_eq!(mask(&input), (masked.clone(), 1), "{input}");
+            assert_eq!(mask(&masked), (masked.clone(), 0), "{masked}");
+            assert!(!mask_key(&input).0.contains(&t), "{input}");
+        }
+        for kept in [
+            "ssh://git@host.example:22/repo.git and https://jane@corp.example:8443/a?x=1",
+            r#"{\"user\": \"jane@corp.example\", \"note\": \"the password policy\"}"#,
+        ] {
+            assert_eq!(mask(kept), (kept.to_string(), 0), "{kept}");
+            assert_eq!(mask_key(kept), (kept.to_string(), 0), "{kept}");
         }
     }
 }

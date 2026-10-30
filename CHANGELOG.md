@@ -36,6 +36,21 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Fixed
+
+- In a URL or record key, a raw `%` before an encoded `&` or `#` (`<token>%%26page=2`) no longer
+  carries the rest of the query into the masked value, so two URLs that differ after it stay two
+  documents. A twice-encoded `&` or `#` (`%2526`) ends a masked value too, and a `%` before
+  another escape (`%25%21`, `%%41`) stays in it. A key stored from such a URL under 0.7.0 held
+  only its masked prefix: its document is read once more.
+- Now masked: a password assigned with a twice percent-encoded name or separator
+  (`%253Faccess_token%253D<token>`), a JSON-quoted password inside a JSON string
+  (`{\"password\": \"<token>\"}`), and a URL password after a user name that holds a raw `@`
+  (`ftp://jane@corp.example:<password>@host`).
+- Masking a key that was masked already no longer masks it again when a `%3A`-separated
+  assignment follows a scheme (`x://password%3a<token>&u@h`); such a stored key is no longer
+  dropped on every load.
+
 ## 0.7.0 — 2026-10-30
 
 0.7.0 needs Connectors 0.60.0 or newer: a Connectors source refuses an older one, naming the version.

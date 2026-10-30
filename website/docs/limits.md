@@ -24,9 +24,10 @@ stand; [Status](./status.mdx) lists what is planned.
 - **Credentials are masked; personal data is kept from the model, not from the store.** Fetched
   text is masked for credential shapes on every run: private keys, cloud, forge, chat and API
   token shapes, JSON Web Tokens, the password in a URL such as `https://user:password@host` (a
-  raw `@` in it included), a private key whose `END` line was cut off, and `password=`-style
-  assignments, also with a prefix (`DB_PASSWORD=`, `client_secret=`), quoted
-  (`"password": "…"`), with `=>`, or percent-encoded (`access_token%3D`, `access_token%3A`).
+  raw `@` in it or in the user name included), a private key whose `END` line was cut off, and
+  `password=`-style assignments, also with a prefix (`DB_PASSWORD=`, `client_secret=`), quoted
+  (`"password": "…"`, also inside a JSON string as `\"password\": \"…\"`), with `=>`, or
+  percent-encoded once or twice (`access_token%3D`, `access_token%3A`, `access_token%253D`).
   That covers a document's text, title, description and URL,
   and a URL or record key wherever cortex writes it: the run's `stopped` and `skipped` messages,
   its log and its state file. Masking is irreversible, so a credential in a listed shape is never
