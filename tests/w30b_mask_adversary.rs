@@ -346,10 +346,10 @@ fn a_stop_sequence_before_a_raw_separator_keeps_no_hex_digit_of_the_credential()
     );
 }
 
-/// A user name with a raw `@` and a password holding `,` or `;`: the second `url-password` rule
-/// refuses the password, the first refuses the user name, and the password is kept in clear.
+/// A user name with a raw `@` and a password holding `,` or `;`: the first `url-password` rule
+/// refuses the user name, and the second reads a `,` or `;` after something a port is not. It
+/// kept the password in clear until `story:credential-key-spellings`.
 #[test]
-#[ignore = "story:credential-key-spellings: user@host:<pw with , or ;>@host keeps the password in clear"]
 fn a_password_with_a_comma_after_a_user_name_with_an_at_sign_is_masked() {
     let (h, t) = (head(), tail());
     for sep in [",", ";"] {
@@ -441,10 +441,10 @@ fn access_key_words_that_are_no_credential_are_kept() {
 }
 
 /// The pair an S3-compatible client's config file writes (`access_key`, `secret_key`) and a
-/// framework's `SECRET_KEY`: `access_key` masks the key id, which is no secret, and the secret
-/// beside it is kept in clear, because `secret` must be the last word of a name.
+/// framework's `SECRET_KEY`: `access_key` masks the key id, and `secret` followed by `key` masks
+/// the secret beside it. It was kept in clear until `story:credential-key-spellings`, when
+/// `secret` had to be the last word of a name.
 #[test]
-#[ignore = "story:credential-key-spellings: secret_key = <secret> is kept in clear (also at 7a94960c)"]
 fn the_secret_half_of_an_access_key_pair_is_masked() {
     let s = head() + &tail();
     for line in [

@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-30T18:35:37Z",
+  "actor": "human:timo",
+  "artifact": "story:credential-key-spellings",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check on wave/20261030c at 139ba95e: 1308 passed, 0 failed, 11 ignored, exit 0",
+    "reference": "wave/20261030c@139ba95e"
+  }
+}

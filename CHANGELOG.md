@@ -36,6 +36,45 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+## 0.7.2 — 2026-10-30
+
+### Fixed
+
+- Now masked on every run, and found by the `Credential` class: a password under a name glued to
+  a prefix (`PGPASSWORD=`) or cut short after one in upper case (`DB_PASS=`, `DB_PASS: `,
+  `"DB_PASS":`), a secret followed by `key` (`SECRET_KEY=`, `DJANGO_SECRET_KEY=`,
+  `AWS_SECRET_KEY=`, `secret_key = `), a name in Markdown or chat markup (`` `DB_PASSWORD`: ``,
+  `*AWS_SECRET_ACCESS_KEY*: `, `**api_key**: `, `**Password:** `), a name with a leading `_`
+  (`self._password = `), an XML element with or without a namespace, its text or a CDATA section (`<db_password>…</db_password>`,
+  `<wsse:Password …>…</wsse:Password>`), and a command-line flag with its value after a space,
+  a quoted value whole, also escaped in a JSON string or after `=` (`--db-password "…"`).
+- Kept as they are: `access_key_id`, `secret_santa`, `password_policy`, `--password-file`,
+  `<password_hint>`, a `<password>` placeholder not closed by its own tag, a heading or label
+  with no value, `PGPASSFILE`, `pass` alone, a lower-case `_pass` name (`render_pass`,
+  `season_pass=`), and after a flag a word of prose in any script or capitalised (`option`,
+  `ändern`, `Option`), a metavar also in brackets (`PASSWORD`, `[--password PASSWORD]`,
+  `<DB_PASSWORD>`, `(string)`), a variable also quoted (`$API_KEY`, `"$PGPASSWORD"`) or a
+  `--secret id=…,src=…` mount.
+- A name in one of these spellings followed by a bare `:` and its value (`get_secret_key:P-1`)
+  is read only in the spellings 0.7.1 read, so no structured record identity changes.
+- The `Credential` class also reads a JSON-quoted name inside a JSON string
+  (`{\"db_password\": \"…\"}`) and a value that starts with a percent-encoded byte
+  (`aws_secret_access_key=%2B…`), as masking does.
+- A URL password after a user name that holds a raw `@` is masked when it holds a `,` or `;`
+  too; a user, host and port before a list of addresses (`ops@mail.example:587,admin@example.org`)
+  is still kept.
+- The two cases 0.7.1 listed under Known limits for `story:credential-key-spellings` run and
+  pass (`tests/w30b_mask_adversary.rs`).
+
+### Known limits
+
+- A password of lower-case letters only after a flag and a space (`--password hunter`) is read as
+  prose and kept.
+- A new spelling followed by a bare `:` and its value (`SECRET_KEY:v`) is not masked, so that no
+  structured record identity changes.
+- `pwd`, `passphrase` and `token` are masked only by the `Credential` class, not on every run;
+  a single-dash flag (`-p v`) and an HTML-escaped element (`&lt;password&gt;`) are not masked.
+
 ## 0.7.1 — 2026-10-30
 
 ### Fixed
