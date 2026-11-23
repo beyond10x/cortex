@@ -43,6 +43,15 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   skip a collection that is still busy. Without the flag a run waits for the lock, as before
   (review of 0.7.2, finding 18).
 
+### Changed
+
+- Development only, no change to the binary: the integration tests are one test binary
+  (`tests/main.rs`, a module per file under `tests/it/`) run by cargo-nextest, which kills a test
+  over 60 s and prints the step's wall time and ten slowest tests (`TEST_BUDGET=enforce` fails the
+  step over 120 s); test builds carry no debug info; `rust-toolchain.toml` pins rustc for the gate
+  and every workflow; and a pull request that changes only planning or prose files passes `Check`
+  without the build and the tests.
+
 ### Fixed
 
 - The EKR pin an instance records is the engine that creates its store. `cortex create` and
