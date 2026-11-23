@@ -71,9 +71,11 @@ pub fn expand(path: &str) -> PathBuf {
 
 /// The version `bin --version` reports (`ekr 0.0.34`): its last word, without a leading `v`.
 pub fn reported_version(bin: &Path) -> Result<String, String> {
-    let out = Command::new(bin)
-        .arg("--version")
-        .stdin(Stdio::null())
+    let mut cmd = Command::new(bin);
+    cmd.arg("--version").stdin(Stdio::null());
+    // It opens no store, but nothing this process inherited as `EKR_*` reaches it either.
+    remove_inherited_ekr(&mut cmd, std::env::vars_os().map(|(key, _)| key));
+    let out = cmd
         .output()
         .map_err(|e| format!("cannot run {} --version: {e}", bin.display()))?;
     if !out.status.success() {

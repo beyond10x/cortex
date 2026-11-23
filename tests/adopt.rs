@@ -740,6 +740,7 @@ fn a_postgres_lineage_another_instance_already_uses_is_not_adopted_again() {
     common::executable(
         &fake,
         r#"case "$1" in
+  --version) echo 'ekr 0.0.34' ;;
   ontology) echo '{"revision": 7, "node_types": [{"name": "Organization"}, {"name": "Product"}], "edge_types": []}' ;;
   head) echo '{"revision": 7, "root": {}}' ;;
   *) exit 1 ;;
