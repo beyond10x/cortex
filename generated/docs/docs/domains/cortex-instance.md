@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 94682e063207678f2a3541be198ffa9985b0000b86c5039c7d4fbb840b078d52
-contract digest slice-sha256/2:b637f0424a3bb550e290e435863edf67afa80607807caf947a5ca965b8d1292a
+model digest 8fc1fa1334160fc5eedc948dcba9fb351db04fd7a002b80a9b8471a75a724dcc
+contract digest slice-sha256/2:371d1e68fb8d171d5dc3914826b96fe875897de46e077fe2eebf6530e9fa93bc
 do not edit: regenerate with `ess generate`
 -->
 
@@ -970,13 +970,7 @@ It takes:
 - `kind` — `cortex.instance.SourceKind`
 - `schedule` — `String`
 
-It has four outcomes.
-
-**`source-exists`** — Nothing changed; the source keeps its schedule, counters and state. Taken when a record already carries the identity the command's creating branch would create, and no input-guarded refusal applies. No entity in this specification changes. It reports `cortex.instance.SourceExists`, carrying `source_id`. It emits nothing. A test reaches it by sending the command twice with one identity: the first call creates the record, the second is answered by this branch.
-
-**`no-such-instance`** — Nothing changed. Taken when no `cortex.instance.Instance` carries the identity `input.instance_name` names. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by arranging the row of the other entity the input names, or its absence, and sending the command for it.
-
-**`not-active`** — The instance is removed; nothing changed. Taken when the `cortex.instance.Instance` that `input.instance_name` names exists and its stored fields satisfy `state == Removed`. No entity in this specification changes. It reports `cortex.instance.InstanceNotActive`, carrying `state`. It emits nothing. A test reaches it by arranging the row of the other entity the input names, or its absence, and sending the command for it.
+It has one outcome.
 
 **`added`** — The source's timer is installed and enabled. The default branch, taken when no other outcome's condition matched. It creates a `cortex.instance.Source`, which starts in `Enabled`. The new instance's identity is published as `source_id` on `cortex.instance.SourceAdded`. It emits `cortex.instance.SourceAdded`. It sets `instance_name` from `input.instance_name`, `name` from `input.name`, `kind` from `input.kind`, `schedule` from `input.schedule`, `runs` from `"0"` and `consecutive_failures` from `"0"`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -1190,11 +1184,9 @@ It takes:
 
 - `name` — `cortex.instance.InstanceName`
 
-It has four outcomes.
+It has three outcomes.
 
 **`removed`** — The timers and the viewer are gone; the directory and the store stay. The default branch, taken when no other outcome's condition matched. It moves a `cortex.instance.Instance` from `Active` to `Removed`, along the declared move `remove`. The instance is the one named by the input field `name`. It emits `cortex.instance.InstanceRemoved`. A test reaches it by constructing an input that satisfies no other outcome's condition.
-
-**`stop-failed`** — Nothing was deleted: the instance stays active and its unit files stay, so a second remove tries again. Decided outside the input: `systemctl --user disable --now` failed for a timer or the viewer of the instance whose unit file the home wrote. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.UnitsNotStopped`, carrying `name` and `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`wrong-state`** — The instance was already removed. Taken when the subject is resting in a state none of this command's moves start from — a `cortex.instance.Instance` in `Removed`, which is what is left of the lifecycle once this command's own moves are taken away. The document lists none of it. No entity in this specification changes. It reports `cortex.instance.InstanceNotActive`, carrying `state`. It emits nothing. A test reaches it by driving an instance into one of those states and then issuing the command, because no input selects this branch.
 
@@ -1251,12 +1243,15 @@ It takes:
 - `source_id` — `cortex.instance.SourceId`
 - `fetch_only` — `Optional<Boolean>`, which may be absent
 - `no_wait` — `Optional<Boolean>`, which may be absent
+- `path` — `Optional<String>`, which may be absent
 
-It has 14 outcomes.
+It has 15 outcomes.
 
 **`disabled`** — The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome. Taken when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)` holds of the input. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.RunSkipped`. It sets `last_outcome` from `"disabled"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test establishes the declared subject state and constructs input selecting this branch in that state.
 
 **`busy`** — Nothing ran: the source was not read, nothing was counted, and the source's status, metrics and hook are untouched, so an external scheduler can skip this collection. Eligible when (defined(no_wait) and no_wait == true); externally decided: Another cortex command holds the home's lock. No entity in this specification changes. It reports `cortex.instance.InstanceBusy`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`path-refused`** — The source is not a `files` source, so it has no directory to read. Nothing ran and nothing was written. Eligible when defined(path); externally decided: The source named is not a `files` source, or is the instance's seed documents. No entity in this specification changes. It reports `cortex.instance.PathRefused`, carrying `source_id` and `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`fetch-only-failed`** — Nothing was written: not the source's status, its seen documents or its window, and no failure is counted. The command line prints it as `fetch-failed`. Eligible when (defined(fetch_only) and fetch_only == true); externally decided: Connectors or the filesystem fails to deliver the source's documents in a fetch-only run. No entity in this specification changes. It reports `cortex.instance.FetchFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
@@ -1302,7 +1297,7 @@ It has five outcomes.
 
 **`rekey-refused`** — Nothing changed; the frozen spec and every source's seen state are as they were. Decided outside the input: A source the frozen spec and the new one both name, whose `state/<source>.json` holds a seen document, changes a field its documents are keyed by: its `kind`; a `connectors` source's `adapter`, `operation` or `id`; a `files` source's `records` format (no `records` and `WholeFile` are one), with a per-record format their `records.id`, or a root of its `paths` that reaches a seen file under another spelling (`docs` and `./docs`; adding, removing or reordering roots is not one); a `structured` source's `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths` or `glob` as written, or its `mapping.id`. A record path is compared as it is read (`key` and `$.key` are one path). No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.RekeyRefused`, carrying `name`, `source` and `field`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`updated`** — The frozen spec is replaced; model settings take effect on the next run. Sources the spec adds are added, sources it keeps take its kind and schedule and keep their counters and state, and sources it drops leave the registry with their timers stopped and deleted. A changed `serve.view_port` moves the viewer to it. The viewer unit holds the connection id resolved at the last create, adopt or update: it is rewritten when the store's connection or the port changed, or when its profile now resolves to another id. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.InstanceUpdated`. It sets `description` from `input.description` and `model` from `input.model`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+**`updated`** — The frozen spec is replaced; sources, model and serve settings take effect on the next run. The viewer unit holds the connection id resolved at the last create, adopt or update: it is rewritten when the store's connection changed, or when its profile now resolves to another id. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.InstanceUpdated`. It sets `description` from `input.description` and `model` from `input.model`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
 **`no-such-instance`** — Nothing changed. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
@@ -1757,8 +1752,6 @@ It carries:
 
 - `state` — `cortex.instance.Instance.State`
 
-Reported by `cortex.instance.AddSource` on its `not-active` outcome.
-
 Reported by `cortex.instance.RemoveInstance` on its `wrong-state` outcome.
 
 Reported by `cortex.instance.UpdateInstance` on its `not-active` outcome.
@@ -1772,8 +1765,6 @@ It carries:
 - `name` — `cortex.instance.InstanceName`
 
 Reported by `cortex.instance.AddEvalCase` on its `no-such-instance` outcome.
-
-Reported by `cortex.instance.AddSource` on its `no-such-instance` outcome.
 
 Reported by `cortex.instance.ApplySchemaProposals` on its `no-such-instance` outcome.
 
@@ -1825,6 +1816,17 @@ It carries:
 Reported by `cortex.instance.AdoptInstance` on its `name-taken` outcome.
 
 Reported by `cortex.instance.CreateInstance` on its `name-taken` outcome.
+
+### `PathRefused`
+
+A run was given a directory (`path`) for a source that is not a `files` source; only a `files` source reads one. Nothing ran.
+
+It carries:
+
+- `source_id` — `cortex.instance.SourceId`
+- `reason` — `String`
+
+Reported by `cortex.instance.RunSource` on its `path-refused` outcome.
 
 ### `ProposeFailed`
 
@@ -1987,16 +1989,6 @@ It carries:
 
 Reported by `cortex.instance.RecordFailure` on its `already-disabled` outcome.
 
-### `SourceExists`
-
-The registry already holds a source with this id; its schedule, counters and state are as they were. `cortex update` changes a source of the spec.
-
-It carries:
-
-- `source_id` — `cortex.instance.SourceId`
-
-Reported by `cortex.instance.AddSource` on its `source-exists` outcome.
-
 ### `SourceNotDisabled`
 
 The source is already enabled, so nothing changed.
@@ -2055,17 +2047,6 @@ It carries:
 
 Reported by `cortex.instance.AdoptInstance` on its `store-unreadable` outcome.
 
-### `UnitsNotStopped`
-
-`systemctl` did not stop a timer or the viewer the home wrote for the instance. The instance stays active and every unit file stays, so `cortex remove` can be run again.
-
-It carries:
-
-- `name` — `cortex.instance.InstanceName`
-- `reason` — `String`
-
-Reported by `cortex.instance.RemoveInstance` on its `stop-failed` outcome.
-
 ## Actors
 
 An actor is who may ask this context for something. Every grant below points at a command this specification declares — a grant is a resolved reference, so "may invoke" something nobody wrote is not a permission this model can express, and an authorisation that authorises nothing cannot ship quietly.
@@ -2085,4 +2066,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `94682e063207678f2a3541be198ffa9985b0000b86c5039c7d4fbb840b078d52` · contract digest `slice-sha256/2:b637f0424a3bb550e290e435863edf67afa80607807caf947a5ca965b8d1292a`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `8fc1fa1334160fc5eedc948dcba9fb351db04fd7a002b80a9b8471a75a724dcc` · contract digest `slice-sha256/2:371d1e68fb8d171d5dc3914826b96fe875897de46e077fe2eebf6530e9fa93bc`. Do not edit this file; change the specification and regenerate it with `ess generate`.

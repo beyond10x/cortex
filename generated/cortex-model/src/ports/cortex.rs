@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 94682e063207678f2a3541be198ffa9985b0000b86c5039c7d4fbb840b078d52
-// contract digest 39d224f34b47bfd9036f6e4f76c054245592e1508e23d47a13530458e6a27100
+// model digest 8fc1fa1334160fc5eedc948dcba9fb351db04fd7a002b80a9b8471a75a724dcc
+// contract digest 2b797601e89158bb5830c5917c9520ff3700b3ab235069ad63ab79f946ad66e6
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -113,9 +113,6 @@ where
     pub fn add_source(&mut self, input: crate::instance::AddSource) -> Result<crate::instance::AddSourceOutcome, crate::obligation::UnmetObligation> {
         let outcome = self.behaviors.add_source(input)?;
         match &outcome {
-            crate::instance::AddSourceOutcome::SourceExists { .. } => {}
-            crate::instance::AddSourceOutcome::NoSuchInstance { .. } => {}
-            crate::instance::AddSourceOutcome::NotActive { .. } => {}
             crate::instance::AddSourceOutcome::Added { source_added, .. } => {
                 self.outbox.push(PublishedEvent::SourceAdded(source_added.clone()));
             }
@@ -312,7 +309,6 @@ where
             crate::instance::RemoveInstanceOutcome::Removed { instance_removed, .. } => {
                 self.outbox.push(PublishedEvent::InstanceRemoved(instance_removed.clone()));
             }
-            crate::instance::RemoveInstanceOutcome::StopFailed { .. } => {}
             crate::instance::RemoveInstanceOutcome::WrongState { .. } => {}
             crate::instance::RemoveInstanceOutcome::NoSuchInstance { .. } => {}
         }
@@ -366,6 +362,7 @@ where
         match &outcome {
             crate::instance::RunSourceOutcome::Disabled { .. } => {}
             crate::instance::RunSourceOutcome::Busy { .. } => {}
+            crate::instance::RunSourceOutcome::PathRefused { .. } => {}
             crate::instance::RunSourceOutcome::FetchOnlyFailed { .. } => {}
             crate::instance::RunSourceOutcome::Fetched { .. } => {}
             crate::instance::RunSourceOutcome::FetchFailed { .. } => {}
