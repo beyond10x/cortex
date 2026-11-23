@@ -14,7 +14,7 @@ tasks:
       - '{{.ESS}} generate types --path spec --target rust --root cortex.instance.InstanceSpec --root cortex.ask.AskEvent --package cortex-spec-types --out generated/spec-types --strict-requires'
       - '{{.ESS}} generate --path spec --kind schema --out generated/schema --strict-requires'
       - '{{.ESS}} generate --path spec --kind docs --out generated/docs --strict-requires'
-      - '{{.ESS}} verify conform synthesize --path spec --out spec/suite.json --strict-requires'
+      - '{{.ESS}} verify conform synthesize --path spec --scenarios spec --out spec/suite.json --strict-requires'
       - task: docs-generate
 
   drift:
@@ -29,7 +29,7 @@ tasks:
         {{.ESS}} generate types --path spec --target rust --root cortex.instance.InstanceSpec --root cortex.ask.AskEvent --package cortex-spec-types --out "$tmp/generated/spec-types" --strict-requires >/dev/null
         {{.ESS}} generate --path spec --kind schema --out "$tmp/generated/schema" --strict-requires >/dev/null
         {{.ESS}} generate --path spec --kind docs --out "$tmp/generated/docs" --strict-requires >/dev/null
-        {{.ESS}} verify conform synthesize --path spec --out "$tmp/suite.json" --strict-requires >/dev/null
+        {{.ESS}} verify conform synthesize --path spec --scenarios spec --out "$tmp/suite.json" --strict-requires >/dev/null
         diff -r --exclude=.ess-output generated "$tmp/generated"
         cmp spec/suite.json "$tmp/suite.json"
         echo "generated/ and spec/suite.json match spec/"
