@@ -5,7 +5,8 @@
 //! Within one batch, each distinct value a class, the known names or a rule finds is replaced by a
 //! placeholder, `[Email-1]`, `[Phone-2]`, `[Card-1]`, `[IpAddress-1]`, `[Url-1]`, `[Name-1]` or
 //! `[<rule name>-1]`, the same value by the same placeholder in every text of the batch. Before the
-//! answer is applied, every placeholder in it is replaced by the value it stands for; one that has
+//! answer is applied, every placeholder in it, with or without its brackets (`Name-1`), is
+//! replaced by the value it stands for; one that has
 //! no value (mangled or invented by the model) stays as it is and is counted as unrestored. In a
 //! node type, property or relation name ([`Batch::restore_name`]) a mangled one is restored too,
 //! and one with no value is answered, so the batch fails naming it. The mapping lives in memory
@@ -1358,19 +1359,45 @@ impl<'a> Batch<'a> {
         *self.counts.entry(name.to_string()).or_default() += n;
     }
 
+    /// Whether the placeholder `p` (`[<label>-<n>]`) may be handed out: no value of the batch has
+    /// it, and no original holds it, bracketed or bare, so a model writing it back with or without
+    /// its brackets means this batch's value.
+    fn free(&self, p: &str) -> bool {
+        !self.back.contains_key(p)
+            && !self.reserved.contains(p)
+            && !self.reserved.contains(&p[1..p.len() - 1])
+    }
+
+    /// The value of `found`, a placeholder an answer writes without its brackets (`Name-3` for
+    /// `[Name-3]`), as written otherwise; `None` for a bracketed one, and for text an original
+    /// holds as it is.
+    fn bare(&self, found: &str) -> Option<&String> {
+        if found.starts_with('[') || self.reserved.contains(found) {
+            return None;
+        }
+        self.back.get(&format!("[{found}]"))
+    }
+
+    /// The next placeholder of `label` that is [`Batch::free`], its number taken.
+    fn next_free(&mut self, label: &str) -> String {
+        let mut n = self.next.get(label).copied().unwrap_or(0);
+        let p = loop {
+            n += 1;
+            let p = format!("[{label}-{n}]");
+            if self.free(&p) {
+                break p;
+            }
+        };
+        self.next.insert(label.to_string(), n);
+        p
+    }
+
     fn placeholder(&mut self, step: usize, value: &str) -> String {
         if let Some(p) = self.forward.get(&(step, value.to_string())) {
             return p.clone();
         }
-        let label = &self.redactor.steps[step].label;
-        let n = self.next.entry(label.clone()).or_insert(0);
-        let p = loop {
-            *n += 1;
-            let p = format!("[{label}-{n}]");
-            if !self.reserved.contains(&p) && !self.back.contains_key(&p) {
-                break p;
-            }
-        };
+        let label = self.redactor.steps[step].label.clone();
+        let p = self.next_free(&label);
         if self.redactor.steps[step].rare {
             self.named.insert(value.to_string());
         }
@@ -1452,21 +1479,15 @@ impl<'a> Batch<'a> {
             .rsplit_once('-')
             .map_or(literal, |(label, _)| label)
             .to_string();
-        let n = self.next.entry(label.clone()).or_insert(0);
-        let p = loop {
-            *n += 1;
-            let p = format!("[{label}-{n}]");
-            if !self.reserved.contains(&p) && !self.back.contains_key(&p) {
-                break p;
-            }
-        };
+        let p = self.next_free(&label);
         self.escaped.insert(literal.to_string(), p.clone());
         self.back.insert(p.clone(), literal.to_string());
         p
     }
 
-    /// Every placeholder of this batch in the strings of `value` replaced by its value. Returns
-    /// how many placeholder-shaped strings had no value; those stay as they are.
+    /// Every placeholder of this batch in the strings of `value` replaced by its value, also one
+    /// written without its brackets (`Name-3` for `[Name-3]`). Returns how many
+    /// placeholder-shaped strings had no value; those stay as they are.
     pub fn restore(&self, value: &mut Value) -> usize {
         match value {
             Value::String(s) => {
@@ -1476,7 +1497,7 @@ impl<'a> Batch<'a> {
                 let mut unrestored = 0;
                 let restored = placeholder.replace_all(s, |c: &regex::Captures| {
                     let found = &c[0];
-                    match self.back.get(found) {
+                    match self.back.get(found).or_else(|| self.bare(found)) {
                         Some(original) => original.clone(),
                         None => {
                             if !self.reserved.contains(found) {
@@ -1607,7 +1628,8 @@ const HELD_MAX: usize = 128;
 
 /// Restores the pieces of one text as they arrive: each piece is restored up to a tail that may
 /// be the start of a placeholder the next piece completes (an `[` with no `]` after it, no white
-/// space and at most [`HELD_MAX`] bytes); that tail is held back until the next piece or
+/// space and at most [`HELD_MAX`] bytes, or a last word that may begin one written without its
+/// brackets); that tail is held back until the next piece or
 /// [`Restoring::finish`] decides it. So no reader of the pieces sees half a placeholder.
 pub struct Restoring<'b, 'a> {
     batch: &'b Batch<'a>,
@@ -1630,6 +1652,17 @@ impl Restoring<'_, '_> {
             }
             _ => self.held.len(),
         };
+        // A placeholder written without its brackets (`Name-1` of `Name-12`) that the next piece
+        // may go on.
+        let word = self
+            .held
+            .trim_end_matches(|c: char| c.is_alphanumeric() || c == '-' || c == '_')
+            .len();
+        let keep = if self.held.len() - word <= HELD_MAX && self.bare_start(&self.held[word..]) {
+            keep.min(word)
+        } else {
+            keep
+        };
         let ready: String = self.held.drain(..keep).collect();
         self.restore(ready)
     }
@@ -1640,6 +1673,26 @@ impl Restoring<'_, '_> {
         let rest = std::mem::take(&mut self.held);
         let out = self.restore(rest);
         (out, self.unrestored)
+    }
+
+    /// Whether `tail`, the word that ends what is held, may be the start of a placeholder of the
+    /// batch written without its brackets: a start of a label, or a label, `-` and digits.
+    fn bare_start(&self, tail: &str) -> bool {
+        !tail.is_empty()
+            && self
+                .batch
+                .redactor
+                .steps
+                .iter()
+                .filter(|s| s.replacement.is_none())
+                .any(|s| match tail.strip_prefix(s.label.as_str()) {
+                    Some(rest) => {
+                        rest.strip_prefix('-')
+                            .is_some_and(|n| n.chars().all(|c| c.is_ascii_digit()))
+                            || rest.is_empty()
+                    }
+                    None => s.label.starts_with(tail),
+                })
     }
 
     fn restore(&mut self, text: String) -> String {
@@ -2250,7 +2303,7 @@ mod tests {
     }
 
     #[test]
-    fn every_placeholder_in_an_answer_is_restored_and_a_mangled_or_unknown_one_counted() {
+    fn every_placeholder_in_an_answer_is_restored_bare_too_and_a_mangled_or_unknown_one_counted() {
         let r = redactor(&ALL, &[("ticket", r"\bT-\d+\b", "")]);
         let mut batch = r.batch();
         let _ = batch.replace("jane.doe@example.com, +44 20 7946 0958, 4111 1111 1111 1111, T-42");
@@ -2275,12 +2328,15 @@ mod tests {
                     {"quote": "see T-42"},
                     {"value": {"value": "[email 1]"}},
                     {"value": {"value": "[Phone-9]"}},
-                    {"value": {"value": "Card-1"}},
+                    {"value": {"value": "4111 1111 1111 1111"}},
                     {"value": {"value": "[masked:api-key]"}},
                 ],
             })
         );
-        assert_eq!(unrestored, 3, "{answer}");
+        assert_eq!(
+            unrestored, 2,
+            "a bare placeholder of the batch is restored: {answer}"
+        );
     }
 
     // ---- Url, Credential, RareName, known names, refuse_if_left (story:redaction-names-and-gate)
@@ -3057,5 +3113,54 @@ mod tests {
             "then ask [Name-1], [Name-1] knows."
         );
         assert!(batch.left("then ask [Name-1], [Name-1] knows.").is_empty());
+    }
+
+    #[test]
+    fn a_placeholder_written_without_brackets_is_restored_and_an_unknown_one_counted() {
+        let r = redactor(&[m::RedactionClass::RareName], &[]);
+        let mut batch = r.batch();
+        batch.reserve("ask Ottilie Brannagh first.");
+        assert_eq!(
+            batch.replace("ask Ottilie Brannagh first."),
+            "ask [Name-1] [Name-2] first."
+        );
+        let mut answer = json!({"value": "Name-1 Name-2 owns it", "aliases": ["Name-1 Name-2"]});
+        assert_eq!(batch.restore(&mut answer), 0);
+        assert_eq!(
+            answer,
+            json!({"value": "Ottilie Brannagh owns it", "aliases": ["Ottilie Brannagh"]})
+        );
+        let mut orphan = json!("Name-1 hands over to Name-99");
+        assert_eq!(batch.restore(&mut orphan), 1);
+        assert_eq!(orphan, json!("Ottilie hands over to Name-99"));
+    }
+
+    #[test]
+    fn a_bare_placeholder_an_original_holds_is_never_handed_out_or_restored() {
+        let r = redactor(&[m::RedactionClass::RareName], &[]);
+        let mut batch = r.batch();
+        batch.reserve("ticket Name-1 is for Ottilie.");
+        assert_eq!(
+            batch.replace("ticket Name-1 is for Ottilie."),
+            "ticket Name-1 is for [Name-2]."
+        );
+        let mut answer = json!("Name-1 and Name-2");
+        assert_eq!(batch.restore(&mut answer), 0);
+        assert_eq!(answer, json!("Name-1 and Ottilie"));
+    }
+
+    #[test]
+    fn a_bare_placeholder_split_across_two_pieces_is_held_back_and_restored_whole() {
+        let r = redactor(&[m::RedactionClass::RareName], &[]);
+        let mut batch = r.batch();
+        let text = "Arno Belka Cilla Dorn Edda Fenn Gisla Harro Ilka Jorun Kesta Lunn met.";
+        batch.reserve(text);
+        assert!(batch.replace(text).starts_with("[Name-1] [Name-2]"));
+        let mut restoring = batch.restoring();
+        assert_eq!(restoring.push("ask Name-1"), "ask ");
+        assert_eq!(restoring.push("2 and Na"), "Lunn and ");
+        assert_eq!(restoring.push("me-1 now"), "Arno now");
+        let (rest, unrestored) = restoring.finish();
+        assert_eq!((rest.as_str(), unrestored), ("", 0));
     }
 }
