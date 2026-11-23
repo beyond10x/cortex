@@ -5,6 +5,8 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+## 0.8.0 — 2026-11-23
+
 ### Added
 
 - `cortex run <instance>/<source> --path <dir>`, also with `--fetch-only`, reads a `files` source
