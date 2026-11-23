@@ -160,7 +160,10 @@ this repository and published by the organisation's reusable workflow.
   property or relation position is restored also in another shape (`[name 3]`), or fails the
   batch naming it. `RareName` never takes the store's ontology names (`Batch::keep_names`): the
   model writes back the type names it is shown, and a replaced one made EKR refuse every entity
-  (`extraction-type-undeclared`). Limits: detection is by pattern (the classes `Url`, `Email`, `Phone`,
+  (`extraction-type-undeclared`). Nor does it take the store's names and aliases of the node
+  types `keep_store_types` lists, read once per run before anything is applied
+  (`known::Lookup::names_of_types`); a node of any other type, a `Person` among them, stays
+  hidden when rare, which `tests/redaction_gate.rs` holds. Limits: detection is by pattern (the classes `Url`, `Email`, `Phone`,
   `IpAddress`, `PaymentCard` and `RareName`, the `known_names` list, and the policy's regex
   `rules`), so four-part version numbers and long digit ids that look like an IP address or a card
   are hidden from the model too (and restored); a person's name is found only when listed in

@@ -50,6 +50,7 @@ fn policy() -> Redactor {
         known_names: None,
         rare_limit: None,
         refuse_if_left: Some(vec![m::RedactionClass::Credential]),
+        keep_store_types: None,
     };
     compile(Some(&policy))
         .expect("a valid policy")

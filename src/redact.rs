@@ -154,6 +154,9 @@ pub struct Redactor {
     /// The `Credential` shapes as a document key is scrubbed with: an assigned value ends at `&`
     /// and `#`, as `crate::mask` ends it in a key.
     key_steps: Vec<Step>,
+    /// The node types whose store names are never a rare name (`keep_store_types`); empty unless
+    /// `words`.
+    keep_store_types: Vec<String>,
 }
 
 fn regex(pattern: &str) -> Regex {
@@ -1007,13 +1010,19 @@ pub fn compile(policy: Option<&m::RedactionPolicy>) -> Result<Option<Redactor>, 
                 .map(|w| w.as_str().to_string()),
         );
     }
+    let words = has(&m::RedactionClass::RareName) || refuse.contains(&m::RedactionClass::RareName);
     Ok(Some(Redactor {
         key_steps: if has(&m::RedactionClass::Credential) {
             credential_steps(true)
         } else {
             Vec::new()
         },
-        words: has(&m::RedactionClass::RareName) || refuse.contains(&m::RedactionClass::RareName),
+        keep_store_types: if words {
+            policy.keep_store_types.clone().unwrap_or_default()
+        } else {
+            Vec::new()
+        },
+        words,
         checks: refuse
             .into_iter()
             .map(|class| (class_name(class), detectors(class)))
@@ -1051,6 +1060,12 @@ impl Redactor {
     /// Whether the policy names classes to refuse when they are left (`refuse_if_left`).
     pub fn refuses(&self) -> bool {
         !self.checks.is_empty()
+    }
+
+    /// The node types whose store names `RareName` never takes (`keep_store_types`), empty when
+    /// the policy lists none or neither replaces nor checks `RareName`.
+    pub fn keep_store_types(&self) -> &[String] {
+        &self.keep_store_types
     }
 
     /// Whether `word` is a rare name for a batch that counted `words`.
@@ -1732,6 +1747,7 @@ mod tests {
             known_names: None,
             rare_limit: None,
             refuse_if_left: None,
+            keep_store_types: None,
         }
     }
 
@@ -2361,6 +2377,27 @@ mod tests {
         compile(Some(policy))
             .expect("a valid policy")
             .expect("a policy that redacts")
+    }
+
+    /// `keep_store_types` is read only where `RareName` is replaced or checked: elsewhere no store
+    /// name would be a rare name anyway, and a run reads nothing for it
+    /// (`story:rare-name-keeps-store-types`).
+    #[test]
+    fn keep_store_types_holds_only_where_rare_name_is_replaced_or_checked() {
+        let with = |classes: &[m::RedactionClass], refuse: &[m::RedactionClass]| {
+            compiled(&m::RedactionPolicy {
+                keep_store_types: Some(vec!["Organization".into()]),
+                ..full_policy(classes, &[], None, refuse)
+            })
+        };
+        let rare = [m::RedactionClass::RareName];
+        let email = [m::RedactionClass::Email];
+        assert_eq!(with(&rare, &[]).keep_store_types(), ["Organization"]);
+        assert_eq!(with(&email, &rare).keep_store_types(), ["Organization"]);
+        assert!(with(&email, &[]).keep_store_types().is_empty());
+        assert!(compiled(&full_policy(&rare, &[], None, &[]))
+            .keep_store_types()
+            .is_empty());
     }
 
     /// The ontology lines' words are never a rare name, in those lines or in a document, and the

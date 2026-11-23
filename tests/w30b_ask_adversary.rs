@@ -530,6 +530,7 @@ fn redactor() -> Redactor {
         known_names: None,
         rare_limit: None,
         refuse_if_left: None,
+        keep_store_types: None,
     }))
     .expect("a valid policy")
     .expect("a policy that redacts")

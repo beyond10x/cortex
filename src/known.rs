@@ -178,6 +178,16 @@ impl Index {
         });
     }
 
+    /// The canonical name and the other aliases of every node whose type name is one of `types`,
+    /// in the index's order.
+    pub fn names_of_types(&self, types: &[String]) -> Vec<String> {
+        self.nodes
+            .iter()
+            .filter(|n| types.contains(&n.node_type))
+            .flat_map(|n| std::iter::once(n.name.clone()).chain(n.aliases.iter().cloned()))
+            .collect()
+    }
+
     /// Every node one of `terms` names, each once, in the index's order ([`store_hits`]).
     pub fn hits(&self, terms: &BTreeSet<String>) -> Vec<m::KnownEntity> {
         let at: BTreeSet<usize> = terms
@@ -318,6 +328,28 @@ impl Lookup {
         Ok(merge(masked(hits), run))
     }
 
+    /// [`Index::names_of_types`] of the store as the run read it: called before the run applies
+    /// anything, it reads the store's head through `session`, with the one snapshot the known
+    /// entities are looked up in (`redaction.keep_store_types`).
+    pub fn names_of_types(
+        &mut self,
+        session: &crate::ekr::Session,
+        ontology: &Value,
+        types: &[String],
+    ) -> Result<Vec<String>, String> {
+        if types.is_empty() {
+            return Ok(Vec::new());
+        }
+        if self.index.is_none() {
+            self.index = Some(Index::of(&session.snapshot()?, ontology));
+        }
+        Ok(self
+            .index
+            .as_ref()
+            .expect("built above")
+            .names_of_types(types))
+    }
+
     /// [`Index::applied`], once the index is built; before, the snapshot that builds it holds the
     /// document.
     pub fn applied(&mut self, document: &serde_yaml_ng::Value, report: &Value) {
@@ -447,6 +479,22 @@ mod tests {
                 "acme/web",
             ])
         );
+    }
+
+    /// `redaction.keep_store_types` reads the names and aliases of the listed types only; a type
+    /// the ontology does not name holds none (`story:rare-name-keeps-store-types`).
+    #[test]
+    fn names_of_types_lists_the_names_and_aliases_of_the_listed_types_only() {
+        let (snapshot, ontology) = graph();
+        let index = Index::from_snapshot(&snapshot, &ontology);
+        let types = |t: &[&str]| t.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            index.names_of_types(&types(&["Repository", "Organization"])),
+            ["acme/api", "repo:acme/api", "Acme"]
+        );
+        assert_eq!(index.names_of_types(&types(&["Service"])), ["web"]);
+        assert!(index.names_of_types(&types(&["Person"])).is_empty());
+        assert!(index.names_of_types(&[]).is_empty());
     }
 
     #[test]

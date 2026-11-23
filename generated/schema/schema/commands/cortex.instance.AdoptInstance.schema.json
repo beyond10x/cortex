@@ -40,8 +40,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
-    "contract_digest": "slice-sha256/2:a659a76c9eb91979c5b6996050717f60024a658c17b3d4a1f840084d7550eccf",
+    "source_digest": "ed785dc97c94fe494049f37960ba329301f8c89b4902cc25e2122215e420e187",
+    "contract_digest": "slice-sha256/2:f24e09748eeb6feef528814aa652a4e73a87806a907c61dab6c689813763bf3e",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -1049,6 +1049,12 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/cortex.instance.RedactionClass"
+          }
+        },
+        "keep_store_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         }
       },

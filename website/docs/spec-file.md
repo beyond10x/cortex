@@ -973,6 +973,7 @@ redaction:
   known_names: [Jane Doe, Rowan]
   rare_limit: 1
   refuse_if_left: [Phone]
+  keep_store_types: [Organization]
 ```
 
 | field | meaning |
@@ -982,6 +983,17 @@ redaction:
 | `known_names` | optional names replaced by `[Name-1]`-style placeholders wherever they appear as whole words, in any case, and restored |
 | `rare_limit` | optional; for `RareName`, the most times a capitalised word may appear in a batch to be taken as a name. Default 1 |
 | `refuse_if_left` | optional classes that fail the run, before any model call, when they are still found in what the model would be shown |
+| `keep_store_types` | optional node types whose names in the store `RareName` never takes. Absent or empty, a run is as before |
+
+`keep_store_types` is for names that are not personal data, such as customers or services, said
+once in a batch: a rare name is hidden from the model, which then cannot tell it from anyone
+else and loses its facts. With `keep_store_types: [Organization]`, a run reads the canonical
+names and aliases of the store's `Organization` nodes once, before it applies anything, and the
+model is shown their words as written, in documents and in the known entities. A name of a node
+of any other type, a `Person` among them, is hidden as before when it is rare. A word that is
+both, such as `Pell` of an organization `Pell Labs` and a person `Rowan Pell`, is kept
+everywhere. `known_names` and `rules` still replace a kept name, and the `refuse_if_left` check
+reads a kept name as kept. Only a run reads the list; the ask service does not.
 
 The prompt shows the store's ontology: its node type names with their property names and value
 kinds, and its relation names with their source and target types. `RareName` never takes these

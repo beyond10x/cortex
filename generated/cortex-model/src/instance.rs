@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea
-// contract digest edb08f72285adea731056f77a39b2f4b42617ddf03746589b9ce338333a0e3ad
+// model digest ed785dc97c94fe494049f37960ba329301f8c89b4902cc25e2122215e420e187
+// contract digest 77967a60a6baed21eca3bcfeb18053000f952e4b0e40d4717434173f3912284f
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -693,6 +693,8 @@ pub struct RedactionPolicy {
     pub rare_limit: Option<i64>,
     /// `refuse_if_left` — `Optional<List<cortex.instance.RedactionClass>>`.
     pub refuse_if_left: Option<Vec<RedactionClass>>,
+    /// `keep_store_types` — `Optional<List<String>>`.
+    pub keep_store_types: Option<Vec<String>>,
 }
 
 /// RedactionRule — `cortex.instance.RedactionRule`.

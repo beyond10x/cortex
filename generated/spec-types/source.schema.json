@@ -1276,6 +1276,12 @@
           },
           "type": "array"
         },
+        "keep_store_types": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "known_names": {
           "items": {
             "type": "string"
@@ -2020,8 +2026,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:fb70507c45809f8b9d7dd018fa5c9fe591112c9aa069873b65c5c012157f3426",
-    "source_digest": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
+    "contract_digest": "slice-sha256/2:6833382df717d595f880806110aa5ceb410c1b5759034d58bb3758fd2a36dc1e",
+    "source_digest": "ed785dc97c94fe494049f37960ba329301f8c89b4902cc25e2122215e420e187",
     "specification_version": "v1",
     "system": "cortex"
   }
