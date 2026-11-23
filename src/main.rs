@@ -2284,9 +2284,9 @@ fn quality(app: &mut App, ctx: &Ctx, name: &str, sample: i64) -> ExitCode {
         match result {
             Ok(q) => {
                 shared.strings.push_back(q.stamp.clone());
-                shared
-                    .integers
-                    .extend([q.revision, q.seed, q.judged, q.passed, q.unclear]);
+                shared.integers.extend([
+                    q.revision, q.seed, q.judged, q.passed, q.unclear, q.unjudged,
+                ]);
                 shared
                     .decimals
                     .extend([Decimal(q.lower.clone()), Decimal(q.upper.clone())]);
@@ -2322,6 +2322,7 @@ fn quality(app: &mut App, ctx: &Ctx, name: &str, sample: i64) -> ExitCode {
                 "judged": e.judged,
                 "passed": e.passed,
                 "unclear": e.unclear,
+                "unjudged": e.unjudged,
                 "rate": e.rate.as_ref().map(number),
                 "lower": number(&e.lower),
                 "upper": number(&e.upper),

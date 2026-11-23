@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest ed785dc97c94fe494049f37960ba329301f8c89b4902cc25e2122215e420e187
-// contract digest 77967a60a6baed21eca3bcfeb18053000f952e4b0e40d4717434173f3912284f
+// model digest c1cc8b9b9466992541f3b9ee58e192fe0acf3efdcfa61eb84d496d57da5c6dc8
+// contract digest 81ef54a1cc0b20fe0001264828691872bf5c3f0b82964539fd5b81eb5fc47621
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -782,7 +782,7 @@ where
         };
         let _ = &held;
         let next = held;
-        let answer = crate::instance::MeasureQualityOutcome::Measured { quality_measured: crate::instance::QualityMeasured { name: input.name.clone(), stamp: self.ports.try_generate_string()?, revision: self.ports.try_generate_integer()?, seed: self.ports.try_generate_integer()?, judged: self.ports.try_generate_integer()?, passed: self.ports.try_generate_integer()?, unclear: self.ports.try_generate_integer()?, rate: self.ports.try_generate_optional_decimal()?, lower: self.ports.try_generate_decimal()?, upper: self.ports.try_generate_decimal()?, cost_usd: self.ports.try_generate_optional_decimal()? } };
+        let answer = crate::instance::MeasureQualityOutcome::Measured { quality_measured: crate::instance::QualityMeasured { name: input.name.clone(), stamp: self.ports.try_generate_string()?, revision: self.ports.try_generate_integer()?, seed: self.ports.try_generate_integer()?, judged: self.ports.try_generate_integer()?, passed: self.ports.try_generate_integer()?, unclear: self.ports.try_generate_integer()?, unjudged: self.ports.try_generate_integer()?, rate: self.ports.try_generate_optional_decimal()?, lower: self.ports.try_generate_decimal()?, upper: self.ports.try_generate_decimal()?, cost_usd: self.ports.try_generate_optional_decimal()? } };
         InstanceStorage::put(&mut self.ports, next);
         return Ok(answer);
     }

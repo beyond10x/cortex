@@ -33,6 +33,15 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Fixed
 
+- **`cortex quality` no longer counts an unanswered fact as a failure.** A fact the judge's answer
+  gave no verdict was written `unclear` and counted as failed, so a judge that left many facts
+  unanswered made the rate far too low. Such a fact is now asked once more, after the last
+  batch, in a later judge call; still without a verdict it is `unjudged`: written so in
+  `verdicts.jsonl`, not sent to `ekr fact-quality`, and outside the rate. `judged`, the rate's
+  denominator, counts only the facts given a verdict, and the `measured` line and
+  `QualityMeasured` carry the new `unjudged`. Each judge call keeps its request (`prompt.txt`)
+  and the answer before any placeholder is restored (`answer.json`) in
+  `quality/<stamp>/batch-<n>/`, which stayed empty before (story `quality-missing-verdicts`).
 - A placeholder the model writes back without its brackets (`Name-3` for `[Name-3]`) is restored
   in a value or an alias, as in a type name. 0.8.0 left it as written and counted it
   `unrestored`, so a redaction gate on `unrestored` undid the run. One the batch's mapping does

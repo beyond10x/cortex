@@ -904,13 +904,16 @@ types:
 
   # A judge's answer on one sampled fact: `yes` when the evidence the fact cites supports it, `no`
   # when it does not, `unclear` when the judge cannot tell. EKR's `ekr.fact-judgements/1` knows only
-  # `Pass` and `Fail`: `yes` is `Pass`, `no` and `unclear` are `Fail`.
+  # `Pass` and `Fail`: `yes` is `Pass`, `no` and `unclear` are `Fail`. `unjudged` is no answer of
+  # the judge: it gave the fact no verdict in the call that showed it and none in the later call
+  # that asked again. An `unjudged` fact is not sent to `ekr fact-quality`; it is outside the rate.
   - name: cortex.instance.QualityVerdictKind
     kind: enum
-    variants: [yes, no, unclear]
+    variants: [yes, no, unclear, unjudged]
 
   # One line of `quality/<stamp>/verdicts.jsonl`, `format` `cortex.quality-verdict/1`: the EKR
-  # assertion id of the sampled fact, the judge's verdict and its reason.
+  # assertion id of the sampled fact, the judge's verdict and its reason; for an `unjudged` fact,
+  # cortex's reason.
   - name: cortex.instance.QualityVerdict
     kind: struct
     fields:
@@ -2686,11 +2689,15 @@ commands:
     # policy shows a run's documents, each fact with the validity interval of its assertion
     # (`Valid: <from> to <to>`, RFC 3339 UTC, an end the assertion leaves open written `open`), so
     # the judge asks whether the evidence supports the fact for that time; the model answers a
-    # `cortex.instance.QualityVerdict` per fact.
-    # `ekr fact-quality` turns the verdicts into a pass rate with its Wilson interval at 95 %. The
-    # measurement writes `quality/<UTC stamp>/verdicts.jsonl` and `quality/<UTC stamp>/
-    # fact-quality.json` (the `ekr.fact-quality/1` document, as EKR printed it) under the instance
-    # directory, and spends at most the spec's `model.budget_usd` and what is left of its
+    # `cortex.instance.QualityVerdict` per fact. A fact the answer gives no verdict is asked once
+    # more after the last batch, in a later call with the other such facts (again in batches of
+    # 20); a fact that answer gives no verdict either is `unjudged`.
+    # `ekr fact-quality` turns the verdicts of the judged facts into a pass rate with its Wilson
+    # interval at 95 %. The measurement writes `quality/<UTC stamp>/verdicts.jsonl` and
+    # `quality/<UTC stamp>/fact-quality.json` (the `ekr.fact-quality/1` document, as EKR printed
+    # it) under the instance directory, and for each judge call `quality/<UTC stamp>/batch-<n>/`
+    # with the request as sent (`prompt.txt`) and the answer before any placeholder is restored
+    # (`answer.json`). It spends at most the spec's `model.budget_usd` and what is left of its
     # `model.daily_ceiling_usd` for the UTC day; in tokens, it stops before a further call once
     # its answers' tokens reach `model.budget_tokens` or the day's reach
     # `model.daily_ceiling_tokens`; behind a model gateway, in tokens only. It reads the store and
@@ -2729,15 +2736,18 @@ commands:
             judged: {generated: true}
             passed: {generated: true}
             unclear: {generated: true}
+            unjudged: {generated: true}
             rate: {generated: true}
             lower: {generated: true}
             upper: {generated: true}
             cost_usd: {generated: true}
         summary: >-
-          Every sampled fact was judged. `judged` counts them, `passed` those judged `yes` and
-          `unclear` those the judge could not tell, which count as failed. `rate` is the pass rate,
-          absent when the store holds no fact to draw; `lower` and `upper` are its Wilson interval
-          at 95 %, 0 and 1 then. `cost_usd` is what the judge's model calls cost in USD, absent as
+          Every sampled fact was put to the judge. `judged` counts those it gave a verdict,
+          `passed` those judged `yes` and `unclear` those the judge could not tell, which count as
+          failed; `unjudged` counts those it gave no verdict in two calls, which count as neither.
+          `rate` is `passed` of `judged`, absent when no fact was judged (the store holds no fact
+          to draw, or every fact is `unjudged`); `lower` and `upper` are its Wilson interval at
+          95 %, 0 and 1 then. `cost_usd` is what the judge's model calls cost in USD, absent as
           soon as one answer carried no cost and never 0 for it. `revision` and `seed` draw the
           same sample again.
 
@@ -3411,6 +3421,7 @@ events:
       - {name: judged, type: Integer}
       - {name: passed, type: Integer}
       - {name: unclear, type: Integer}
+      - {name: unjudged, type: Integer}
       - {name: rate, type: Optional<Decimal>}
       - {name: lower, type: Decimal}
       - {name: upper, type: Decimal}
