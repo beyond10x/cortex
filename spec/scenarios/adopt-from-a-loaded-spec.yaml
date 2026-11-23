@@ -1,0 +1,52 @@
+# The command line reads `--spec` through its loader (`src/spec.rs`) and passes the document it
+# loaded, and the values it reads from it, to `AdoptInstance`. This document is one the loader
+# accepts: a model behind a gateway, a PostgreSQL store named by its configuration file, a
+# redaction policy and an answer service.
+type: ess-scenario/5
+domain: cortex.instance
+scenario: adopt-from-a-loaded-spec
+summary: An operator adopts a store under a cortex.instance/1 spec the loader accepts.
+
+timeline:
+  - at: 2026-11-23T09:00:00Z
+    command: cortex.instance.AdoptInstance
+    actor: cortex.instance.Operator
+    input:
+      name: support-desk
+      description: What the support desk learned from its tickets.
+      model: claude-sonnet-5-5
+      ekr_version: 0.0.34
+      seed_digest: 2ff1b8f4636e011835284dfa1480606c60c4af8965e03ba527623dd8c83ae843
+      store: support-desk.postgres.json
+      spec:
+        format: cortex.instance/1
+        name: support-desk
+        description: What the support desk learned from its tickets.
+        ekr: {version: 0.0.34}
+        seed: {documents: []}
+        model:
+          model: claude-sonnet-5-5
+          gateway: {base_url: "http://127.0.0.1:4000", token_env: LLM_GATEWAY_TOKEN, max_context_tokens: 200000, max_output_tokens: 8000}
+          budget_tokens: 2000000
+          daily_ceiling_tokens: 500000
+          timeout_s: 600
+          batch_chars: 20000
+        sources: []
+        serve: {}
+        store:
+          backend: postgres
+          value: {config: support-desk.postgres.json}
+        redaction:
+          classes: [Email, Phone]
+          known_names: []
+          rules: []
+          refuse_if_left: [Email]
+        runs: {keep_days: 30}
+        ask:
+          listen: "127.0.0.1:8740"
+          identity_header: X-Identity
+          limits: {max_steps: 8, max_result_bytes: 65536, max_seconds: 60, per_identity_per_minute: 6}
+    outcome: adopted
+    events:
+      - event: cortex.instance.InstanceAdopted
+        payload: {name: support-desk}
