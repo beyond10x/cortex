@@ -212,9 +212,14 @@ fn a_fetched_web_page_is_stored_as_url_evidence() {
     let (code, line, all) = create(&w, &spec);
     assert_eq!(code, Some(0), "{line} {all}");
     let (code, out, err) = cortex(&w, &["run", "t/news"]);
+    let ran = first_line(&out);
     assert_eq!(
-        (code, first_line(&out)["outcome"].as_str()),
-        (Some(0), Some("applied")),
+        (
+            code,
+            ran["outcome"].as_str(),
+            ran["detail"]["documents_applied"].as_i64()
+        ),
+        (Some(0), Some("ran"), Some(2)),
         "{out}{err}"
     );
 
