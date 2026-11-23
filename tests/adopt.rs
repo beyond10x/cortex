@@ -129,7 +129,7 @@ fn spec(w: &World, name: &str, schema: &str) -> PathBuf {
             r#"format: cortex.instance/1
 name: {name}
 description: Adopted brain.
-ekr: {{version: "0.0.30", bin: "{ekr}"}}
+ekr: {{version: "0.0.34", bin: "{ekr}"}}
 seed: {{schema: {name}-schema.yaml, documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:
@@ -809,7 +809,7 @@ fn chat_spec(w: &World, name: &str, extra: &str) -> PathBuf {
             r#"format: cortex.instance/1
 name: {name}
 description: Adopted brain.
-ekr: {{version: "0.0.30", bin: "{ekr}"}}
+ekr: {{version: "0.0.34", bin: "{ekr}"}}
 seed: {{schema: {name}-schema.yaml, documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

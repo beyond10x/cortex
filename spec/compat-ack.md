@@ -7,8 +7,10 @@
 reasons. Each acknowledged change has its reason here, one row each; `tests/compat_ack.rs` fails
 when an id has no row or a row no id.
 
-The comparison: `v0.7.1` against the release being prepared. After a release, both files are
+The comparison: `v0.7.2` against the release being prepared. After a release, both files are
 reset (AGENTS.md, "The specification comes first").
 
 | change | reason |
 |---|---|
+| `command/cortex.instance.RunSource/input-added/no_wait` | `cortex run --no-wait`, new in this release. The input is optional; a run without it waits for the home's lock as in 0.7.2. |
+| `command/cortex.instance.RunSource/outcome-added/busy` | `busy`, exit 9, is answered only with `no_wait`, which no caller of 0.7.2 sends; a run without it never answers `busy`. |

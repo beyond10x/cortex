@@ -145,15 +145,20 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 6 | `batch-too-large` | a part of several documents of an extraction batch was still too long for the model's window, or its answer still cut off, after the batch was split 3 deep; the reason names that part's documents and the batch size used. Not a failure of the source, so `--record-failure` counts nothing; the batches before it stay applied, and a later run extracts the rest. A part of one document does not end the run: it is left out alone, named in `too_large` and marked seen (see [The batch size](./spec-file.md#the-batch-size)) |
 | 7 | `model-unavailable` | the model could not be reached: `detail.cause` is `refused` (`claude` could not be started, or the connection was refused), `not-loaded` (the server behind the gateway has not loaded the model) or `gateway-down` (HTTP 502, 503, 504 or 529 overloaded). Not a failure of the source, so `--record-failure` counts nothing, however long the model is down; the batches before it stay applied, and a later run extracts the rest (see [When the model cannot be reached](#when-the-model-cannot-be-reached)) |
 | 8 | `terminated` | the run was sent SIGTERM and stopped at its next safe point; a gated run was undone first. Not a failure of the source, so `--record-failure` counts nothing (see [Stopping a run](#stopping-a-run)) |
+| 9 | `busy` | with `--no-wait` only: another cortex command holds the home's lock, so nothing ran. The source was not read and nothing was recorded: no status, metric, hook or counted failure. A scheduler skips this collection and starts the next one on its schedule |
 | 143 | none | a second SIGTERM ended the process at once; nothing was recorded |
 
 With `--fetch-only` (see [Counting what a run would extract](#counting-what-a-run-would-extract)),
 `fetched` exits 0 and a fetch that failed exits 1 as `fetch-failed`.
 
+Without `--no-wait`, a run started while another cortex command holds the home's lock (another
+run, a `create`, an `update`) waits for it and then runs. A scheduler whose runs can overlap, such
+as a Kubernetes CronJob, passes `--no-wait` to skip a collection that is still busy instead.
+
 The JSON line on stdout says the same, with its `detail`. With `--record-failure`, a failed run
 prints a second line, the recorded failure's (`counted` or `disabled`); the exit status is the
 run's. A `store-outcome-unknown`, `connection-unavailable`, `batch-too-large`,
-`model-unavailable` or `terminated` run records no failure and prints no second line.
+`model-unavailable`, `terminated` or `busy` run records no failure and prints no second line.
 
 ## Stopping a run
 

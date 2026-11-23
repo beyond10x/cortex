@@ -36,6 +36,21 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Added
+
+- `cortex run --no-wait`: while another cortex command holds the home's lock, the run answers
+  `busy` at once with exit status 9 and runs and records nothing, so an external scheduler can
+  skip a collection that is still busy. Without the flag a run waits for the lock, as before
+  (review of 0.7.2, finding 18).
+
+### Fixed
+
+- The EKR pin an instance records is the engine that creates its store. `cortex create` and
+  `cortex adopt` ask the `ekr` binary for its version (`ekr --version`) and refuse one that
+  reports another version than the spec's `ekr.version`, whether `ekr.bin` names it or it sits in
+  the cache; `cortex setup` refuses a cached binary of another version instead of keeping it
+  (review of 0.7.2, finding 17).
+
 ## 0.7.2 — 2026-10-30
 
 ### Fixed

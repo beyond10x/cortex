@@ -10,6 +10,9 @@
     },
     "fetch_only": {
       "type": "boolean"
+    },
+    "no_wait": {
+      "type": "boolean"
     }
   },
   "required": [
@@ -19,8 +22,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
-    "contract_digest": "slice-sha256/2:eac929852d664d71434ebff2649f1c66d0c1446afae7ba0cbc2568958ccb364b",
+    "source_digest": "2b4c97d0b48bef360a506d832f098e346fd275e38cbe5d10f71d010956a32f90",
+    "contract_digest": "slice-sha256/2:df3833125b028a05acc31e8a1bc11bff0cf4b04ee08631f8c405c2b1dac25fa4",
     "regenerate": "ess generate"
   },
   "$defs": {
