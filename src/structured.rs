@@ -683,6 +683,10 @@ pub struct Source<'a> {
     /// The value kind of each mapped property ([`kinds`]), set from the store's ontology before
     /// the run maps a record; a property it does not name is a `String`.
     pub kinds: Kinds,
+    /// Whether a run lists only the records that changed in its window
+    /// ([`crate::sources::lists_a_window`]): a record it did not list keeps its values
+    /// ([`Source::ended`]).
+    pub windowed: bool,
 }
 
 /// What one record of a source is mapped by: the source's own mapping, or a child's.
@@ -840,7 +844,22 @@ impl<'a> Source<'a> {
             links,
             earlier,
             kinds: Kinds::new(),
+            windowed: crate::sources::lists_a_window(st),
         }
+    }
+
+    /// With a listing of a window only ([`Source::windowed`]), whether the record whose identity
+    /// is `record` is outside what the run listed: neither it nor, for a child record, its parent
+    /// is in `listed`. Its values are kept: the provider was not asked about it.
+    fn outside_window(&self, record: &str, listed: &BTreeMap<String, Listed>) -> bool {
+        if !self.windowed {
+            return false;
+        }
+        let top = match self.child_of(record) {
+            Some((_, parent)) => format!("{}:{parent}", self.prefix),
+            None => record.to_string(),
+        };
+        !listed.contains_key(record) && !listed.contains_key(&top)
     }
 
     /// The kind property `property` of node type `node_type` is written in ([`Source::kinds`]).
@@ -1029,6 +1048,23 @@ impl<'a> Source<'a> {
             let (parent, _) = rest.split_once(':')?;
             Some((n, unescape(parent)?))
         })
+    }
+
+    /// How the record whose identity is `key` is mapped, as one hash
+    /// ([`crate::state::Seen::fields_hash`]): its scope's mapping, a child's `time` and relation to
+    /// its parent, the links whose changes it is, and whether it is a link's tag. A record whose
+    /// hash differs from the one it was applied with is applied again at once (finding 4 of the
+    /// 0.7.2 review).
+    pub fn mapping_hash(&self, key: &str) -> String {
+        let scope = self.scope(key);
+        crate::state::text_hash(&format!(
+            "{:?}\n{:?}\n{:?}\n{:?}\n{}",
+            scope.mapping,
+            scope.time,
+            scope.parent.as_ref().map(|(relation, _)| relation),
+            scope.links,
+            scope.named
+        ))
     }
 
     /// The scope of the record whose identity is `key`.
@@ -1407,8 +1443,9 @@ impl<'a> Source<'a> {
     /// prefix of one of `held` with no relation (the records of a child call that failed for
     /// their parent, which the run did not read: [`Source::failed_child`]); with a relation, the
     /// record keeps the assertions of that relation only (the changes of a link not found in full
-    /// for their parent). Every other active assertion of this source is ended:
-    /// a property is superseded by the latest active assertion of the same record, subject and
+    /// for their parent). A source that lists a window only ([`Source::windowed`]) keeps every
+    /// value of a record it did not list, nor its parent: a record missing from a window is not
+    /// gone. Every other active assertion of this source is ended: a property is superseded by the latest active assertion of the same record, subject and
     /// property that is still listed and valid from no earlier than it (its replacement, which
     /// cites the evidence of the run that applied it); one with no such replacement — the record
     /// is gone, or no longer has the property — and a relation are retracted with `reason`, which
@@ -1534,6 +1571,7 @@ impl<'a> Source<'a> {
                     || held.iter().any(|h| holds(h, r))
                     || listed.get(r).is_some_and(lists)
                     || earlier(r)
+                    || self.outside_window(r, listed)
             });
             mine.push(Mine { a, records, kept });
         }
@@ -1872,7 +1910,8 @@ impl Mapped {
     /// The evidence ids of the records with a part `report` (an `ekr.integrate.ExtractionReport`)
     /// lists as `rejected`: a fact's record, every record an entity stands for or was named by,
     /// and, for the `ontology` or an item it does not know, every record of the batch; each with
-    /// the refusals EKR gave for its parts.
+    /// the refusals EKR gave for its parts. A reference the report lists as `ambiguous` refuses
+    /// the records of the entity it names and of every fact naming it, alike.
     pub fn rejected(&self, report: &Value) -> BTreeMap<String, Vec<String>> {
         let cited = |fact: &Value| -> Vec<String> {
             fact.as_object()
@@ -1922,6 +1961,55 @@ impl Mapped {
                 out.entry(owner).or_default().push(refusal.clone());
             }
         }
+        // A reference EKR found ambiguous (its aliases meet more than one store node of its type)
+        // was not applied, nor any fact naming it, though EKR rejected no part: its records are
+        // refused as a rejected part's are, so they are not counted applied, not marked seen and
+        // tried again (finding 5 of the 0.7.2 review).
+        let same = |a: &Value, b: &Value| -> bool {
+            let names = |v: &Value| -> BTreeSet<String> {
+                v["aliases"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            };
+            a["node_type"] == b["node_type"] && names(a) == names(b)
+        };
+        let entities = self.document["entities"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        for part in report["ambiguous"].as_array().into_iter().flatten() {
+            let reference = &part["reference"];
+            let mut owners: BTreeSet<String> = BTreeSet::new();
+            for (i, entity) in entities.iter().enumerate() {
+                if same(entity, reference) {
+                    owners.extend(self.entity_owners.get(i).into_iter().flatten().cloned());
+                }
+            }
+            for fact in &facts {
+                let body = fact.as_object().and_then(|o| o.values().next());
+                if body.is_some_and(|b| {
+                    same(&b["subject"], reference) || same(&b["object"], reference)
+                }) {
+                    owners.extend(cited(fact));
+                }
+            }
+            if owners.is_empty() {
+                owners = every();
+            }
+            let candidates = part["candidates"].as_array().map_or(0, Vec::len);
+            let refusal = format!(
+                "ambiguous: its aliases match {candidates} store nodes of type {}, so EKR applied \
+                 none of its facts",
+                reference["node_type"].as_str().unwrap_or("?")
+            );
+            for owner in owners {
+                out.entry(owner).or_default().push(refusal.clone());
+            }
+        }
         out
     }
 }
@@ -1961,6 +2049,7 @@ mod tests {
             links: Vec::new(),
             earlier: Vec::new(),
             kinds: Kinds::new(),
+            windowed: false,
         }
     }
 
@@ -2410,6 +2499,7 @@ mod tests {
             links: Vec::new(),
             earlier: Vec::new(),
             kinds: Kinds::new(),
+            windowed: false,
         }
     }
 
@@ -2612,6 +2702,7 @@ mod tests {
             links: vec![&link],
             earlier: Vec::new(),
             kinds: Kinds::new(),
+            windowed: false,
         };
         let tag_id = s.child_identity("tags.list", "7", "v1").expect("a child");
         assert_eq!(tag_id, "forge:projects.list/tags.list:7:v1");

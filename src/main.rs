@@ -121,10 +121,20 @@ enum Command {
         /// the home runs that binary; without this flag a newer one is kept.
         #[arg(long)]
         replace_binary: bool,
+        /// Do not wait for the home's lock: while another cortex command holds it, answer `busy`
+        /// at once (exit 9) and change nothing.
+        #[arg(long)]
+        no_wait: bool,
     },
     /// Remove an instance's timers and viewer; its directory and store stay
     /// (`cortex.instance.RemoveInstance`).
-    Remove { name: String },
+    Remove {
+        name: String,
+        /// Do not wait for the home's lock: while another cortex command holds it, answer `busy`
+        /// at once (exit 9) and change nothing.
+        #[arg(long)]
+        no_wait: bool,
+    },
     /// Run one source once (`cortex.instance.RunSource`).
     Run {
         /// `<instance>/<source>`.
@@ -135,6 +145,14 @@ enum Command {
         /// Fetch the source and count what a run would extract, with no model call and no write.
         #[arg(long)]
         fetch_only: bool,
+        /// Do not wait for the home's lock: while another cortex command holds it, answer `busy`
+        /// at once (exit 9) and run nothing, so an external scheduler can skip the collection.
+        #[arg(long)]
+        no_wait: bool,
+        /// Read a `files` source from this directory instead of its spec's `paths`, for this run
+        /// only; each document is keyed by its path relative to the directory.
+        #[arg(long, value_name = "DIR")]
+        path: Option<PathBuf>,
     },
     /// Put an instance's store back to a snapshot a run took before it applied anything
     /// (`cortex.instance.RestoreSnapshot`).
@@ -321,7 +339,13 @@ enum SourceCommand {
         reason: String,
     },
     /// Enable a disabled source again (`cortex.instance.EnableSource`).
-    Enable { source_id: String },
+    Enable {
+        source_id: String,
+        /// Do not wait for the home's lock: while another cortex command holds it, answer `busy`
+        /// at once (exit 9) and change nothing.
+        #[arg(long)]
+        no_wait: bool,
+    },
 }
 
 const SPEC_SCHEMA: &str =
@@ -398,10 +422,16 @@ fn main() -> ExitCode {
             }
         },
         command => {
-            // `restore` does not wait for the lock: while another command holds it, it answers
-            // `busy` and writes nothing.
+            // `restore` and every `--no-wait` do not wait for the lock: while another command holds
+            // it, they answer `busy` and write nothing.
             let lock = match &command {
-                Command::Restore { .. } => home.try_lock(),
+                Command::Restore { .. }
+                | Command::Run { no_wait: true, .. }
+                | Command::Update { no_wait: true, .. }
+                | Command::Remove { no_wait: true, .. }
+                | Command::Source {
+                    command: SourceCommand::Enable { no_wait: true, .. },
+                } => home.try_lock(),
                 _ => home.lock().map(Some),
             };
             let lock = match lock {
@@ -455,7 +485,8 @@ struct Ctx<'a> {
     home: &'a Home,
     shared: SharedRef,
     tools: run::Tools,
-    /// Whether this command took the home's lock; only `restore` runs without it.
+    /// Whether this command took the home's lock; only `restore` and a `--no-wait` command run
+    /// without it, and only to answer `busy`.
     locked: bool,
     /// The home's lock while this command holds it. `quality` lets it go once its sample is drawn.
     lock: RefCell<Option<std::fs::File>>,
@@ -500,8 +531,16 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             spec,
             no_units,
             replace_binary,
-        } => update(app, ctx, &name, &spec, Units::of(no_units, replace_binary)),
-        Command::Remove { name } => remove(app, ctx, &name),
+            no_wait,
+        } => update(
+            app,
+            ctx,
+            &name,
+            &spec,
+            Units::of(no_units, replace_binary),
+            no_wait,
+        ),
+        Command::Remove { name, no_wait } => remove(app, ctx, &name, no_wait),
         Command::Restore { name, snapshot } => restore(app, ctx, &name, &snapshot),
         Command::Quality { name, sample } => quality(app, ctx, &name, sample),
         Command::Eval {
@@ -554,7 +593,17 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             source_id,
             record_failure,
             fetch_only,
-        } => run_source(app, ctx, &source_id, record_failure, fetch_only),
+            no_wait,
+            path,
+        } => run_source(
+            app,
+            ctx,
+            &source_id,
+            record_failure,
+            fetch_only,
+            no_wait,
+            path,
+        ),
         Command::Source { command } => match command {
             SourceCommand::Add {
                 instance_name,
@@ -569,6 +618,7 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
                     "Structured" => m::SourceKind::Structured,
                     _ => m::SourceKind::Files,
                 };
+                let instance = instance_name.clone();
                 let input = m::AddSource {
                     instance_name: m::InstanceName(instance_name),
                     source_id: m::SourceId(source_id),
@@ -576,30 +626,50 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
                     kind,
                     schedule,
                 };
-                match app.add_source(input) {
-                    Ok(m::AddSourceOutcome::Added { source_added }) => print(
-                        "source add",
-                        &Done {
-                            outcome: "added",
-                            ok: true,
-                            detail: json!({"source_id": source_added.source_id.0}),
-                        },
-                    ),
-                    Err(e) => fail(e),
-                }
+                let done = match app.add_source(input) {
+                    Ok(m::AddSourceOutcome::Added { source_added }) => Done {
+                        outcome: "added",
+                        ok: true,
+                        detail: json!({"source_id": source_added.source_id.0}),
+                    },
+                    Ok(m::AddSourceOutcome::SourceExists { error }) => Done {
+                        outcome: "source-exists",
+                        ok: false,
+                        detail: json!({"source_id": error.source_id.0}),
+                    },
+                    Ok(m::AddSourceOutcome::NoSuchInstance { error }) => Done {
+                        outcome: "no-such-instance",
+                        ok: false,
+                        detail: json!({"name": error.name.0}),
+                    },
+                    Ok(m::AddSourceOutcome::NotActive { .. }) => Done {
+                        outcome: "not-active",
+                        ok: false,
+                        detail: json!({"name": instance}),
+                    },
+                    Err(e) => return fail(e),
+                };
+                print("source add", &done)
             }
             SourceCommand::RecordFailure { source_id, reason } => {
                 record_failure(app, ctx, &source_id, &reason).0
             }
-            SourceCommand::Enable { source_id } => enable(app, ctx, &source_id),
+            SourceCommand::Enable { source_id, no_wait } => enable(app, ctx, &source_id, no_wait),
         },
         Command::List => match app.instances() {
             Ok(rows) => {
                 // The version of `<home>/bin/cortex`, which every source unit of the home runs.
                 let binary_version = schedule::binary_version(&ctx.home.root);
+                let systemd = Systemd::from_env(&ctx.home.root);
                 for row in rows {
                     let layout = Layout::new(ctx.home.instance_dir(&row.name.0));
-                    let port = layout.load_meta().map(|m| m.view_port).ok();
+                    // An instance with no viewer unit of this home (`--no-units`, or removed)
+                    // has no address to name.
+                    let port = layout
+                        .load_meta()
+                        .map(|m| m.view_port)
+                        .ok()
+                        .filter(|_| systemd.has_view(&row.name.0));
                     println!(
                         "{}",
                         json!({
@@ -726,6 +796,8 @@ fn seed_instance(
             spec.ekr.version
         ));
     }
+    // The instance records `ekr.version` as its pin: the binary that creates the store must be it.
+    ekr::check_version(&bin, &spec.ekr.version)?;
     let host = ekr::Binary(bin).host_json(&spec.name.0)?;
     home::write_atomic(&layout.host(), host.as_bytes())?;
     let store = layout.store_handle(spec);
@@ -947,6 +1019,72 @@ fn units_detail(systemd: &Systemd, installed: Result<(), String>, detail: &mut V
     }
 }
 
+/// Adds `source` of the spec of instance `name` to the registry (`cortex.instance.AddSource`).
+/// Any outcome but `added` is an error that names it.
+fn add_spec_source(
+    app: &mut App,
+    name: &m::InstanceName,
+    source: &m::SourceSpec,
+) -> Result<(), String> {
+    let id = format!("{}/{}", name.0, source.name);
+    let outcome = app
+        .add_source(m::AddSource {
+            instance_name: name.clone(),
+            source_id: m::SourceId(id.clone()),
+            name: source.name.clone(),
+            kind: model_map::kind(&source.settings),
+            schedule: source.schedule.clone(),
+        })
+        .map_err(|e| e.to_string())?;
+    let refused = match outcome {
+        m::AddSourceOutcome::Added { .. } => return Ok(()),
+        m::AddSourceOutcome::SourceExists { .. } => "source-exists",
+        m::AddSourceOutcome::NoSuchInstance { .. } => "no-such-instance",
+        m::AddSourceOutcome::NotActive { .. } => "not-active",
+    };
+    Err(format!("source {id}: {refused}"))
+}
+
+/// What `update` does to the registry rows of instance `name`'s sources ahead of its units: a
+/// source `spec` keeps takes its kind and schedule and keeps its counters and state; a source it
+/// adds is added. Answers the ids added and the names of the sources `spec` drops.
+fn reconcile_sources(
+    app: &mut App,
+    ctx: &Ctx,
+    name: &str,
+    spec: &m::InstanceSpec,
+) -> Result<(Vec<String>, Vec<String>), String> {
+    let mut added = Vec::new();
+    for source in &spec.sources {
+        let id = format!("{name}/{}", source.name);
+        let held = ctx
+            .shared
+            .borrow_mut()
+            .registry
+            .sources
+            .get_mut(&id)
+            .map(|held| {
+                held.data.kind = model_map::kind(&source.settings);
+                held.data.schedule = source.schedule.clone();
+            });
+        if held.is_none() {
+            add_spec_source(app, &spec.name, source)?;
+            added.push(id);
+        }
+    }
+    let dropped = ctx
+        .shared
+        .borrow()
+        .registry
+        .sources
+        .values()
+        .filter(|s| s.data.instance_name.0 == name)
+        .filter(|s| !spec.sources.iter().any(|k| k.name == s.data.name))
+        .map(|s| s.data.name.clone())
+        .collect();
+    Ok((added, dropped))
+}
+
 /// Places this cortex at `<home>/bin/cortex` ([`Systemd::place_binary`]), puts what that did in
 /// `detail["binary"]`, then installs each source's units. A spec with no source installs no unit
 /// that runs cortex, so it leaves the binary alone.
@@ -1147,14 +1285,7 @@ fn create(
                 return unregister(ctx, &name, &layout, e);
             }
             for source in &spec.sources {
-                let input = m::AddSource {
-                    instance_name: spec.name.clone(),
-                    source_id: m::SourceId(format!("{name}/{}", source.name)),
-                    name: source.name.clone(),
-                    kind: model_map::kind(&source.settings),
-                    schedule: source.schedule.clone(),
-                };
-                if let Err(e) = app.add_source(input) {
+                if let Err(e) = add_spec_source(app, &spec.name, source) {
                     return unregister(ctx, &name, &layout, e);
                 }
             }
@@ -1206,6 +1337,9 @@ fn create(
                     install_sources(ctx, &systemd, &name, &spec, replace_binary, &mut detail)
                 });
                 units_detail(&systemd, installed, &mut detail);
+            } else {
+                // No viewer was started, so no address is named.
+                detail["view"] = Value::Null;
             }
             Done {
                 outcome: if partial { "partial" } else { "created" },
@@ -1308,6 +1442,8 @@ fn adopt_into(
             spec.ekr.version
         )));
     }
+    // The instance records `ekr.version` as its pin: the binary that runs the store must be it.
+    ekr::check_version(&bin, &spec.ekr.version).map_err(failed)?;
     let host = match a.host {
         Some(path) => std::fs::read_to_string(path)
             .map_err(|e| failed(format!("cannot read --host {}: {e}", path.display())))?,
@@ -1511,14 +1647,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                 return unregister(ctx, &name, &layout, e);
             }
             for source in &spec.sources {
-                let input = m::AddSource {
-                    instance_name: spec.name.clone(),
-                    source_id: m::SourceId(format!("{name}/{}", source.name)),
-                    name: source.name.clone(),
-                    kind: model_map::kind(&source.settings),
-                    schedule: source.schedule.clone(),
-                };
-                if let Err(e) = app.add_source(input) {
+                if let Err(e) = add_spec_source(app, &spec.name, source) {
                     return unregister(ctx, &name, &layout, e);
                 }
             }
@@ -1539,6 +1668,9 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                     install_sources(ctx, &systemd, &name, &spec, replace_binary, &mut detail)
                 });
                 units_detail(&systemd, installed, &mut detail);
+            } else {
+                // No viewer was started, so no address is named.
+                detail["view"] = Value::Null;
             }
             Done {
                 outcome: "adopted",
@@ -1757,7 +1889,14 @@ fn rekeyed(
     })
 }
 
-fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> ExitCode {
+fn update(
+    app: &mut App,
+    ctx: &Ctx,
+    name: &str,
+    path: &Path,
+    units: Units,
+    no_wait: bool,
+) -> ExitCode {
     let loaded = match spec::load_given(path) {
         Ok(l) => l,
         Err(e) => return fail(e),
@@ -1766,17 +1905,29 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
     if spec.name.0 != name {
         return fail(format!("the spec names {:?}, not {name:?}", spec.name.0));
     }
+    // `--no-wait` found the lock held: the update answers `busy`, and reads neither Connectors
+    // nor the store on the way.
+    let busy = busy_unless_locked(ctx, "cortex.instance.UpdateInstance");
     let layout = Layout::new(ctx.home.instance_dir(name));
     // The viewer unit is written only when the store's `ekr` now launches through another
     // connection, or newly or no longer through one: an update that adds, drops or changes
     // `store.value.connection`, or one whose profile now resolves to another id than the one the
     // viewer unit holds (the connection was connected anew). Otherwise the update leaves the
     // viewer alone, and a viewer the operator stopped stays stopped. A frozen spec that cannot be
-    // read writes it.
-    let relaunch = layout.load_spec().map_or(true, |old| {
-        layout.store_handle(&old).launched_through()
-            != layout.store_handle(&spec).launched_through()
-    }) || viewer_resolves_anew(ctx, name, &layout.store_handle(&spec), units);
+    // read writes it. A `serve.view_port` other than the one `meta.json` holds moves the viewer:
+    // the port is recorded and the unit written on it.
+    let moved_to = spec
+        .serve
+        .view_port
+        .and_then(|p| u16::try_from(p).ok())
+        .filter(|p| layout.load_meta().is_ok_and(|meta| meta.view_port != *p));
+    let relaunch = !busy
+        && (moved_to.is_some()
+            || layout.load_spec().map_or(true, |old| {
+                layout.store_handle(&old).launched_through()
+                    != layout.store_handle(&spec).launched_through()
+            })
+            || viewer_resolves_anew(ctx, name, &layout.store_handle(&spec), units));
     if let Some(reason) = foreign_units(ctx, name, &spec, units, relaunch) {
         return fail(reason);
     }
@@ -1802,7 +1953,7 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
     }
     // A structured mapping whose value kind differs from the one the instance's store declares is
     // refused as well; a store that cannot be read now leaves that to the run.
-    if refusal.is_none() && structured::has_structured(&spec) && layout.host().is_file() {
+    if !busy && refusal.is_none() && structured::has_structured(&spec) && layout.host().is_file() {
         if let Ok(ontology) = layout.store_handle(&spec).ontology() {
             refusal = structured::spec_refusal(&spec, &ontology);
         }
@@ -1841,9 +1992,11 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
         model: spec.model.model.clone(),
         spec: spec.clone(),
         seed_digest,
+        no_wait: no_wait.then_some(true),
     };
     let done = match app.update_instance(input) {
         Err(e) => return fail(e),
+        Ok(m::UpdateInstanceOutcome::Busy { error }) => busy_done(error),
         Ok(m::UpdateInstanceOutcome::SeedChangeRefused { error }) => Done {
             outcome: "seed-change-refused",
             ok: false,
@@ -1871,40 +2024,70 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
             if let Err(e) = home::write_atomic(&layout.spec(), loaded.text.as_bytes()) {
                 return fail(e);
             }
-            let mut added = Vec::new();
-            for source in &spec.sources {
-                let id = format!("{name}/{}", source.name);
-                if ctx.shared.borrow_mut().registry.sources.contains_key(&id) {
-                    continue;
-                }
-                let input = m::AddSource {
-                    instance_name: spec.name.clone(),
-                    source_id: m::SourceId(id.clone()),
-                    name: source.name.clone(),
-                    kind: model_map::kind(&source.settings),
-                    schedule: source.schedule.clone(),
-                };
-                if let Err(e) = app.add_source(input) {
+            if let Some(port) = moved_to {
+                let moved = layout.load_meta().and_then(|mut meta| {
+                    meta.view_port = port;
+                    layout.save_meta(&meta)
+                });
+                if let Err(e) = moved {
                     return fail(e);
                 }
-                added.push(id);
             }
-            let mut detail = json!({"name": instance_updated.name.0, "added_sources": added});
+            let (added, dropped) = match reconcile_sources(app, ctx, name, &spec) {
+                Ok(sources) => sources,
+                Err(e) => return fail(e),
+            };
+            let systemd = Systemd::from_env(&ctx.home.root);
+            // A dropped source leaves the registry once its own units are stopped and deleted;
+            // one whose timer does not stop keeps its row and its unit files for the next update.
+            let mut removed_sources = Vec::new();
+            let mut kept = Vec::new();
+            let mut failed = Vec::new();
+            if !dropped.is_empty() {
+                match systemd.remove_units(name, &dropped, false) {
+                    Ok(removed) => {
+                        ctx.shared.borrow_mut().registry.sources.retain(|_, s| {
+                            s.data.instance_name.0 != name || !dropped.contains(&s.data.name)
+                        });
+                        removed_sources = dropped.iter().map(|s| format!("{name}/{s}")).collect();
+                        kept = removed.kept;
+                        failed.extend(removed.reload_failed);
+                    }
+                    Err(e) => failed.push(e),
+                }
+            }
+            let mut detail = json!({
+                "name": instance_updated.name.0,
+                "added_sources": added,
+                "removed_sources": removed_sources,
+            });
             if let Units::Install { replace_binary } = units {
-                let systemd = Systemd::from_env(&ctx.home.root);
                 // A rewritten viewer opens the store as the new spec does: through the launch
-                // exactly when it names a `connection`. It keeps the port it runs on.
+                // exactly when it names a `connection`, on the port `meta.json` now holds. It is
+                // restarted, so a running viewer takes the new unit.
                 let viewer = if relaunch {
-                    layout.load_meta().and_then(|meta| {
-                        systemd.install_view(name, &layout.store_handle(&spec), meta.view_port)
-                    })
+                    layout
+                        .load_meta()
+                        .and_then(|meta| {
+                            systemd.install_view(name, &layout.store_handle(&spec), meta.view_port)
+                        })
+                        .and_then(|_| systemd.restart_view_unit(name))
                 } else {
                     Ok(())
                 };
                 let installed = viewer.and_then(|_| {
                     install_sources(ctx, &systemd, name, &spec, replace_binary, &mut detail)
                 });
-                units_detail(&systemd, installed, &mut detail);
+                if let Err(e) = installed {
+                    failed.insert(0, e);
+                }
+                units_detail(&systemd, Ok(()), &mut detail);
+            }
+            if !kept.is_empty() {
+                detail["units"]["kept"] = json!(kept);
+            }
+            if !failed.is_empty() {
+                detail["units"]["failed"] = json!(failed.join("; "));
             }
             Done {
                 outcome: "updated",
@@ -1913,30 +2096,65 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
             }
         }
     };
-    print("update", &done)
+    print_status("update", &done)
 }
 
-fn remove(app: &mut App, ctx: &Ctx, name: &str) -> ExitCode {
+fn remove(app: &mut App, ctx: &Ctx, name: &str, no_wait: bool) -> ExitCode {
+    // `--no-wait` found the lock held: the remove answers `busy` and stops no unit.
+    let busy = busy_unless_locked(ctx, "cortex.instance.RemoveInstance");
+    // An active instance's units are stopped and deleted before the instance is recorded removed.
+    // A unit that does not stop deletes nothing and answers `stop-failed`: the instance stays
+    // active, so a second `remove` tries again.
+    let active = !busy
+        && ctx
+            .shared
+            .borrow()
+            .registry
+            .instances
+            .get(name)
+            .is_some_and(|i| i.state == m::InstanceState::Active);
+    let mut units = None;
+    if active {
+        let sources: Vec<String> = ctx
+            .shared
+            .borrow()
+            .registry
+            .sources
+            .values()
+            .filter(|s| s.data.instance_name.0 == name)
+            .map(|s| s.data.name.clone())
+            .collect();
+        match Systemd::from_env(&ctx.home.root).remove_instance(name, &sources) {
+            Ok(removed) => units = Some(removed),
+            Err(reason) => {
+                let mut shared = ctx.shared.borrow_mut();
+                shared
+                    .external
+                    .insert(("cortex.instance.RemoveInstance", "stop-failed"), true);
+                shared.strings.push_back(reason);
+            }
+        }
+    }
     let done = match app.remove_instance(m::RemoveInstance {
         name: m::InstanceName(name.to_string()),
+        no_wait: no_wait.then_some(true),
     }) {
         Err(e) => return fail(e),
+        Ok(m::RemoveInstanceOutcome::Busy { error }) => busy_done(error),
+        Ok(m::RemoveInstanceOutcome::StopFailed { error }) => Done {
+            outcome: "stop-failed",
+            ok: false,
+            detail: json!({"name": error.name.0, "reason": error.reason}),
+        },
         Ok(m::RemoveInstanceOutcome::Removed { instance_removed }) => {
-            let sources: Vec<String> = ctx
-                .shared
-                .borrow_mut()
-                .registry
-                .sources
-                .values()
-                .filter(|s| s.data.instance_name.0 == name)
-                .map(|s| s.data.name.clone())
-                .collect();
             let mut detail =
                 json!({"name": instance_removed.name.0, "dir": ctx.home.instance_dir(name)});
-            match Systemd::from_env(&ctx.home.root).remove_instance(name, &sources) {
-                Ok(kept) if !kept.is_empty() => detail["units"] = json!({"kept": kept}),
-                Ok(_) => {}
-                Err(e) => detail["units"] = json!({"failed": e}),
+            let removed = units.unwrap_or_default();
+            if !removed.kept.is_empty() {
+                detail["units"]["kept"] = json!(removed.kept);
+            }
+            if let Some(e) = removed.reload_failed {
+                detail["units"]["failed"] = json!(e);
             }
             Done {
                 outcome: "removed",
@@ -1955,7 +2173,7 @@ fn remove(app: &mut App, ctx: &Ctx, name: &str) -> ExitCode {
             detail: json!({"name": error.name.0}),
         },
     };
-    print("remove", &done)
+    print_status("remove", &done)
 }
 
 fn restore(app: &mut App, ctx: &Ctx, name: &str, snapshot: &str) -> ExitCode {
@@ -2695,6 +2913,44 @@ fn split(source_id: &str) -> (&str, &str) {
 /// scheduler tells "switched off" from "broken".
 const EXIT_DISABLED: u8 = 3;
 
+/// The exit status of a `--no-wait` command (`run`, `update`, `remove`, `source enable`) while
+/// another cortex command holds the home's lock: nothing ran or changed and nothing was recorded,
+/// so a scheduler skips this collection and an orchestrator tries again later.
+const EXIT_BUSY: u8 = 9;
+
+/// Whether `command` runs without the home's lock, which only a `--no-wait` command that found it
+/// held does: then the command's declared `busy` branch is taken, with its reason.
+fn busy_unless_locked(ctx: &Ctx, command: &'static str) -> bool {
+    if ctx.locked {
+        return false;
+    }
+    let mut shared = ctx.shared.borrow_mut();
+    shared.external.insert((command, "busy"), true);
+    shared.strings.push_back(format!(
+        "another cortex command holds the lock of {}",
+        ctx.home.root.display()
+    ));
+    true
+}
+
+fn busy_done(error: m::InstanceBusy) -> Done {
+    Done {
+        outcome: "busy",
+        ok: false,
+        detail: json!({"reason": error.reason}),
+    }
+}
+
+/// [`print`], with `busy` (a `--no-wait` command that found the lock held) exiting [`EXIT_BUSY`].
+fn print_status(command: &str, done: &Done) -> ExitCode {
+    let code = print(command, done);
+    if done.outcome == "busy" {
+        ExitCode::from(EXIT_BUSY)
+    } else {
+        code
+    }
+}
+
 /// The exit status of a `run` that ended because EKR could not say whether a store write took
 /// effect (a stage verb, `apply-extraction` or a transaction's commit; a gated `sqlite` run that
 /// kept a snapshot is undone from it first): distinct from a failed run's 1, so a scheduler tells
@@ -2743,11 +2999,13 @@ fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
         m::RunSourceOutcome::BatchTooLarge { .. } => EXIT_BATCH_TOO_LARGE,
         m::RunSourceOutcome::Terminated { .. } => EXIT_TERMINATED,
         m::RunSourceOutcome::ModelUnavailable { .. } => EXIT_MODEL_UNAVAILABLE,
+        m::RunSourceOutcome::Busy { .. } => EXIT_BUSY,
         m::RunSourceOutcome::FetchOnlyFailed { .. }
         | m::RunSourceOutcome::FetchFailed { .. }
         | m::RunSourceOutcome::ExtractionFailed { .. }
         | m::RunSourceOutcome::ApplyRefused { .. }
-        | m::RunSourceOutcome::NoSuchSource { .. } => 1,
+        | m::RunSourceOutcome::NoSuchSource { .. }
+        | m::RunSourceOutcome::PathRefused { .. } => 1,
     }
 }
 
@@ -2757,10 +3015,33 @@ fn run_source(
     source_id: &str,
     record: bool,
     fetch_only: bool,
+    no_wait: bool,
+    path: Option<PathBuf>,
 ) -> ExitCode {
+    // `--path` is read against the caller's working directory, not the spec's.
+    let path = match path.map(|p| std::path::absolute(&p).map(PathBuf::into_os_string)) {
+        None => None,
+        Some(Ok(p)) => match p.into_string() {
+            Ok(p) => Some(p),
+            Err(p) => return fail(format!("--path {}: not UTF-8", p.to_string_lossy())),
+        },
+        Some(Err(e)) => return fail(format!("--path: {e}")),
+    };
+    // `--no-wait` took no lock because another command holds it: the run answers `busy`.
+    let busy = !ctx.locked;
+    if busy {
+        let mut shared = ctx.shared.borrow_mut();
+        shared
+            .external
+            .insert(("cortex.instance.RunSource", "busy"), true);
+        shared.strings.push_back(format!(
+            "another cortex command holds the lock of {}",
+            ctx.home.root.display()
+        ));
+    }
     // A run that is sent SIGTERM stops at its next safe point and answers `terminated`; a
     // fetch-only run, which writes nothing, keeps the default and ends at once.
-    if !fetch_only {
+    if !fetch_only && !busy {
         if let Err(e) = cortex_cli::terminate::install() {
             return fail(e);
         }
@@ -2768,6 +3049,8 @@ fn run_source(
     let outcome = match app.run_source(m::RunSource {
         source_id: m::SourceId(source_id.to_string()),
         fetch_only: fetch_only.then_some(true),
+        no_wait: no_wait.then_some(true),
+        path,
     }) {
         Ok(o) => o,
         Err(e) => return fail(e),
@@ -2786,8 +3069,10 @@ fn run_source(
                 "facts_refused": report.facts_refused,
                 "parts_rejected": report.parts_rejected,
                 "facts_reapplied": report.facts_reapplied,
+                "facts_history": report.facts_history,
                 "masked": report.masked,
-                "stopped": report.stopped,
+                "stopped": source_ran.stopped,
+                "documents_left": source_ran.documents_left,
             });
             // The run's model calls and the tokens they reported, as its `SourceRan` carries them.
             for (key, value) in [
@@ -2887,6 +3172,7 @@ fn run_source(
                     "held": f.held,
                     "unchanged": f.unchanged,
                     "unread": f.unread,
+                    "skipped": f.skipped,
                 }),
             },
             None,
@@ -2977,6 +3263,15 @@ fn run_source(
             },
             None,
         ),
+        // Not a failure of the source: nothing ran. No `RecordFailure`, no status, metric or hook.
+        m::RunSourceOutcome::Busy { error } => (
+            Done {
+                outcome: "busy",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            None,
+        ),
         m::RunSourceOutcome::Disabled { run_skipped } => (
             Done {
                 outcome: "disabled",
@@ -2993,7 +3288,17 @@ fn run_source(
             },
             None,
         ),
+        // A refusal of the input: nothing ran, so nothing is recorded or reported.
+        m::RunSourceOutcome::PathRefused { error } => (
+            Done {
+                outcome: "path-refused",
+                ok: false,
+                detail: json!({"source_id": error.source_id.0, "reason": error.reason}),
+            },
+            None,
+        ),
     };
+    let refused = matches!(done.outcome, "path-refused");
     // A run that applied a batch and then failed left its report: its documents and tokens are
     // counted as a run's that ended `ran` are.
     if figures.is_none() {
@@ -3005,8 +3310,9 @@ fn run_source(
         (true, Some(reason)) => record_failure(app, ctx, source_id, reason).1,
         _ => false,
     };
-    // A fetch-only run reports nothing: no status file, no metric, no hook.
-    if !fetch_only {
+    // A fetch-only run reports nothing: no status file, no metric, no hook. Nor does a busy one,
+    // which holds no lock to write them under, or one whose `--path` was refused.
+    if !fetch_only && !busy && !refused {
         report_run(ctx, source_id, disabled, figures);
     }
     ExitCode::from(status)
@@ -3115,11 +3421,14 @@ fn record_failure(app: &mut App, ctx: &Ctx, source_id: &str, reason: &str) -> (E
     )
 }
 
-fn enable(app: &mut App, ctx: &Ctx, source_id: &str) -> ExitCode {
+fn enable(app: &mut App, ctx: &Ctx, source_id: &str, no_wait: bool) -> ExitCode {
+    busy_unless_locked(ctx, "cortex.instance.EnableSource");
     let done = match app.enable_source(m::EnableSource {
         source_id: m::SourceId(source_id.to_string()),
+        no_wait: no_wait.then_some(true),
     }) {
         Err(e) => return fail(e),
+        Ok(m::EnableSourceOutcome::Busy { error }) => busy_done(error),
         Ok(m::EnableSourceOutcome::Enabled { source_enabled }) => {
             let (instance, source) = split(source_id);
             let mut detail = json!({"source_id": source_enabled.source_id.0});
@@ -3145,7 +3454,7 @@ fn enable(app: &mut App, ctx: &Ctx, source_id: &str) -> ExitCode {
             detail: json!({"source_id": error.source_id.0}),
         },
     };
-    print("source enable", &done)
+    print_status("source enable", &done)
 }
 
 /// `cortex ask serve`: a spec the service cannot serve is refused (exit 2, naming the field)

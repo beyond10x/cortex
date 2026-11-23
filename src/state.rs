@@ -1,10 +1,11 @@
 //! What a source has already seen: the `cortex.instance.SeenDocument` records of
 //! `spec/domains/instance.yaml`, held in one state file per source, and the `UNMAPPED:` rule of
 //! `RunSource`'s `ran` that writes and reads them. A document is new when its key was never
-//! applied, changed when its text hash differs, and skipped while its last application is younger
-//! than the policy's `refresh_after_days`, unless it is a record read from a file
-//! ([`Origin::FileRecord`]), which is delivered again as soon as it changed, or a structured
-//! source's change whose text changed only in its links ([`SeenState::unlinked`]).
+//! applied, changed when its text hash or the hash of what cortex stores from it beside the text
+//! differs ([`SeenState::fields`]), and skipped while its last application is younger than the
+//! policy's `refresh_after_days`, unless it is a record read from a file ([`Origin::FileRecord`]),
+//! which is delivered again as soon as it changed, a structured source's change whose text changed
+//! only in its links ([`SeenState::unlinked`]), or a structured record whose mapping changed.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -30,6 +31,13 @@ pub struct Seen {
     /// them ([`crate::structured::LINKS`]); absent when the text held none, as its `hash` is that.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unlinked_hash: Option<String>,
+    /// The hash of what cortex stores from the document beside its text, as the run that applied
+    /// it saw it ([`SeenState::fields`]): a Web page's title, description and publication date
+    /// ([`page_fields`]), or how a structured source's record is mapped
+    /// ([`crate::structured::Source::mapping_hash`]). Absent for another document, and for one
+    /// applied before cortex remembered it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fields_hash: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -63,12 +71,35 @@ pub struct SeenState {
     /// before reads as one whose listing was never ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended_listing: Option<String>,
+    /// Records of a structured source the store refused on their last try (a part EKR rejected,
+    /// a reference it found ambiguous, a `store_lookup` refusal), by key. Such a record is not
+    /// seen, so every run wants it again; [`SeenState::select`] takes it after every other wanted
+    /// document, the one refused longest ago first, so a record refused on every run does not
+    /// hold back the others under `max_documents_per_run`. Applying or retiring the record drops
+    /// its entry; absent while none is refused.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub refused: BTreeMap<String, Refused>,
     /// This run's, never written: by key, the hash of the text without its links of each change
     /// record of a structured source's link ([`crate::structured::Source::link`]). A change whose
     /// text differs from the one last applied only in its links is wanted at once and never held,
     /// whatever `refresh_after_days`, and [`SeenState::record`] remembers it.
     #[serde(skip)]
     pub unlinked: BTreeMap<String, String>,
+    /// This run's, never written: by key, the hash of what cortex stores from each fetched
+    /// document beside its text ([`Seen::fields_hash`]). A document whose fields differ from the
+    /// ones last applied is a changed document; a structured source's record whose mapping
+    /// changed is wanted at once, whatever `refresh_after_days` (findings 4 and 9 of the 0.7.2
+    /// review).
+    #[serde(skip)]
+    pub fields: BTreeMap<String, String>,
+}
+
+/// The last refusal of a record ([`SeenState::refused`]): the hash of the text refused and the
+/// start of the run that tried it, in milliseconds since the Unix epoch.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Refused {
+    pub hash: String,
+    pub at: i64,
 }
 
 pub fn text_hash(text: &str) -> String {
@@ -78,6 +109,15 @@ pub fn text_hash(text: &str) -> String {
 /// The hash a document is remembered by: of its whole text when the run took it before the cut.
 pub fn doc_hash(doc: &Document) -> String {
     doc.hash.clone().unwrap_or_else(|| text_hash(&doc.text))
+}
+
+/// The fields cortex stores from a Web page beside its text, its `WebPage` node's title,
+/// description and publication date, as one hash ([`Seen::fields_hash`]); `None` for a document
+/// that is no Web page.
+pub fn page_fields(doc: &Document) -> Option<String> {
+    (doc.origin == Origin::Url).then(|| {
+        text_hash(&serde_json::json!([doc.title, doc.description, doc.published]).to_string())
+    })
 }
 
 pub fn hex(bytes: &[u8]) -> String {
@@ -107,6 +147,7 @@ impl SeenState {
                 let clean = |k: &String| crate::mask::mask_key(k).1 == 0;
                 state.documents.retain(|k, _| clean(k));
                 state.child_failures.retain(|k, _| clean(k));
+                state.refused.retain(|k, _| clean(k));
                 Ok(state)
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self {
@@ -117,7 +158,9 @@ impl SeenState {
                 pending_since: None,
                 child_failures: BTreeMap::new(),
                 ended_listing: None,
+                refused: BTreeMap::new(),
                 unlinked: BTreeMap::new(),
+                fields: BTreeMap::new(),
             }),
             Err(e) => Err(format!("cannot read {}: {e}", path.display())),
         }
@@ -171,7 +214,9 @@ impl SeenState {
     }
 
     /// The documents a run should extract: new keys, and changed text past the refresh window (or
-    /// at once, for a record read from a file), at most `max` of them, in fetch order.
+    /// at once, for a record read from a file), at most `max` of them, in fetch order; a record
+    /// the store refused with the text it has now ([`SeenState::refused`]) after all the others,
+    /// the one refused longest ago first.
     pub fn select(
         &self,
         docs: Vec<Document>,
@@ -179,41 +224,137 @@ impl SeenState {
         refresh_after_days: i64,
         max: usize,
     ) -> Vec<Document> {
-        docs.into_iter()
+        let (mut retried, fresh): (Vec<_>, Vec<_>) = docs
+            .into_iter()
             .filter(|d| self.wants(d, now_ms, refresh_after_days))
-            .take(max)
-            .collect()
+            .partition(|d| self.refused_at(d).is_some());
+        retried.sort_by_key(|d| self.refused_at(d));
+        fresh.into_iter().chain(retried).take(max).collect()
     }
 
-    /// Whether a run should extract `doc`: its key is new, or its text changed past the refresh
-    /// window, or changed at all for a record read from a file or in its links alone. A key seen
-    /// with no hash (adopted by key, not yet fetched) is not extracted.
+    /// When the store last refused `doc` with the text it has now, if it did.
+    fn refused_at(&self, doc: &Document) -> Option<i64> {
+        self.refused
+            .get(&doc.key)
+            .filter(|r| r.hash == doc_hash(doc))
+            .map(|r| r.at)
+    }
+
+    /// Remembers that the store refused `doc`, tried by the run that started at `at`: it stays
+    /// unseen, and is selected after the other wanted documents ([`SeenState::select`]).
+    pub fn refuse(&mut self, doc: &Document, at: i64) {
+        self.refused.insert(
+            doc.key.clone(),
+            Refused {
+                hash: doc_hash(doc),
+                at,
+            },
+        );
+    }
+
+    /// Retires the records a whole listing no longer lists (`dropped: Supersede`, once their
+    /// values were ended): every key not in `listed` whose identity starts with none of `kept`
+    /// (the records of a child call the run did not read) is forgotten, its saved fingerprint
+    /// and refusal with it. A retired record that is listed again is new, so its values, which
+    /// the end retracted, are applied again (finding 3 of the 0.7.2 review). Answers how many
+    /// were retired.
+    pub fn retire_unlisted(&mut self, listed: &BTreeSet<&str>, kept: &[&str]) -> usize {
+        let gone =
+            |k: &String| !listed.contains(k.as_str()) && !kept.iter().any(|p| k.starts_with(p));
+        let before = self.documents.len();
+        self.documents.retain(|k, _| !gone(k));
+        self.refused.retain(|k, _| !gone(k));
+        before - self.documents.len()
+    }
+
+    /// Whether a run should extract `doc`: its key is new, or it changed (its text, or what cortex
+    /// stores from it beside the text, [`SeenState::fields`]) past the refresh window, or changed
+    /// at all for a record read from a file, in its links alone, or as a structured record whose
+    /// mapping changed. A key seen with no hash (adopted by key, not yet fetched) is not
+    /// extracted.
     pub fn wants(&self, doc: &Document, now_ms: i64, refresh_after_days: i64) -> bool {
         match self.documents.get(&doc.key) {
             None => true,
-            Some(seen) => seen.hash.as_ref().is_some_and(|hash| {
-                (!waits(doc)
+            Some(seen) => self.change(doc, seen).is_some_and(|at_once| {
+                at_once
                     || now_ms.saturating_sub(seen.applied_at)
                         >= refresh_after_days.saturating_mul(DAY_MS)
-                    || self.relinked(doc, seen))
-                    && *hash != doc_hash(doc)
             }),
         }
     }
 
     /// Whether `doc` changed but is held back: its key was applied less than `refresh_after_days`
-    /// ago, with other text, and it is not a record read from a file nor a change whose links
-    /// alone changed. A key seen with no hash is not held.
+    /// ago, with other text or fields, and it is not a change that is wanted at once (a record
+    /// read from a file, a change whose links alone changed, a record whose mapping changed). A
+    /// key seen with no hash is not held.
     pub fn holds(&self, doc: &Document, now_ms: i64, refresh_after_days: i64) -> bool {
-        waits(doc)
-            && self.documents.get(&doc.key).is_some_and(|seen| {
-                seen.hash.as_ref().is_some_and(|hash| {
-                    now_ms.saturating_sub(seen.applied_at)
-                        < refresh_after_days.saturating_mul(DAY_MS)
-                        && *hash != doc_hash(doc)
-                        && !self.relinked(doc, seen)
-                })
-            })
+        self.documents.get(&doc.key).is_some_and(|seen| {
+            self.change(doc, seen) == Some(false)
+                && now_ms.saturating_sub(seen.applied_at)
+                    < refresh_after_days.saturating_mul(DAY_MS)
+        })
+    }
+
+    /// How `doc` differs from `seen`, the document applied under its key: `None` when it does not
+    /// (or `seen` has no hash), `Some(true)` for a change wanted at once, `Some(false)` for one
+    /// that waits for the refresh window. A changed text waits unless `doc` is a record read from
+    /// a file or its links alone changed; changed fields wait for a Web page, and are wanted at
+    /// once for a structured record, whose fields are its mapping.
+    fn change(&self, doc: &Document, seen: &Seen) -> Option<bool> {
+        let hash = seen.hash.as_ref()?;
+        let text = *hash != doc_hash(doc);
+        let fields = self.refielded(doc, seen);
+        if !text && !fields {
+            return None;
+        }
+        let remapped = fields && doc.origin != Origin::Url;
+        Some((text && (!waits(doc) || self.relinked(doc, seen))) || remapped)
+    }
+
+    /// Whether what cortex stores from `doc` beside its text differs from what `seen` was applied
+    /// with ([`Seen::fields_hash`]). A structured record applied with none is: the mapping it was
+    /// applied with is unknown. A Web page applied with none is not; [`SeenState::adopt_fields`]
+    /// takes its fields as fetched.
+    fn refielded(&self, doc: &Document, seen: &Seen) -> bool {
+        match (self.fields.get(&doc.key), seen.fields_hash.as_ref()) {
+            (Some(now), Some(applied)) => now != applied,
+            (Some(_), None) => doc.origin != Origin::Url,
+            (None, _) => false,
+        }
+    }
+
+    /// Records, for every fetched Web page seen with no fields hash (applied by a cortex that did
+    /// not remember it), the fields this run fetched ([`SeenState::fields`]), so a later change of
+    /// them is a change and these are not extracted again. A structured record is left without
+    /// one, so it is applied again ([`SeenState::refielded`]).
+    pub fn adopt_fields(&mut self, docs: &[Document]) {
+        for doc in docs.iter().filter(|d| d.origin == Origin::Url) {
+            let Some(fields) = self.fields.get(&doc.key) else {
+                continue;
+            };
+            if let Some(seen) = self
+                .documents
+                .get_mut(&doc.key)
+                .filter(|s| s.fields_hash.is_none())
+            {
+                seen.fields_hash = Some(fields.clone());
+            }
+        }
+    }
+
+    /// Whether `doc` is seen as applied with the text and the fields it has now.
+    pub fn applied_as_now(&self, doc: &Document) -> bool {
+        self.documents.get(&doc.key).is_some_and(|seen| {
+            seen.hash.as_deref() == Some(doc_hash(doc).as_str()) && !self.refielded(doc, seen)
+        })
+    }
+
+    /// [`Wanted::of`] `doc`, with the fields this run fetched of it.
+    pub fn wanted(&self, doc: &Document) -> Wanted {
+        Wanted {
+            fields: self.fields.get(&doc.key).cloned(),
+            ..Wanted::of(doc)
+        }
     }
 
     /// Whether `doc`, a change record of a link, has the text `seen` was applied with but for its
@@ -246,6 +387,7 @@ impl SeenState {
                 .filter(|unlinked| **unlinked != hash)
                 .cloned();
             seen.hash = Some(hash);
+            seen.fields_hash = self.fields.get(&doc.key).cloned();
             hashed += 1;
         }
         hashed
@@ -262,13 +404,15 @@ impl SeenState {
                 key: key.clone(),
                 content_hash: seen.hash.clone(),
                 unlinked_hash: seen.unlinked_hash.clone(),
+                fields_hash: seen.fields_hash.clone(),
                 applied_at: seen.applied_at,
             })
             .collect()
     }
 
-    /// Remembers `doc` as applied at `now_ms`: its hash, and for a change record whose text holds
-    /// links, its hash without them ([`SeenState::unlinked`]).
+    /// Remembers `doc` as applied at `now_ms`: its hash, its fields ([`SeenState::fields`]), and
+    /// for a change record whose text holds links, its hash without them
+    /// ([`SeenState::unlinked`]).
     pub fn record(&mut self, doc: &Document, now_ms: i64) {
         let hash = doc_hash(doc);
         let unlinked_hash = self
@@ -276,23 +420,36 @@ impl SeenState {
             .get(&doc.key)
             .filter(|unlinked| **unlinked != hash)
             .cloned();
+        self.refused.remove(&doc.key);
         self.documents.insert(
             doc.key.clone(),
             Seen {
                 hash: Some(hash),
                 applied_at: now_ms,
                 unlinked_hash,
+                fields_hash: self.fields.get(&doc.key).cloned(),
             },
         );
     }
 
-    /// Whether `wanted`, as this run fetched it, is seen with its text: applied by this run, since
-    /// a wanted document's key is new or seen with other text.
+    /// How many documents of `backlog` this state does not hold with the text and fields the run
+    /// fetched: the wanted documents a run neither applied nor marked seen, which the next run
+    /// wants again.
+    pub fn left(&self, backlog: &Backlog) -> usize {
+        backlog
+            .wanted
+            .iter()
+            .filter(|w| !self.holds_text(w))
+            .count()
+    }
+
+    /// Whether `wanted`, as this run fetched it, is seen with its text and fields: applied by this
+    /// run, since a wanted document's key is new or seen with other text or fields.
     fn holds_text(&self, wanted: &Wanted) -> bool {
-        self.documents
-            .get(&wanted.key)
-            .and_then(|seen| seen.hash.as_ref())
-            == Some(&wanted.hash)
+        self.documents.get(&wanted.key).is_some_and(|seen| {
+            seen.hash.as_ref() == Some(&wanted.hash)
+                && (wanted.fields.is_none() || seen.fields_hash == wanted.fields)
+        })
     }
 
     /// The `pending_since` a windowed run that did not succeed leaves, after what it applied: the
@@ -340,13 +497,15 @@ pub struct Backlog {
     pub held_since: Option<i64>,
 }
 
-/// A document a windowed run wanted: its key, its hash ([`doc_hash`]) and its record time
-/// ([`crate::evidence::document_time_ms`]), `None` when that cannot be read.
+/// A document a windowed run wanted: its key, its hash ([`doc_hash`]), its record time
+/// ([`crate::evidence::document_time_ms`]), `None` when that cannot be read, and its fields
+/// ([`SeenState::fields`]), `None` when it has none ([`SeenState::wanted`]).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Wanted {
     pub key: String,
     pub hash: String,
     pub time_ms: Option<i64>,
+    pub fields: Option<String>,
 }
 
 impl Wanted {
@@ -355,6 +514,7 @@ impl Wanted {
             key: doc.key.clone(),
             hash: doc_hash(doc),
             time_ms: crate::evidence::document_time_ms(doc),
+            fields: None,
         }
     }
 }
@@ -588,6 +748,7 @@ mod tests {
                 hash: None,
                 applied_at: 1,
                 unlinked_hash: None,
+                fields_hash: None,
             }
         );
         // Saved as the adopted state: still no hash.
@@ -657,6 +818,7 @@ mod tests {
             hash: None,
             applied_at: 1,
             unlinked_hash: None,
+            fields_hash: None,
         };
         let mut state = SeenState::default();
         state.documents.insert("a".into(), adopted.clone());
@@ -734,6 +896,45 @@ mod tests {
             .map(|d| d.key)
             .collect();
         assert_eq!(held, ["c"]);
+    }
+
+    /// Finding 6 of the 0.7.2 review: a refused record is selected after the other wanted ones,
+    /// the one refused longest ago first; its changed text, or its application, ends that.
+    #[test]
+    fn a_refused_record_is_selected_after_the_others_and_the_oldest_refusal_first() {
+        let keys = |docs: Vec<Document>| docs.into_iter().map(|d| d.key).collect::<Vec<_>>();
+        let docs = || vec![doc("a", "1"), doc("b", "2"), doc("c", "3"), doc("d", "4")];
+        let mut state = SeenState::default();
+        state.refuse(&doc("a", "1"), 20);
+        state.refuse(&doc("b", "2"), 10);
+        assert_eq!(keys(state.select(docs(), 0, 0, 10)), ["c", "d", "b", "a"]);
+        assert_eq!(keys(state.select(docs(), 0, 0, 1)), ["c"]);
+        // A refusal of another text is no refusal of this one.
+        state.refuse(&doc("c", "old"), 5);
+        assert_eq!(keys(state.select(docs(), 0, 0, 1)), ["c"]);
+        state.record(&doc("c", "3"), 1);
+        state.record(&doc("d", "4"), 1);
+        assert_eq!(keys(state.select(docs(), 0, 0, 1)), ["b"]);
+        assert!(!state.refused.contains_key("c"));
+    }
+
+    /// Finding 3 of the 0.7.2 review: a whole listing retires the records it no longer lists, but
+    /// those under a kept prefix, so a retired record listed again is new.
+    #[test]
+    fn retiring_forgets_the_unlisted_records_but_the_kept_ones() {
+        let mut state = SeenState::default();
+        for key in ["s:A", "s:B", "s/c:P:x"] {
+            state.record(&doc(key, "t"), 1);
+        }
+        state.refuse(&doc("s:B", "u"), 2);
+        let listed = BTreeSet::from(["s:A"]);
+        assert_eq!(state.retire_unlisted(&listed, &["s/c:P:"]), 1);
+        assert_eq!(
+            state.documents.keys().collect::<Vec<_>>(),
+            ["s/c:P:x", "s:A"]
+        );
+        assert!(state.refused.is_empty());
+        assert!(state.wants(&doc("s:B", "t"), 0, 0));
     }
 
     /// A change record of a link whose text differs from the one last applied only in its links
@@ -819,6 +1020,7 @@ mod tests {
                     key: "https://example.org/a".into(),
                     content_hash: Some(text_hash("one")),
                     unlinked_hash: None,
+                    fields_hash: None,
                     applied_at: 5,
                 },
                 m::SeenDocumentData {
@@ -827,6 +1029,7 @@ mod tests {
                     key: "https://example.org/b".into(),
                     content_hash: Some(text_hash("two")),
                     unlinked_hash: None,
+                    fields_hash: None,
                     applied_at: 7,
                 },
             ]
@@ -845,6 +1048,26 @@ mod tests {
         since_ms: 1_000_000_000_000,
         until_ms: 1_000_900_000_000,
     };
+
+    /// `story:run-report-cap-and-refusals`: a wanted document is left until the state holds it
+    /// with the text the run fetched; one recorded with other text is still left.
+    #[test]
+    fn the_documents_left_are_the_wanted_ones_not_held_with_their_text() {
+        let (a, b) = (timed("a", "one", None), timed("b", "two", None));
+        let backlog = Backlog {
+            complete: true,
+            held_since: None,
+            wanted: [&a, &b].into_iter().map(Wanted::of).collect(),
+        };
+        let mut state = SeenState::default();
+        assert_eq!(state.left(&backlog), 2);
+        state.record(&a, 1);
+        assert_eq!(state.left(&backlog), 1);
+        state.record(&timed("b", "other", None), 1);
+        assert_eq!(state.left(&backlog), 1, "b is held with other text");
+        state.record(&b, 1);
+        assert_eq!(state.left(&backlog), 0);
+    }
 
     /// `story:window-advances-past-applied`: the window moves to the earliest wanted document left
     /// unapplied, less the overlap; applied documents, however early, do not hold it.

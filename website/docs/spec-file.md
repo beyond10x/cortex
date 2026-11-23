@@ -12,6 +12,10 @@ One YAML file in the `cortex.instance/1` format defines one instance. Its exact 
 Schema is [`instance-spec.schema.json`](https://beyond10x.github.io/cortex/schemas/instance-spec.schema.json),
 and `cortex schema` prints the same document. This page says what each section does.
 
+A field the JSON Schema types `integer` takes any number with no fractional part, as JSON Schema
+counts one: `timeout_s: 900`, `900.0` and `9e2` are one value. A fraction (`900.5`) is refused,
+naming the field.
+
 The repository's `examples/example.yaml` is a complete file with two web sources.
 `examples/agent-tooling.yaml` is another, with its own seed ontology
 (`examples/seed/agent-tooling.yaml`): a daily news search on three queries, a weekly crawl of the
@@ -57,8 +61,13 @@ directory, so the instance keeps working when the originals move.
 
 | field | meaning |
 |---|---|
-| `version` | the pinned EKR version |
+| `version` | the pinned EKR version, which the instance records as its engine |
 | `bin` | optional path to the `ekr` binary; `~/` is expanded. Without it, cortex uses `~/.cache/cortex/bin/<version>/bin/ekr`, where `cortex setup` installs it |
+
+`cortex create` and `cortex adopt` run `<bin> --version` first and refuse a binary that reports
+another version than `version`, before any store exists: `create` answers `seed-refused` and
+`adopt` exits 2, each naming the version the binary reported. `cortex setup` refuses a binary of
+another version in the cache the same way; remove it and run `cortex setup` again.
 
 ## `seed`
 
@@ -343,7 +352,9 @@ Websites with their title, description and content, through a Connectors adapter
 | `policy` | optional crawl policy: `max_depth`, `max_breadth`, `limit`, `select_paths`, `exclude_paths`, `instructions`, `allow_external`. Without it a crawl is limited to 20 pages |
 
 A website with no content keeps its description as its text; one with neither is dropped. A URL
-returned twice in one run counts once.
+returned twice in one run counts once. A URL the provider could not read, and an answer it says
+is incomplete, are named in fetch-only's `unread` and in the run's `stopped`
+([Operating](./operating.md#counting-what-a-run-would-extract)).
 
 ### `kind: connectors`
 
@@ -441,7 +452,11 @@ next page, token, key or link), `max_pages` and `stop_older_than_since` (optiona
 its value is the next `param`, whatever the style, except `NextLink`. Without it, a `PageNumber`
 walk asks for the page after the current one (the input's `param`, or 1 when absent), and a
 `Token`, `Keyset` or `NextLink` walk reads one page. A walk stops at an empty page, at a missing
-`next`, at a page or token it has already asked for, or after `max_pages` pages.
+`next`, at a page or token it has already asked for, or after `max_pages` pages. An answer that
+names a page or token the walk already asked for is a paging cycle: the pages after it were never
+answered, so the walk leaves records unread and says
+`<adapter>.<operation>: the answer named a page it already returned (a paging cycle)` in `unread`
+(fetch-only) and `stopped` (a run).
 
 A `NextLink` walk reads a URL at `next`, relative or absolute, and asks next for the
 percent-decoded value of its query parameter named by the last segment of `param`:
@@ -593,6 +608,17 @@ A record whose text changed is extracted again on the next run, whatever `refres
 the window holds back only whole files and the other kinds of source. Its thread context is part
 of its text, so a record whose nearer thread records changed is extracted again too.
 
+**A directory per run.** `cortex run <instance>/<source> --path <dir>` reads the source from
+`<dir>` in place of `paths`, for that run only; `glob`, `records` and `lookup` stay as the spec
+says, and `lookup` is still read against the spec file's directory. A document's key is then the
+file's path relative to `<dir>`: `<relative path>#<id>` for a record, `<relative path>` for a whole
+file, cited as `file:<key>`. A caller that writes each run's files to a new directory, such as
+`run-17/work/slices/chat.jsonl` and then `run-18/work/slices/chat.jsonl`, passes
+`--path run-17/work` and then `--path run-18/work`: both runs key the record
+`slices/chat.jsonl#<id>`, so an unchanged record is not extracted again (`documents_new` 0) and a
+changed one is. Keys with and without `--path` differ, so run a source one way only. Masking
+applies to the relative key as to any key.
+
 ### `kind: structured`
 
 Records turned into entities, properties and relations by a fixed `mapping`, with no model call:
@@ -700,6 +726,17 @@ node, and no `Repository` node:
   refused alike, naming the type, the property and both kinds;
 - no match, or matches of its own type only: written as with `OwnType`.
 
+**Refused records.** A record EKR applies nothing of is refused too: one with a part EKR rejects,
+and one whose entity, or a node one of its facts names, `ekr apply-extraction` reports
+`ambiguous` (its aliases match more than one store node of its type), though EKR rejects no part
+of it. The run names it in `rejected` (`ambiguous: its aliases match 2 store nodes of type
+Project, so EKR applied none of its facts`), does not count it in `documents_applied` and does not
+mark it seen, so the run is not successful, its window does not move past it, and the next run
+tries it again. A refused record (rejected, ambiguous, or refused by the store lookup above) is
+tried after every other record the run wants, the one refused longest ago first: under
+`max_documents_per_run` it does not hold back the records behind it. A changed text is selected in
+its place as any changed record is.
+
 **Values.** Each mapped property is declared and written in one value kind: the `value_kind` its
 mapping names (`String`, `Integer`, `Decimal`, `Boolean` or `Timestamp`), else the kind the
 store's ontology already declares for that property of the node type (`ekr ontology`), else
@@ -749,11 +786,26 @@ every child of a parent the source no longer lists, has its values ended, its re
 parent among them.
 
 The run reports `superseded` and `retracted` when it ended any. Nothing is ended when the fetch
-left records unread (a `max_pages` reached, an empty page that named a next one), or when the
-source lists no record at all: an empty list is read as a list that failed, so a source cannot
-drop its last record. A record whose current text the run did not apply (held back by
-`refresh_after_days`, beyond `max_documents_per_run`, rejected, or over the evidence bound) keeps
-its values. Values are ended at most 1,000 to a transaction; when a later transaction of a run
+left records unread (a `max_pages` reached, an empty page that named a next one, a paging cycle),
+or when the source lists no record at all: an empty list is read as a list that failed, so a
+source cannot drop its last record. A record whose current text the run did not apply (held back
+by `refresh_after_days`, beyond `max_documents_per_run`, rejected, or over the evidence bound)
+keeps its values.
+
+A record's values are retracted only on evidence that it is gone: a whole listing that no longer
+lists it. A Connectors operation asked about the run's window (an input names `{since}`,
+`{until}`, `{since_epoch}`, `{until_epoch}` or `{since_minutes_ago}`), or walked with
+`stop_older_than_since`, lists what changed in the window, not every record: its run supersedes
+the changed values of the records it lists, and keeps every value of a record it does not list
+(and of that record's children). Such a source never retracts a record that left the provider; to
+end those, read the whole listing (an operation asked without the window) or use `dropped: Keep`.
+
+A record a whole listing no longer lists is retired once its values were ended: its seen entry is
+dropped, so when the source lists it again, with the same text or another, it is new and its
+values are applied again (fetch-only counts it in `new`). Records of a child call the run did not
+read are not retired.
+
+Values are ended at most 1,000 to a transaction; when a later transaction of a run
 fails, the edges of relations an earlier one retracted stay, and later runs do not remove them.
 
 Values another source asserted are never ended. A `kind: connectors` source cites its records as
@@ -904,9 +956,9 @@ applies. Shorten or unmap the value at the source to clear it. Change detection,
 
 | field | meaning |
 |---|---|
-| `refresh_after_days` | a document whose text changed is extracted again only when it was last applied at least this many days ago; 0 to 36500. A record read from a file ([`kind: files`](#kind-files)) and a `structured` source's change whose text changed only in its links ([`kind: structured`](#kind-structured)) wait for nothing |
+| `refresh_after_days` | a document whose text changed, or a web page whose title, description or publication date changed, is extracted again only when it was last applied at least this many days ago; 0 to 36500. A record read from a file ([`kind: files`](#kind-files)), a `structured` source's change whose text changed only in its links, and a `structured` record whose mapping changed ([`kind: structured`](#kind-structured)) wait for nothing |
 | `change` | how a change is detected; `ContentHash` is the only value |
-| `max_documents_per_run` | the most documents one run extracts; above 0 |
+| `max_documents_per_run` | the most documents one run extracts; above 0. A run that leaves wanted documents beyond it reports `stopped: document-cap` and their number in `documents_left` ([`cortex run`](./commands.md)) |
 | `max_chars_per_document` | longer text is cut to this many characters; above 0. Text is also cut, at a character boundary, to what a 16,384-byte evidence payload holds after its header (EKR 0.0.32's bound), so about 5,400 characters of a three-byte script such as Chinese fit. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |
 
 ## `redaction`
@@ -930,6 +982,26 @@ redaction:
 | `known_names` | optional names replaced by `[Name-1]`-style placeholders wherever they appear as whole words, in any case, and restored |
 | `rare_limit` | optional; for `RareName`, the most times a capitalised word may appear in a batch to be taken as a name. Default 1 |
 | `refuse_if_left` | optional classes that fail the run, before any model call, when they are still found in what the model would be shown |
+
+The prompt shows the store's ontology: its node type names with their property names and value
+kinds, and its relation names with their source and target types. `RareName` never takes these
+names, in the ontology lines or in a document, and does not count them: the model sees
+`Runbook(owner: String)` as the store holds it, and writes it back as the type of what it
+extracts. `known_names` and `rules` still replace a type name they match. A placeholder the model
+writes where a node type, property or relation name goes is restored before the answer is
+applied, also when it dropped the brackets (`Name-3` for `[Name-3]`); one that stands for no value
+of the batch fails the batch, naming the placeholder and where it stood, and nothing of that
+batch is applied.
+
+Each batch directory under `runs/` keeps the prompt as sent (`prompt.txt`), the model's raw
+answer (`answer.json`) and each part EKR refused (`refusals.json`: the part, the outcome EKR named
+and its reason) beside the extraction document applied
+([Operating](./operating.md#where-things-live)). With a policy, all three hold placeholders, not
+the values they stand for: the model was sent only placeholders, its answer is kept as it came,
+before restoring, and EKR's refusals, which can name the restored values, are written with
+every value the policy finds replaced by a placeholder of the batch. `extraction.yaml` holds the
+restored values, as the store does. The mapping from placeholder to value is never written. They
+are removed with the run directory after [`runs.keep_days`](#runs).
 
 ## `snapshots`
 
@@ -1001,7 +1073,7 @@ monitoring:
 
 | field | meaning |
 |---|---|
-| `view_port` | optional port for `ekr view` on 127.0.0.1, 0 to 65535; without it, `cortex create` takes the first free port from 18900 |
+| `view_port` | optional port for `ekr view` on 127.0.0.1, 0 to 65535; without it, `cortex create` takes the first free port from 18900, and `cortex update` keeps the instance's port. `cortex update` with another port moves the viewer to it |
 
 ## `store`
 

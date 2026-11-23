@@ -110,6 +110,10 @@
           "type": "Optional<string>"
         },
         {
+          "name": "fields_hash",
+          "type": "Optional<string>"
+        },
+        {
           "name": "applied_at",
           "type": "integer"
         }

@@ -224,6 +224,7 @@ fn keys_that_hold_no_credential_keep_their_stored_form() {
                 hash: None,
                 applied_at: 1,
                 unlinked_hash: None,
+                fields_hash: None,
             },
         );
     }
@@ -271,7 +272,7 @@ fn source_yaml(adapter: &str, operation: &str, child: bool) -> m::StructuredSour
         r#"format: cortex.instance/1
 name: c
 description: Test brain.
-ekr: {{version: "0.0.32", bin: "ekr"}}
+ekr: {{version: "0.0.34", bin: "ekr"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

@@ -85,6 +85,7 @@ fn a_key_stored_by_0_7_0_for_a_percent_before_an_encoded_ampersand_is_kept_and_m
             hash: Some("h".into()),
             applied_at: 1,
             unlinked_hash: None,
+            fields_hash: None,
         },
     );
     let dir = tempfile::tempdir().expect("a temporary directory");

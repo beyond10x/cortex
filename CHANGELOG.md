@@ -5,36 +5,80 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
-### What 1.0 holds
+### Added
 
-1.0 is the first release whose interface is stable. It adds no feature over 0.5.0; it is 0.5.0's
-feature set after a real instance ran for 7 days with nobody at the keyboard.
+- `cortex update`, `cortex remove` and `cortex source enable` take `--no-wait` too: while another
+  cortex command holds the home's lock they answer `busy` at once with exit status 9 and change
+  nothing (an update leaves the frozen spec as it was), so an orchestrator that changes an
+  instance's spec while a run may be in flight gets an answer at once instead of waiting minutes.
+  Without the flag they wait for the lock, as before (story `update-no-wait`).
 
-- **Instances.** One spec file makes an instance: an EKR store on SQLite or PostgreSQL, a viewer,
-  an MCP line, and one systemd user timer per source. `cortex update` changes sources, model and
-  serve settings; `cortex adopt` turns an existing store into an instance without reseeding;
-  `cortex remove` keeps the data.
-- **Sources.** Web (search, or listed sites read as pages or crawled), Connectors (records of any
-  admitted operation, with pages, child calls and a time window), files (local files or records
-  read from them, with lookups), and structured imports that need no model call, map child
-  operations as linked nodes, link changes to the first tag that ships them, and end what a source
-  dropped.
-- **Runs.** Only new or changed documents are extracted, by a model call with no tools. cortex
-  mints every evidence id, dates facts by when their source said them, supersedes a changed value,
-  and writes extracted relations as edges. Credentials are masked before storage; a `redaction`
-  policy keeps personal data from the model and a gate refuses a batch it still finds. A snapshot
-  before each run makes `cortex restore` undo a bad one, and a gated run on PostgreSQL runs in an EKR
-  stage it abandons on failure; two failed runs in a row disable a source, and a daily ceiling
-  holds model spend. A metric file, a failure hook and `cortex sources` show how each run ended.
-  `cortex quality` judges a sample of facts; `cortex schema` proposes schema changes.
-- **Project.** Specified in ESS with 125 conformance scenarios; CI runs `task check` on every pull
-  request; each release carries an `x86_64-unknown-linux-gnu` binary checked against `SHA256SUMS`.
+### Changed
 
-Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
+- A run that `max_documents_per_run` capped reports `stopped: document-cap` instead of
+  `stopped: null`, and every `ran` report carries `documents_left`, the wanted documents the run
+  neither applied nor marked seen (`0` when it left none; `SourceRan` carries both). Before, a
+  capped run looked like one that read everything, and a caller counted what was left with a
+  second `--fetch-only` call.
+- A batch directory under `runs/` keeps each part EKR refused in `refusals.json`: the part, the
+  outcome EKR named and its reason. Under a `redaction` policy every value the policy finds in it
+  is replaced by a placeholder of the batch, as in `prompt.txt` and `answer.json`. Before, a
+  refusal's reason was in no file of the run directory under a policy.
 
-- `model.backend: Codex` is accepted and fails every run; extraction uses `claude -p` only.
-- A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
-- Linux with systemd user units only, and one released target.
+### Fixed
+
+- A `web` source reports what the provider did not read. Each URL in a `websearch.fetch` or
+  `websearch.crawl` answer's `failed` list, and an answer that says `complete: false`, is named in
+  fetch-only's `unread` and in the run's `stopped`, with the provider's reason or truncation
+  causes. A search short of `max_results` alone is not named. 0.8.0 ignored both and reported a
+  run whose only URL failed as a plain `ran` (review of 0.7.2, finding 7).
+- A web page's description is cut, with its title, to what the 16,384-byte evidence payload
+  holds, leaving the page's text its own length or 8,192 bytes. The prompt, the evidence and the
+  stored `WebPage` `description` hold the same text. 0.8.0 showed the model and stored a long
+  description whose tail its evidence did not hold (review of 0.7.2, finding 10).
+- A `structured` record whose mapping changed is applied again at the next run, at once and
+  whatever `refresh_after_days`, its text changed or not. 0.8.0 answered `cortex update` with
+  `updated` and left every unchanged record on the old mapping, so a property added to the mapping
+  reached the store only for records that changed later. The state file remembers each record's
+  mapping (`fields_hash`); a record applied by 0.8.0 has none and is applied again once, with no
+  model call.
+- A web page whose title, description or publication date changed while its URL and body stayed
+  the same is a changed document, extracted again once `refresh_after_days` have passed, so its
+  `WebPage` node gets the new values. 0.8.0 counted it unchanged. A page applied by 0.8.0 takes
+  the fields of its next fetch as applied and is not extracted again for them.
+- `cortex run --fetch-only` names in the new `skipped` list each document a run would leave out
+  after it failed alone on 3 consecutive runs, and counts it neither `new` nor `changed`.
+  0.8.0 forecast it as model work that the run then skipped.
+- `create`, `update` and `adopt` read every field the published JSON Schema types `integer` as
+  that schema does: a number with no fractional part in any spelling (`timeout_s: 1.0`, `1e3`) is
+  that whole number, where 0.8.0 refused `1.0` as not a whole number. A fraction (`1.5`) is still
+  refused, naming the field (review of 0.7.2, finding 25).
+- The conformance suite reads the spec document each create, adopt and update step supplies
+  through the command line's own loader (`load_given`) and gives the behaviour the spec it
+  loaded, where it gave every step one fixed spec; a document the loader refuses fails its
+  scenario. Three authored scenarios (`spec/scenarios/`) create, adopt and update from
+  `cortex.instance/1` documents the loader accepts. The 100 steps whose document is ESS 0.77.0's
+  synthesized witness (`format: spec.format`) are counted and must be refused at their format;
+  ESS gives a struct input a document of its own only from `ess/33` (ESS 0.78.0) (review of
+  0.7.2, finding 26).
+- `cortex update` takes a source the new spec drops out of the registry, and stops and deletes
+  its timer and service (`removed_sources`). Before, the source stayed `Enabled` and its timer
+  kept firing a run that failed and was counted. A timer that does not stop keeps its source and
+  unit files, `units.failed` names it, and the next update tries again.
+- `cortex update` gives a source the spec keeps its new `kind` and `schedule` in the registry, so
+  `cortex sources` lists the schedule its timer runs on; its runs, failures and state are kept.
+- `cortex update` with another `serve.view_port` moves the viewer: `meta.json` and `cortex list`
+  hold the new port, and the viewer unit is written on it and restarted. Before, the old port
+  stayed. A viewer unit an update rewrites for a changed connection is restarted too.
+- `cortex source add` for a source the registry holds answers `source-exists` (exit 1) and
+  changes nothing; before, it reset the source's counters and enabled a disabled source. A source
+  of an instance the home does not hold is refused (`no-such-instance`), and one of a removed
+  instance (`not-active`).
+- `cortex remove` answers `stop-failed` (exit 1) and names each failure when
+  `systemctl disable --now` fails for a timer or the viewer. It deletes no unit file and keeps the
+  instance active, so `cortex remove` can be run again. Before, it answered `removed`, deleted the
+  unit files and refused a second remove as `wrong-state`. A unit file that is not there is no
+  longer stopped, and `daemon-reload` runs only once a file was deleted.
 
 ### Fixed: answers and evaluations (review of 0.7.2, findings 19 to 24)
 
@@ -58,13 +102,119 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   Breaking: `cortex.ask.LimitReached`, `ModelFailed` and `ReaderFailed` carry `steps` and the
   token counts.
 
+## 0.8.0 — 2026-11-23
+
+### Added
+
+- `cortex run <instance>/<source> --path <dir>`, also with `--fetch-only`, reads a `files` source
+  from `<dir>` instead of its spec's `paths`, for that run only. Each document is keyed by its
+  path relative to `<dir>` (`<relative path>#<id>`, evidence `file:<key>`), so a record read from
+  a new directory on each run is one document and is not extracted again while it is unchanged.
+  On a source of another kind, or on `<instance>/seed`, it answers the new outcome `path-refused`
+  (exit 1) and writes nothing; a missing `<dir>` fails the fetch, naming it.
+
+### What 1.0 holds
+
+1.0 is the first release whose interface is stable. It adds no feature over 0.5.0; it is 0.5.0's
+feature set after a real instance ran for 7 days with nobody at the keyboard.
+
+- **Instances.** One spec file makes an instance: an EKR store on SQLite or PostgreSQL, a viewer,
+  an MCP line, and one systemd user timer per source. `cortex update` changes sources, model and
+  serve settings; `cortex adopt` turns an existing store into an instance without reseeding;
+  `cortex remove` keeps the data.
+- **Sources.** Web (search, or listed sites read as pages or crawled), Connectors (records of any
+  admitted operation, with pages, child calls and a time window), files (local files or records
+  read from them, with lookups), and structured imports that need no model call, map child
+  operations as linked nodes, link changes to the first tag that ships them, and end what a source
+  dropped.
+- **Runs.** Only new or changed documents are extracted, by a model call with no tools. cortex
+  mints every evidence id, dates facts by when their source said them, supersedes a changed value,
+  and writes extracted relations as edges. Credentials are masked before storage; a `redaction`
+  policy keeps personal data from the model and a gate refuses a batch it still finds. A snapshot
+  before each run makes `cortex restore` undo a bad one, and a gated run on PostgreSQL runs in an EKR
+  stage it abandons on failure; two failed runs in a row disable a source, and a daily ceiling
+  holds model spend. A metric file, a failure hook and `cortex sources` show how each run ended.
+  `cortex quality` judges a sample of facts; `cortex schema` proposes schema changes.
+- **Project.** Specified in ESS with 132 conformance scenarios; CI runs `task check` on every pull
+  request; each release carries an `x86_64-unknown-linux-gnu` binary checked against `SHA256SUMS`.
+
+Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
+
+- `model.backend: Codex` is accepted and fails every run; extraction uses `claude -p` only.
+- A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
+- Linux with systemd user units only, and one released target.
+
+### Added
+
+- `cortex run --no-wait`: while another cortex command holds the home's lock, the run answers
+  `busy` at once with exit status 9 and runs and records nothing, so an external scheduler can
+  skip a collection that is still busy. Without the flag a run waits for the lock, as before
+  (review of 0.7.2, finding 18).
+
 ### Fixed
 
+- A structured source with `dropped: Supersede` retracts a record's values only when a whole
+  listing no longer lists it. A Connectors operation asked about the run's window (`{since}` or
+  another window placeholder in an input, or `stop_older_than_since`) supersedes the changed
+  values of the records it lists and keeps every value of the records it does not list; 0.7.2
+  retracted them.
+- A paged answer that names a page or token the walk already asked for is a paging cycle: the walk
+  leaves the operation's pages unread, fetch-only lists it in `unread`, a run names it in
+  `stopped`, and nothing is ended. 0.7.2 read the cycle as the end of the listing and retracted
+  the records it never reached.
+- A record a whole listing dropped is retired with its values: when the source lists it again,
+  with the same text, it is new and applied again. 0.7.2 called it unchanged and its values stayed
+  retracted.
+- A structured record whose entity EKR reports `ambiguous` (its aliases match two store nodes of
+  its type) is named in `rejected`, not counted in `documents_applied`, not marked seen, and tried
+  again by the next run. 0.7.2 counted it applied and never tried it again.
+- A refused structured record (rejected, ambiguous or refused by `store_lookup`) is tried after
+  every other record the run wants, the one refused longest ago first, so under
+  `max_documents_per_run` it no longer blocks the records behind it on every run.
+- The EKR pin an instance records is the engine that creates its store. `cortex create` and
+  `cortex adopt` ask the `ekr` binary for its version (`ekr --version`) and refuse one that
+  reports another version than the spec's `ekr.version`, whether `ekr.bin` names it or it sits in
+  the cache; `cortex setup` refuses a cached binary of another version instead of keeping it
+  (review of 0.7.2, finding 17).
 - A connection named by id is found on any page of `connectors connections list`: cortex follows
   `next_cursor` when `cortex create` checks the id and when it revalidates the connection before
   a read. Before, an id on the second page was reported missing, and two timer runs then disabled
   the source. A list that names a cursor a second time, or runs past 1000 pages, ends the read
   with a reason naming the cursor instead of a loop.
+- `RareName` no longer replaces the store's ontology names (node types, properties, value kinds,
+  relations) in the prompt or in a document, and does not count them. A model writes back the
+  type names it is shown; a replaced one made EKR refuse every entity
+  (`extraction-type-undeclared: Name-32`) and the run was undone. `known_names` and `rules` still
+  replace a type name they match.
+- A placeholder the model writes where a node type, property or relation name goes is restored
+  before the answer is applied, also without its brackets (`Name-3`); one that stands for no value
+  fails the batch, naming it and where it stood.
+- A batch directory under `runs/` keeps the prompt as sent (`prompt.txt`) and the model's raw
+  answer (`answer.json`, formerly `model.json`) under a `redaction` policy too. Both hold
+  placeholders, not originals; the mapping is never written.
+- `cortex create --no-units` and `cortex adopt --no-units` print `view: null` instead of an address
+  no viewer serves, and `cortex list` prints `view: null` for an instance with no viewer unit.
+- **One current value per single-valued property.** A `!Property` fact of a property declared
+  `cardinality: One` (by the store, or by the model's document for a new one) is marked
+  `replaces: true` by cortex before it is applied. EKR 0.0.34 adds an unmarked fact as one more
+  active value whatever the cardinality, so a merge request's state read from its tracker record
+  and again from a later chat message stayed current twice. Now the newest value stays current,
+  an older one is kept as its history (below), and a first value is stored
+  through `facts_reapplied` (`story:extraction-coverage`).
+- **The prompt asks for every document's own facts.** The extraction rules tell the model to go
+  through every document to its end, to extract a thread reply's own facts apart from the message
+  it answers and every item of a message that lists several, and to read `[context]` paragraphs
+  as context (`story:extraction-coverage`).
+- A document read after a newer one no longer loses its changed value: a fact marked
+  `replaces: true` that is older than the current value, which EKR refuses
+  (`invalid-supersession`), is stored as that value's history, ending where the current value
+  begins, and counted in the run's `facts_history` instead of `rejected`. Before, the fact was
+  lost and listed as rejected.
+- One document whose extraction redeclares a type the store holds otherwise
+  (`extraction-type-conflict`) no longer fails its whole batch: that document is refused alone,
+  named in `rejected` with `extraction-type-conflict: <type>` and not marked seen, so a later run
+  asks for it again, and the rest of the batch applies. Before, the batch's apply failed, which
+  failed the run when nothing had been applied yet and stopped it otherwise.
 
 ## 0.7.2 — 2026-10-30
 

@@ -76,13 +76,42 @@ pub fn lead_bytes(doc: &Document, lead: &str) -> usize {
     head(doc).len() + lead.len()
 }
 
-/// Cuts `doc`'s text, at a character boundary, to what its payload holds within
-/// [`PAYLOAD_MAX_BYTES`], so the model is shown no text its evidence does not hold. Answers whether
-/// it cut anything.
+/// The bytes of the payload a header leaves the text at least, when the text is that long.
+const TEXT_MIN_BYTES: usize = PAYLOAD_MAX_BYTES / 2;
+
+/// Cuts `doc`, at character boundaries, to what its payload holds within [`PAYLOAD_MAX_BYTES`],
+/// so the model is shown, and the store is given, no text its evidence does not hold. A header
+/// that would leave the text less than its own length or [`TEXT_MIN_BYTES`] is cut first: the
+/// description, then the title; then the published date is dropped, as a cut date is no date.
+/// The text is then cut to the room the header leaves. Answers whether it cut anything.
 pub fn fit(doc: &mut Document) -> bool {
+    let room = PAYLOAD_MAX_BYTES - doc.text.len().min(TEXT_MIN_BYTES);
+    let mut cut = false;
+    for field in 0..3 {
+        let over = head(doc).len().saturating_sub(room);
+        if over == 0 {
+            break;
+        }
+        let value = match field {
+            0 => &mut doc.description,
+            1 => &mut doc.title,
+            _ => &mut doc.published,
+        };
+        let Some(v) = value else { continue };
+        let keep = if field == 2 {
+            0
+        } else {
+            v.floor_char_boundary(v.len().saturating_sub(over))
+        };
+        v.truncate(keep);
+        if v.is_empty() {
+            *value = None;
+        }
+        cut = true;
+    }
     let room = PAYLOAD_MAX_BYTES.saturating_sub(head(doc).len());
     if doc.text.len() <= room {
-        return false;
+        return cut;
     }
     doc.text.truncate(doc.text.floor_char_boundary(room));
     true
@@ -303,13 +332,41 @@ mod tests {
         let mut short = doc("d", "Example Labs.");
         assert!(!fit(&mut short));
         assert_eq!(short.text, "Example Labs.");
-        // A header over the bound alone: the payload is still cut to it, the text kept empty.
+        // A description over the bound alone: it is cut, at a character boundary, so the header
+        // and the whole text fit, and the payload holds the description as cut.
         let mut long_head = doc(&"é".repeat(9_000), "text");
         assert!(fit(&mut long_head));
-        assert_eq!(long_head.text, "");
+        assert_eq!(long_head.text, "text");
+        let description = long_head.description.clone().unwrap();
+        assert!(description.len() < 18_000 && description.len() > PAYLOAD_MAX_BYTES - 100);
         let bytes = payload(&long_head);
-        assert!(bytes.len() <= PAYLOAD_MAX_BYTES);
-        String::from_utf8(bytes).expect("a character boundary");
+        assert!(bytes.len() <= PAYLOAD_MAX_BYTES && bytes.len() > PAYLOAD_MAX_BYTES - 3);
+        let kept = String::from_utf8(bytes).expect("a character boundary");
+        assert!(kept.contains(&format!("Description: {description}\n")));
+        assert!(kept.ends_with("\n\ntext"));
+    }
+
+    /// A long description and a long text: the header leaves the text 8,192 bytes. A title over
+    /// the bound: the description is dropped, the title cut, and the published date kept, as the
+    /// header then fits.
+    #[test]
+    fn a_long_header_leaves_the_text_half_the_payload() {
+        let mut both = doc(&"d".repeat(20_000), &"t".repeat(20_000));
+        assert!(fit(&mut both));
+        assert_eq!(both.text.len(), TEXT_MIN_BYTES);
+        assert_eq!(payload(&both).len(), PAYLOAD_MAX_BYTES);
+        let mut title = Document {
+            title: Some("T".repeat(20_000)),
+            published: Some("2026-10-01".into()),
+            ..doc(&"d".repeat(100), "text")
+        };
+        assert!(fit(&mut title));
+        assert_eq!(title.description, None);
+        assert_eq!(title.published, Some("2026-10-01".into()));
+        assert_eq!(title.text, "text");
+        let kept = String::from_utf8(payload(&title)).unwrap();
+        assert!(kept.contains(&format!("Title: {}\n", title.title.as_deref().unwrap())));
+        assert!(kept.len() <= PAYLOAD_MAX_BYTES);
     }
 
     fn published(text: &str) -> Document {

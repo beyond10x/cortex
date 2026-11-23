@@ -28,10 +28,10 @@ run of the source writes it again, with its counts starting from zero.
 | `instances/<name>/ask.sqlite` | with `cortex ask serve` on a `sqlite` store, its answer records, votes and review items (on a `postgres` store they live in the schema `ask.records` names instead) ([Ask service](./ask-service.md#answer-records-votes-and-review)); kept `ask.retention_days` (default 90) |
 | `instances/<name>/host.json` | the EKR host document the store is opened with |
 | `instances/<name>/meta.json` | the viewer's port and the directory the spec was created from |
-| `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
+| `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash, the hash of its stored fields (a web page's title, description and date, a structured record's mapping) and time |
 | `instances/<name>/state/entities.json` | entity names from earlier runs, offered to the model so it reuses them |
 | `instances/<name>/failures/<source>.json` | documents whose extraction failed (`cortex.failures/1`): each key's text hash, its consecutive runs failed with the document alone (`runs`, `0` when none), the failed batches of several it was in (`batches`, absent when none) and the last reason; outside `state/`, so undoing a run keeps it (see [What one run does](#what-one-run-does)) |
-| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report, or claude's error text (`claude/error.txt`); kept until a run removes it after the spec's [`runs.keep_days`](./spec-file.md#runs), and forever without one. `runs/` belongs to cortex: with `keep_days`, any directory in it named like a run directory (`<digits>-<lowercase letters, digits and dashes>`) is removed once that name is older than `keep_days`, whoever put it there |
+| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt as sent (`prompt.txt`), the model's raw answer (`answer.json`), the extraction document applied (`extraction.yaml`), EKR's report (`report.json`) and each part EKR refused (`refusals.json`, only when it refused one: a list of `document`, the file applied, `part`, as EKR names it such as `facts[1]`, `outcome`, the code EKR named such as `extraction-value-mismatch`, and `reason`, its text), or claude's error text (`claude/error.txt`). Under a [`redaction`](./spec-file.md#redaction) policy `prompt.txt`, `answer.json` and `refusals.json` hold placeholders, not the values they stand for, `extraction.yaml` holds the restored values, and EKR's reports are not kept; the placeholder mapping is never written. Kept until a run removes it after the spec's [`runs.keep_days`](./spec-file.md#runs), and forever without one. `runs/` belongs to cortex: with `keep_days`, any directory in it named like a run directory (`<digits>-<lowercase letters, digits and dashes>`) is removed once that name is older than `keep_days`, whoever put it there |
 | `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
 | `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
@@ -112,9 +112,9 @@ home directory. So the source services carry, from the shell that ran `cortex cr
 
 A relative `--home` or `$CORTEX_HOME` is made absolute, so the units name the same home from any
 directory. Run `cortex create` from a shell where `connectors` and `claude` work; after changing
-either, `cortex update` writes the source units again. It writes the viewer unit only when the
-update adds, drops or changes a PostgreSQL store's connection (see "A PostgreSQL store's password"
-below).
+either, `cortex update` writes the source units again. It stops and deletes the units of a source the spec dropped. It writes and restarts the viewer
+unit only when the update moves `serve.view_port` or adds, drops or changes a PostgreSQL store's
+connection (see "A PostgreSQL store's password" below).
 
 The timers run only while your systemd user manager runs. To have them run while you are logged
 out, enable lingering once: `loginctl enable-linger`.
@@ -138,6 +138,7 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 0 | `ran` | the source ran; `documents_new` 0 means nothing had changed |
 | 1 | `fetch-failed`, `extraction-failed`, `apply-refused` | the run failed and applied nothing; with `--record-failure` the failure is counted |
 | 1 | `no-such-source` | the home holds no such source |
+| 1 | `path-refused` | `--path` named a directory for a source that is not a `files` source, or for `<instance>/seed`; nothing ran or was recorded, and `--record-failure` counts nothing |
 | 2 | none | an error before any outcome, on stderr as `cortex: <message>` (an unreadable registry, a home that cannot be locked) |
 | 3 | `disabled` | the source is disabled after two failed runs in a row; nothing ran. `cortex source enable` switches it back on |
 | 4 | `store-outcome-unknown` | EKR could not say whether a store write of the run took effect (`publication outcome is unknown` from a stage verb, `apply-extraction` or a transaction's commit); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage or extracts the batch again, and a gated `sqlite` run that had kept its snapshot is undone from it (see [Undoing a run](#undoing-a-run)) |
@@ -145,15 +146,20 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 6 | `batch-too-large` | a part of several documents of an extraction batch was still too long for the model's window, or its answer still cut off, after the batch was split 3 deep; the reason names that part's documents and the batch size used. Not a failure of the source, so `--record-failure` counts nothing; the batches before it stay applied, and a later run extracts the rest. A part of one document does not end the run: it is left out alone, named in `too_large` and marked seen (see [The batch size](./spec-file.md#the-batch-size)) |
 | 7 | `model-unavailable` | the model could not be reached: `detail.cause` is `refused` (`claude` could not be started, or the connection was refused), `not-loaded` (the server behind the gateway has not loaded the model) or `gateway-down` (HTTP 502, 503, 504 or 529 overloaded). Not a failure of the source, so `--record-failure` counts nothing, however long the model is down; the batches before it stay applied, and a later run extracts the rest (see [When the model cannot be reached](#when-the-model-cannot-be-reached)) |
 | 8 | `terminated` | the run was sent SIGTERM and stopped at its next safe point; a gated run was undone first. Not a failure of the source, so `--record-failure` counts nothing (see [Stopping a run](#stopping-a-run)) |
+| 9 | `busy` | with `--no-wait` only: another cortex command holds the home's lock, so nothing ran. The source was not read and nothing was recorded: no status, metric, hook or counted failure. A scheduler skips this collection and starts the next one on its schedule |
 | 143 | none | a second SIGTERM ended the process at once; nothing was recorded |
 
 With `--fetch-only` (see [Counting what a run would extract](#counting-what-a-run-would-extract)),
 `fetched` exits 0 and a fetch that failed exits 1 as `fetch-failed`.
 
+Without `--no-wait`, a run started while another cortex command holds the home's lock (another
+run, a `create`, an `update`) waits for it and then runs. A scheduler whose runs can overlap, such
+as a Kubernetes CronJob, passes `--no-wait` to skip a collection that is still busy instead.
+
 The JSON line on stdout says the same, with its `detail`. With `--record-failure`, a failed run
 prints a second line, the recorded failure's (`counted` or `disabled`); the exit status is the
 run's. A `store-outcome-unknown`, `connection-unavailable`, `batch-too-large`,
-`model-unavailable` or `terminated` run records no failure and prints no second line.
+`model-unavailable`, `terminated` or `busy` run records no failure and prints no second line.
 
 ## Stopping a run
 
@@ -178,11 +184,26 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
 1. **Fetch** the source's documents (web pages or records through `connectors`, or local files).
 2. **Mask** credential-shaped text in each document, then cut it to `max_chars_per_document`,
    and further, at a character boundary, to what its evidence holds: EKR 0.0.32 takes an
-   evidence payload of at most 16,384 bytes, header included.
-3. **Keep** documents whose key was never applied, and documents whose text hash changed once
-   their last application is `refresh_after_days` old, at most `max_documents_per_run`. Two
-   changes do not wait for that window: a record read from a file, and a change of a `structured`
-   source whose text differs from the one last applied only in its links to tags.
+   evidence payload of at most 16,384 bytes, header included. A header (the `Source:` line, a
+   web page's title, published date and description) that would leave the text less room than
+   its own length or 8,192 bytes, whichever is smaller, is cut first: the description, then the
+   title, at a character boundary; then the published date is dropped. The model is shown, and
+   the `WebPage` node is given, the title and description as the evidence holds them.
+3. **Keep** documents whose key was never applied, and documents that changed once their last
+   application is `refresh_after_days` old, at most `max_documents_per_run`. A document changed
+   when anything cortex stores from it would change: its text hash, and for a web page also its
+   title, description or publication date, which cortex writes onto its `WebPage` node. Three
+   changes do not wait for that window: a record read from a file, a change of a `structured`
+   source whose text differs from the one last applied only in its links to tags, and a
+   `structured` record whose mapping changed (a property, alias, relation, child `time` or link
+   added, removed or edited by `cortex update`): every such record is applied again, its text
+   changed or not.
+   A document applied before cortex remembered these fields (0.8.0 and earlier) counts as
+   follows on the first run that fetches it: a web page takes the title, description and date of
+   that fetch as applied, so it is not extracted again for them; a `structured` record is applied
+   again, since the mapping it was applied with is unknown and applying a record calls no model.
+   A run that leaves wanted documents beyond `max_documents_per_run` reports
+   `stopped: document-cap` and counts them in `documents_left`; the next run wants them again.
 4. **Issue evidence.** cortex mints one evidence item per document; the model never does. The
    item is observed when the document says it was written: a web page's published time or a
    record's `time`, read as RFC 3339, as a date alone (00:00 UTC) or as epoch seconds with an
@@ -218,14 +239,39 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    fails in the store, the run stops after the batch and the documents whose values it carried
    are not marked seen, so a later run extracts them again. EKR also rejects it when the current value is dated
    later than the replacement (`invalid-supersession`), as when an older document is read after a
-   newer one, and the newer value then stays current; that rejection is listed in the run's
-   `rejected` and the rest of the document applies.
+   newer one. cortex then keeps the older value as the current value's history: it applies the
+   fact again without `replaces`, so the value is stored from its own document's time, and
+   supersedes it by the current value from the current value's start, so it ends there
+   (`history.yaml` and `history-ends.yaml` in the batch's directory). The newer value stays
+   current, nothing is listed in `rejected`, and the run counts the fact in `facts_history`. Two
+   older values of one entity and property in one batch end one where the next begins. If a step
+   of this fails in the store, the run stops after the batch and the documents it carried are not
+   marked seen, so a later run extracts them again.
+   A property that holds one value (`cardinality: One` in the store's ontology or, for one the
+   store does not declare yet, in the model's document, where `One` is EKR's default) gets
+   `replaces: true` from cortex on every fact, whatever the model marked: EKR adds an unmarked
+   fact as one more active value whatever the cardinality, so a value read in a later batch or
+   run, or the same value read from a second record, would leave two current. With the mark, the
+   rules above leave one value current, the newest by its document's time; a value older than
+   the stored one is kept as its history, as above (`facts_history`), and a first value with
+   nothing stored to replace is counted in `facts_reapplied`. A `Many` property is left as the
+   model marked it.
+   The prompt asks the model to go through every document and extract what its own text states:
+   a reply in a thread its own facts apart from the message it replies to, a message that lists
+   several items the facts of each item; a `[context]` paragraph (see
+   [the spec file](./spec-file.md#kind-files)) is read as context, not as the document's facts.
 6. **Merge.** A fact citing an evidence id cortex did not issue for that batch is refused; cortex
    adds the evidence items itself and records each web page as a `WebPage` node.
 7. **Apply** the document with `ekr apply-extraction`, then record the batch's documents as seen.
    A document a part EKR rejected belongs to is seen too, since EKR would reject that part again
    on the same text; the run names it in `rejected`, with EKR's refusal or the codes of the issues
    validation raised.
+   When EKR refuses the whole document because it redeclares a type the store holds with other
+   parents, abstractness or cardinality (`extraction-type-conflict`), only the documents whose
+   facts name that type are refused: cortex takes the type's declaration and every fact of those
+   documents out, applies the rest of the batch against the store's own declaration, and names
+   each such document in `rejected` with `extraction-type-conflict: <type>`. Those documents are
+   not marked seen, so a later run asks the model for them again.
    Before the run's first apply, a `sqlite` store and `state/` are copied, and kept as a
    snapshot once that apply commits (see [Undoing a run](#undoing-a-run)); a copy that cannot be
    taken fails the run with nothing applied.
@@ -314,20 +360,35 @@ documents the source no longer lists.
 
 `cortex run <instance>/<source> --fetch-only` runs steps 1 and 2 and the comparison of step 3,
 and stops there. It fetches over the window a run would ask about, masks and scrubs each document
-as a run does, and compares its content hash with the source's seen state:
+as a run does, and compares its content hash and stored fields with the source's seen state and
+its failure counts:
 
 ```json
 {"command":"run","outcome":"fetched","detail":{"source_id":"news/feed",
  "window":{"since":"2026-10-15T09:50:00Z","until":"2026-10-15T10:00:00Z"},
- "fetched":20,"new":3,"changed":1,"held":0,"unchanged":16,"unread":[]}}
+ "fetched":20,"new":3,"changed":1,"held":0,"unchanged":16,"unread":[],"skipped":[]}}
 ```
 
 `new` counts documents whose key was never applied, `changed` those a run would extract now,
-`held` those whose change waits for `refresh_after_days`, and `unchanged` the rest; `fetched` is
-their sum. `max_documents_per_run` does not cut the counts. `unread` lists, masked as a run's
-`stopped` is, why the fetch left records unread. Use it to check a new source, connection or
-schedule, and to count the documents a run at your cadence would send to the model, before
-paying for extraction.
+`held` those whose change waits for `refresh_after_days`, and `unchanged` the rest. `skipped`
+names, with the line the run writes in its own `skipped`, each document the run would leave out
+because it failed alone on 3 consecutive runs with the text it has now (see
+[Failures](#failures)); such a document is counted neither `new` nor `changed`, as the run sends
+it to no model. `fetched` is the sum of the four counts and the documents in `skipped`.
+`max_documents_per_run` does not cut the counts. `unread` lists, masked as a run's `stopped` is,
+why the fetch left records unread. A run names the same lines in `stopped`, after any other
+reason it stopped, and still ends as `ran`. For a `web` source, where `<call>` is
+`websearch.search`, `websearch.fetch` or `websearch.crawl from <start url>`, they are:
+
+- `<call>: <url> not read (<reason>)` for each URL in the answer's `failed` list, with the
+  provider's reason;
+- `<call>: the answer is incomplete (<causes>)` when the answer says `complete: false`, with its
+  `truncation` causes. A `websearch.search` answer whose causes are all `provider_limit` (fewer
+  results than `max_results`) or `content_bytes` is not named: it left nothing the source asked
+  for unread. A page whose content the provider clipped is still read.
+
+Use it to check a new source, connection or schedule, and to count the documents a run at your
+cadence would send to the model, before paying for extraction.
 
 Nothing else happens: no model call, no snapshot and no PostgreSQL stage, nothing written to the
 store, `state/<source>.json`, the source's status, `metrics.prom` or `cortex.log`, no hook
@@ -759,9 +820,10 @@ unit when the id changed, and the MCP line is printed again after each connect.
 
 A `postgres` store whose spec names `store.value.connection` gets its password from Connectors:
 every `ekr` that opens the store, the viewer's and the MCP line's included, starts through
-`connectors connections launch --consumer ekr`, and `cortex update` rewrites and starts the viewer
-unit when an update adds, drops or changes the connection ([Spec file](./spec-file.md#store)). Any
-other update leaves the viewer unit alone, so a viewer the operator stopped stays stopped.
+`connectors connections launch --consumer ekr`, and `cortex update` rewrites, starts and restarts the viewer
+unit when an update adds, drops or changes the connection ([Spec file](./spec-file.md#store)) or
+moves `serve.view_port`. Any other update leaves the viewer unit alone, so a viewer the operator
+stopped stays stopped.
 
 The one `ekr` cortex starts directly is the provisioning of `cortex create
 --postgres-schema-config <file>` when the spec names no `store.value.schema_connection`: it runs
@@ -780,7 +842,9 @@ binary as the consumer `cortex-records` in the Connectors configuration, with no
 
 ## Serving a store
 
-`cortex list` prints each instance's viewer address, `http://127.0.0.1:<port>/`.
+`cortex list` prints each instance's viewer address, `http://127.0.0.1:<port>/`, and `null` for
+an instance with no viewer unit of this home (created or adopted with `--no-units`, or removed);
+`create` and `adopt` with `--no-units` print `view: null` too.
 `cortex mcp-line <name>` prints a `claude mcp add --transport stdio cortex-<name> -- … ekr mcp`
 line with the instance's host document and store, which registers the store as an MCP server.
 For a `postgres` store that names a `connection`, the line, like the viewer unit, starts

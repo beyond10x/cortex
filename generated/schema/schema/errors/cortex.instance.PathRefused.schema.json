@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PathRefused payload",
+  "description": "A run was given a directory (`path`) for a source that is not a `files` source; only a `files` source reads one. Nothing ran.",
+  "x-ess-name": "cortex.instance.PathRefused",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "source_id": {
+      "$ref": "#/$defs/cortex.instance.SourceId"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "source_id",
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
+    "contract_digest": "slice-sha256/2:d43e8bfa66e4608dd47661ec332b7998b54d7ef7e4499566f4ea2902b9b2220a",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.SourceId": {
+      "title": "SourceId",
+      "x-ess-name": "cortex.instance.SourceId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

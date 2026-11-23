@@ -227,6 +227,44 @@ fn window_for_call(input: &Value, window: &Window) -> Value {
     }
 }
 
+/// The placeholders a run fills from its window ([`with_window`], [`at_call`]).
+const WINDOW_PLACEHOLDERS: [&str; 5] = [
+    "{since}",
+    "{until}",
+    "{since_epoch}",
+    "{until_epoch}",
+    "{since_minutes_ago}",
+];
+
+/// Whether a string of `input` names a window placeholder.
+fn names_window(input: &Value) -> bool {
+    match input {
+        Value::String(t) => WINDOW_PLACEHOLDERS.iter().any(|p| t.contains(p)),
+        Value::Array(items) => items.iter().any(names_window),
+        Value::Object(fields) => fields.values().any(names_window),
+        _ => false,
+    }
+}
+
+/// Whether a `structured` source lists only part of its records on a run: its Connectors
+/// operation is asked about the run's window (an input names `{since}`, `{until}` or another
+/// window placeholder) or its walk stops at `{since}` (`stop_older_than_since`). Such a listing
+/// holds what changed in the window, not every record the provider has, so a record missing from
+/// it is not gone (finding 1 of the 0.7.2 review): a run ends the values of the records it lists,
+/// never those of a record it did not list. A `files` input, and an operation asked without the
+/// window, list every record.
+pub fn lists_a_window(st: &m::StructuredSource) -> bool {
+    match &st.input {
+        m::StructuredInput::Files(_) => false,
+        m::StructuredInput::Connectors(c) => {
+            c.inputs.iter().any(|i| names_window(&to_serde(i)))
+                || c.paging
+                    .as_ref()
+                    .is_some_and(|p| p.stop_older_than_since == Some(true))
+        }
+    }
+}
+
 /// `template` with every string value's `{a.b}` placeholders filled from `record`.
 fn render_json(template: &Value, record: &Value) -> Value {
     match template {
@@ -291,7 +329,9 @@ fn next_page(p: &m::Paging, input: &Value, answer: &Value) -> Option<Value> {
 /// an empty page, at a missing `next` (see [`next_page`]), at a page or token it has already asked
 /// for, or after `max_pages` pages; without `paging` one page is read. A walk that leaves pages
 /// unread adds why to `unread`, once per operation: it reached `max_pages` with a next page still
-/// to read, an empty page still named a next one, or a `NextLink` link did not name `param`.
+/// to read, an empty page still named a next one, a `NextLink` link did not name `param`, or the
+/// answer named a page or token the walk already asked for (a paging cycle: what follows it was
+/// never answered, so the walk did not read the whole listing).
 fn walk(
     invoke: &mut dyn FnMut(&Value) -> Result<Value, FetchError>,
     what: &str,
@@ -378,7 +418,13 @@ fn walk_until(
                 }
             }
         }
+        // A provider that names a page it was already asked for answers in a cycle: the pages
+        // after it are not read, so the listing is incomplete and is never read as whole.
         if asked.contains(&next) {
+            note(
+                unread,
+                format!("{what}: the answer named a page it already returned (a paging cycle)"),
+            );
             break;
         }
         if n == pages {
@@ -499,7 +545,8 @@ pub struct Fetched {
     pub documents: Vec<Document>,
     /// Why the fetch left records unread, one line each: a paged operation that reached its
     /// `max_pages` with pages left or met an empty page that named a next one, or a child call
-    /// that failed for a parent, which is then left out. Empty when it read everything.
+    /// that failed for a parent, which is then left out; a URL a web answer names as failed, or a
+    /// web answer that says it is incomplete ([`web_unread`]). Empty when it read everything.
     pub unread: Vec<String>,
     /// Parents left out because their child call failed on [`CHILD_FAILURE_LIMIT`] or more
     /// consecutive runs, one line each. They do not hold the window.
@@ -593,7 +640,10 @@ pub fn fetch(
     match settings {
         m::SourceSettings::Web(web) => {
             let connection = resolve(web_adapter(web), &web.connection, &web.profile)?;
-            fetch_web(web, &connection, connectors).map(documents)
+            fetch_web(web, &connection, connectors).map(|(docs, unread)| Fetched {
+                unread,
+                ..documents(docs)
+            })
         }
         m::SourceSettings::Connectors(c) => {
             let connection = resolve(&c.adapter, &c.connection, &c.profile)?;
@@ -1097,13 +1147,55 @@ fn items<'a>(answer: &'a Value, key: &str) -> impl Iterator<Item = &'a Value> {
     body(answer)[key].as_array().into_iter().flatten()
 }
 
+/// Adds to `unread` what one `datasource.websearch/v1alpha1` answer, of the call `what` names,
+/// left unread: each URL in its `failed` list, with the provider's reason, and the answer itself
+/// when it says `complete: false`, with its truncation causes. A search whose causes are all
+/// `provider_limit` (fewer results than `max_results`) or `content_bytes` (clipped content, no
+/// item left out) left nothing the source asked for unread.
+fn web_unread(what: &str, answer: &Value, unread: &mut Vec<String>) {
+    let body = body(answer);
+    for failed in body["failed"].as_array().into_iter().flatten() {
+        let url = s(failed, "url").unwrap_or_else(|| "a URL".into());
+        let reason = s(failed, "reason").unwrap_or_else(|| "no reason given".into());
+        note(unread, format!("{what}: {url} not read ({reason})"));
+    }
+    if body["complete"] != Value::Bool(false) {
+        return;
+    }
+    let causes: Vec<&str> = body["truncation"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let short = what == "websearch.search"
+        && !causes.is_empty()
+        && causes
+            .iter()
+            .all(|c| matches!(*c, "provider_limit" | "content_bytes"));
+    if short {
+        return;
+    }
+    let causes = if causes.is_empty() {
+        "no cause named".to_string()
+    } else {
+        causes.join(", ")
+    };
+    note(
+        unread,
+        format!("{what}: the answer is incomplete ({causes})"),
+    );
+}
+
+/// The documents of a `web` source, and what its answers left unread ([`web_unread`]).
 fn fetch_web(
     web: &m::WebSource,
     connection: &str,
     connectors: &Connectors,
-) -> Result<Vec<Document>, FetchError> {
+) -> Result<(Vec<Document>, Vec<String>), FetchError> {
     let adapter = web_adapter(web);
     let mut docs = Vec::new();
+    let mut unread = Vec::new();
     match &web.input {
         m::WebInput::Search(search) => {
             for query in &search.queries {
@@ -1114,6 +1206,7 @@ fn fetch_web(
                     &search_input(query, &search.policy),
                 )?;
                 docs.extend(items(&answer, "results").filter_map(website));
+                web_unread("websearch.search", &answer, &mut unread);
             }
         }
         m::WebInput::Sites(sites) => match sites.mode {
@@ -1121,6 +1214,7 @@ fn fetch_web(
                 let input = json!({"urls": sites.urls});
                 let answer = connectors.invoke(adapter, connection, "websearch.fetch", &input)?;
                 docs.extend(items(&answer, "pages").filter_map(website));
+                web_unread("websearch.fetch", &answer, &mut unread);
             }
             m::WebMode::Crawl => {
                 for url in &sites.urls {
@@ -1128,12 +1222,13 @@ fn fetch_web(
                     let answer =
                         connectors.invoke(adapter, connection, "websearch.crawl", &input)?;
                     docs.extend(items(&answer, "pages").filter_map(website));
+                    web_unread(&format!("websearch.crawl from {url}"), &answer, &mut unread);
                 }
             }
         },
     }
     dedupe(&mut docs);
-    Ok(docs)
+    Ok((docs, unread))
 }
 
 fn dedupe(docs: &mut Vec<Document>) {
@@ -1401,6 +1496,40 @@ fn fetch_files(
     base: &Path,
     max_context: usize,
 ) -> Result<(Vec<Document>, Vec<String>), FetchError> {
+    let roots: Vec<_> = f.paths.iter().map(|root| under(base, root)).collect();
+    read_files(f, base, &roots, false, max_context)
+}
+
+/// `cortex run --path <dir>`: the files of a `files` source read from `dir` in place of its
+/// `paths`, for one run, as [`fetch_files`] reads them (its `glob`, `records` and `lookup`, the
+/// lookup still read against `base`). A document's key is the file's path relative to `dir`
+/// (`<relative path>#<id>` for a record), so a record read from two run directories has one key.
+/// A `dir` that is missing or cannot be listed fails the fetch, naming it.
+pub fn fetch_files_in(
+    f: &m::FilesSource,
+    base: &Path,
+    dir: &Path,
+    max_context: usize,
+) -> Result<Fetched, FetchError> {
+    std::fs::read_dir(dir)
+        .map_err(|e| FetchError::Failed(format!("--path {}: {e}", dir.display())))?;
+    let (documents, skipped) = read_files(f, base, &[dir.to_path_buf()], true, max_context)?;
+    Ok(Fetched {
+        documents,
+        skipped,
+        ..Fetched::default()
+    })
+}
+
+/// The files under `roots` read as [`fetch_files`] says; with `relative`, each keyed by its path
+/// below its root instead of its full path.
+fn read_files(
+    f: &m::FilesSource,
+    base: &Path,
+    roots: &[std::path::PathBuf],
+    relative: bool,
+    max_context: usize,
+) -> Result<(Vec<Document>, Vec<String>), FetchError> {
     let glob = globset::Glob::new(&f.glob)
         .map_err(|e| FetchError::Failed(format!("glob {:?}: {e}", f.glob)))?
         .compile_matcher();
@@ -1410,20 +1539,20 @@ fn fetch_files(
         read.lookup = read_lookup(&under(base, lookup))?;
     }
     let mut skipped = Vec::new();
-    for root in &f.paths {
-        let root = under(base, root);
-        for entry in walkdir::WalkDir::new(&root).sort_by_file_name() {
+    for root in roots {
+        for entry in walkdir::WalkDir::new(root).sort_by_file_name() {
             let entry =
                 entry.map_err(|e| FetchError::Failed(format!("{}: {e}", root.display())))?;
             if !entry.file_type().is_file() {
                 continue;
             }
-            let rel = entry.path().strip_prefix(&root).unwrap_or(entry.path());
+            let rel = entry.path().strip_prefix(root).unwrap_or(entry.path());
             if !glob.is_match(rel) {
                 continue;
             }
             stop_before(|| "the next file".into())?;
-            let path = entry.path().display().to_string();
+            let path = if relative { rel } else { entry.path() };
+            let path = path.display().to_string();
             let bytes = match read_capped(entry.path()) {
                 Ok(bytes) => bytes,
                 Err(why) => {
@@ -2132,6 +2261,28 @@ mod tests {
         assert_eq!(asked, [json!({}), json!({"page": "same"})]);
     }
 
+    /// Finding 2 of the 0.7.2 review: a token the walk already asked for is a cycle, and what
+    /// follows it was never answered: the walk says so in `unread`, so nothing is ended.
+    #[test]
+    fn a_repeated_token_leaves_the_listing_unread() {
+        let p = paging(m::PageStyle::Token, Some("next"), 5);
+        let mut unread = Vec::new();
+        let records = walk(
+            &mut |_: &Value| Ok(json!({"items": ["a"], "next": "one"})),
+            "t.op",
+            &json!({}),
+            "items",
+            Some(&p),
+            &mut unread,
+        )
+        .unwrap();
+        assert_eq!(records, [json!("a"), json!("a")]);
+        assert_eq!(
+            unread,
+            ["t.op: the answer named a page it already returned (a paging cycle)"]
+        );
+    }
+
     #[test]
     fn a_keyset_or_token_walk_without_next_reads_one_page_as_an_unpaged_one_does() {
         let p = paging(m::PageStyle::Keyset, None, 10);
@@ -2746,7 +2897,7 @@ mod next_link_tests {
     }
 
     #[test]
-    fn a_link_asking_again_for_a_cursor_already_asked_for_ends_the_walk() {
+    fn a_link_asking_again_for_a_cursor_already_asked_for_ends_the_walk_unread() {
         let p = next_link(10, false);
         let (_, asked, unread) = walked(
             &p,
@@ -2754,7 +2905,10 @@ mod next_link_tests {
             |_| json!({"items": [1], "_links": {"next": "/p?cursor=same"}}),
         );
         assert_eq!(asked, [json!({}), json!({"cursor": "same"})]);
-        assert!(unread.is_empty(), "{unread:?}");
+        assert_eq!(
+            unread,
+            ["t.op: the answer named a page it already returned (a paging cycle)"]
+        );
     }
 
     /// Three pages, newest first: the second holds the first record older than `{since}`.

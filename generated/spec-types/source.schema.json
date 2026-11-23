@@ -2020,8 +2020,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:9a76964594e5bc2c0dac9e53be42506c0a935792c29f1463432573f22cee3d02",
-    "source_digest": "bdfa10d1a7d3b76f5379948f7e634a20827596fe39d019c9b285ed0bedc0a1da",
+    "contract_digest": "slice-sha256/2:fb70507c45809f8b9d7dd018fa5c9fe591112c9aa069873b65c5c012157f3426",
+    "source_digest": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
     "specification_version": "v1",
     "system": "cortex"
   }

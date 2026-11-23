@@ -269,6 +269,7 @@ fn stand_in_ekr(root: &Path) {
         &format!(
             r#"R="{root}"
 case "$1" in
+  --version) echo 'ekr 0.0.34' ;;
   example) echo '{{}}' ;;
   seed) [ -n "$EKR_STORE" ] && : > "$EKR_STORE"; echo '{{"committed_at":1}}' ;;
   head) echo '{{"revision":1}}' ;;
