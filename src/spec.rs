@@ -433,8 +433,8 @@ fn check(spec: &m::InstanceSpec) -> Result<(), String> {
 /// `update` and `adopt` ([`load_given`]); an instance's frozen copy, read with [`load`], and the
 /// spec `cortex ask serve` is given, read with [`load_served`], are not held to it, so one
 /// created before the rule keeps running: a run saturates the refresh window and caps the hook's
-/// time ([`crate::status`]), the port is read only when an instance is made, and the answer
-/// service reads none of the three.
+/// time ([`crate::status`]), the port is read when an instance is made or an update moves it,
+/// and the answer service reads none of the three.
 pub fn bounds_refusal(spec: &m::InstanceSpec) -> Option<String> {
     if let Some(source) = spec
         .sources

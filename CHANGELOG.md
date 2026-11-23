@@ -57,10 +57,28 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   through the command line's own loader (`load_given`) and gives the behaviour the spec it
   loaded, where it gave every step one fixed spec; a document the loader refuses fails its
   scenario. Three authored scenarios (`spec/scenarios/`) create, adopt and update from
-  `cortex.instance/1` documents the loader accepts. The 90 steps whose document is ESS 0.77.0's
+  `cortex.instance/1` documents the loader accepts. The 100 steps whose document is ESS 0.77.0's
   synthesized witness (`format: spec.format`) are counted and must be refused at their format;
   ESS gives a struct input a document of its own only from `ess/33` (ESS 0.78.0) (review of
   0.7.2, finding 26).
+- `cortex update` takes a source the new spec drops out of the registry, and stops and deletes
+  its timer and service (`removed_sources`). Before, the source stayed `Enabled` and its timer
+  kept firing a run that failed and was counted. A timer that does not stop keeps its source and
+  unit files, `units.failed` names it, and the next update tries again.
+- `cortex update` gives a source the spec keeps its new `kind` and `schedule` in the registry, so
+  `cortex sources` lists the schedule its timer runs on; its runs, failures and state are kept.
+- `cortex update` with another `serve.view_port` moves the viewer: `meta.json` and `cortex list`
+  hold the new port, and the viewer unit is written on it and restarted. Before, the old port
+  stayed. A viewer unit an update rewrites for a changed connection is restarted too.
+- `cortex source add` for a source the registry holds answers `source-exists` (exit 1) and
+  changes nothing; before, it reset the source's counters and enabled a disabled source. A source
+  of an instance the home does not hold is refused (`no-such-instance`), and one of a removed
+  instance (`not-active`).
+- `cortex remove` answers `stop-failed` (exit 1) and names each failure when
+  `systemctl disable --now` fails for a timer or the viewer. It deletes no unit file and keeps the
+  instance active, so `cortex remove` can be run again. Before, it answered `removed`, deleted the
+  unit files and refused a second remove as `wrong-state`. A unit file that is not there is no
+  longer stopped, and `daemon-reload` runs only once a file was deleted.
 
 ## 0.8.0 — 2026-11-23
 
