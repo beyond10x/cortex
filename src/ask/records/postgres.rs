@@ -630,6 +630,12 @@ impl Remote {
         })
     }
 
+    /// How many calls wait for their turn now, the one being served not counted: a caller that
+    /// must know another call is queued before it acts (a test ordering calls) reads it.
+    pub fn waiting(&self) -> usize {
+        self.queue.line().waiting.len()
+    }
+
     fn spawn(launch: &Launch, deadline: Instant) -> Result<Proc, String> {
         let mut child = launch.command().spawn().map_err(|e| {
             format!(

@@ -160,8 +160,11 @@ fn the_server_stops_when_the_case_ends_even_with_a_silent_connection_open() {
     .expect("the server starts");
     let took = started.elapsed();
     drop(served.answer);
+    // A server held by the connection returns after its 30-second read timeout; one that is
+    // not returns about 0.3 s (the case) after its start. The bound sits halfway, so a loaded
+    // machine has 14 s of room before a correct server reaches it.
     assert!(
-        took < Duration::from_secs(5),
+        took < Duration::from_secs(15),
         "serve returned {took:?} after the case ended: a silent connection held the server"
     );
 }
@@ -281,12 +284,14 @@ fn a_header_line_over_the_cap_is_refused_before_any_further_read() {
         (out, started.elapsed())
     })
     .expect("the server starts");
+    // Nothing follows the line, so a server that reads on answers nothing before its 30-second
+    // read timeout, and the client, which gives up after 5 s, reads no refusal at all: the 431
+    // itself shows the server answered without a further read, however loaded the machine.
     let (out, took) = served.answer;
     assert!(
         out.starts_with("HTTP/1.1 431"),
         "a header line at the cap was not refused (after {took:?}): {out:?}"
     );
-    assert!(took < Duration::from_secs(2), "the refusal took {took:?}");
 }
 
 /// `story:ask-body-limit-test-race`, the class of the ask service's over-limit body: a client that

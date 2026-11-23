@@ -464,15 +464,19 @@ fn a_vote_changed_from_down_to_up_stays_one_vote_and_opens_no_second_review() {
 /// A `down` vote, a failed answer and an answer slower than `slow_after_ms` each open one review
 /// item with the matching cause; `GET /review` lists them; closing one removes it from the list,
 /// and closing it again answers 409, an unknown one 404.
+///
+/// The slow answer's gateway waits 100 ms past `slow_after_ms`, so it is slow however fast the
+/// machine; the other two wait nothing, and stay under it unless the machine stalls them for
+/// the whole 3 s.
 #[test]
 fn a_down_vote_a_failure_and_a_slow_answer_each_open_one_review_with_its_cause() {
     let world = World::new();
     let url = gateway(vec![
         (0, text_reply("Fast answer.", (5, 2, 0))),
         (0, broken_reply()),
-        (2500, text_reply("Slow answer.", (5, 2, 0))),
+        (3100, text_reply("Slow answer.", (5, 2, 0))),
     ]);
-    let service = serve(&world, &world.spec(&url, "  slow_after_ms: 1500", ""));
+    let service = serve(&world, &world.spec(&url, "  slow_after_ms: 3000", ""));
     let (voted, _) = service.answered("alice", "first?");
     let (name, error) = service.ask("alice", "second?");
     assert_eq!(name, "error", "{error}");

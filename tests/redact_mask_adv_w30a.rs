@@ -46,16 +46,29 @@ fn run(classes: &[m::RedactionClass], text: &str) -> (String, BTreeMap<String, u
     (out, counts)
 }
 
-/// The fastest of three runs of `f`.
-fn fastest(mut f: impl FnMut()) -> Duration {
-    (0..3)
-        .map(|_| {
-            let t = Instant::now();
-            f();
-            t.elapsed()
-        })
-        .min()
-        .expect("three runs")
+/// How many times the larger input is the smaller one in the linear-time cases: linear work
+/// takes 16x the time on it, quadratic work 256x.
+const GROWTH: usize = 16;
+/// The most times the time may grow for the larger input: 4x what linear work takes and 4x below
+/// what quadratic work takes, so neither noise nor a constant term reaches it from either side.
+const LINEAR_BOUND: f64 = 64.0;
+
+/// How many times longer `f` takes on `large` than on `small`, and the two times: the fastest of
+/// seven runs of each, taken in turns, so that load that slows a run of one size slows the runs
+/// of the other size beside it too, and the fastest of each is a run load did not slow.
+fn growth(small: &str, large: &str, f: impl Fn(&str)) -> (f64, Duration, Duration) {
+    f(small);
+    let (mut t_small, mut t_large) = (Duration::MAX, Duration::MAX);
+    for _ in 0..7 {
+        let t = Instant::now();
+        f(small);
+        t_small = t_small.min(t.elapsed());
+        let t = Instant::now();
+        f(large);
+        t_large = t_large.min(t.elapsed());
+    }
+    let ratio = t_large.as_secs_f64() / t_small.as_secs_f64().max(1e-9);
+    (ratio, t_small, t_large)
 }
 
 // ---- Phone: `/` after an international area code -------------------------------------------
@@ -106,23 +119,19 @@ fn two_markdown_links_joined_without_a_space_are_two_links() {
 /// Links written in brackets, back to back with no space, are found in time linear in the
 /// text: each match now runs to the end of the run of non-space text and `link` cuts it at `]`,
 /// so every link scans the rest of the text again. Before the change a match ended at `[`.
+/// 16x the links: linear work takes 16x the time, the rescan 256x.
 #[test]
 fn bracketed_links_back_to_back_are_found_in_linear_time() {
     let r = redactor(&[m::RedactionClass::Url]);
     let unit = "[https://a.example/b]";
-    let small = unit.repeat(1 << 9);
-    let large = unit.repeat(1 << 11);
-    let _ = r.redact(unit, &mut r.counts());
-    let t_small = fastest(|| {
-        let _ = r.redact(&small, &mut r.counts());
-    });
-    let t_large = fastest(|| {
-        let _ = r.redact(&large, &mut r.counts());
+    let small = unit.repeat(1 << 8);
+    let large = unit.repeat((1 << 8) * GROWTH);
+    let (ratio, t_small, t_large) = growth(&small, &large, |text| {
+        let _ = r.redact(text, &mut r.counts());
     });
     assert!(
-        t_large < t_small * 8,
-        "4x the text took {:.1}x the time ({t_small:?} -> {t_large:?})",
-        t_large.as_secs_f64() / t_small.as_secs_f64()
+        ratio < LINEAR_BOUND,
+        "{GROWTH}x the text took {ratio:.1}x the time ({t_small:?} -> {t_large:?})"
     );
 }
 
@@ -205,23 +214,19 @@ fn a_url_password_does_not_run_past_its_host_to_a_later_at_sign() {
 /// A masking pass costs time linear in the text: a text of many `BEGIN … PRIVATE KEY` lines
 /// with no `END` line (4x the text) took 16x the time; measured in release on 1 MiB, 24.4 s
 /// against 6.5 ms before the change. The `BEGIN … END` alternative before the cut-key one
-/// scans to the end of the text for every `BEGIN`.
+/// scans to the end of the text for every `BEGIN`. 16x the lines: linear work takes 16x the time,
+/// the scan per line 256x.
 #[test]
 fn begin_lines_without_an_end_line_are_masked_in_linear_time() {
     let begin = format!("-----BEGIN PRIVATE {}-----\n", "KEY");
-    let small = begin.repeat(1 << 9);
-    let large = begin.repeat(1 << 11);
-    let _ = mask(&begin);
-    let t_small = fastest(|| {
-        let _ = mask(&small);
-    });
-    let t_large = fastest(|| {
-        let _ = mask(&large);
+    let small = begin.repeat(1 << 8);
+    let large = begin.repeat((1 << 8) * GROWTH);
+    let (ratio, t_small, t_large) = growth(&small, &large, |text| {
+        let _ = mask(text);
     });
     assert!(
-        t_large < t_small * 8,
-        "4x the text took {:.1}x the time ({t_small:?} -> {t_large:?})",
-        t_large.as_secs_f64() / t_small.as_secs_f64()
+        ratio < LINEAR_BOUND,
+        "{GROWTH}x the text took {ratio:.1}x the time ({t_small:?} -> {t_large:?})"
     );
 }
 

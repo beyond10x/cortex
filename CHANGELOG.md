@@ -45,6 +45,15 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 ### Fixed
 
+- **Redaction takes time linear in the matches.** Each match a redaction class found was checked
+  against every match found before it, so a text of many matches, such as links in brackets
+  back to back, took time quadratic in their number (4x the links, 14x the time). The check is a
+  binary search now; what is replaced is unchanged.
+- **A commit or a version after `@` at the end of a text is no email address.** `Email` reads an
+  address a provider cut before its top-level domain at the very end of a text (`jane.doe@exam`).
+  It also read a document key such as `group/repo@3f2a9c1` there, and the model was shown
+  `[Email-1]` for it. What is left of a cut address's domain now holds no digit, so a commit id
+  or a version (`tool@1.4.2`) after `@` is kept.
 - The EKR pin an instance records is the engine that creates its store. `cortex create` and
   `cortex adopt` ask the `ekr` binary for its version (`ekr --version`) and refuse one that
   reports another version than the spec's `ekr.version`, whether `ekr.bin` names it or it sits in

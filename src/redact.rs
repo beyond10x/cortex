@@ -192,8 +192,10 @@ fn email() -> &'static Regex {
         let local = r#"(?:\b[\p{L}\p{N}_][\p{L}\p{N}\p{M}._%+'\-]*|"[^"\r\n]+")"#;
         let label = r"[\p{L}\p{N}\p{M}][\p{L}\p{N}\p{M}\-]*";
         let domain = format!(r"{label}(?:\.{label})*\.(?:\p{{L}}{{2,}}|xn--[\p{{L}}\p{{N}}\-]+)\b");
-        // An address a provider cut before its top-level domain, at the very end of a text.
-        let cut = r"[\p{L}\p{N}\p{M}\-.]*[\p{Zs}…]*\z";
+        // An address a provider cut before its top-level domain, at the very end of a text. What
+        // is left of its domain holds no digit: a name and a commit or version at the end of a
+        // text (`group/repo@3f2a9c1`, `tool@1.4.2`) is a reference, not a cut address.
+        let cut = r"[\p{L}\p{M}\-.]*[\p{Zs}…]*\z";
         // `%40` is `@` percent-encoded in a URL; the local part's `%` admits `%2B` and the like.
         regex(&format!("{local}(?:@|%40)(?:{domain}|{cut})"))
     })
@@ -1019,6 +1021,19 @@ pub fn compile(policy: Option<&m::RedactionPolicy>) -> Result<Option<Redactor>, 
     }))
 }
 
+/// The items of `spans` whose span (`span` of each) overlaps `r`. `spans` is sorted by start and
+/// its spans are not empty and overlap none another, so their ends rise with their starts and
+/// the ones `r` overlaps lie side by side: two binary searches find them.
+fn overlapping<'s, T>(
+    spans: &'s [T],
+    span: impl Fn(&T) -> &Range<usize>,
+    r: &Range<usize>,
+) -> &'s [T] {
+    let from = spans.partition_point(|t| span(t).end <= r.start);
+    let to = from + spans[from..].partition_point(|t| span(t).start < r.end);
+    &spans[from..to]
+}
+
 fn next_char(text: &str, at: usize) -> usize {
     at + text[at..].chars().next().map_or(1, char::len_utf8)
 }
@@ -1044,6 +1059,11 @@ impl Redactor {
 
     /// `step`'s matches in `text` that overlap nothing in `taken`, in text order. A rare-name
     /// step finds nothing without the batch's `words`.
+    ///
+    /// The spans of `taken` overlap none another, and neither do those found, which come in text
+    /// order: each match looks up the spans it overlaps by binary search, so a text of `n`
+    /// matches costs `n log n`, not a pass over every span found before it (`n²`: 4x the
+    /// back-to-back links took 14x the time).
     fn scan(
         &self,
         step: &Step,
@@ -1055,6 +1075,10 @@ impl Redactor {
         if step.rare && words.is_none() {
             return found;
         }
+        // `taken` by start, each span with its place in `taken`: of several it overlaps, a match
+        // defers to the one taken first.
+        let mut sorted: Vec<(Range<usize>, usize)> = taken.iter().cloned().zip(0..).collect();
+        sorted.sort_by_key(|(t, _)| t.start);
         let mut pos = 0;
         while pos <= text.len() {
             let (whole, candidate) = if step.group == 0 {
@@ -1070,12 +1094,19 @@ impl Redactor {
                 (whole, c.get(step.group).map(|g| g.range()))
             };
             let retry = next_char(text, whole.start);
-            let hidden = taken
-                .iter()
-                .chain(found.iter())
-                .filter(|t| step.rare && t.start < whole.end && whole.start < t.end)
-                .min_by_key(|t| t.start)
-                .cloned();
+            let hidden = if step.rare {
+                let earlier = overlapping(&sorted, |(t, _)| t, &whole)
+                    .first()
+                    .map(|(t, _)| t);
+                let found_here = overlapping(&found, |t| t, &whole).first();
+                earlier
+                    .into_iter()
+                    .chain(found_here)
+                    .min_by_key(|t| t.start)
+                    .cloned()
+            } else {
+                None
+            };
             if let Some(t) = hidden {
                 // The part of a word before a span another step hides is what the check reads
                 // beside that span's placeholder: it is a name when it stands alone and is rare.
@@ -1113,11 +1144,13 @@ impl Redactor {
                 pos = whole.end.max(retry);
                 continue;
             }
-            if let Some(t) = taken
+            let overlapped = overlapping(&sorted, |(t, _)| t, &range)
                 .iter()
-                .chain(found.iter())
-                .find(|t| t.start < range.end && range.start < t.end)
-            {
+                .min_by_key(|(_, at)| *at)
+                .map(|(t, _)| t)
+                .or_else(|| overlapping(&found, |t| t, &range).first())
+                .cloned();
+            if let Some(t) = overlapped {
                 pos = if step.refine.is_some() {
                     retry
                 } else {

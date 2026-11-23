@@ -18,12 +18,12 @@ use cortex_cli::ask::records::postgres::{Launch, Remote, Sql};
 use cortex_cli::ask::records::SCHEMA_VERSION;
 use serde_json::Value;
 
-/// The deadline of each wait of a record call in these cases; the service's is 30 s.
-const DEADLINE: Duration = Duration::from_secs(1);
-/// What a call that failed in the queue may take past its deadline: taking the clock and
-/// answering.
-const SLACK: Duration = Duration::from_millis(400);
-/// How long a case waits for a call before it calls the call blocked.
+/// The deadline of each wait of a record call in this case; the service's is 30 s. A call held
+/// longest holds the records process for a start and a statement, each bounded by it, while the
+/// call behind it waits one deadline: the case puts half a deadline between the two ends, so
+/// the order of the ends does not turn on how loaded the machine is.
+const DEADLINE: Duration = Duration::from_secs(3);
+/// How long a case waits for a call or a file before it calls it blocked.
 const BLOCKED: Duration = Duration::from_secs(20);
 
 fn scratch(prefix: &str) -> tempfile::TempDir {
@@ -84,29 +84,78 @@ fn query(remote: &Arc<Remote>) -> mpsc::Receiver<(Answer, Duration)> {
     rx
 }
 
+/// Waits until `ready` holds, and fails the case when it still does not after [`BLOCKED`].
+fn until(what: &str, ready: impl Fn() -> bool) {
+    let started = Instant::now();
+    while !ready() {
+        assert!(started.elapsed() < BLOCKED, "{what}: not after {BLOCKED:?}");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 /// A database that stalls stalls the start too. The call before ours starts the records process
-/// (0.9 s, inside its deadline) and then waits out the deadline on its statement, so it holds the
-/// mutex for 1.9 s. Ours arrived 0.1 s after it and, by the correction's own words, waits at
-/// most one deadline for it; it waits 1.8 s, and only then fails as "waited 1s behind earlier
-/// ones". In the service: a vote, a review or a close answers `store-failed` after about 60 s,
-/// not the 30 s the ask-service page states.
+/// and then waits out the deadline on its statement, so it holds the process for its start and a
+/// whole deadline after it. Ours is made while that start runs and, by the correction's own
+/// words, waits at most one deadline for it: it fails as "waited … behind earlier ones" while the
+/// call before it still holds the process. Under the untimed `lock()` ours could not end before
+/// the call before it released the mutex. In the service: a vote, a review or a close answers
+/// `store-failed` after about 60 s, not the 30 s the ask-service page states.
+///
+/// Launch 1 is ready at once and ends, so the first call finds the process gone. Launch 2 starts
+/// when the case lets it: half a deadline after ours is queued. So the call before ours ends a
+/// deadline and a half after ours was queued, and ours one deadline after; the start ends half a
+/// deadline inside its own deadline. Nothing is compared with a bound on the time but the
+/// deadline itself, from below.
 #[test]
 fn a_call_behind_a_start_and_a_stall_waits_at_most_one_deadline_for_it() {
     let tmp = scratch("cortex-askio-adv2");
-    // Launch 1 is ready at once; every later launch takes 0.9 s to start. No launch answers a
+    let go = tmp.path().join("go");
+    // Launch 1 ends at its first query; every later one waits for `go` to start and answers no
     // query: the database stalls.
-    let launch = records(tmp.path(), r#"[ "$n" = 1 ] || sleep 0.9"#, ":");
+    let launch = records(
+        tmp.path(),
+        &format!(
+            r#"[ "$n" = 1 ] || while [ ! -e "{}" ]; do sleep 0.01; done"#,
+            go.display()
+        ),
+        r#"[ "$n" = 1 ] && exit 0"#,
+    );
     let remote = Arc::new(Remote::start(launch).expect("the stand-in starts"));
-    // The stall is found once: the process is stopped and the next call starts another.
+    // The process is found gone once, and the next call starts another.
     let first = remote.query("SELECT 1", &[]);
-    assert!(first.is_err(), "a stalled process answered: {first:?}");
+    assert!(first.is_err(), "a process that ended answered: {first:?}");
+    let launches = || {
+        std::fs::read_to_string(tmp.path().join("launches.log"))
+            .unwrap_or_default()
+            .lines()
+            .count()
+    };
     let before = query(&remote);
-    std::thread::sleep(Duration::from_millis(100));
-    let (ours, took) = query(&remote).recv_timeout(BLOCKED).expect("our call ends");
-    let _ = before.recv_timeout(BLOCKED);
+    until("the start of the call before ours", || launches() == 2);
+    let ours = query(&remote);
+    until("our call queued", || remote.waiting() == 1);
+    std::thread::sleep(DEADLINE / 2);
+    std::fs::write(&go, "").unwrap();
+    let (answer, took) = ours.recv_timeout(BLOCKED).expect("our call ends");
+    let before_still_held = before.try_recv().is_err();
+    let (before_answer, _) = before.recv_timeout(BLOCKED).expect("the call before ends");
     assert!(
-        took < DEADLINE + SLACK,
-        "a call that arrived 0.1 s after the one before it waited {took:?} for it, past the \
-         deadline of {DEADLINE:?} for the calls before it; it answered {ours:?}"
+        before_answer
+            .as_ref()
+            .is_err_and(|e| e.contains("did not answer")),
+        "the call before ours did not start the process and stall on its statement: \
+         {before_answer:?}"
+    );
+    assert!(
+        answer
+            .as_ref()
+            .is_err_and(|e| e.contains("behind earlier ones")),
+        "our call did not fail waiting for the one before it: {answer:?}"
+    );
+    assert!(took >= DEADLINE, "our call gave up after {took:?}");
+    assert!(
+        before_still_held,
+        "our call ended after {took:?}, after the call before it let the process go: it waited \
+         for it past its deadline of {DEADLINE:?}"
     );
 }
