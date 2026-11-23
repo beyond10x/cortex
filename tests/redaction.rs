@@ -572,28 +572,48 @@ fn a_rule_with_a_replacement_is_neither_sent_nor_stored_and_one_without_is_resto
     assert_eq!(line["unrestored"], 0, "{line}");
 }
 
-/// The operator's decision: a batch directory keeps only the restored `extraction.yaml`, so no
-/// file on disk pairs a placeholder with its value.
+/// A batch directory keeps the prompt as sent and the raw answer, which hold placeholders and no
+/// value they stand for, and the restored `extraction.yaml`, which holds no placeholder; no EKR
+/// report and no mapping (`story:runbook-probe-fixes`, which replaced the decision to keep only
+/// `extraction.yaml`).
 #[test]
-fn no_file_in_a_batch_directory_holds_a_placeholder() {
+fn a_batch_directory_keeps_placeholders_only_in_the_prompt_and_the_raw_answer() {
     let w = world(&planted_pages(), 5000);
     std::fs::write(w.root.join("inject-facts"), website_fact("[Email-1]")).unwrap();
     let (code, ran) = w.cortex(&["run", "r/news"]);
     assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
     let runs = w.home.join("instances/r/runs");
     let files = files_under(&runs);
-    assert!(
-        files
-            .iter()
-            .any(|(p, _)| p.ends_with("/batch-0/extraction.yaml")),
-        "{:?}",
-        files.iter().map(|(p, _)| p).collect::<Vec<_>>()
-    );
+    for name in ["extraction.yaml", "prompt.txt", "answer.json"] {
+        assert!(
+            files
+                .iter()
+                .any(|(p, _)| p.ends_with(&format!("/batch-0/{name}"))),
+            "{name}: {:?}",
+            files.iter().map(|(p, _)| p).collect::<Vec<_>>()
+        );
+    }
     for (path, bytes) in &files {
+        for value in [EMAIL, CARD, PHONE] {
+            if !path.ends_with("/extraction.yaml") {
+                assert!(!contains(bytes, value), "{path} holds {value}");
+            }
+        }
         for placeholder in ["[Email-1]", "[Card-1]", "[Phone-1]"] {
-            assert!(!contains(bytes, placeholder), "{path} holds {placeholder}");
+            if path.ends_with("/extraction.yaml") {
+                assert!(!contains(bytes, placeholder), "{path} holds {placeholder}");
+            }
         }
     }
+    let prompt = files
+        .iter()
+        .find(|(p, _)| p.ends_with("/prompt.txt"))
+        .map(|(_, b)| String::from_utf8_lossy(b).to_string())
+        .unwrap();
+    assert!(
+        prompt.contains("Write to [Email-1]; card [Card-1]"),
+        "{prompt}"
+    );
     for entry in std::fs::read_dir(
         runs.join(
             std::fs::read_dir(&runs)
@@ -609,10 +629,12 @@ fn no_file_in_a_batch_directory_holds_a_placeholder() {
     {
         let entry = entry.unwrap();
         if entry.file_type().unwrap().is_file() {
-            assert_eq!(
-                entry.file_name(),
-                "extraction.yaml",
-                "only the restored extraction"
+            let name = entry.file_name();
+            assert!(
+                ["extraction.yaml", "prompt.txt", "answer.json"]
+                    .iter()
+                    .any(|n| name == *n),
+                "{name:?}: no EKR report, no mapping"
             );
         }
     }
