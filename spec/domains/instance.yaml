@@ -1330,6 +1330,14 @@ errors:
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
 
+  - name: cortex.instance.PathRefused
+    summary: >-
+      A run was given a directory (`path`) for a source that is not a `files` source; only a
+      `files` source reads one. Nothing ran.
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+      - {name: reason, type: String}
+
   - name: cortex.instance.RestoreUnsupported
     summary: >-
       The instance's store is on the postgres backend: its snapshot is the operator's database
@@ -1843,6 +1851,7 @@ commands:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: fetch_only, type: Optional<Boolean>}
       - {name: no_wait, type: Optional<Boolean>}
+      - {name: path, type: Optional<String>}
     outcomes:
       # UNMAPPED: the exit status of each outcome, which an external scheduler reads instead of
       # the printed line: `ran` 0; `fetch-failed`, `extraction-failed`, `apply-refused` and
@@ -1990,6 +1999,30 @@ commands:
         summary: >-
           Nothing ran: the source was not read, nothing was counted, and the source's status,
           metrics and hook are untouched, so an external scheduler can skip this collection.
+      # UNMAPPED: with `path` (`cortex run --path <dir>`, with or without `--fetch-only`), a
+      # `files` source reads `<dir>`, resolved against the caller's working directory, in place
+      # of its spec's `paths`, for that run only; its `glob`, `records` and `lookup` are read as
+      # the spec says. A document's key is then the file's path relative to `<dir>`
+      # (`<relative path>#<id>` for a record) and its evidence identity `file:<key>`, so a record
+      # read from two run directories is one seen document, and an unchanged one is not extracted
+      # again. A `<dir>` that is missing or cannot be listed fails the fetch (`fetch-failed`, or
+      # `fetch-only-failed`) naming it. `<instance>/seed` with `path` answers `path-refused`, and
+      # so does a source of another kind: the refusal exits 1 and writes nothing, not the
+      # source's status, `metrics.prom` or the hook. ESS has no construct for a file path or for
+      # how a document key is made, and a subject-fact guard (`kind != Files`) cannot sit beside
+      # the `disabled` state guard in one command at `ess/22`, so the kind is read as an
+      # external branch; tests/review_run_path.rs holds it.
+      - name: path-refused
+        external: The source named is not a `files` source, or is the instance's seed documents
+        when: "defined(path)"
+        error: cortex.instance.PathRefused
+        payload:
+          cortex.instance.PathRefused:
+            source_id: input.source_id
+            reason: {generated: true}
+        summary: >-
+          The source is not a `files` source, so it has no directory to read. Nothing ran and
+          nothing was written.
 
       - name: fetch-only-failed
         external: Connectors or the filesystem fails to deliver the source's documents in a fetch-only run

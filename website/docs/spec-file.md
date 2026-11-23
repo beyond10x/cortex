@@ -598,6 +598,17 @@ A record whose text changed is extracted again on the next run, whatever `refres
 the window holds back only whole files and the other kinds of source. Its thread context is part
 of its text, so a record whose nearer thread records changed is extracted again too.
 
+**A directory per run.** `cortex run <instance>/<source> --path <dir>` reads the source from
+`<dir>` in place of `paths`, for that run only; `glob`, `records` and `lookup` stay as the spec
+says, and `lookup` is still read against the spec file's directory. A document's key is then the
+file's path relative to `<dir>`: `<relative path>#<id>` for a record, `<relative path>` for a whole
+file, cited as `file:<key>`. A caller that writes each run's files to a new directory, such as
+`run-17/work/slices/chat.jsonl` and then `run-18/work/slices/chat.jsonl`, passes
+`--path run-17/work` and then `--path run-18/work`: both runs key the record
+`slices/chat.jsonl#<id>`, so an unchanged record is not extracted again (`documents_new` 0) and a
+changed one is. Keys with and without `--path` differ, so run a source one way only. Masking
+applies to the relative key as to any key.
+
 ### `kind: structured`
 
 Records turned into entities, properties and relations by a fixed `mapping`, with no model call:

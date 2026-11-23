@@ -770,6 +770,10 @@ impl Scenario {
                     source_id: m::SourceId(s("source_id")),
                     fetch_only: input.get("fetch_only").and_then(Value::as_bool),
                     no_wait: input.get("no_wait").and_then(Value::as_bool),
+                    path: input
+                        .get("path")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
                 })
                 .unwrap()
             {
@@ -845,6 +849,13 @@ impl Scenario {
                 m::RunSourceOutcome::NoSuchSource { error } => (
                     "no-such-source",
                     Some(("SourceNotFound", json!({"source_id": error.source_id.0}))),
+                ),
+                m::RunSourceOutcome::PathRefused { error } => (
+                    "path-refused",
+                    Some((
+                        "PathRefused",
+                        json!({"source_id": error.source_id.0, "reason": error.reason}),
+                    )),
                 ),
             },
             "cortex.instance.RecordFailure" => match app
@@ -1692,7 +1703,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     if std::env::var_os(SUITE_ENV).is_none() {
         assert_eq!(
             scenarios.len(),
-            125,
+            126,
             "the suite's scenario count moved; update this floor"
         );
     }

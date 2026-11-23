@@ -1401,6 +1401,40 @@ fn fetch_files(
     base: &Path,
     max_context: usize,
 ) -> Result<(Vec<Document>, Vec<String>), FetchError> {
+    let roots: Vec<_> = f.paths.iter().map(|root| under(base, root)).collect();
+    read_files(f, base, &roots, false, max_context)
+}
+
+/// `cortex run --path <dir>`: the files of a `files` source read from `dir` in place of its
+/// `paths`, for one run, as [`fetch_files`] reads them (its `glob`, `records` and `lookup`, the
+/// lookup still read against `base`). A document's key is the file's path relative to `dir`
+/// (`<relative path>#<id>` for a record), so a record read from two run directories has one key.
+/// A `dir` that is missing or cannot be listed fails the fetch, naming it.
+pub fn fetch_files_in(
+    f: &m::FilesSource,
+    base: &Path,
+    dir: &Path,
+    max_context: usize,
+) -> Result<Fetched, FetchError> {
+    std::fs::read_dir(dir)
+        .map_err(|e| FetchError::Failed(format!("--path {}: {e}", dir.display())))?;
+    let (documents, skipped) = read_files(f, base, &[dir.to_path_buf()], true, max_context)?;
+    Ok(Fetched {
+        documents,
+        skipped,
+        ..Fetched::default()
+    })
+}
+
+/// The files under `roots` read as [`fetch_files`] says; with `relative`, each keyed by its path
+/// below its root instead of its full path.
+fn read_files(
+    f: &m::FilesSource,
+    base: &Path,
+    roots: &[std::path::PathBuf],
+    relative: bool,
+    max_context: usize,
+) -> Result<(Vec<Document>, Vec<String>), FetchError> {
     let glob = globset::Glob::new(&f.glob)
         .map_err(|e| FetchError::Failed(format!("glob {:?}: {e}", f.glob)))?
         .compile_matcher();
@@ -1410,20 +1444,20 @@ fn fetch_files(
         read.lookup = read_lookup(&under(base, lookup))?;
     }
     let mut skipped = Vec::new();
-    for root in &f.paths {
-        let root = under(base, root);
-        for entry in walkdir::WalkDir::new(&root).sort_by_file_name() {
+    for root in roots {
+        for entry in walkdir::WalkDir::new(root).sort_by_file_name() {
             let entry =
                 entry.map_err(|e| FetchError::Failed(format!("{}: {e}", root.display())))?;
             if !entry.file_type().is_file() {
                 continue;
             }
-            let rel = entry.path().strip_prefix(&root).unwrap_or(entry.path());
+            let rel = entry.path().strip_prefix(root).unwrap_or(entry.path());
             if !glob.is_match(rel) {
                 continue;
             }
             stop_before(|| "the next file".into())?;
-            let path = entry.path().display().to_string();
+            let path = if relative { rel } else { entry.path() };
+            let path = path.display().to_string();
             let bytes = match read_capped(entry.path()) {
                 Ok(bytes) => bytes,
                 Err(why) => {
