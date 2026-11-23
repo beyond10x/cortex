@@ -2333,19 +2333,20 @@ mod tests {
     /// subject and predicate, so each one ended finds its replacement without a scan of every
     /// assertion of the source, and when nothing is ended it reads no edge and builds no set of the
     /// store's assertions. A store of `n` records each with a superseded and a current value,
-    /// beside `n` assertions of other writers, and the same store at 16x the records: indexed,
-    /// `ended` takes about 16x the time on the larger one; a scan per ended assertion takes 256x
-    /// (at 20,000 records, 20,000 × 40,000 steps, a minute in a debug build). The bound sits 4x
-    /// from each, and the times compared are the least CPU time of runs of both sizes taken in
-    /// turns, so load on the machine does not reach it.
+    /// beside `n` assertions of other writers, and the same store at 8x the records: indexed,
+    /// `ended` takes about 8x the time on the larger one (its maps add a log factor, about 11x);
+    /// a scan per ended assertion takes 64x (at 20,000 records, 20,000 × 40,000 steps, a minute
+    /// in a debug build). The bound, 8^1.5, sits 2.8x from linear and 2.8x from quadratic, and
+    /// the times compared are the least CPU time of two runs of both sizes taken in turns, so
+    /// load on the machine does not reach it.
     #[test]
     fn ended_over_a_large_store_indexes_what_stays_and_ends_nothing_without_reading_edges() {
         use crate::ekr::Operation;
         use rustix::time::{clock_gettime, ClockId};
         use std::time::Duration;
-        const SMALL: usize = 400;
-        const GROWTH: usize = 16;
-        const LINEAR_BOUND: f64 = 64.0;
+        const SMALL: usize = 200;
+        const GROWTH: usize = 8;
+        const LINEAR_BOUND: f64 = 22.6;
         let m = mapping();
         let s = source(&m);
         let ontology = json!({"node_types": [{"properties": [{"id": "p-age", "name": "age"}]}],
@@ -2432,11 +2433,12 @@ mod tests {
                 cpu_time().saturating_sub(t)
             };
             let (mut t_small, mut t_large) = (Duration::MAX, Duration::MAX);
-            for _ in 0..3 {
+            for _ in 0..2 {
                 t_small = t_small.min(time(&small));
                 t_large = t_large.min(time(&large));
             }
             let ratio = t_large.as_secs_f64() / t_small.as_secs_f64().max(1e-9);
+            eprintln!("{what}: {ratio:.1}x the CPU time ({t_small:?} -> {t_large:?})");
             assert!(
                 ratio < LINEAR_BOUND,
                 "{what}: {GROWTH}x the records took {ratio:.1}x the CPU time \

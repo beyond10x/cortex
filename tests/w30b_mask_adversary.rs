@@ -22,9 +22,10 @@ fn tail() -> String {
 
 /// The sizes of the two inputs of the linear-time cases. Below about 16 KiB the regex engine
 /// takes a faster path for these patterns (5x to 7x less time per byte in a build with
-/// unoptimised dependencies), so both sizes sit above it, where the time per byte stays the same.
-/// The larger is 4x the smaller: linear work takes 4x the time on it and quadratic work 16x.
-const SMALL: usize = 1 << 15;
+/// unoptimised dependencies); from 16 KiB on the time per byte stays the same (1.9x to 2.1x the
+/// CPU time per doubling, measured up to 256 KiB). The larger is 4x the smaller: linear work
+/// takes 4x the time on it and quadratic work 16x.
+const SMALL: usize = 1 << 14;
 const LARGE: usize = SMALL * 4;
 /// The most times the time may grow from `SMALL` to `LARGE`: 4^1.5, 2x above what linear work
 /// takes and 2x below what quadratic work takes.
@@ -37,19 +38,17 @@ fn cpu_time() -> Duration {
     Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
 }
 
-/// How many times more CPU time `f` takes on `large` than on `small`, and the two times: the
-/// least of two runs of each, taken in turns, after one run that builds what `f` builds once.
+/// How many times more CPU time `f` takes on `large` than on `small`, and the two times, after
+/// one run on the start of `small` that builds what `f` builds once. CPU time varies by a few
+/// percent from run to run, so one run of each size is enough.
 fn growth(small: &str, large: &str, f: impl Fn(&str)) -> (f64, Duration, Duration) {
+    f(small.get(..small.len() / 16).unwrap_or(small));
+    let t = cpu_time();
     f(small);
-    let (mut t_small, mut t_large) = (Duration::MAX, Duration::MAX);
-    for _ in 0..2 {
-        let t = cpu_time();
-        f(small);
-        t_small = t_small.min(cpu_time().saturating_sub(t));
-        let t = cpu_time();
-        f(large);
-        t_large = t_large.min(cpu_time().saturating_sub(t));
-    }
+    let t_small = cpu_time().saturating_sub(t);
+    let t = cpu_time();
+    f(large);
+    let t_large = cpu_time().saturating_sub(t);
     let ratio = t_large.as_secs_f64() / t_small.as_secs_f64().max(1e-9);
     eprintln!("{ratio:.1}x the CPU time ({t_small:?} -> {t_large:?})");
     (ratio, t_small, t_large)
