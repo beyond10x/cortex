@@ -7,6 +7,19 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Fixed
 
+- A `structured` record whose mapping changed is applied again at the next run, at once and
+  whatever `refresh_after_days`, its text changed or not. 0.8.0 answered `cortex update` with
+  `updated` and left every unchanged record on the old mapping, so a property added to the mapping
+  reached the store only for records that changed later. The state file remembers each record's
+  mapping (`fields_hash`); a record applied by 0.8.0 has none and is applied again once, with no
+  model call.
+- A web page whose title, description or publication date changed while its URL and body stayed
+  the same is a changed document, extracted again once `refresh_after_days` have passed, so its
+  `WebPage` node gets the new values. 0.8.0 counted it unchanged. A page applied by 0.8.0 takes
+  the fields of its next fetch as applied and is not extracted again for them.
+- `cortex run --fetch-only` names in the new `skipped` list each document a run would leave out
+  after it failed alone on 3 consecutive runs, and counts it neither `new` nor `changed`.
+  0.8.0 forecast it as model work that the run then skipped.
 - `cortex update` takes a source the new spec drops out of the registry, and stops and deletes
   its timer and service (`removed_sources`). Before, the source stayed `Enabled` and its timer
   kept firing a run that failed and was counted. A timer that does not stop keeps its source and

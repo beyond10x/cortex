@@ -1,8 +1,11 @@
 {
   "format": "ess-diff-acknowledgements/1",
   "before": "b77e573a24f45c33d239857ef5217a99252c69722f75361972dcf01ec51cdf99",
-  "after": "379dcd42330798cb467b2cf2094b004edd0ce3aa8b13a37f6a76ec1e7e77c116",
+  "after": "da4c14ea792dc63c8e245bc5140a7a640cac9d7574d2dce8354aeb2702ad95bc",
   "acknowledged": [
+    "entity/cortex.instance.SeenDocument/field-added/fields_hash",
+    "command/cortex.instance.RunSource/outcome-response-payload-changed/fetched",
+    "event/cortex.instance.SourceFetched/field-added/skipped",
     "command/cortex.instance.AddSource/outcome-added/no-such-instance",
     "command/cortex.instance.AddSource/outcome-added/not-active",
     "command/cortex.instance.AddSource/outcome-added/source-exists",

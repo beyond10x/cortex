@@ -2014,7 +2014,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
     "contract_digest": "slice-sha256/2:46864e56b8a3cfc468388a87b3c92a413aa3e7ec68259b7dc865529993c01b0d",
-    "source_digest": "379dcd42330798cb467b2cf2094b004edd0ce3aa8b13a37f6a76ec1e7e77c116",
+    "source_digest": "da4c14ea792dc63c8e245bc5140a7a640cac9d7574d2dce8354aeb2702ad95bc",
     "specification_version": "v1",
     "system": "cortex"
   }
