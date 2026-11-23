@@ -400,6 +400,47 @@ window where it was. A disabled source is counted too; `<instance>/seed` is not 
 answers `fetch-failed`. `--fetch-only` cannot be combined with `--record-failure`. It holds the
 home's lock while it fetches, as a run does.
 
+### Checking an extraction before it is applied
+
+`cortex run <instance>/<source> --extract-only` runs a run up to the write: it fetches, selects and
+extracts with the same batches, prompts, redaction, budget and refusals, and keeps each batch's
+merged `extraction.yaml` in the run directory with `kept.json`, the documents each batch holds:
+
+```json
+{"command":"run","outcome":"extracted","detail":{"source_id":"news/feed",
+ "run":"1795463342000-feed","documents_new":3,"documents_kept":3,"batches":1,"stopped":null,
+ "model_calls":1,"cost_usd":"0.0100","facts_refused":0,"masked":0}}
+```
+
+Nothing is written to the store, `state/<source>.json` (the seen documents and the window),
+the failure counts, the known entity names, the source's status, `metrics.prom` or
+`cortex.log`, and no hook is called; the day's spend counts its model calls. A run of the source
+before the apply still sees the documents as new. A run with nothing new keeps nothing and its
+`run` is `null`. A failure before a batch was kept answers `extract-only-failed`, with the
+outcome a run would have taken in `failure`. A spent budget, a failed batch or a model that could
+not be reached after a batch was kept keeps the batches before it and says why in `stopped`; a
+SIGTERM keeps nothing.
+
+Check `runs/<run>/batch-<n>/extraction.yaml` (and `prompt.txt` and `answer.json` beside it), then
+apply it:
+
+```console
+cortex apply <instance> <run>
+```
+
+The apply writes the batches in order as a run does: the type conflicts isolated, replacements
+with nothing to replace applied again, older values kept as history, the parts EKR rejects named
+in `rejected` and `refusals.json`, the snapshot (`sqlite`) or stage (`postgres`) taken first and
+the spec's `gate` held. It marks each applied document seen and records the source's window as
+the run would have, and writes a `cortex.log` line with `applied` naming the run. A kept
+extraction is applied once: `applied.json` is written into the run directory before the first
+write, and a second `cortex apply` of the run answers `already-applied`. Before it writes
+anything, the apply compares each document of the extraction with the source's seen state; when
+a run applied one of them since, or a `cortex restore` put back another state, it answers
+`extraction-stale`, naming the documents, and the kept extraction stays as it was. Extract again
+then. `runs.keep_days` prunes a kept run like any other, after which the apply answers
+`no-such-run`.
+
 ## Failures
 
 A run that fails (`fetch-failed`, `extraction-failed`, `apply-refused`) applies nothing and leaves

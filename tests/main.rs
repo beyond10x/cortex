@@ -89,6 +89,7 @@ mod it {
     mod review_connection_pagination;
     mod review_ekr_pin;
     mod review_ekr_pin_and_busy;
+    mod review_extract_then_apply;
     mod review_extraction_coverage;
     mod review_instance_update;
     mod review_placeholder_restore;

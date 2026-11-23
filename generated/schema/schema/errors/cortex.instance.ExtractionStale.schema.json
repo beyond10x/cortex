@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExtractionStale payload",
+  "description": "The store moved past the kept extraction: a run applied, or a restore put back, a document it holds after it was extracted, so its seen state is not the one the extraction was made against; or the instance's spec no longer has its source. `reason` names the documents. Nothing was applied; run `cortex run --extract-only` again.",
+  "x-ess-name": "cortex.instance.ExtractionStale",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "run": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "run",
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "4d696c5e1aca27b4d9e6d3faaf3bc2b55b9215801b5aee7ac47b47e28bc8e13f",
+    "contract_digest": "slice-sha256/2:3394a1312f2fb01dcc3f3d6fb78cffb72894267e7cd9b9405a8f3a0c570dffa7",
+    "regenerate": "ess generate"
+  }
+}

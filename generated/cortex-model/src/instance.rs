@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest c1cc8b9b9466992541f3b9ee58e192fe0acf3efdcfa61eb84d496d57da5c6dc8
-// contract digest 81ef54a1cc0b20fe0001264828691872bf5c3f0b82964539fd5b81eb5fc47621
+// model digest 4d696c5e1aca27b4d9e6d3faaf3bc2b55b9215801b5aee7ac47b47e28bc8e13f
+// contract digest 1788d15a326626c332896ec48b946f55a5bb886a430361d0c2ba2a8525140ea8
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -2083,6 +2083,82 @@ pub enum AdoptInstanceOutcome {
     },
 }
 
+/// Apply a kept extraction — the input of `cortex.instance.ApplyExtraction`.
+///
+/// Everything it can result in is [`ApplyExtractionOutcome`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApplyExtraction {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `run` — `String`.
+    pub run: String,
+}
+
+/// Everything `cortex.instance.ApplyExtraction` can result in — one variant per declared outcome.
+///
+/// An infrastructure failure is deliberately not in here: a refusal is a fact about the domain,
+/// a transport fault is a fact about the run, and conflating the two is what the declared
+/// outcomes exist to prevent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ApplyExtractionOutcome {
+    /// `no-such-run` — externally decided (The instance's `runs/` holds no kept extraction by this name).
+    ///
+    /// Nothing was applied.
+    NoSuchRun {
+        /// Why it was refused: `cortex.instance.KeptExtractionNotFound`.
+        error: KeptExtractionNotFound,
+    },
+    /// `already-applied` — externally decided (The kept extraction was applied before, or an apply of it began).
+    ///
+    /// Nothing was applied a second time.
+    AlreadyApplied {
+        /// Why it was refused: `cortex.instance.ExtractionAlreadyApplied`.
+        error: ExtractionAlreadyApplied,
+    },
+    /// `extraction-stale` — externally decided (A document of the kept extraction is seen otherwise than when it was extracted, or the instance's spec no longer has its source).
+    ///
+    /// Nothing was applied, and the kept extraction stays as it was.
+    ExtractionStale {
+        /// Why it was refused: `cortex.instance.ExtractionStale`.
+        error: ExtractionStale,
+    },
+    /// `apply-refused` — externally decided (EKR refuses the first kept batch, or the run's gate refuses the apply).
+    ///
+    /// Nothing stays applied: the store and the seen documents are as before, a gated apply undone from its snapshot or stage as a gated run is.
+    ApplyRefused {
+        /// Why it was refused: `cortex.instance.ApplyRefused`.
+        error: ApplyRefused,
+    },
+    /// `store-outcome-unknown` — externally decided (EKR answers that the publication outcome of a store write of the apply is unknown).
+    ///
+    /// As for a run: the batch is not marked seen, so a later run extracts it again; a gated apply that kept a snapshot is undone from it, and a stage is settled by the next run.
+    StoreOutcomeUnknown {
+        /// Why it was refused: `cortex.instance.StoreOutcomeUnknown`.
+        error: StoreOutcomeUnknown,
+    },
+    /// `terminated` — externally decided (The apply is sent SIGTERM before it ends).
+    ///
+    /// The apply stopped before its next batch; a gated apply is undone, an ungated one keeps the batches it applied, each marked seen.
+    Terminated {
+        /// Why it was refused: `cortex.instance.RunTerminated`.
+        error: RunTerminated,
+    },
+    /// `applied` — otherwise.
+    ///
+    /// The kept batches were applied in order and their documents marked seen; a batch EKR refused after an earlier one applied stops the apply there, as it stops a run, and its documents are left for a later run. The source's window advanced as the run's would have.
+    Applied {
+        /// The `cortex.instance.ExtractionApplied` this outcome publishes.
+        extraction_applied: ExtractionApplied,
+    },
+    /// `no-such-instance` — for an identity no record carries.
+    ///
+    /// Nothing was applied.
+    NoSuchInstance {
+        /// Why it was refused: `cortex.instance.InstanceNotFound`.
+        error: InstanceNotFound,
+    },
+}
+
 /// Apply approved schema proposals — the input of `cortex.instance.ApplySchemaProposals`.
 ///
 /// Everything it can result in is [`ApplySchemaProposalsOutcome`].
@@ -2713,6 +2789,8 @@ pub struct RunSource {
     pub no_wait: Option<bool>,
     /// `path` — `Optional<String>`.
     pub path: Option<String>,
+    /// `extract_only` — `Optional<Boolean>`.
+    pub extract_only: Option<bool>,
 }
 
 /// Everything `cortex.instance.RunSource` can result in — one variant per declared outcome.
@@ -2756,6 +2834,20 @@ pub enum RunSourceOutcome {
     Fetched {
         /// The `cortex.instance.SourceFetched` this outcome publishes.
         source_fetched: SourceFetched,
+    },
+    /// `extract-only-failed` — externally decided (The fetch or the model fails before an extract-only run kept a batch) when eligible ((defined(extract_only) and extract_only == true)).
+    ///
+    /// Nothing was kept and nothing was written: not the store, the seen documents, the window or the source's status, and no failure is counted. The model calls it made count in the day's spend.
+    ExtractOnlyFailed {
+        /// Why it was refused: `cortex.instance.ExtractOnlyFailed`.
+        error: ExtractOnlyFailed,
+    },
+    /// `extracted` — when `(defined(extract_only) and extract_only == true)`.
+    ///
+    /// An extract-only run: the new or changed documents a run would extract were extracted and kept in the run directory `run`, unapplied. The store, the seen documents, the window and the source's status are as they were, so a run before `cortex apply` still sees the documents as new.
+    Extracted {
+        /// The `cortex.instance.SourceExtracted` this outcome publishes.
+        source_extracted: SourceExtracted,
     },
     /// `fetch-failed` — externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first).
     ///
@@ -2945,6 +3037,19 @@ pub struct EvalRan {
     pub cost_usd: Option<crate::primitives::Decimal>,
 }
 
+/// ExtractionApplied — the event `cortex.instance.ExtractionApplied`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractionApplied {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
+    /// `run` — `String`.
+    pub run: String,
+    /// `documents_applied` — `Integer`.
+    pub documents_applied: i64,
+    /// `documents_left` — `Integer`.
+    pub documents_left: i64,
+}
+
 /// InstanceAdopted — the event `cortex.instance.InstanceAdopted`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceAdopted {
@@ -3119,6 +3224,27 @@ pub struct SourceEnabled {
     pub source_id: SourceId,
 }
 
+/// SourceExtracted — the event `cortex.instance.SourceExtracted`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceExtracted {
+    /// `source_id` — `cortex.instance.SourceId`.
+    pub source_id: SourceId,
+    /// `run` — `Optional<String>`.
+    pub run: Option<String>,
+    /// `documents_new` — `Integer`.
+    pub documents_new: i64,
+    /// `documents_kept` — `Integer`.
+    pub documents_kept: i64,
+    /// `batches` — `Integer`.
+    pub batches: i64,
+    /// `stopped` — `Optional<String>`.
+    pub stopped: Option<String>,
+    /// `model_calls` — `Integer`.
+    pub model_calls: i64,
+    /// `cost_usd` — `Optional<Decimal>`.
+    pub cost_usd: Option<crate::primitives::Decimal>,
+}
+
 /// SourceFetched — the event `cortex.instance.SourceFetched`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceFetched {
@@ -3286,11 +3412,42 @@ pub struct EvalSetInvalid {
     pub reason: String,
 }
 
+/// The declared error `cortex.instance.ExtractOnlyFailed`.
+///
+/// An extract-only run failed before it kept a batch. `outcome` names the outcome a run would have taken (`fetch-failed`, `extraction-failed`, `model-unavailable`, `batch-too-large`, `connection-unavailable`, `terminated`, `path-refused`), `reason` says why. Nothing was kept or written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractOnlyFailed {
+    /// `outcome` — `String`.
+    pub outcome: String,
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
+/// The declared error `cortex.instance.ExtractionAlreadyApplied`.
+///
+/// `cortex apply` already applied this kept extraction, or began to: a kept extraction is applied once. Nothing was applied; a run extracts again what the first apply left.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractionAlreadyApplied {
+    /// `run` — `String`.
+    pub run: String,
+}
+
 /// The declared error `cortex.instance.ExtractionFailed`.
 ///
 /// The model call failed or returned no valid extraction document; nothing was applied.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtractionFailed {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
+/// The declared error `cortex.instance.ExtractionStale`.
+///
+/// The store moved past the kept extraction: a run applied, or a restore put back, a document it holds after it was extracted, so its seen state is not the one the extraction was made against; or the instance's spec no longer has its source. `reason` names the documents. Nothing was applied; run `cortex run --extract-only` again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractionStale {
+    /// `run` — `String`.
+    pub run: String,
     /// `reason` — `String`.
     pub reason: String,
 }
@@ -3338,6 +3495,15 @@ pub struct InstanceNotFound {
 pub struct JudgeFailed {
     /// `reason` — `String`.
     pub reason: String,
+}
+
+/// The declared error `cortex.instance.KeptExtractionNotFound`.
+///
+/// The instance's `runs/` directory holds no kept extraction by this name: no `cortex run --extract-only` kept one there, or `runs.keep_days` pruned it. Nothing was applied.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeptExtractionNotFound {
+    /// `run` — `String`.
+    pub run: String,
 }
 
 /// The declared error `cortex.instance.ModelUnavailable`.
@@ -3668,6 +3834,17 @@ pub mod obligations {
         fn adopt_instance(&mut self, input: super::AdoptInstance) -> Result<super::AdoptInstanceOutcome, crate::obligation::UnmetObligation>;
     }
 
+    /// The behaviour `cortex.instance.ApplyExtraction` — generated.
+    ///
+    /// The specification fully determines it: [`crate::behaviour::Generated`] implements it
+    /// over the storage and context ports. Implement it yourself to replace that behaviour.
+    pub trait ApplyExtractionBehavior {
+        /// Decides and enacts exactly one declared outcome of `cortex.instance.ApplyExtraction`.
+        ///
+        /// `Err` is the typed refusal of a request the model declares no outcome for.
+        fn apply_extraction(&mut self, input: super::ApplyExtraction) -> Result<super::ApplyExtractionOutcome, crate::obligation::UnmetObligation>;
+    }
+
     /// The behaviour `cortex.instance.ApplySchemaProposals` — generated.
     ///
     /// The specification fully determines it: [`crate::behaviour::Generated`] implements it
@@ -3795,7 +3972,7 @@ pub mod obligations {
     ///
     /// Why it is not generated: kept an obligation by a refusal that compensates (`compensates: true`), on `fetch-failed`.
     ///
-    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)`, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `busy` externally decided (Another cortex command holds the home's lock) when eligible ((defined(no_wait) and no_wait == true)), error `cortex.instance.InstanceBusy`; `path-refused` externally decided (The source named is not a `files` source, or is the instance's seed documents) when eligible (defined(path)), error `cortex.instance.PathRefused`; `fetch-only-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents in a fetch-only run) when eligible ((defined(fetch_only) and fetch_only == true)), error `cortex.instance.FetchFailed`; `fetched` when `(defined(fetch_only) and fetch_only == true)`, updates `cortex.instance.Source`, emits `cortex.instance.SourceFetched`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails (other than as `model-unavailable` says), times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `store-outcome-unknown` externally decided (EKR answers that the publication outcome of a store write of the run (a stage verb or `apply-extraction`) is unknown), updates `cortex.instance.Source`, error `cortex.instance.StoreOutcomeUnknown`; `connection-unavailable` externally decided (Connectors answers a retryable operational failure to every attempt of `connections revalidate` (or of the `connections list` read before it, which for a source naming a profile is also the read that resolves the profile) before the run's first fetch), updates `cortex.instance.Source`, error `cortex.instance.ConnectionUnavailable`; `batch-too-large` externally decided (`claude` answers that a part of several documents of an extraction batch is too long for the model's window, or that its answer was cut off at the output limit, after the batch was split 3 deep), updates `cortex.instance.Source`, error `cortex.instance.BatchTooLarge`; `terminated` externally decided (The run is sent SIGTERM before it ends), updates `cortex.instance.Source`, error `cortex.instance.RunTerminated`; `model-unavailable` externally decided (The run's model cannot be reached: its process cannot be started, its connection is refused, the server behind the gateway has not loaded the model, or the gateway answers HTTP 502, 503, 504 or 529 (overloaded)), updates `cortex.instance.Source`, error `cortex.instance.ModelUnavailable`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
+    /// Contract: given `cortex.instance.RunSource` input, decide and enact exactly one outcome. Declared outcomes (declaration order, not selection precedence): `disabled` when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)`, updates `cortex.instance.Source`, emits `cortex.instance.RunSkipped`; `busy` externally decided (Another cortex command holds the home's lock) when eligible ((defined(no_wait) and no_wait == true)), error `cortex.instance.InstanceBusy`; `path-refused` externally decided (The source named is not a `files` source, or is the instance's seed documents) when eligible (defined(path)), error `cortex.instance.PathRefused`; `fetch-only-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents in a fetch-only run) when eligible ((defined(fetch_only) and fetch_only == true)), error `cortex.instance.FetchFailed`; `fetched` when `(defined(fetch_only) and fetch_only == true)`, updates `cortex.instance.Source`, emits `cortex.instance.SourceFetched`; `extract-only-failed` externally decided (The fetch or the model fails before an extract-only run kept a batch) when eligible ((defined(extract_only) and extract_only == true)), error `cortex.instance.ExtractOnlyFailed`; `extracted` when `(defined(extract_only) and extract_only == true)`, updates `cortex.instance.Source`, emits `cortex.instance.SourceExtracted`; `fetch-failed` externally decided (Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first), updates `cortex.instance.Source`, error `cortex.instance.FetchFailed`; `extraction-failed` externally decided (The model call fails (other than as `model-unavailable` says), times out, exceeds the run budget before any batch, or returns no valid document; an error answer that cost zero is asked once more first, after a fixed wait), updates `cortex.instance.Source`, error `cortex.instance.ExtractionFailed`; `apply-refused` externally decided (EKR refuses the merged extraction document), updates `cortex.instance.Source`, error `cortex.instance.ApplyRefused`; `store-outcome-unknown` externally decided (EKR answers that the publication outcome of a store write of the run (a stage verb or `apply-extraction`) is unknown), updates `cortex.instance.Source`, error `cortex.instance.StoreOutcomeUnknown`; `connection-unavailable` externally decided (Connectors answers a retryable operational failure to every attempt of `connections revalidate` (or of the `connections list` read before it, which for a source naming a profile is also the read that resolves the profile) before the run's first fetch), updates `cortex.instance.Source`, error `cortex.instance.ConnectionUnavailable`; `batch-too-large` externally decided (`claude` answers that a part of several documents of an extraction batch is too long for the model's window, or that its answer was cut off at the output limit, after the batch was split 3 deep), updates `cortex.instance.Source`, error `cortex.instance.BatchTooLarge`; `terminated` externally decided (The run is sent SIGTERM before it ends), updates `cortex.instance.Source`, error `cortex.instance.RunTerminated`; `model-unavailable` externally decided (The run's model cannot be reached: its process cannot be started, its connection is refused, the server behind the gateway has not loaded the model, or the gateway answers HTTP 502, 503, 504 or 529 (overloaded)), updates `cortex.instance.Source`, error `cortex.instance.ModelUnavailable`; `ran` otherwise, updates `cortex.instance.Source`, emits `cortex.instance.SourceRan`; `no-such-source` for an identity no record carries, error `cortex.instance.SourceNotFound`.
     pub trait RunSourceBehavior {
         /// Decides and enacts exactly one declared outcome of `cortex.instance.RunSource`.
         ///

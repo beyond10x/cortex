@@ -414,22 +414,31 @@ impl SeenState {
     /// for a change record whose text holds links, its hash without them
     /// ([`SeenState::unlinked`]).
     pub fn record(&mut self, doc: &Document, now_ms: i64) {
+        let seen = self.entry(doc, now_ms);
+        self.put(&doc.key, seen);
+    }
+
+    /// What [`SeenState::record`] would remember of `doc` applied at `now_ms`, without
+    /// remembering it: a kept extraction (`cortex run --extract-only`) carries it to the apply.
+    pub fn entry(&self, doc: &Document, now_ms: i64) -> Seen {
         let hash = doc_hash(doc);
         let unlinked_hash = self
             .unlinked
             .get(&doc.key)
             .filter(|unlinked| **unlinked != hash)
             .cloned();
-        self.refused.remove(&doc.key);
-        self.documents.insert(
-            doc.key.clone(),
-            Seen {
-                hash: Some(hash),
-                applied_at: now_ms,
-                unlinked_hash,
-                fields_hash: self.fields.get(&doc.key).cloned(),
-            },
-        );
+        Seen {
+            hash: Some(hash),
+            applied_at: now_ms,
+            unlinked_hash,
+            fields_hash: self.fields.get(&doc.key).cloned(),
+        }
+    }
+
+    /// Remembers `seen` for `key`, as [`SeenState::record`] does for a document it applied.
+    pub fn put(&mut self, key: &str, seen: Seen) {
+        self.refused.remove(key);
+        self.documents.insert(key.to_string(), seen);
     }
 
     /// How many documents of `backlog` this state does not hold with the text and fields the run
@@ -485,7 +494,7 @@ impl SeenState {
 /// What a windowed run wanted of its fetch, for the window it leaves ([`SeenState::pending_after`]).
 /// Kept with the run's report, so a run that failed, or was undone, leaves its window by the
 /// same rule.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Backlog {
     /// Whether the fetch read every record of the window: no page or child call left unread.
     pub complete: bool,
@@ -500,7 +509,7 @@ pub struct Backlog {
 /// A document a windowed run wanted: its key, its hash ([`doc_hash`]), its record time
 /// ([`crate::evidence::document_time_ms`]), `None` when that cannot be read, and its fields
 /// ([`SeenState::fields`]), `None` when it has none ([`SeenState::wanted`]).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Wanted {
     pub key: String,
     pub hash: String,

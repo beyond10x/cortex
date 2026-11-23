@@ -1,7 +1,7 @@
 {
   "format": "ess-diff-acknowledgements/1",
   "before": "b77e573a24f45c33d239857ef5217a99252c69722f75361972dcf01ec51cdf99",
-  "after": "c1cc8b9b9466992541f3b9ee58e192fe0acf3efdcfa61eb84d496d57da5c6dc8",
+  "after": "4d696c5e1aca27b4d9e6d3faaf3bc2b55b9215801b5aee7ac47b47e28bc8e13f",
   "acknowledged": [
     "type/cortex.instance.RedactionPolicy/field-added/keep_store_types",
     "entity/cortex.instance.SeenDocument/field-added/fields_hash",
@@ -42,6 +42,12 @@
     "error/cortex.ask.ReaderFailed/field-added/output_tokens",
     "error/cortex.ask.ReaderFailed/field-added/steps",
     "command/cortex.instance.MeasureQuality/outcome-response-payload-changed/measured",
-    "event/cortex.instance.QualityMeasured/field-added/unjudged"
+    "event/cortex.instance.QualityMeasured/field-added/unjudged",
+    "command/cortex.instance.RunSource/input-added/extract_only",
+    "command/cortex.instance.RunSource/outcome-added/extract-only-failed",
+    "command/cortex.instance.RunSource/outcome-added/extracted",
+    "component/cortex/accepts-added/cortex.instance.ApplyExtraction",
+    "component/cortex/cli-changed",
+    "component/cortex/publishes-added/cortex.instance.ExtractionApplied"
   ]
 }

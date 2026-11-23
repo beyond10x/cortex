@@ -140,7 +140,7 @@ enum Command {
         /// `<instance>/<source>`.
         source_id: String,
         /// On a failed run, record the failure (`cortex.instance.RecordFailure`), as the timers do.
-        #[arg(long, conflicts_with = "fetch_only")]
+        #[arg(long, conflicts_with_all = ["fetch_only", "extract_only"])]
         record_failure: bool,
         /// Fetch the source and count what a run would extract, with no model call and no write.
         #[arg(long)]
@@ -153,6 +153,11 @@ enum Command {
         /// only; each document is keyed by its path relative to the directory.
         #[arg(long, value_name = "DIR")]
         path: Option<PathBuf>,
+        /// Fetch and extract as a run does, and keep each batch's extraction in the run directory
+        /// unapplied: nothing is written to the store or the seen documents. `cortex apply` applies
+        /// it.
+        #[arg(long, conflicts_with = "fetch_only")]
+        extract_only: bool,
     },
     /// Put an instance's store back to a snapshot a run took before it applied anything
     /// (`cortex.instance.RestoreSnapshot`).
@@ -160,6 +165,13 @@ enum Command {
         name: String,
         /// A file name under `<instance>/snapshots/`, without `.sqlite`.
         snapshot: String,
+    },
+    /// Apply, once, the extraction a `run --extract-only` kept in the run directory `run`
+    /// (`cortex.instance.ApplyExtraction`).
+    Apply {
+        name: String,
+        /// The run directory under `<instance>/runs/` that `run --extract-only` named.
+        run: String,
     },
     /// Measure how often the instance's facts are supported by the evidence they cite: draw a
     /// sample, have the instance's model judge it in batches of 20 and write the pass rate with
@@ -457,6 +469,7 @@ fn main() -> ExitCode {
                 shared: shared.clone(),
                 runner: None,
                 counter: None,
+                keeper: None,
             }));
             let ctx = Ctx {
                 home: &home,
@@ -595,6 +608,7 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             fetch_only,
             no_wait,
             path,
+            extract_only,
         } => run_source(
             app,
             ctx,
@@ -603,7 +617,9 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             fetch_only,
             no_wait,
             path,
+            extract_only,
         ),
+        Command::Apply { name, run } => apply_extraction(app, ctx, &name, &run),
         Command::Source { command } => match command {
             SourceCommand::Add {
                 instance_name,
@@ -2268,6 +2284,148 @@ fn restore(app: &mut App, ctx: &Ctx, name: &str, snapshot: &str) -> ExitCode {
     print("restore", &done)
 }
 
+/// `cortex apply <name> <run>`: applies the extraction `run --extract-only` kept in `run`, once
+/// ([`run::apply_kept`]), then answers through the generated behaviour of
+/// `cortex.instance.ApplyExtraction`, as `restore` does.
+fn apply_extraction(app: &mut App, ctx: &Ctx, name: &str, run_name: &str) -> ExitCode {
+    const CMD: &str = "cortex.instance.ApplyExtraction";
+    let mut applied = None;
+    // An unknown name applies nothing; the generated behaviour answers `no-such-instance`.
+    let known = ctx.shared.borrow().registry.instances.contains_key(name);
+    if known {
+        // An apply sent SIGTERM stops before its next batch and answers `terminated`.
+        if let Err(e) = cortex_cli::terminate::install() {
+            return fail(e);
+        }
+        let layout = Layout::new(ctx.home.instance_dir(name));
+        let result = run::apply_kept(&layout, run_name);
+        let mut shared = ctx.shared.borrow_mut();
+        let mut decide = |outcome: &'static str, reason: Option<String>| {
+            shared.external.insert((CMD, outcome), true);
+            shared.strings.extend(reason);
+        };
+        match result {
+            Ok(report) => applied = Some(report),
+            Err(run::ApplyError::Refused(run::KeptRefusal::NotFound)) => {
+                decide("no-such-run", None)
+            }
+            Err(run::ApplyError::Refused(run::KeptRefusal::Applied)) => {
+                decide("already-applied", None)
+            }
+            Err(run::ApplyError::Refused(run::KeptRefusal::Stale(reason))) => {
+                decide("extraction-stale", Some(reason))
+            }
+            Err(run::ApplyError::Failed(run::Failure::StoreOutcomeUnknown(reason))) => {
+                decide("store-outcome-unknown", Some(reason))
+            }
+            Err(run::ApplyError::Failed(run::Failure::Terminated(reason))) => {
+                decide("terminated", Some(reason))
+            }
+            Err(run::ApplyError::Failed(failure)) => {
+                decide("apply-refused", Some(failure.reason().to_string()))
+            }
+        }
+        if let Some(report) = &applied {
+            shared.integers.extend([
+                report.documents_applied,
+                i64::try_from(report.documents_left).unwrap_or(i64::MAX),
+            ]);
+        }
+    }
+    let (done, status) = match app.apply_extraction(m::ApplyExtraction {
+        name: m::InstanceName(name.to_string()),
+        run: run_name.to_string(),
+    }) {
+        Err(e) => return fail(e),
+        Ok(m::ApplyExtractionOutcome::Applied { extraction_applied }) => {
+            let mut detail = json!({
+                "name": extraction_applied.name.0,
+                "run": extraction_applied.run,
+                "documents_applied": extraction_applied.documents_applied,
+                "documents_left": extraction_applied.documents_left,
+            });
+            if let Some(report) = &applied {
+                detail["stopped"] = json!(report.stopped);
+                detail["parts_rejected"] = json!(report.parts_rejected);
+                detail["facts_reapplied"] = json!(report.facts_reapplied);
+                detail["facts_history"] = json!(report.facts_history);
+                // Present only when EKR rejected a part: an apply that had none reports as before.
+                if !report.rejected.is_empty() {
+                    detail["rejected"] = json!(report
+                        .rejected
+                        .iter()
+                        .map(run::Rejected::json)
+                        .collect::<Vec<_>>());
+                }
+            }
+            let done = Done {
+                outcome: "applied",
+                ok: true,
+                detail,
+            };
+            (done, 0)
+        }
+        Ok(m::ApplyExtractionOutcome::NoSuchRun { error }) => (
+            Done {
+                outcome: "no-such-run",
+                ok: false,
+                detail: json!({"run": error.run}),
+            },
+            1,
+        ),
+        Ok(m::ApplyExtractionOutcome::AlreadyApplied { error }) => (
+            Done {
+                outcome: "already-applied",
+                ok: false,
+                detail: json!({"run": error.run}),
+            },
+            1,
+        ),
+        Ok(m::ApplyExtractionOutcome::ExtractionStale { error }) => (
+            Done {
+                outcome: "extraction-stale",
+                ok: false,
+                detail: json!({"run": error.run, "reason": error.reason}),
+            },
+            1,
+        ),
+        Ok(m::ApplyExtractionOutcome::ApplyRefused { error }) => (
+            Done {
+                outcome: "apply-refused",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            1,
+        ),
+        Ok(m::ApplyExtractionOutcome::StoreOutcomeUnknown { error }) => (
+            Done {
+                outcome: "store-outcome-unknown",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            EXIT_STORE_OUTCOME_UNKNOWN,
+        ),
+        Ok(m::ApplyExtractionOutcome::Terminated { error }) => (
+            Done {
+                outcome: "terminated",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            EXIT_TERMINATED,
+        ),
+        Ok(m::ApplyExtractionOutcome::NoSuchInstance { error }) => (
+            Done {
+                outcome: "no-such-instance",
+                ok: false,
+                detail: json!({"name": error.name.0}),
+            },
+            1,
+        ),
+    };
+    print("apply", &done);
+    ExitCode::from(status)
+}
+
 fn quality(app: &mut App, ctx: &Ctx, name: &str, sample: i64) -> ExitCode {
     const CMD: &str = "cortex.instance.MeasureQuality";
     // An unknown name measures nothing; the generated behaviour answers `no-such-instance`.
@@ -2993,7 +3151,9 @@ fn unavailable_cause(cause: m::ModelUnavailableCause) -> &'static str {
 /// The exit status of each `run` outcome, which an external scheduler reads instead of the line.
 fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
     match outcome {
-        m::RunSourceOutcome::Ran { .. } | m::RunSourceOutcome::Fetched { .. } => 0,
+        m::RunSourceOutcome::Ran { .. }
+        | m::RunSourceOutcome::Fetched { .. }
+        | m::RunSourceOutcome::Extracted { .. } => 0,
         m::RunSourceOutcome::Disabled { .. } => EXIT_DISABLED,
         m::RunSourceOutcome::StoreOutcomeUnknown { .. } => EXIT_STORE_OUTCOME_UNKNOWN,
         m::RunSourceOutcome::ConnectionUnavailable { .. } => EXIT_CONNECTION_UNAVAILABLE,
@@ -3002,6 +3162,7 @@ fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
         m::RunSourceOutcome::ModelUnavailable { .. } => EXIT_MODEL_UNAVAILABLE,
         m::RunSourceOutcome::Busy { .. } => EXIT_BUSY,
         m::RunSourceOutcome::FetchOnlyFailed { .. }
+        | m::RunSourceOutcome::ExtractOnlyFailed { .. }
         | m::RunSourceOutcome::FetchFailed { .. }
         | m::RunSourceOutcome::ExtractionFailed { .. }
         | m::RunSourceOutcome::ApplyRefused { .. }
@@ -3010,6 +3171,7 @@ fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_source(
     app: &mut App,
     ctx: &Ctx,
@@ -3018,6 +3180,7 @@ fn run_source(
     fetch_only: bool,
     no_wait: bool,
     path: Option<PathBuf>,
+    extract_only: bool,
 ) -> ExitCode {
     // `--path` is read against the caller's working directory, not the spec's.
     let path = match path.map(|p| std::path::absolute(&p).map(PathBuf::into_os_string)) {
@@ -3052,6 +3215,7 @@ fn run_source(
         fetch_only: fetch_only.then_some(true),
         no_wait: no_wait.then_some(true),
         path,
+        extract_only: extract_only.then_some(true),
     }) {
         Ok(o) => o,
         Err(e) => return fail(e),
@@ -3187,6 +3351,57 @@ fn run_source(
             },
             None,
         ),
+        m::RunSourceOutcome::Extracted {
+            source_extracted: e,
+        } => {
+            let report = ctx.shared.borrow_mut().last_run.take().unwrap_or_default();
+            let mut detail = json!({
+                "source_id": e.source_id.0,
+                "run": e.run,
+                "documents_new": e.documents_new,
+                "documents_kept": e.documents_kept,
+                "batches": e.batches,
+                "stopped": e.stopped,
+                "model_calls": e.model_calls,
+                "cost_usd": e.cost_usd.map(|c| c.0),
+                "facts_refused": report.facts_refused,
+                "masked": report.masked,
+            });
+            // Present only when they hold something, as on a `ran` line.
+            if !report.cost_counted {
+                detail["cost_counted"] = json!(false);
+            }
+            if report.truncated > 0 {
+                detail["truncated"] = json!(report.truncated);
+            }
+            if !report.skipped.is_empty() {
+                detail["skipped"] = json!(report.skipped);
+            }
+            if !report.too_large.is_empty() {
+                detail["too_large"] = json!(report.too_large);
+            }
+            if let Some(redacted) = &report.redacted {
+                detail["redacted"] = json!(redacted);
+                detail["unrestored"] = json!(report.unrestored);
+            }
+            (
+                Done {
+                    outcome: "extracted",
+                    ok: true,
+                    detail,
+                },
+                None,
+            )
+        }
+        // Nothing was kept or recorded; the outcome a run would have taken is named.
+        m::RunSourceOutcome::ExtractOnlyFailed { error } => (
+            Done {
+                outcome: "extract-only-failed",
+                ok: false,
+                detail: json!({"failure": error.outcome, "reason": error.reason}),
+            },
+            None,
+        ),
         m::RunSourceOutcome::FetchFailed { error } => (
             Done {
                 outcome: "fetch-failed",
@@ -3311,9 +3526,9 @@ fn run_source(
         (true, Some(reason)) => record_failure(app, ctx, source_id, reason).1,
         _ => false,
     };
-    // A fetch-only run reports nothing: no status file, no metric, no hook. Nor does a busy one,
-    // which holds no lock to write them under, or one whose `--path` was refused.
-    if !fetch_only && !busy && !refused {
+    // A fetch-only or extract-only run reports nothing: no status file, no metric, no hook. Nor
+    // does a busy one, which holds no lock to write them under, or one whose `--path` was refused.
+    if !fetch_only && !extract_only && !busy && !refused {
         report_run(ctx, source_id, disabled, figures);
     }
     ExitCode::from(status)

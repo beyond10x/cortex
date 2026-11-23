@@ -214,7 +214,7 @@ this repository and published by the organisation's reusable workflow.
 - `task check` is the gate (see [Commands](#commands)); `STATUS.md` records its last result.
 - Format with `cargo fmt -p cortex-cli -p cortex-docs`. `cargo fmt --all` also rewrites the
   generated crates, which are path dependencies, and `task drift` then fails.
-- `tests/it/conformance.rs` runs every scenario of `spec/suite.json` (137) in process; `tests/it/e2e.rs`
+- `tests/it/conformance.rs` runs every scenario of `spec/suite.json` (148) in process; `tests/it/e2e.rs`
   drives the binary end to end; the clap ⇔ spec test in `src/main.rs` holds the command line to
   the commands, inputs and views `spec/` puts on it.
 - **One integration-test binary.** Every integration test is a module of `tests/main.rs`, in
