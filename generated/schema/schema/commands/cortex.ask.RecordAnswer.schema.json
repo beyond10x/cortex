@@ -74,8 +74,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
-    "contract_digest": "slice-sha256/2:fda9fb4d8eeb4d7a37fbf39a1961e634eed56b7a80cd814df66f69943a9edfd3",
+    "source_digest": "bdfa10d1a7d3b76f5379948f7e634a20827596fe39d019c9b285ed0bedc0a1da",
+    "contract_digest": "slice-sha256/2:ee957389f34993be6410e8e565e9edacd53ec3de6d82aa18b55940c2d8127726",
     "regenerate": "ess generate"
   },
   "$defs": {
@@ -95,7 +95,8 @@
         "failed",
         "limited",
         "client-closed",
-        "cut-off"
+        "cut-off",
+        "refused"
       ]
     },
     "cortex.ask.AskTool": {

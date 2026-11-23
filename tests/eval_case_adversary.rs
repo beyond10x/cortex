@@ -56,6 +56,11 @@ fn failed_answer(keeper: &Keeper, answer_id: &str, question: &str) -> String {
     let failed = ma::AskOutcome::ModelFailed {
         error: ma::ModelFailed {
             reason: "down".into(),
+            steps: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            cached_tokens: 0,
+            context_tokens: 0,
         },
     };
     keeper.record(asked, &failed).expect("recorded");

@@ -199,6 +199,7 @@ fn empty_done() -> ma::AskDone {
         answer: String::new(),
         nodes: vec![],
         evidence: vec![],
+        unsupported: vec![],
         input_tokens: 0,
         output_tokens: 0,
         cached_tokens: 0,

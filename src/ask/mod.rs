@@ -437,6 +437,7 @@ pub fn final_event(outcome: &ma::AskOutcome) -> ma::AskEvent {
             ),
             None,
         ),
+        ma::AskOutcome::Refused { error: e } => error("refused", e.refusal.clone(), None),
         ma::AskOutcome::ClientClosed { .. } => error(
             "client-closed",
             "the reader closed the stream before the answer".into(),
@@ -467,23 +468,57 @@ pub fn detail(outcome: &ma::AskOutcome) -> Option<&str> {
     }
 }
 
-fn limit(limit: &str) -> ma::AskOutcome {
+/// The answer reached its step or time limit, with what its model calls spent.
+fn limit(limit: &str, spent: &Spent) -> ma::AskOutcome {
     ma::AskOutcome::LimitReached {
         error: ma::LimitReached {
             limit: limit.into(),
+            steps: spent.steps,
+            input_tokens: spent.usage.input,
+            output_tokens: spent.usage.output,
+            cached_tokens: spent.usage.cached,
+            context_tokens: spent.context,
         },
     }
 }
 
-fn reader_failed(reason: String) -> ma::AskOutcome {
+fn reader_failed(reason: String, spent: &Spent) -> ma::AskOutcome {
     ma::AskOutcome::ReaderFailed {
-        error: ma::ReaderFailed { reason },
+        error: ma::ReaderFailed {
+            reason,
+            steps: spent.steps,
+            input_tokens: spent.usage.input,
+            output_tokens: spent.usage.output,
+            cached_tokens: spent.usage.cached,
+            context_tokens: spent.context,
+        },
     }
 }
 
-fn model_failed(reason: String) -> ma::AskOutcome {
+fn model_failed(reason: String, spent: &Spent) -> ma::AskOutcome {
     ma::AskOutcome::ModelFailed {
-        error: ma::ModelFailed { reason },
+        error: ma::ModelFailed {
+            reason,
+            steps: spent.steps,
+            input_tokens: spent.usage.input,
+            output_tokens: spent.usage.output,
+            cached_tokens: spent.usage.cached,
+            context_tokens: spent.context,
+        },
+    }
+}
+
+/// The model declined to answer with `refusal`: no answer, with what it spent.
+fn declined(refusal: String, spent: &Spent) -> ma::AskOutcome {
+    ma::AskOutcome::Refused {
+        error: ma::Refused {
+            refusal,
+            steps: spent.steps,
+            input_tokens: spent.usage.input,
+            output_tokens: spent.usage.output,
+            cached_tokens: spent.usage.cached,
+            context_tokens: spent.context,
+        },
     }
 }
 
@@ -577,8 +612,8 @@ pub fn answer(
     }
     let mut reader = match mcp::Reader::start(&settings.reader, deadline) {
         Ok(r) => r,
-        Err(CallError::Timeout) => return limit("time-limit"),
-        Err(CallError::Failed(reason)) => return reader_failed(reason),
+        Err(CallError::Timeout) => return limit("time-limit", &spent),
+        Err(CallError::Failed(reason)) => return reader_failed(reason, &spent),
     };
     let tools: Vec<Value> = match reader.tools(deadline) {
         Ok(tools) => tools
@@ -595,20 +630,23 @@ pub fn answer(
                 })
             })
             .collect(),
-        Err(CallError::Timeout) => return limit("time-limit"),
-        Err(CallError::Failed(reason)) => return reader_failed(reason),
+        Err(CallError::Timeout) => return limit("time-limit", &spent),
+        Err(CallError::Failed(reason)) => return reader_failed(reason, &spent),
     };
     let gateway = match model::Gateway::new(&settings.model) {
         Ok(g) => g,
-        Err(reason) => return model_failed(reason),
+        Err(reason) => return model_failed(reason, &spent),
     };
     let mut messages = vec![
         json!({"role": "system", "content": settings.system}),
         json!({"role": "user", "content": question}),
     ];
+    // What the reader returned in this answer, as the model was shown it: a citation counts only
+    // when its id is in one of these (`cite`). A failed or withheld result returned nothing.
+    let mut returned: Vec<String> = Vec::new();
     for step in 1..=limits.max_steps {
         if Instant::now() >= deadline {
-            return limit("time-limit");
+            return limit("time-limit", &spent);
         }
         if !stream.emit(status(step, "asking the model")) {
             return client_closed(&spent);
@@ -626,8 +664,8 @@ pub fn answer(
         }
         let reply = match reply {
             Ok(r) => r,
-            Err(CallError::Timeout) => return limit("time-limit"),
-            Err(CallError::Failed(reason)) => return model_failed(reason),
+            Err(CallError::Timeout) => return limit("time-limit", &spent),
+            Err(CallError::Failed(reason)) => return model_failed(reason, &spent),
         };
         spent.add(&reply.usage);
         let (usage, context) = (spent.usage, spent.context);
@@ -636,9 +674,14 @@ pub fn answer(
         if let Some(finish_reason) = reply.cut_off() {
             return cut_off(finish_reason, &spent);
         }
+        // A refusal is no answer, whatever else the reply holds: none of its text is streamed and
+        // none of its tool calls is made.
+        if let Some(refusal) = reply.refusal.as_deref() {
+            return declined(restored(batch.as_ref(), refusal), &spent);
+        }
         if reply.tool_calls.is_empty() {
             let text = reply.content.unwrap_or_default();
-            let cited = cite::cite(&text, settings.ask.link_templates.as_ref());
+            let cited = cite::cite(&text, settings.ask.link_templates.as_ref(), &returned);
             // Each delta is restored as it is sent, holding back a tail that may be a split
             // placeholder; the answer is what the deltas carried.
             let mut restoring = batch.as_ref().map(|b| b.restoring());
@@ -671,6 +714,7 @@ pub fn answer(
                         answer,
                         nodes: cited.nodes,
                         evidence: cited.evidence,
+                        unsupported: cited.unsupported,
                         input_tokens: usage.input,
                         output_tokens: usage.output,
                         cached_tokens: usage.cached,
@@ -691,7 +735,7 @@ pub fn answer(
             }
         }
         if step == limits.max_steps {
-            return limit("step-limit");
+            return limit("step-limit", &spent);
         }
         messages.push(reply.message.clone());
         // At most `max_tool_calls` calls of a step are made. Every call the model asked for still
@@ -718,8 +762,8 @@ pub fn answer(
             let (text, failed) = match serde_json::from_str::<Value>(&call.arguments) {
                 Ok(arguments) => match reader.call(&call.name, arguments, deadline) {
                     Ok(result) => compact(&result),
-                    Err(CallError::Timeout) => return limit("time-limit"),
-                    Err(CallError::Failed(reason)) => return reader_failed(reason),
+                    Err(CallError::Timeout) => return limit("time-limit", &spent),
+                    Err(CallError::Failed(reason)) => return reader_failed(reason, &spent),
                 },
                 Err(e) => (format!("the arguments are not JSON: {e}"), true),
             };
@@ -735,6 +779,9 @@ pub fn answer(
             })) {
                 return client_closed(&spent);
             }
+            if !failed && !withheld {
+                returned.push(shown.clone());
+            }
             messages.push(json!({"role": "tool", "tool_call_id": call.id, "content": shown}));
         }
         for call in over {
@@ -748,7 +795,7 @@ pub fn answer(
             }));
         }
     }
-    limit("step-limit")
+    limit("step-limit", &spent)
 }
 
 #[cfg(test)]

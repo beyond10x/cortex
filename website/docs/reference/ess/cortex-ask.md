@@ -18,7 +18,7 @@ The answer service of an instance: cortex ask serve answers a question over the 
 
 ### `AnswerOutcome`
 
-`cortex.ask.AnswerOutcome` is one of `answered`, `failed`, `limited`, `client-closed` and `cut-off`.
+`cortex.ask.AnswerOutcome` is one of `answered`, `failed`, `limited`, `client-closed`, `cut-off` and `refused`.
 
 ### `AskDelta`
 
@@ -34,12 +34,13 @@ The answer service of an instance: cortex ask serve answers a question over the 
 
 ### `AskDone`
 
-`cortex.ask.AskDone` is a record of 10 fields:
+`cortex.ask.AskDone` is a record of 11 fields:
 
 - `answer_id` — `String`
 - `answer` — `String`
 - `nodes` — `List<String>`
 - `evidence` — `List<String>`
+- `unsupported` — `List<String>`
 - `input_tokens` — `Integer`
 - `output_tokens` — `Integer`
 - `cached_tokens` — `Integer`
@@ -363,7 +364,7 @@ It takes:
 - `question` — `String`
 - `identity` — `String`
 
-It has nine outcomes.
+It has 10 outcomes.
 
 **`unidentified`** — It answers 401; no model was asked. Decided outside the input: The request carries no identity in the header the spec names. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.Unidentified`, carrying `header`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
@@ -371,11 +372,13 @@ It has nine outcomes.
 
 **`busy`** — It answers 429 with an `error` event whose `reason` is `busy`; no model was asked. Decided outside the input: The service is working on its most answers at once. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.Busy`, carrying `max_in_flight`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`limit-reached`** — The stream ends with an `error` event naming the limit, and no `done`. Decided outside the input: The model still asks for a tool at the step limit, or the time limit passes. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.LimitReached`, carrying `limit`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`limit-reached`** — The stream ends with an `error` event naming the limit, and no `done`. Decided outside the input: The model still asks for a tool at the step limit, or the time limit passes. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.LimitReached`, carrying `limit`, `steps`, `input_tokens`, `output_tokens`, `cached_tokens` and `context_tokens`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`model-failed`** — The stream ends with an `error` event, and no `done`. Decided outside the input: The model gateway cannot be reached or answers an error. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.ModelFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`model-failed`** — The stream ends with an `error` event, and no `done`. Decided outside the input: The model gateway cannot be reached or answers an error. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.ModelFailed`, carrying `reason`, `steps`, `input_tokens`, `output_tokens`, `cached_tokens` and `context_tokens`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
-**`reader-failed`** — The stream ends with an `error` event, and no `done`. Decided outside the input: The EKR MCP reader cannot be started or stops answering. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.ReaderFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+**`reader-failed`** — The stream ends with an `error` event, and no `done`. Decided outside the input: The EKR MCP reader cannot be started or stops answering. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.ReaderFailed`, carrying `reason`, `steps`, `input_tokens`, `output_tokens`, `cached_tokens` and `context_tokens`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`refused`** — The stream ends with an `error` event whose `reason` is `refused` and whose `message` is the refusal, and no `done`. Decided outside the input: The model declines to answer, with a Chat Completions refusal. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.Refused`, carrying `refusal`, `steps`, `input_tokens`, `output_tokens`, `cached_tokens` and `context_tokens`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`cut-off`** — The stream ends with an `error` event whose `reason` is `cut-off`, and no `done`. Decided outside the input: The model's reply ends because of its token limit or a content filter. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.ask.CutOff`, carrying `finish_reason`, `steps`, `input_tokens`, `output_tokens`, `cached_tokens` and `context_tokens`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
@@ -658,21 +661,31 @@ No outcome in this system reports it: it is declared and unreachable.
 
 ### `LimitReached`
 
-The answer reached the spec's step or time limit before the model answered.
+The answer reached the spec's step or time limit before the model answered. `steps` and the token counts are those of the model calls made, as for `cortex.ask.ClientClosed`; 0 when the limit came before the first.
 
 It carries:
 
 - `limit` — `String`
+- `steps` — `Integer`
+- `input_tokens` — `Integer`
+- `output_tokens` — `Integer`
+- `cached_tokens` — `Integer`
+- `context_tokens` — `Integer`
 
 Reported by `cortex.ask.Ask` on its `limit-reached` outcome.
 
 ### `ModelFailed`
 
-The model gateway could not be reached or answered an error or no message.
+The model gateway could not be reached or answered an error or no message. `steps` and the token counts are those of the model calls that answered before it, as for `cortex.ask.ClientClosed`.
 
 It carries:
 
 - `reason` — `String`
+- `steps` — `Integer`
+- `input_tokens` — `Integer`
+- `output_tokens` — `Integer`
+- `cached_tokens` — `Integer`
+- `context_tokens` — `Integer`
 
 Reported by `cortex.ask.Ask` on its `model-failed` outcome.
 
@@ -689,13 +702,33 @@ Reported by `cortex.ask.Ask` on its `rate-limited` outcome.
 
 ### `ReaderFailed`
 
-The EKR MCP reader could not be started or stopped answering.
+The EKR MCP reader could not be started or stopped answering. `steps` and the token counts are those of the model calls made before it, as for `cortex.ask.ClientClosed`.
 
 It carries:
 
 - `reason` — `String`
+- `steps` — `Integer`
+- `input_tokens` — `Integer`
+- `output_tokens` — `Integer`
+- `cached_tokens` — `Integer`
+- `context_tokens` — `Integer`
 
 Reported by `cortex.ask.Ask` on its `reader-failed` outcome.
+
+### `Refused`
+
+The model declined to answer: the gateway's chat completion carried a non-empty `message.refusal` (the Chat Completions refusal, `AssistantRefusal` in llm-chat). Its text is no answer: no `delta` is streamed and no tool call it asked for is made. `refusal` is that text, restored under a `redaction` policy; `steps` and the token counts are those of the model calls made, this one included, as for `cortex.ask.ClientClosed`.
+
+It carries:
+
+- `refusal` — `String`
+- `steps` — `Integer`
+- `input_tokens` — `Integer`
+- `output_tokens` — `Integer`
+- `cached_tokens` — `Integer`
+- `context_tokens` — `Integer`
+
+Reported by `cortex.ask.Ask` on its `refused` outcome.
 
 ### `ReviewExists`
 
@@ -776,4 +809,4 @@ It may invoke [`OpenReview`](#openreview), [`PurgeExpired`](#purgeexpired) and [
 
 ---
 
-Generated from cortex v1 · model digest `dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7` · contract digest `slice-sha256/2:93636ffddc8e11296bb401275c89f8ae5f64fd3f353ca722d9ca71b7fa981aa7`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `bdfa10d1a7d3b76f5379948f7e634a20827596fe39d019c9b285ed0bedc0a1da` · contract digest `slice-sha256/2:826573dd99c34bc97280cd7509fcd5515abf74f95fc41e83e2ed029315d288ec`. Do not edit this file; change the specification and regenerate it with `task generate`.

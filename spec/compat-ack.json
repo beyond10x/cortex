@@ -1,6 +1,28 @@
 {
   "format": "ess-diff-acknowledgements/1",
   "before": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
-  "after": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
-  "acknowledged": []
+  "after": "bdfa10d1a7d3b76f5379948f7e634a20827596fe39d019c9b285ed0bedc0a1da",
+  "acknowledged": [
+    "type/cortex.ask.AnswerOutcome/variant-added/refused",
+    "type/cortex.ask.AskDone/field-added/unsupported",
+    "command/cortex.ask.Ask/outcome-added/refused",
+    "command/cortex.ask.Ask/outcome-error-payload-changed/limit-reached",
+    "command/cortex.ask.Ask/outcome-error-payload-changed/model-failed",
+    "command/cortex.ask.Ask/outcome-error-payload-changed/reader-failed",
+    "error/cortex.ask.LimitReached/field-added/cached_tokens",
+    "error/cortex.ask.LimitReached/field-added/context_tokens",
+    "error/cortex.ask.LimitReached/field-added/input_tokens",
+    "error/cortex.ask.LimitReached/field-added/output_tokens",
+    "error/cortex.ask.LimitReached/field-added/steps",
+    "error/cortex.ask.ModelFailed/field-added/cached_tokens",
+    "error/cortex.ask.ModelFailed/field-added/context_tokens",
+    "error/cortex.ask.ModelFailed/field-added/input_tokens",
+    "error/cortex.ask.ModelFailed/field-added/output_tokens",
+    "error/cortex.ask.ModelFailed/field-added/steps",
+    "error/cortex.ask.ReaderFailed/field-added/cached_tokens",
+    "error/cortex.ask.ReaderFailed/field-added/context_tokens",
+    "error/cortex.ask.ReaderFailed/field-added/input_tokens",
+    "error/cortex.ask.ReaderFailed/field-added/output_tokens",
+    "error/cortex.ask.ReaderFailed/field-added/steps"
+  ]
 }

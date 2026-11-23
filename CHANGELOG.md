@@ -27,7 +27,7 @@ feature set after a real instance ran for 7 days with nobody at the keyboard.
   stage it abandons on failure; two failed runs in a row disable a source, and a daily ceiling
   holds model spend. A metric file, a failure hook and `cortex sources` show how each run ended.
   `cortex quality` judges a sample of facts; `cortex schema` proposes schema changes.
-- **Project.** Specified in ESS with 124 conformance scenarios; CI runs `task check` on every pull
+- **Project.** Specified in ESS with 125 conformance scenarios; CI runs `task check` on every pull
   request; each release carries an `x86_64-unknown-linux-gnu` binary checked against `SHA256SUMS`.
 
 Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
@@ -35,6 +35,28 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - `model.backend: Codex` is accepted and fails every run; extraction uses `claude -p` only.
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
+
+### Fixed: answers and evaluations (review of 0.7.2, findings 19 to 24)
+
+- `cortex eval run --runner ask` asks the instance's running `cortex ask serve` at the address its
+  spec's `ask.listen` names, instead of answering `runner-failed` "no service".
+- A Chat Completions refusal (no content, a non-empty `message.refusal`) ends the answer with an
+  `error` event whose reason is `refused` and whose message is the refusal text, streams no text,
+  and is recorded with the outcome `refused`, the text as its `answer` and a `failed` review item.
+  It was a `done` event with an empty answer, recorded as `answered`. Breaking: a new
+  `cortex.ask.AnswerOutcome` variant and `cortex.ask.Ask` outcome.
+- A citation marker naming an id no tool result of the answer held is written
+  `[unsupported node:<id>]`, never linked, and listed in the new `done.unsupported`, not in
+  `done.nodes` or `done.evidence`. Breaking: `cortex.ask.AskDone` has the field `unsupported`.
+- `replay` keeps a recorded non-answer (a refused case) failed, whatever its text holds; each
+  `results.jsonl` line of a case with no answer names it in `outcome`, and its scores count every
+  expectation missed.
+- The quality judge is shown each fact's validity interval (`Valid: <from> to <to>`), so one fact
+  valid in January and in February is judged at its own time.
+- An answer ended by the step or time limit, a model failure or a reader failure after a model
+  call keeps the steps and tokens of the calls made, in its error and in its record; they were 0.
+  Breaking: `cortex.ask.LimitReached`, `ModelFailed` and `ReaderFailed` carry `steps` and the
+  token counts.
 
 ## 0.7.2 — 2026-10-30
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "EvalRunnerFailed payload",
-  "description": "The runner could not answer a case: the model call failed, timed out, answered no valid answer or found the budget or the instance's daily ceiling spent; no `cortex ask serve` answered; or the run `replay` names holds no recorded answer for a case. `results.jsonl` keeps the results of the cases answered before; no `summary.json` was written.",
+  "description": "The runner could not answer a case: the model call failed, timed out, answered no valid answer or found the budget or the instance's daily ceiling spent; no `cortex ask serve` answered at the address the spec's `ask.listen` names, the spec has no `ask` section, or the service answered `model-failed`, `reader-failed` or a refusal of the request itself (`unidentified`, `bad-request`, or `rate-limit` and `busy` still after its retries); or the run `replay` names holds no recorded answer for a case. `results.jsonl` keeps the results of the cases answered before; no `summary.json` was written.",
   "x-ess-name": "cortex.instance.EvalRunnerFailed",
   "x-ess-kind": "error-payload",
   "type": "object",
@@ -17,8 +17,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
-    "contract_digest": "slice-sha256/2:d8e0a7d446180fc5639bea49f539337de03095530d404618ce3102b109b97119",
+    "source_digest": "bdfa10d1a7d3b76f5379948f7e634a20827596fe39d019c9b285ed0bedc0a1da",
+    "contract_digest": "slice-sha256/2:7c73dd8669bc4ccd3fcb8babd65be0d05a42201f65a0a0184eee8652b9f8169e",
     "regenerate": "ess generate"
   }
 }

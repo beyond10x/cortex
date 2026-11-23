@@ -45,6 +45,11 @@ fn failed() -> ma::AskOutcome {
     ma::AskOutcome::ModelFailed {
         error: ma::ModelFailed {
             reason: "the gateway was down".into(),
+            steps: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            cached_tokens: 0,
+            context_tokens: 0,
         },
     }
 }

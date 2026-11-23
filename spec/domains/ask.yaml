@@ -154,11 +154,12 @@ types:
   # reader failed (`cortex.ask.ModelFailed`, `cortex.ask.ReaderFailed`); `client-closed` when the
   # reader closed the stream before its last event (`cortex.ask.ClientClosed`), which is no failure
   # of the model; `cut-off` when the model's reply ended because of its token limit or a content
-  # filter (`cortex.ask.CutOff`), which is no answer. A refusal before the answer starts (401, 429,
-  # 400) is no answer and leaves no record.
+  # filter (`cortex.ask.CutOff`), which is no answer; `refused` when the model declined to answer
+  # (`cortex.ask.Refused`), which is no answer either. A refusal before the answer starts (401,
+  # 429, 400) is no answer and leaves no record.
   - name: cortex.ask.AnswerOutcome
     kind: enum
-    variants: [answered, failed, limited, client-closed, cut-off]
+    variants: [answered, failed, limited, client-closed, cut-off, refused]
 
   # A reader's verdict on an answer.
   - name: cortex.ask.VoteValue
@@ -219,7 +220,12 @@ types:
 
   # The last event of an answer. `answer` is the answer with its citation markers turned into links
   # (`cortex.ask.LinkTemplates`); `nodes` and `evidence` the ids it cites, each once, in the order
-  # they first appear. The token counts add up, over every model call of the answer, what the
+  # they first appear. A citation is verified when its id occurs, as a whole word, in a tool result
+  # the model was shown in this answer; only a verified citation is linked and listed in `nodes` or
+  # `evidence`. A marker naming an id no tool result held is an unsupported reference: it is
+  # written `[unsupported node:<id>]` (or `evidence`), never linked, and listed once in
+  # `unsupported` as `node:<id>` or `evidence:<id>`, in the order it first appears. The token
+  # counts add up, over every model call of the answer, what the
   # gateway reported in its `usage`: `prompt_tokens`, `completion_tokens` and
   # `prompt_tokens_details.cached_tokens` (0 when not reported). `context_tokens` is the prompt
   # tokens of the last call, the size of the context the answer was made in; `steps` the model
@@ -236,6 +242,7 @@ types:
       - {name: answer, type: String}
       - {name: nodes, type: List<String>}
       - {name: evidence, type: List<String>}
+      - {name: unsupported, type: List<String>}
       - {name: input_tokens, type: Integer}
       - {name: output_tokens, type: Integer}
       - {name: cached_tokens, type: Integer}
@@ -244,9 +251,9 @@ types:
       - {name: unrestored, type: Integer}
 
   # The last event of an answer that has none. `reason` is one of `unidentified`, `rate-limit`,
-  # `busy`, `step-limit`, `time-limit`, `model-failed`, `reader-failed`, `cut-off`, `client-closed` and
-  # `bad-request`; `message` says more, for a person; `retry_after` is given with `rate-limit`
-  # only, in whole seconds. `client-closed` is the reason an answer is recorded with when its
+  # `busy`, `step-limit`, `time-limit`, `model-failed`, `reader-failed`, `cut-off`, `refused`,
+  # `client-closed` and `bad-request`; `message` says more, for a person, and for `refused` is the
+  # model's refusal text; `retry_after` is given with `rate-limit` only, in whole seconds. `client-closed` is the reason an answer is recorded with when its
   # reader left; nobody is left to read its event.
   - name: cortex.ask.AskError
     kind: struct
@@ -359,11 +366,14 @@ entities:
   # One answer the service gave or failed to give, kept in `ask.sqlite` in the instance directory,
   # or in the schema `ask.records` names (`cortex.ask.PostgresRecords`), a table of cortex's own,
   # never the store's, for `retention_days`. `identity` is the asker's;
-  # `answer` the answer as `done` carried it, absent unless `outcome` is `answered`; `reason` the
-  # `error` event's reason otherwise. `tool_calls` are the `tool` events of the answer, in order.
-  # The token counts and `steps` are those of the `done` event; for `client-closed` and `cut-off`
-  # they are those of the model calls made before the answer ended (`cortex.ask.ClientClosed`,
-  # `cortex.ask.CutOff`); otherwise 0. `latency_ms` the
+  # `answer` the answer as `done` carried it, and for `refused` the model's refusal text
+  # (`cortex.ask.Refused`), absent for every other outcome; `reason` the `error` event's reason
+  # unless `outcome` is `answered`. `tool_calls` are the `tool` events of the answer, in order.
+  # The token counts and `steps` are those of the `done` event; for every other outcome they are
+  # those of the model calls made before the answer ended, as its error carries them
+  # (`cortex.ask.LimitReached`, `cortex.ask.ModelFailed`, `cortex.ask.ReaderFailed`,
+  # `cortex.ask.ClientClosed`, `cortex.ask.CutOff`, `cortex.ask.Refused`), 0 when no model call
+  # was made. `latency_ms` the
   # milliseconds from the question to the last event; `at` when the question was asked.
   # `question` and `answer` are kept with every credential shape masked (`[masked:<shape>]`,
   # `crate::mask`), whatever the instance's `redaction` policy, as everywhere cortex writes text;
@@ -507,19 +517,57 @@ errors:
       - {name: max_in_flight, type: Integer}
 
   - name: cortex.ask.LimitReached
-    summary: The answer reached the spec's step or time limit before the model answered.
+    summary: >-
+      The answer reached the spec's step or time limit before the model answered. `steps` and the
+      token counts are those of the model calls made, as for `cortex.ask.ClientClosed`; 0 when the
+      limit came before the first.
     fields:
       - {name: limit, type: String}
+      - {name: steps, type: Integer}
+      - {name: input_tokens, type: Integer}
+      - {name: output_tokens, type: Integer}
+      - {name: cached_tokens, type: Integer}
+      - {name: context_tokens, type: Integer}
 
   - name: cortex.ask.ModelFailed
-    summary: The model gateway could not be reached or answered an error or no message.
+    summary: >-
+      The model gateway could not be reached or answered an error or no message. `steps` and the
+      token counts are those of the model calls that answered before it, as for
+      `cortex.ask.ClientClosed`.
     fields:
       - {name: reason, type: String}
+      - {name: steps, type: Integer}
+      - {name: input_tokens, type: Integer}
+      - {name: output_tokens, type: Integer}
+      - {name: cached_tokens, type: Integer}
+      - {name: context_tokens, type: Integer}
 
   - name: cortex.ask.ReaderFailed
-    summary: The EKR MCP reader could not be started or stopped answering.
+    summary: >-
+      The EKR MCP reader could not be started or stopped answering. `steps` and the token counts
+      are those of the model calls made before it, as for `cortex.ask.ClientClosed`.
     fields:
       - {name: reason, type: String}
+      - {name: steps, type: Integer}
+      - {name: input_tokens, type: Integer}
+      - {name: output_tokens, type: Integer}
+      - {name: cached_tokens, type: Integer}
+      - {name: context_tokens, type: Integer}
+
+  - name: cortex.ask.Refused
+    summary: >-
+      The model declined to answer: the gateway's chat completion carried a non-empty
+      `message.refusal` (the Chat Completions refusal, `AssistantRefusal` in llm-chat). Its text is
+      no answer: no `delta` is streamed and no tool call it asked for is made. `refusal` is that
+      text, restored under a `redaction` policy; `steps` and the token counts are those of the
+      model calls made, this one included, as for `cortex.ask.ClientClosed`.
+    fields:
+      - {name: refusal, type: String}
+      - {name: steps, type: Integer}
+      - {name: input_tokens, type: Integer}
+      - {name: output_tokens, type: Integer}
+      - {name: cached_tokens, type: Integer}
+      - {name: context_tokens, type: Integer}
 
   - name: cortex.ask.ClientClosed
     summary: >-
@@ -648,6 +696,11 @@ commands:
         payload:
           cortex.ask.LimitReached:
             limit: {generated: true}
+            steps: {generated: true}
+            input_tokens: {generated: true}
+            output_tokens: {generated: true}
+            cached_tokens: {generated: true}
+            context_tokens: {generated: true}
         summary: The stream ends with an `error` event naming the limit, and no `done`.
 
       - name: model-failed
@@ -656,6 +709,11 @@ commands:
         payload:
           cortex.ask.ModelFailed:
             reason: {generated: true}
+            steps: {generated: true}
+            input_tokens: {generated: true}
+            output_tokens: {generated: true}
+            cached_tokens: {generated: true}
+            context_tokens: {generated: true}
         summary: The stream ends with an `error` event, and no `done`.
 
       - name: reader-failed
@@ -664,7 +722,27 @@ commands:
         payload:
           cortex.ask.ReaderFailed:
             reason: {generated: true}
+            steps: {generated: true}
+            input_tokens: {generated: true}
+            output_tokens: {generated: true}
+            cached_tokens: {generated: true}
+            context_tokens: {generated: true}
         summary: The stream ends with an `error` event, and no `done`.
+
+      - name: refused
+        external: The model declines to answer, with a Chat Completions refusal
+        error: cortex.ask.Refused
+        payload:
+          cortex.ask.Refused:
+            refusal: {generated: true}
+            steps: {generated: true}
+            input_tokens: {generated: true}
+            output_tokens: {generated: true}
+            cached_tokens: {generated: true}
+            context_tokens: {generated: true}
+        summary: >-
+          The stream ends with an `error` event whose `reason` is `refused` and whose `message` is
+          the refusal, and no `done`.
 
       - name: cut-off
         external: The model's reply ends because of its token limit or a content filter
