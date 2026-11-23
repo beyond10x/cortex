@@ -2319,12 +2319,13 @@ mod tests {
     /// beside `n` assertions of other writers, and the same store at 16x the records: indexed,
     /// `ended` takes about 16x the time on the larger one; a scan per ended assertion takes 256x
     /// (at 20,000 records, 20,000 × 40,000 steps, a minute in a debug build). The bound sits 4x
-    /// from each, and the times compared are the fastest of runs of both sizes taken in turns,
-    /// so load on the machine slows both and neither noise nor a constant term reaches it.
+    /// from each, and the times compared are the least CPU time of runs of both sizes taken in
+    /// turns, so load on the machine does not reach it.
     #[test]
     fn ended_over_a_large_store_indexes_what_stays_and_ends_nothing_without_reading_edges() {
         use crate::ekr::Operation;
-        use std::time::{Duration, Instant};
+        use rustix::time::{clock_gettime, ClockId};
+        use std::time::Duration;
         const SMALL: usize = 400;
         const GROWTH: usize = 16;
         const LINEAR_BOUND: f64 = 64.0;
@@ -2401,11 +2402,17 @@ mod tests {
         );
 
         for (what, at) in [("ended", 0), ("idle", 1)] {
+            // The CPU time of this thread: it stands still while the thread waits for a
+            // processor, so load on the machine does not lengthen what is measured.
+            let cpu_time = || {
+                let t = clock_gettime(ClockId::ThreadCPUTime);
+                Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
+            };
             let time = |(snapshot, idle, listed): &(Value, Value, BTreeMap<String, Listed>)| {
                 let store = if at == 0 { snapshot } else { idle };
-                let t = Instant::now();
+                let t = cpu_time();
                 let _ = s.ended(store, &ontology, listed, &BTreeSet::new(), &[]);
-                t.elapsed()
+                cpu_time().saturating_sub(t)
             };
             let (mut t_small, mut t_large) = (Duration::MAX, Duration::MAX);
             for _ in 0..3 {
@@ -2415,7 +2422,7 @@ mod tests {
             let ratio = t_large.as_secs_f64() / t_small.as_secs_f64().max(1e-9);
             assert!(
                 ratio < LINEAR_BOUND,
-                "{what}: {GROWTH}x the records took {ratio:.1}x the time \
+                "{what}: {GROWTH}x the records took {ratio:.1}x the CPU time \
                  ({t_small:?} -> {t_large:?})"
             );
         }

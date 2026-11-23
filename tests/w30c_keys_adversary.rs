@@ -9,7 +9,7 @@
 //! such literal sits in the source.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use cortex_cli::ekr::Operation;
 use cortex_cli::mask::{mask, mask_key};
@@ -17,6 +17,7 @@ use cortex_cli::redact::{compile, Redactor};
 use cortex_cli::state::{Seen, SeenState, FORMAT};
 use cortex_cli::structured::Source;
 use cortex_model::instance as m;
+use rustix::time::{clock_gettime, ClockId};
 use serde_json::json;
 
 fn cat(parts: &[&str]) -> String {
@@ -64,16 +65,39 @@ fn policy_only(r: &Redactor, text: &str) -> (String, Vec<&'static str>) {
     (shown, left)
 }
 
-/// The fastest of three runs of `f`.
-fn fastest(mut f: impl FnMut()) -> Duration {
-    (0..5)
-        .map(|_| {
-            let t = Instant::now();
-            f();
-            t.elapsed()
-        })
-        .min()
-        .expect("five runs")
+/// The sizes of the two inputs of the linear-time cases. Below about 16 KiB the regex engine
+/// takes a faster path for these patterns (5x to 7x less time per byte in a build with
+/// unoptimised dependencies), so both sizes sit above it, where the time per byte stays the same.
+/// The larger is 4x the smaller: linear work takes 4x the time on it and quadratic work 16x.
+const SMALL: usize = 1 << 15;
+const LARGE: usize = SMALL * 4;
+/// The most times the time may grow from `SMALL` to `LARGE`: 4^1.5, 2x above what linear work
+/// takes and 2x below what quadratic work takes.
+const LINEAR_BOUND: f64 = 8.0;
+
+/// The CPU time this thread has used. Unlike the wall clock it stands still while the thread
+/// waits for a processor, so load on the machine does not lengthen what is measured.
+fn cpu_time() -> Duration {
+    let t = clock_gettime(ClockId::ThreadCPUTime);
+    Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
+}
+
+/// How many times more CPU time `f` takes on `large` than on `small`, and the two times: the
+/// least of three runs of each, taken in turns, after one run that builds what `f` builds once.
+fn growth(small: &str, large: &str, f: impl Fn(&str)) -> (f64, Duration, Duration) {
+    f(small);
+    let (mut t_small, mut t_large) = (Duration::MAX, Duration::MAX);
+    for _ in 0..3 {
+        let t = cpu_time();
+        f(small);
+        t_small = t_small.min(cpu_time().saturating_sub(t));
+        let t = cpu_time();
+        f(large);
+        t_large = t_large.min(cpu_time().saturating_sub(t));
+    }
+    let ratio = t_large.as_secs_f64() / t_small.as_secs_f64().max(1e-9);
+    eprintln!("{ratio:.1}x the CPU time ({t_small:?} -> {t_large:?})");
+    (ratio, t_small, t_large)
 }
 
 // ---- values left partly in clear -------------------------------------------------------------
@@ -446,9 +470,9 @@ fn masking_mixed_new_shapes_twice_changes_nothing_more() {
 
 // ---- time ------------------------------------------------------------------------------------
 
-/// Runs of the new shapes' parts at 8 and 64 KiB, small enough to hold on a loaded machine
+/// Runs of the new shapes' parts at 32 and 128 KiB, small enough to hold on a loaded machine
 /// (green at 1 and 4 MiB in pass 1, 153 s in a debug build): masking and the policy take time
-/// linear in the text (8x the text, under 32x the time; quadratic would be 64x).
+/// linear in the text (4x the text, under 8x the CPU time; quadratic would be 16x).
 #[test]
 fn runs_of_the_new_shapes_parts_take_linear_time() {
     let p = pw();
@@ -469,16 +493,15 @@ fn runs_of_the_new_shapes_parts_take_linear_time() {
     let r = policy();
     let mut slow = Vec::new();
     for (label, unit) in &units {
-        let small = unit.repeat((1 << 13) / unit.len());
-        let large = unit.repeat((1 << 16) / unit.len());
+        let small = unit.repeat(SMALL / unit.len());
+        let large = unit.repeat(LARGE / unit.len());
         for (what, f) in [
             ("mask", &(|t: &str| drop(mask(t))) as &dyn Fn(&str)),
             ("mask_key", &|t: &str| drop(mask_key(t))),
             ("policy", &|t: &str| drop(policy_only(&r, t))),
         ] {
-            let t_small = fastest(|| f(&small));
-            let t_large = fastest(|| f(&large));
-            if t_large > t_small * 32 && t_large > Duration::from_millis(25) {
+            let (ratio, t_small, t_large) = growth(&small, &large, f);
+            if ratio > LINEAR_BOUND && t_large > Duration::from_millis(25) {
                 slow.push(format!("{what} {label}: {t_small:?} -> {t_large:?}"));
             }
         }
@@ -734,7 +757,7 @@ fn the_two_assignment_rules_mask_one_value_once() {
     }
 }
 
-/// The fix's new parts at 8 and 64 KiB: a CDATA section never closed, an element closed by
+/// The fix's new parts at 32 and 128 KiB: a CDATA section never closed, an element closed by
 /// another tag, a namespaced element with attributes, an unterminated quoted flag value, a name
 /// with a bare `:`, an upper-case `_PASS` chain. Masking and the policy take linear time.
 #[test]
@@ -754,16 +777,15 @@ fn runs_of_the_fix_parts_take_linear_time() {
     let r = policy();
     let mut slow = Vec::new();
     for (label, unit) in &units {
-        let small = unit.repeat((1 << 13) / unit.len());
-        let large = unit.repeat((1 << 16) / unit.len());
+        let small = unit.repeat(SMALL / unit.len());
+        let large = unit.repeat(LARGE / unit.len());
         for (what, f) in [
             ("mask", &(|t: &str| drop(mask(t))) as &dyn Fn(&str)),
             ("mask_key", &|t: &str| drop(mask_key(t))),
             ("policy", &|t: &str| drop(policy_only(&r, t))),
         ] {
-            let t_small = fastest(|| f(&small));
-            let t_large = fastest(|| f(&large));
-            if t_large > t_small * 32 && t_large > Duration::from_millis(25) {
+            let (ratio, t_small, t_large) = growth(&small, &large, f);
+            if ratio > LINEAR_BOUND && t_large > Duration::from_millis(25) {
                 slow.push(format!("{what} {label}: {t_small:?} -> {t_large:?}"));
             }
         }

@@ -5,12 +5,13 @@
 //! Credential-shaped values are assembled at runtime so no such literal sits in the source.
 
 use std::collections::BTreeMap;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use cortex_cli::mask::{mask, mask_key};
 use cortex_cli::redact::{compile, Redactor};
 use cortex_cli::state::{Seen, SeenState, FORMAT};
 use cortex_model::instance as m;
+use rustix::time::{clock_gettime, ClockId};
 
 /// A credential-shaped value, built at runtime.
 fn secret() -> String {
@@ -53,21 +54,28 @@ const GROWTH: usize = 16;
 /// what quadratic work takes, so neither noise nor a constant term reaches it from either side.
 const LINEAR_BOUND: f64 = 64.0;
 
-/// How many times longer `f` takes on `large` than on `small`, and the two times: the fastest of
-/// seven runs of each, taken in turns, so that load that slows a run of one size slows the runs
-/// of the other size beside it too, and the fastest of each is a run load did not slow.
+/// The CPU time this thread has used. Unlike the wall clock it stands still while the thread
+/// waits for a processor, so load on the machine does not lengthen what is measured.
+fn cpu_time() -> Duration {
+    let t = clock_gettime(ClockId::ThreadCPUTime);
+    Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
+}
+
+/// How many times more CPU time `f` takes on `large` than on `small`, and the two times: the
+/// least of three runs of each, taken in turns, after one run that builds what `f` builds once.
 fn growth(small: &str, large: &str, f: impl Fn(&str)) -> (f64, Duration, Duration) {
     f(small);
     let (mut t_small, mut t_large) = (Duration::MAX, Duration::MAX);
-    for _ in 0..7 {
-        let t = Instant::now();
+    for _ in 0..3 {
+        let t = cpu_time();
         f(small);
-        t_small = t_small.min(t.elapsed());
-        let t = Instant::now();
+        t_small = t_small.min(cpu_time().saturating_sub(t));
+        let t = cpu_time();
         f(large);
-        t_large = t_large.min(t.elapsed());
+        t_large = t_large.min(cpu_time().saturating_sub(t));
     }
     let ratio = t_large.as_secs_f64() / t_small.as_secs_f64().max(1e-9);
+    eprintln!("{ratio:.1}x the CPU time ({t_small:?} -> {t_large:?})");
     (ratio, t_small, t_large)
 }
 
@@ -131,7 +139,7 @@ fn bracketed_links_back_to_back_are_found_in_linear_time() {
     });
     assert!(
         ratio < LINEAR_BOUND,
-        "{GROWTH}x the text took {ratio:.1}x the time ({t_small:?} -> {t_large:?})"
+        "{GROWTH}x the text took {ratio:.1}x the CPU time ({t_small:?} -> {t_large:?})"
     );
 }
 
@@ -215,18 +223,19 @@ fn a_url_password_does_not_run_past_its_host_to_a_later_at_sign() {
 /// with no `END` line (4x the text) took 16x the time; measured in release on 1 MiB, 24.4 s
 /// against 6.5 ms before the change. The `BEGIN … END` alternative before the cut-key one
 /// scans to the end of the text for every `BEGIN`. 16x the lines: linear work takes 16x the time,
-/// the scan per line 256x.
+/// the scan per line 256x. 1,024 lines (30 KiB) and more: below about 16 KiB the regex engine
+/// takes a faster path, so a smaller input would take less time per byte than the larger one.
 #[test]
 fn begin_lines_without_an_end_line_are_masked_in_linear_time() {
     let begin = format!("-----BEGIN PRIVATE {}-----\n", "KEY");
-    let small = begin.repeat(1 << 8);
-    let large = begin.repeat((1 << 8) * GROWTH);
+    let small = begin.repeat(1 << 10);
+    let large = begin.repeat((1 << 10) * GROWTH);
     let (ratio, t_small, t_large) = growth(&small, &large, |text| {
         let _ = mask(text);
     });
     assert!(
         ratio < LINEAR_BOUND,
-        "{GROWTH}x the text took {ratio:.1}x the time ({t_small:?} -> {t_large:?})"
+        "{GROWTH}x the text took {ratio:.1}x the CPU time ({t_small:?} -> {t_large:?})"
     );
 }
 
