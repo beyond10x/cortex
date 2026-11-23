@@ -809,8 +809,9 @@ fn held_since_does_not_grow_without_bound_while_records_keep_changing() {
         for row in rows.iter_mut() {
             row.0 -= DAY_MS;
         }
-        // Both records are edited today.
-        let now = now_ms();
+        // Both records are edited today, in a second before the run starts: the window ends at the
+        // run's start in whole seconds, so no wait is needed for the change to fall inside it.
+        let now = now_ms() - 1_100;
         if day == 1 {
             rows.push((now, "I-2", "v1".to_string()));
         }
@@ -819,7 +820,6 @@ fn held_since_does_not_grow_without_bound_while_records_keep_changing() {
             row.2 = format!("v{day}");
         }
         write_rows(&w, &rows);
-        sleep_past_a_second();
         let before = now_ms();
         run(&w, "busy");
         let line = w.lines("issues.log").last().unwrap().clone();

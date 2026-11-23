@@ -2,293 +2,75 @@
 //! items of an instance on a `postgres` store live in the schema `ask.records` names, never in
 //! EKR's, reached through a Connectors connection of their own (`cortex.ask.PostgresRecords`).
 //!
-//! The case starts a disposable PostgreSQL 17 container with TLS, provisions EKR's schema in it
-//! with the real `ekr postgres-schema`, and gives the records a role of their own that could
-//! create tables in EKR's schema too. The service's records process is launched by a stand-in
-//! `connectors` that hands it the role's `{"password": …}` document on descriptor 3, as
-//! `connectors connections launch --consumer cortex-records` does. It skips with a named reason
-//! when no container runtime answers, except on GitHub Actions, where it fails.
+//! Each case takes a database of its own on the run's one PostgreSQL 17 server with TLS
+//! (`common::pg`), provisions EKR's schema in it with the real `ekr postgres-schema`, and gives
+//! the records a role of their own that could create tables in EKR's schema too. The service's
+//! records process is launched by a stand-in `connectors` that hands it the role's
+//! `{"password": …}` document on descriptor 3, as `connectors connections launch --consumer
+//! cortex-records` does. It skips with a named reason when no container runtime answers, except
+//! on GitHub Actions, where it fails.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
+use crate::common::pg::{self, container_runtime, run};
 use crate::common::{ekr, executable};
 use cortex_cli::ask::records::{postgres::PgRecords, RecordStore, SCHEMA_VERSION};
 use cortex_model::ask as ma;
 use serde_json::{json, Value};
 
-const IMAGE: &str = "postgres:17";
 const TOKEN_ENV: &str = "ASK_PG_GATEWAY_TOKEN";
 const HEADER: &str = "x-asker";
 const LIMITS: &str =
     "{max_steps: 4, max_result_bytes: 4096, max_seconds: 30, per_identity_per_minute: 60}";
 const WAIT: Duration = Duration::from_secs(60);
 
-/// The label every container of this file carries, and the one that dates it.
-const LABEL: &str = "cortex.test=answer-records-postgres";
-const CREATED: &str = "cortex.test.created";
-const STALE_AFTER_S: u64 = 600;
-
-fn now_s() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-}
-
-fn run(cmd: &mut Command, what: &str) -> String {
-    let out = cmd
-        .output()
-        .unwrap_or_else(|e| panic!("cannot run {what}: {e}"));
-    assert!(
-        out.status.success(),
-        "{what} failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    String::from_utf8_lossy(&out.stdout).into_owned()
-}
-
-/// Whether a container can run here. Without one the case skips with the reason, except on
-/// GitHub Actions, where it fails.
-fn container_runtime(case: &str) -> bool {
-    let reason = match Command::new("docker")
-        .args(["info", "--format", "{{.ServerVersion}}"])
-        .output()
-    {
-        Ok(out) if out.status.success() => return true,
-        Ok(out) => format!(
-            "`docker info` failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        ),
-        Err(e) => format!("cannot run `docker`: {e}"),
-    };
-    assert_ne!(
-        std::env::var("GITHUB_ACTIONS").as_deref(),
-        Ok("true"),
-        "the PostgreSQL case must run on GitHub Actions: {reason}"
-    );
-    eprintln!("SKIP {case}: no container runtime ({reason})");
-    false
-}
-
-/// Removes every labelled container older than [`STALE_AFTER_S`], left by a killed run.
-fn sweep_stale_containers() {
-    let listed = run(
-        Command::new("docker").args([
-            "ps",
-            "-a",
-            "--filter",
-            &format!("label={LABEL}"),
-            "--format",
-            &format!("{{{{.ID}}}} {{{{.Label \"{CREATED}\"}}}}"),
-        ]),
-        "docker ps",
-    );
-    for line in listed.lines() {
-        let mut words = line.split_whitespace();
-        let (Some(id), created) = (words.next(), words.next()) else {
-            continue;
-        };
-        let created: u64 = created.and_then(|c| c.parse().ok()).unwrap_or(0);
-        if now_s().saturating_sub(created) > STALE_AFTER_S {
-            let _ = Command::new("docker").args(["rm", "-f", id]).output();
-        }
-    }
-}
-
-/// A disposable PostgreSQL container with TLS: EKR's schema `ekr`, provisioned by `ekr`, and a
-/// records role `cortex_ask` that may create schemas in the database and tables in `ekr`.
+/// A database of its own on the run's shared PostgreSQL server ([`pg`]): EKR's schema `ekr`, owned
+/// by an owner role and provisioned by `ekr`, and a records role that may create schemas in the
+/// database and tables in `ekr`.
 struct Postgres {
-    name: String,
+    db: pg::Database,
     port: String,
     ca: PathBuf,
+    /// The roles' names, which end in the database's id.
+    owner_role: String,
+    ask_role: String,
     /// The records role's password, which must appear nowhere cortex writes or prints.
     password: String,
 }
 
-impl Drop for Postgres {
-    fn drop(&mut self) {
-        let _ = Command::new("docker")
-            .args(["rm", "-f", &self.name])
-            .output();
-    }
-}
-
 impl Postgres {
-    fn start(dir: &Path) -> Self {
+    fn start() -> Self {
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let name = format!("cortex-records-pg-{}-{stamp}", std::process::id());
-        let tls = dir.join("tls");
-        std::fs::create_dir_all(&tls).unwrap();
-        let openssl = |args: &[&str]| {
-            run(
-                Command::new("openssl").args(args).current_dir(&tls),
-                "openssl",
+        let password = format!("records-secret-{stamp}");
+        let db = pg::Database::create(|id| {
+            format!(
+                "CREATE ROLE ekr_owner_{id} LOGIN PASSWORD 'owner-secret'; \
+                 CREATE SCHEMA ekr AUTHORIZATION ekr_owner_{id}; \
+                 CREATE ROLE cortex_ask_{id} LOGIN PASSWORD '{password}'; \
+                 GRANT CREATE ON DATABASE t_{id} TO cortex_ask_{id}; \
+                 GRANT USAGE, CREATE ON SCHEMA ekr TO cortex_ask_{id};"
             )
-        };
-        openssl(&[
-            "req",
-            "-x509",
-            "-newkey",
-            "rsa:2048",
-            "-nodes",
-            "-days",
-            "1",
-            "-subj",
-            "/CN=cortex-test-ca",
-            "-keyout",
-            "ca.key",
-            "-out",
-            "ca.crt",
-        ]);
-        openssl(&[
-            "req",
-            "-newkey",
-            "rsa:2048",
-            "-nodes",
-            "-subj",
-            "/CN=localhost",
-            "-keyout",
-            "server.key",
-            "-out",
-            "server.csr",
-        ]);
-        std::fs::write(
-            tls.join("ext"),
-            "subjectAltName=DNS:localhost,IP:127.0.0.1\n",
-        )
-        .unwrap();
-        openssl(&[
-            "x509",
-            "-req",
-            "-in",
-            "server.csr",
-            "-CA",
-            "ca.crt",
-            "-CAkey",
-            "ca.key",
-            "-CAcreateserial",
-            "-days",
-            "1",
-            "-extfile",
-            "ext",
-            "-out",
-            "server.crt",
-        ]);
-        for file in ["server.crt", "server.key"] {
-            std::fs::set_permissions(tls.join(file), std::fs::Permissions::from_mode(0o644))
-                .unwrap();
+        });
+        Self {
+            port: db.server.port.clone(),
+            ca: db.server.ca.clone(),
+            owner_role: db.role("ekr_owner"),
+            ask_role: db.role("cortex_ask"),
+            password,
+            db,
         }
-        sweep_stale_containers();
-        let mount = format!("{}:/tls:ro", tls.display());
-        let created = format!("{CREATED}={}", now_s());
-        run(
-            Command::new("docker").args([
-                "run",
-                "-d",
-                "--name",
-                &name,
-                "--label",
-                LABEL,
-                "--label",
-                &created,
-                "-e",
-                "POSTGRES_PASSWORD=superuser",
-                "-e",
-                "POSTGRES_DB=ekr",
-                "-p",
-                "127.0.0.1::5432",
-                "-v",
-                &mount,
-                IMAGE,
-                "sh",
-                "-c",
-                "cp /tls/server.crt /tls/server.key /var/lib/postgresql/ \
-                 && chown postgres /var/lib/postgresql/server.* \
-                 && chmod 600 /var/lib/postgresql/server.key \
-                 && exec docker-entrypoint.sh postgres -c ssl=on \
-                 -c ssl_cert_file=/var/lib/postgresql/server.crt \
-                 -c ssl_key_file=/var/lib/postgresql/server.key",
-            ]),
-            "docker run",
-        );
-        let mut pg = Self {
-            name,
-            port: String::new(),
-            ca: tls.join("ca.crt"),
-            password: format!("records-secret-{stamp}"),
-        };
-        let deadline = std::time::Instant::now() + Duration::from_secs(120);
-        while !Command::new("docker")
-            .args([
-                "exec",
-                &pg.name,
-                "pg_isready",
-                "-h",
-                "127.0.0.1",
-                "-U",
-                "postgres",
-            ])
-            .output()
-            .is_ok_and(|o| o.status.success())
-        {
-            assert!(
-                std::time::Instant::now() < deadline,
-                "PostgreSQL did not start"
-            );
-            std::thread::sleep(Duration::from_millis(500));
-        }
-        pg.psql(&format!(
-            "CREATE ROLE ekr_owner LOGIN PASSWORD 'owner-secret'; \
-             CREATE SCHEMA ekr AUTHORIZATION ekr_owner; \
-             CREATE ROLE cortex_ask LOGIN PASSWORD '{}'; \
-             GRANT CREATE ON DATABASE ekr TO cortex_ask; \
-             GRANT USAGE, CREATE ON SCHEMA ekr TO cortex_ask;",
-            pg.password
-        ));
-        let port = run(
-            Command::new("docker").args(["port", &pg.name, "5432/tcp"]),
-            "docker port",
-        );
-        pg.port = port
-            .lines()
-            .next()
-            .and_then(|l| l.rsplit(':').next())
-            .expect("a published port")
-            .trim()
-            .to_string();
-        pg
     }
 
     /// Runs `sql` as the superuser; its rows, one per line, columns separated by `|`.
     fn psql(&self, sql: &str) -> String {
-        run(
-            Command::new("docker").args([
-                "exec",
-                &self.name,
-                "psql",
-                "-v",
-                "ON_ERROR_STOP=1",
-                "-h",
-                "127.0.0.1",
-                "-U",
-                "postgres",
-                "-d",
-                "ekr",
-                // Rows alone: `-q` drops the command tag (`UPDATE 1`) a RETURNING prints after.
-                "-qAt",
-                "-c",
-                sql,
-            ]),
-            "psql",
-        )
+        self.db.psql(sql)
     }
 
     /// The tables of `schema`, sorted.
@@ -309,8 +91,8 @@ impl Postgres {
         std::fs::write(
             &owner_dsn,
             format!(
-                "postgres://ekr_owner:owner-secret@localhost:{}/ekr\n",
-                self.port
+                "postgres://{}:owner-secret@localhost:{}/{}\n",
+                self.owner_role, self.port, self.db.name
             ),
         )
         .unwrap();
@@ -339,7 +121,10 @@ impl Postgres {
         );
         std::fs::write(
             dir.join("app.connection"),
-            format!("postgres://ekr_owner@localhost:{}/ekr\n", self.port),
+            format!(
+                "postgres://{}@localhost:{}/{}\n",
+                self.owner_role, self.port, self.db.name
+            ),
         )
         .unwrap();
         let app = dir.join("app.json");
@@ -348,7 +133,10 @@ impl Postgres {
     }
 
     fn url(&self) -> String {
-        format!("postgres://cortex_ask@localhost:{}/ekr", self.port)
+        format!(
+            "postgres://{}@localhost:{}/{}",
+            self.ask_role, self.port, self.db.name
+        )
     }
 
     /// The records backend, opened in this process with the role's password.
@@ -765,7 +553,7 @@ fn answer_records_live_in_a_postgres_schema_of_their_own_and_never_in_ekrs() {
         return;
     }
     let world = World::new();
-    let pg = Postgres::start(&world.root);
+    let pg = Postgres::start();
     let config = pg.provision_ekr(&world.root);
     world.connectors(&pg.password);
     let ekr_before = pg.tables("ekr");
@@ -940,7 +728,7 @@ fn a_records_schema_from_a_newer_cortex_is_refused() {
         return;
     }
     let world = World::new();
-    let pg = Postgres::start(&world.root);
+    let pg = Postgres::start();
     let config = pg.provision_ekr(&world.root);
     world.connectors(&pg.password);
     drop(pg.records("cortex_ask"));
