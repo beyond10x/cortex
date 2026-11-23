@@ -1,10 +1,13 @@
 {
   "format": "ess-diff-acknowledgements/1",
   "before": "b77e573a24f45c33d239857ef5217a99252c69722f75361972dcf01ec51cdf99",
-  "after": "2895c30bb48baea3101d05b9af9ed31adfb6761f7bf17c72829b6b2d0565f3c1",
+  "after": "97b14b7ce2bdcf445f2d5c0f9f2e44f20f604b57e63cb5f974d764bc849469e5",
   "acknowledged": [
     "entity/cortex.instance.SeenDocument/field-added/fields_hash",
     "command/cortex.instance.RunSource/outcome-response-payload-changed/fetched",
-    "event/cortex.instance.SourceFetched/field-added/skipped"
+    "event/cortex.instance.SourceFetched/field-added/skipped",
+    "command/cortex.instance.RunSource/outcome-response-payload-changed/ran",
+    "event/cortex.instance.SourceRan/field-added/documents_left",
+    "event/cortex.instance.SourceRan/field-added/stopped"
   ]
 }

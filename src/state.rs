@@ -432,6 +432,17 @@ impl SeenState {
         );
     }
 
+    /// How many documents of `backlog` this state does not hold with the text and fields the run
+    /// fetched: the wanted documents a run neither applied nor marked seen, which the next run
+    /// wants again.
+    pub fn left(&self, backlog: &Backlog) -> usize {
+        backlog
+            .wanted
+            .iter()
+            .filter(|w| !self.holds_text(w))
+            .count()
+    }
+
     /// Whether `wanted`, as this run fetched it, is seen with its text and fields: applied by this
     /// run, since a wanted document's key is new or seen with other text or fields.
     fn holds_text(&self, wanted: &Wanted) -> bool {
@@ -1037,6 +1048,26 @@ mod tests {
         since_ms: 1_000_000_000_000,
         until_ms: 1_000_900_000_000,
     };
+
+    /// `story:run-report-cap-and-refusals`: a wanted document is left until the state holds it
+    /// with the text the run fetched; one recorded with other text is still left.
+    #[test]
+    fn the_documents_left_are_the_wanted_ones_not_held_with_their_text() {
+        let (a, b) = (timed("a", "one", None), timed("b", "two", None));
+        let backlog = Backlog {
+            complete: true,
+            held_since: None,
+            wanted: [&a, &b].into_iter().map(Wanted::of).collect(),
+        };
+        let mut state = SeenState::default();
+        assert_eq!(state.left(&backlog), 2);
+        state.record(&a, 1);
+        assert_eq!(state.left(&backlog), 1);
+        state.record(&timed("b", "other", None), 1);
+        assert_eq!(state.left(&backlog), 1, "b is held with other text");
+        state.record(&b, 1);
+        assert_eq!(state.left(&backlog), 0);
+    }
 
     /// `story:window-advances-past-applied`: the window moves to the earliest wanted document left
     /// unapplied, less the overlap; applied documents, however early, do not hold it.
