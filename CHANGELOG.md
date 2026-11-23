@@ -37,7 +37,7 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   through the command line's own loader (`load_given`) and gives the behaviour the spec it
   loaded, where it gave every step one fixed spec; a document the loader refuses fails its
   scenario. Three authored scenarios (`spec/scenarios/`) create, adopt and update from
-  `cortex.instance/1` documents the loader accepts. The 88 steps whose document is ESS 0.77.0's
+  `cortex.instance/1` documents the loader accepts. The 98 steps whose document is ESS 0.77.0's
   synthesized witness (`format: spec.format`) are counted and must be refused at their format;
   ESS gives a struct input a document of its own only from `ess/33` (ESS 0.78.0) (review of
   0.7.2, finding 26).

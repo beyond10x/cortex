@@ -67,7 +67,7 @@ enum Supplied {
 /// The create, adopt and update steps of `spec/suite.json` whose document is a synthesized
 /// witness the loader refuses ([`Supplied::Witness`]). Every other such step's document goes
 /// through the loader and must load. A ratchet: lower it when the suite carries fewer.
-const WITNESS_STEPS: usize = 88;
+const WITNESS_STEPS: usize = 98;
 
 /// Whether `document` is a synthesized witness: each text ESS's synthesis writes at `format`,
 /// `name`, `description` and `model.model` is that field's path (`spec.format`), with the
@@ -1862,7 +1862,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
             .count();
         assert_eq!(
             (supplied, witnesses),
-            (92, WITNESS_STEPS),
+            (102, WITNESS_STEPS),
             "the steps supplying a spec, and the synthesized witnesses among them, moved: {} \
              loaded; update these counts",
             supplied - witnesses
