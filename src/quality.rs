@@ -6,7 +6,8 @@
 //! instance's redaction policy shows a run's documents; `ekr fact-quality` turns the verdicts into a
 //! pass rate with its Wilson interval. The runtime judges nothing, and the model never names a fact
 //! of its own: a verdict for a fact the batch does not hold is dropped, and a fact the answer gives
-//! no verdict is `unclear`.
+//! no verdict is asked once more in a later call, and is `unjudged`, outside the rate, when that
+//! answer gives it none either.
 
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -52,16 +53,19 @@ pub enum Failure {
     Judge(String),
 }
 
-/// A measurement that judged every sampled fact.
+/// A measurement that put every sampled fact to the judge.
 #[derive(Debug)]
 pub struct Measurement {
     pub stamp: String,
     pub dir: PathBuf,
     pub revision: i64,
     pub seed: i64,
+    /// The facts the judge gave a verdict: the denominator of `rate`.
     pub judged: i64,
     pub passed: i64,
     pub unclear: i64,
+    /// The facts the judge gave no verdict in two calls; outside `judged` and the rate.
+    pub unjudged: i64,
     /// `ekr.fact-quality/1`'s `rate`, `lower` and `upper`, as EKR printed them; `rate` is `None`
     /// when nothing was judged.
     pub rate: Option<String>,
@@ -148,9 +152,11 @@ pub fn kind_name(kind: m::QualityVerdictKind) -> &'static str {
         m::QualityVerdictKind::Yes => "yes",
         m::QualityVerdictKind::No => "no",
         m::QualityVerdictKind::Unclear => "unclear",
+        m::QualityVerdictKind::Unjudged => "unjudged",
     }
 }
 
+/// A verdict the judge may give; `unjudged` is cortex's, never the judge's.
 fn kind_of(name: &str) -> Option<m::QualityVerdictKind> {
     match name {
         "yes" => Some(m::QualityVerdictKind::Yes),
@@ -166,9 +172,10 @@ pub fn verdict_json(v: &m::QualityVerdict) -> Value {
 }
 
 /// The verdict on each of `facts`, in their order, from the judge's `answer`: the first entry
-/// naming the fact with a declared verdict, or `unclear` when there is none. An entry naming a fact
-/// `facts` does not hold is dropped.
-pub fn verdicts(answer: &Value, facts: &[String]) -> Vec<m::QualityVerdict> {
+/// naming the fact with a verdict the judge may give (`yes`, `no`, `unclear`), or `None` when
+/// there is none, so the fact is asked again. An entry naming a fact `facts` does not hold is
+/// dropped.
+pub fn verdicts(answer: &Value, facts: &[String]) -> Vec<Option<m::QualityVerdict>> {
     let mut given: BTreeMap<&str, (m::QualityVerdictKind, String)> = BTreeMap::new();
     for entry in answer["verdicts"].as_array().into_iter().flatten() {
         let (Some(fact), Some(kind)) = (
@@ -183,18 +190,27 @@ pub fn verdicts(answer: &Value, facts: &[String]) -> Vec<m::QualityVerdict> {
     facts
         .iter()
         .map(|id| {
-            let (verdict, reason) = given.remove(id.as_str()).unwrap_or((
-                m::QualityVerdictKind::Unclear,
-                "the judge gave no verdict for this fact".to_string(),
-            ));
-            m::QualityVerdict {
-                format: VERDICT_FORMAT.to_string(),
-                fact: id.clone(),
-                verdict,
-                reason,
-            }
+            given
+                .remove(id.as_str())
+                .map(|(verdict, reason)| m::QualityVerdict {
+                    format: VERDICT_FORMAT.to_string(),
+                    fact: id.clone(),
+                    verdict,
+                    reason,
+                })
         })
         .collect()
+}
+
+/// The line of a fact the judge gave no verdict in the call that showed it nor in the later call
+/// that asked again.
+pub fn unjudged(fact: &str) -> m::QualityVerdict {
+    m::QualityVerdict {
+        format: VERDICT_FORMAT.to_string(),
+        fact: fact.to_string(),
+        verdict: m::QualityVerdictKind::Unjudged,
+        reason: "the judge gave no verdict for this fact in two calls".to_string(),
+    }
 }
 
 /// A fact in words: its kind, then its subject, its property or relation, and its value or object.
@@ -565,9 +581,133 @@ fn so_far(judged: usize, of: usize, cost_usd: Option<f64>) -> String {
     )
 }
 
-/// Has the instance's model judge `drawn` and writes `quality/<UTC stamp>/verdicts.jsonl` and
-/// `quality/<UTC stamp>/fact-quality.json`. Needs no lock: it reads no store and writes only its
-/// own new directory; each cost it adds to the spend of the day takes `home`'s lock for that write.
+/// What a judge call needs and what the calls so far spent, so the first calls and the later ones
+/// that ask again are bounded alike.
+struct Judge<'a> {
+    model: Model,
+    redactor: Option<Redactor>,
+    schema: Value,
+    dir: &'a Path,
+    /// `None` behind a model gateway: the measurement is bounded in tokens only.
+    budget: Option<f64>,
+    spent: f64,
+    daily: spend::Daily<'a>,
+    /// The measurement's tokens, held to `model.budget_tokens` as a run's are.
+    tokens: spend::TokenBudget,
+    cost_usd: Option<f64>,
+    /// Judge calls made: the next one's directory is `batch-<calls>`.
+    calls: usize,
+    /// Facts sampled, for a failure's reason.
+    of: usize,
+}
+
+impl Judge<'_> {
+    /// One judge call over `batch`, in `batch-<n>/` of the measurement's directory: its request
+    /// as sent (`prompt.txt`, written before the call, so a failed call keeps it) and its answer
+    /// before any placeholder is restored (`answer.json`); the model runs in `batch-<n>/claude/`.
+    /// `judged` counts the facts given a verdict before it, for the reason of a failure. Answers
+    /// the verdict on each fact of the batch, in its order, `None` where the answer gave none.
+    fn call(
+        &mut self,
+        batch: &Batch,
+        judged: usize,
+    ) -> Result<Vec<Option<m::QualityVerdict>>, Failure> {
+        let remaining = match self.budget {
+            Some(budget) if budget - self.spent <= 0.0 => {
+                return Err(Failure::Judge(format!(
+                    "budget of {budget} USD spent; {}",
+                    so_far(judged, self.of, self.cost_usd)
+                )));
+            }
+            Some(budget) => Some(budget - self.spent),
+            None => None,
+        };
+        if let Err(why) = self.tokens.check() {
+            return Err(Failure::Judge(format!(
+                "{why}; {}",
+                so_far(judged, self.of, self.cost_usd)
+            )));
+        }
+        let (of, cost_usd) = (self.of, self.cost_usd);
+        let remaining = self
+            .daily
+            .allow_bound(remaining)
+            .map_err(|why| Failure::Judge(format!("{why}; {}", so_far(judged, of, cost_usd))))?;
+        // The judge is shown the batch with personal data replaced by placeholders; the mapping
+        // stays in `pseudonyms`, in memory, until the reasons are restored.
+        let mut pseudonyms = self.redactor.as_ref().map(Redactor::batch);
+        let text = match pseudonyms.as_mut() {
+            None => prompt(batch, str::to_string),
+            Some(p) => {
+                reserve(p, batch);
+                prompt(batch, |t| p.replace(t))
+            }
+        };
+        let dir = self.dir.join(format!("batch-{}", self.calls));
+        self.calls += 1;
+        // The request as sent: under a redaction policy it holds placeholders, never the values
+        // they stand for, and the mapping is never written.
+        std::fs::create_dir_all(&dir)
+            .and_then(|()| std::fs::write(dir.join("prompt.txt"), &text))
+            .map_err(|e| Failure::Judge(format!("{}: {e}", dir.display())))?;
+        let answer = match self.model.ask_with(
+            JUDGE_PROMPT,
+            &dir.join("claude"),
+            &self.schema,
+            &text,
+            remaining,
+        ) {
+            Ok(answer) => answer,
+            Err(refused) => {
+                self.daily.add_answer(refused.cost_usd, &refused.usage);
+                // The failed call is counted too: "in all" is everything the judge spent.
+                let total = add_cost(self.cost_usd, refused.cost_usd);
+                return Err(Failure::Judge(format!(
+                    "{}; {}",
+                    refused.message,
+                    so_far(judged, self.of, total)
+                )));
+            }
+        };
+        self.daily.add_answer(answer.cost_usd, &answer.usage);
+        self.tokens.add(&answer.usage);
+        self.spent += answer.cost_usd.unwrap_or(0.0);
+        self.cost_usd = add_cost(self.cost_usd, answer.cost_usd);
+        // The model's answer before anything is restored: under a redaction policy it holds the
+        // placeholders it was shown, never the values they stand for.
+        let raw = serde_json::to_string_pretty(&answer.document).unwrap_or_default();
+        std::fs::write(dir.join("answer.json"), raw)
+            .map_err(|e| Failure::Judge(format!("{}: {e}", dir.display())))?;
+        let mut restored = answer.document;
+        if let Some(p) = &pseudonyms {
+            p.restore(&mut restored);
+        }
+        drop(pseudonyms);
+        let ids: Vec<String> = batch.facts.iter().map(|f| f.id.clone()).collect();
+        Ok(verdicts(&restored, &ids))
+    }
+}
+
+/// Appends `lines` to `verdicts.jsonl`.
+fn append(path: &Path, lines: &[m::QualityVerdict]) -> Result<(), Failure> {
+    let mut text = String::new();
+    for v in lines {
+        text.push_str(&verdict_json(v).to_string());
+        text.push('\n');
+    }
+    std::fs::OpenOptions::new()
+        .append(true)
+        .open(path)
+        .and_then(|mut f| f.write_all(text.as_bytes()))
+        .map_err(|e| Failure::Judge(format!("{}: {e}", path.display())))
+}
+
+/// Has the instance's model judge `drawn` and writes `quality/<UTC stamp>/verdicts.jsonl`,
+/// `quality/<UTC stamp>/fact-quality.json` and a `batch-<n>/` per judge call. A fact an answer
+/// gives no verdict is asked again after the last batch, with the other such facts, and is
+/// `unjudged` when that answer gives it none either: its line says so, and it is outside the rate.
+/// Needs no lock: it reads no store and writes only its own new directory; each cost it adds to
+/// the spend of the day takes `home`'s lock for that write.
 pub fn judge(
     layout: &Layout,
     tools: &Tools,
@@ -596,106 +736,71 @@ pub fn judge(
     let (stamp, dir) = new_dir(layout, "quality", &utc_stamp(seed)).map_err(Failure::Judge)?;
     let verdicts_path = dir.join("verdicts.jsonl");
     std::fs::write(&verdicts_path, "").map_err(|e| Failure::Judge(e.to_string()))?;
-    let model = Model {
-        backend: spec.model.backend.unwrap_or(m::ModelBackend::Claude),
-        claude: tools.claude.clone(),
-        codex: tools.codex.clone(),
-        model: spec.model.model.clone(),
-        timeout_s: spec.model.timeout_s,
-        gateway: spec.model.gateway.clone(),
+    let mut judge = Judge {
+        model: Model {
+            backend: spec.model.backend.unwrap_or(m::ModelBackend::Claude),
+            claude: tools.claude.clone(),
+            codex: tools.codex.clone(),
+            model: spec.model.model.clone(),
+            timeout_s: spec.model.timeout_s,
+            gateway: spec.model.gateway.clone(),
+        },
+        redactor,
+        schema: answer_schema(),
+        dir: &dir,
+        budget: spend::dollar_budget(&spec.model),
+        spent: 0.0,
+        daily: spend::Daily::new(layout, &spec.model, Some(home)),
+        tokens: spend::TokenBudget::new(&spec.model),
+        cost_usd: Some(0.0),
+        calls: 0,
+        of: items.len(),
     };
-    // `None` behind a model gateway: the measurement is bounded in tokens only.
-    let budget = spend::dollar_budget(&spec.model);
-    let schema = answer_schema();
-    let mut spent = 0.0;
-    let mut daily = spend::Daily::new(layout, &spec.model, Some(home));
-    // The measurement's tokens, held to `model.budget_tokens` as a run's are.
-    let mut tokens = spend::TokenBudget::new(&spec.model);
-    let mut cost_usd = Some(0.0);
     let mut all: Vec<m::QualityVerdict> = Vec::new();
-    for (n, batch) in batches.iter().enumerate() {
-        let remaining = match budget {
-            Some(budget) if budget - spent <= 0.0 => {
-                return Err(Failure::Judge(format!(
-                    "budget of {budget} USD spent; {}",
-                    so_far(all.len(), items.len(), cost_usd)
-                )));
+    // The sampled items whose facts an answer gave no verdict, in the sample's order.
+    let mut again: Vec<Value> = Vec::new();
+    for (batch, chunk) in batches.iter().zip(items.chunks(BATCH)) {
+        let given = judge.call(batch, all.len())?;
+        let mut judged = Vec::new();
+        for (verdict, item) in given.into_iter().zip(chunk) {
+            match verdict {
+                Some(v) => judged.push(v),
+                None => again.push(item.clone()),
             }
-            Some(budget) => Some(budget - spent),
-            None => None,
-        };
-        if let Err(why) = tokens.check() {
-            return Err(Failure::Judge(format!(
-                "{why}; {}",
-                so_far(all.len(), items.len(), cost_usd)
-            )));
         }
-        let remaining = daily.allow_bound(remaining).map_err(|why| {
-            Failure::Judge(format!(
-                "{why}; {}",
-                so_far(all.len(), items.len(), cost_usd)
-            ))
-        })?;
-        // The judge is shown the batch with personal data replaced by placeholders; the mapping
-        // stays in `pseudonyms`, in memory, until the reasons are restored.
-        let mut pseudonyms = redactor.as_ref().map(Redactor::batch);
-        let text = match pseudonyms.as_mut() {
-            None => prompt(batch, str::to_string),
-            Some(p) => {
-                reserve(p, batch);
-                prompt(batch, |t| p.replace(t))
-            }
-        };
-        let answer = match model.ask_with(
-            JUDGE_PROMPT,
-            &dir.join(format!("batch-{n}")),
-            &schema,
-            &text,
-            remaining,
-        ) {
-            Ok(answer) => answer,
-            Err(refused) => {
-                daily.add_answer(refused.cost_usd, &refused.usage);
-                // The failed call is counted too: "in all" is everything the judge spent.
-                let total = add_cost(cost_usd, refused.cost_usd);
-                return Err(Failure::Judge(format!(
-                    "{}; {}",
-                    refused.message,
-                    so_far(all.len(), items.len(), total)
-                )));
-            }
-        };
-        daily.add_answer(answer.cost_usd, &answer.usage);
-        tokens.add(&answer.usage);
-        spent += answer.cost_usd.unwrap_or(0.0);
-        cost_usd = add_cost(cost_usd, answer.cost_usd);
-        let mut restored = answer.document;
-        if let Some(p) = &pseudonyms {
-            p.restore(&mut restored);
-        }
-        drop(pseudonyms);
-        let ids: Vec<String> = batch.facts.iter().map(|f| f.id.clone()).collect();
-        let judged = verdicts(&restored, &ids);
-        let mut lines = String::new();
-        for v in &judged {
-            lines.push_str(&verdict_json(v).to_string());
-            lines.push('\n');
-        }
-        std::fs::OpenOptions::new()
-            .append(true)
-            .open(&verdicts_path)
-            .and_then(|mut f| f.write_all(lines.as_bytes()))
-            .map_err(|e| Failure::Judge(format!("{}: {e}", verdicts_path.display())))?;
+        append(&verdicts_path, &judged)?;
         all.extend(judged);
     }
+    // Each fact without a verdict is asked once more, in a later call; the batches are drawn
+    // anew from those facts alone, and each is checked against `refuse_if_left` before it is sent.
+    for batch in self::batches(&again) {
+        if let Some(r) = judge.redactor.as_ref().filter(|r| r.refuses()) {
+            if let Some(why) = refused(r, &batch, "the judge") {
+                return Err(Failure::Judge(why));
+            }
+        }
+        let given = judge.call(&batch, all.len())?;
+        let lines: Vec<m::QualityVerdict> = given
+            .into_iter()
+            .zip(&batch.facts)
+            .map(|(verdict, fact)| verdict.unwrap_or_else(|| unjudged(&fact.id)))
+            .collect();
+        append(&verdicts_path, &lines)?;
+        all.extend(lines);
+    }
+    let cost_usd = judge.cost_usd;
 
     let judgements = json!({
         "format": "ekr.fact-judgements/1",
         "sample": {"revision": revision, "seed": seed, "size": size},
-        "judgements": all.iter().map(|v| json!({
-            "assertion": v.fact,
-            "verdict": if v.verdict == m::QualityVerdictKind::Yes { "Pass" } else { "Fail" },
-        })).collect::<Vec<_>>(),
+        "judgements": all.iter().filter_map(|v| {
+            let verdict = match v.verdict {
+                m::QualityVerdictKind::Yes => "Pass",
+                m::QualityVerdictKind::No | m::QualityVerdictKind::Unclear => "Fail",
+                m::QualityVerdictKind::Unjudged => return None,
+            };
+            Some(json!({"assertion": v.fact, "verdict": verdict}))
+        }).collect::<Vec<_>>(),
     });
     let bytes = fact_quality(&ekr, &judgements).map_err(Failure::Judge)?;
     let report: Value = serde_json::from_slice(&bytes)
@@ -703,14 +808,16 @@ pub fn judge(
     std::fs::write(dir.join("fact-quality.json"), &bytes)
         .map_err(|e| Failure::Judge(e.to_string()))?;
     let count = |k: m::QualityVerdictKind| all.iter().filter(|v| v.verdict == k).count() as i64;
+    let unjudged = count(m::QualityVerdictKind::Unjudged);
     Ok(Measurement {
         stamp,
         dir,
         revision,
         seed,
-        judged: all.len() as i64,
+        judged: all.len() as i64 - unjudged,
         passed: count(m::QualityVerdictKind::Yes),
         unclear: count(m::QualityVerdictKind::Unclear),
+        unjudged,
         rate: report["rate"]
             .is_number()
             .then(|| report["rate"].to_string()),
@@ -732,30 +839,34 @@ mod tests {
     }
 
     #[test]
-    fn a_verdict_per_fact_in_order_unknown_facts_dropped_and_a_missing_one_unclear() {
+    fn a_verdict_per_fact_in_order_unknown_facts_dropped_and_a_missing_one_none() {
         let answer = json!({"verdicts": [
             {"fact": "b", "verdict": "no", "reason": "says otherwise"},
             {"fact": "forged", "verdict": "yes", "reason": "r"},
             {"fact": "a", "verdict": "yes", "reason": "stated"},
             {"fact": "a", "verdict": "no", "reason": "second answer is ignored"},
             {"fact": "c", "verdict": "maybe", "reason": "not a declared verdict"},
+            {"fact": "d", "verdict": "unjudged", "reason": "not a verdict the judge gives"},
         ]});
-        let ids = ["a", "b", "c"].map(String::from);
-        let got: Vec<(String, &str, String)> = verdicts(&answer, &ids)
+        let ids = ["a", "b", "c", "d", "e"].map(String::from);
+        let got: Vec<Option<(String, &str, String)>> = verdicts(&answer, &ids)
             .into_iter()
-            .map(|v| (v.fact, kind_name(v.verdict), v.reason))
+            .map(|v| v.map(|v| (v.fact, kind_name(v.verdict), v.reason)))
             .collect();
         assert_eq!(
             got,
             [
-                ("a".to_string(), "yes", "stated".to_string()),
-                ("b".to_string(), "no", "says otherwise".to_string()),
-                (
-                    "c".to_string(),
-                    "unclear",
-                    "the judge gave no verdict for this fact".to_string()
-                ),
+                Some(("a".to_string(), "yes", "stated".to_string())),
+                Some(("b".to_string(), "no", "says otherwise".to_string())),
+                None,
+                None,
+                None,
             ]
+        );
+        assert_eq!(
+            verdict_json(&unjudged("e")),
+            json!({"format": "cortex.quality-verdict/1", "fact": "e", "verdict": "unjudged",
+                "reason": "the judge gave no verdict for this fact in two calls"})
         );
     }
 

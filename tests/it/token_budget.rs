@@ -248,30 +248,31 @@ fn without_a_token_limit_an_answer_without_usage_stops_nothing() {
 /// before a model call once the daily token ceiling is reached.
 #[test]
 fn quality_and_schema_count_against_the_daily_token_ceiling() {
-    let w = instance("judged", 2, ", daily_ceiling_tokens: 5000");
+    let w = instance("judged", 2, ", daily_ceiling_tokens: 7000");
     let ran = run(&w, "judged/news");
     assert_eq!(calls(&w), 1, "{ran}");
     assert_eq!(spend(&w, "judged")["spent_tokens"], 2000);
 
     // The stand-in answers an extraction, not verdicts or proposals: whatever each command makes
-    // of that answer, its tokens are added to the day's.
+    // of that answer, its tokens are added to the day's. The judge finds no verdict in it and
+    // asks every fact once more in a later call (`story:quality-missing-verdicts`).
     let (_, out) = w.cortex(&["quality", "judged", "--sample", "3"]);
-    assert_eq!(calls(&w), 2, "{out}");
-    assert_eq!(spend(&w, "judged")["spent_tokens"], 4000, "{out}");
-    let (_, out) = w.cortex(&["schema", "judged", "--sample", "3"]);
     assert_eq!(calls(&w), 3, "{out}");
     assert_eq!(spend(&w, "judged")["spent_tokens"], 6000, "{out}");
+    let (_, out) = w.cortex(&["schema", "judged", "--sample", "3"]);
+    assert_eq!(calls(&w), 4, "{out}");
+    assert_eq!(spend(&w, "judged")["spent_tokens"], 8000, "{out}");
 
     for (command, outcome) in [("quality", "judge-failed"), ("schema", "propose-failed")] {
         let (code, out) = w.cortex(&[command, "judged", "--sample", "3"]);
         assert_eq!((code, out["outcome"].as_str()), (1, Some(outcome)), "{out}");
         let reason = out["detail"]["reason"].as_str().unwrap_or_default();
         assert!(
-            reason.starts_with("daily ceiling of 5000 tokens reached"),
+            reason.starts_with("daily ceiling of 7000 tokens reached"),
             "{out}"
         );
     }
-    assert_eq!(calls(&w), 3, "no model call once the ceiling is reached");
+    assert_eq!(calls(&w), 4, "no model call once the ceiling is reached");
 }
 
 /// A spec text with `model` as its model line.

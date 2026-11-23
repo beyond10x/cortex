@@ -418,11 +418,14 @@ fn the_judge_is_shown_evidence_as_the_redaction_policy_shows_a_run() {
 }
 
 /// Adversary (wave 20261006g, unit a): no other case of the suite ever produces an `unclear`
-/// verdict end to end, so mapping `unclear` to EKR's `Pass` (`src/quality.rs:502`) or dropping the
-/// `unclear` count survives it. The judge here answers `unclear` for its first fact, nothing for
-/// its second, `no` then `yes` for its third, and `yes` for a fact the batch does not hold.
+/// verdict end to end, so mapping `unclear` to EKR's `Pass` or dropping the `unclear` count
+/// survives it. The judge here answers `unclear` for the first fact of each call, nothing for its
+/// second, `no` then `yes` for its third, and `yes` for a fact the batch does not hold. The second
+/// fact is asked again in a later call (`story:quality-missing-verdicts`), where it is the first
+/// and is answered `unclear`; its line follows those of the first call.
 #[test]
-fn unclear_and_missing_verdicts_fail_and_an_injected_or_repeated_one_changes_nothing() {
+fn unclear_verdicts_fail_a_missing_one_is_asked_again_and_an_injected_or_repeated_one_changes_nothing(
+) {
     let w = instance("mixed", 3, "");
     let forged = "00000000-0000-4000-8000-00000000beef";
     executable(
@@ -477,7 +480,7 @@ echo "{{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"total_c
     let kinds: Vec<&str> = lines.iter().filter_map(|v| v["verdict"].as_str()).collect();
     assert_eq!(
         kinds,
-        ["unclear", "unclear", "no", "yes", "yes", "yes"],
+        ["unclear", "no", "yes", "yes", "yes", "unclear"],
         "{lines:?}"
     );
     assert!(lines.iter().all(|v| v["fact"] != forged), "{lines:?}");
