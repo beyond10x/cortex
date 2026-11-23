@@ -255,6 +255,7 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "judged": e.judged,
                 "passed": e.passed,
                 "unclear": e.unclear,
+                "unjudged": e.unjudged,
                 "rate": e.rate.map(|r| r.0),
                 "lower": e.lower.0,
                 "upper": e.upper.0,
@@ -2096,7 +2097,8 @@ fn the_shape_check_holds_each_field_to_the_shape_the_suite_states() {
         .clone();
     let measured = json!({
         "name": "n", "stamp": "s", "revision": 1, "seed": 2, "judged": 3, "passed": 2,
-        "unclear": 0, "rate": "0.6666", "lower": "0.2", "upper": "0.9", "cost_usd": "0.0200",
+        "unclear": 0, "unjudged": 0, "rate": "0.6666", "lower": "0.2", "upper": "0.9",
+        "cost_usd": "0.0200",
     });
     let holds = |payload: &Value, shape: &serde_json::Map<String, Value>| {
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 29fd0487afecf3d694b1251edb50e6cf44012cca74ef1d52f2fe654acdc8dc24
-// contract digest 4e157f33a367119c58eb97267c16c34892de38fd47d43d110b8d09f1718b04a3
+// model digest a25bc94edd0495b48afb8e1d64b7baf53aa64a26788c32a1d4dc17e3b3f3fad1
+// contract digest 75ffd3dac269f1f00880db1d76f7922d76572cab66524f723477f37dbe9897a3
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! The `cortex` system, v1: its components assembled, its bindings wired, and its one transport.

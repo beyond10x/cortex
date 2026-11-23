@@ -26,6 +26,9 @@
     "unclear": {
       "type": "integer"
     },
+    "unjudged": {
+      "type": "integer"
+    },
     "rate": {
       "type": "string",
       "format": "decimal",
@@ -55,6 +58,7 @@
     "judged",
     "passed",
     "unclear",
+    "unjudged",
     "lower",
     "upper"
   ],
@@ -62,8 +66,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "29fd0487afecf3d694b1251edb50e6cf44012cca74ef1d52f2fe654acdc8dc24",
-    "contract_digest": "slice-sha256/2:acbb533e30f9f73abbd22fe41575772d096dd4b5ff5f11afc76f01b5ba8c1b2a",
+    "source_digest": "a25bc94edd0495b48afb8e1d64b7baf53aa64a26788c32a1d4dc17e3b3f3fad1",
+    "contract_digest": "slice-sha256/2:621d438c8cc6920ff6ddb7a1f0609c0705217821c722f0c07ddd06bc5f531e36",
     "regenerate": "ess generate"
   },
   "$defs": {

@@ -69,23 +69,30 @@ saying the Codex backend does not extract yet, and `codex` is never started; `co
 `ekr sample`, each with the evidence it cites, seeded with the measurement's start in Unix
 milliseconds. Each batch of 20 goes to the instance's model with no tools and a judge's own system
 prompt, called as a run's extraction is, and shown as the spec's `redaction` policy shows a run's
-documents. The model answers `yes`, `no` or `unclear`, with a reason, for each fact. `ekr
-fact-quality` turns the verdicts into a pass rate with its Wilson interval at 95 %; `yes` counts as
-passed, and `no` and `unclear` as failed. The measurement spends at most the spec's
-`model.budget_usd`, and no more than its `model.daily_ceiling_usd` leaves of the UTC day (see
+documents. The model answers `yes`, `no` or `unclear`, with a reason, for each fact. A fact the
+answer gives no verdict is asked once more after the last batch, in a later call with the other
+such facts (again in batches of 20); a fact that answer gives no verdict either is `unjudged`.
+`ekr fact-quality` turns the verdicts of the judged facts into a pass rate with its Wilson interval
+at 95 %; `yes` counts as passed, `no` and `unclear` as failed, and an `unjudged` fact as neither.
+The measurement spends at most the spec's `model.budget_usd`, and no more than its
+`model.daily_ceiling_usd` leaves of the UTC day (see
 [the spec file](./spec-file.md#the-daily-ceiling)).
 
-It writes two files under `quality/<UTC stamp>/` in the instance directory (the stamp is
+It writes these files under `quality/<UTC stamp>/` in the instance directory (the stamp is
 `YYYYMMDDTHHMMSSZ`):
 
 | file | holds |
 |---|---|
-| `verdicts.jsonl` | one `cortex.quality-verdict/1` object per fact: `fact` (the EKR assertion id), `verdict` and `reason`. A fact the model gave no verdict for is `unclear`; a verdict for a fact the batch did not hold is dropped |
-| `fact-quality.json` | the `ekr.fact-quality/1` document as `ekr fact-quality` printed it: `judged`, `passed`, `failed`, `rate`, `lower`, `upper` |
+| `verdicts.jsonl` | one `cortex.quality-verdict/1` object per fact: `fact` (the EKR assertion id), `verdict` and `reason`. A fact the model gave no verdict in two calls is `unjudged`, with cortex's reason; a verdict for a fact the batch did not hold is dropped. A fact asked again has its line after those of the first calls |
+| `fact-quality.json` | the `ekr.fact-quality/1` document as `ekr fact-quality` printed it: `judged`, `passed`, `failed`, `rate`, `lower`, `upper`; `unjudged` facts are not in it |
+| `batch-<n>/prompt.txt` | the request of judge call `n` (from 0) as sent; under a `redaction` policy it holds placeholders. Written before the call, so a failed call keeps it |
+| `batch-<n>/answer.json` | the model's answer to call `n` before any placeholder is restored |
 
 A `measured` line's detail carries `stamp`, `revision` and `seed` (which draw the same sample
-again), `judged`, `passed`, `unclear`, `rate` (null when the store holds no fact), `lower`,
-`upper`, `cost_usd` (as a run reports it: null when an answer carried no cost) and `dir`.
+again), `judged` (the facts given a verdict: the rate's denominator), `passed`, `unclear`,
+`unjudged`, `rate` (`passed` of `judged`; null when no fact was judged: the store holds no fact,
+or every fact is `unjudged`), `lower`, `upper`, `cost_usd` (as a run reports it: null when an
+answer carried no cost) and `dir`.
 `sample-failed` (EKR refused the size or could not read the store) asks no model and writes
 nothing. `judge-failed` (a model call failed or found the budget or the daily ceiling spent, or `refuse_if_left`
 refused what the judge would be shown) writes no `fact-quality.json`; `verdicts.jsonl` keeps the

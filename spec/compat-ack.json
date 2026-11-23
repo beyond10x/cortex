@@ -1,7 +1,7 @@
 {
   "format": "ess-diff-acknowledgements/1",
   "before": "b77e573a24f45c33d239857ef5217a99252c69722f75361972dcf01ec51cdf99",
-  "after": "29fd0487afecf3d694b1251edb50e6cf44012cca74ef1d52f2fe654acdc8dc24",
+  "after": "a25bc94edd0495b48afb8e1d64b7baf53aa64a26788c32a1d4dc17e3b3f3fad1",
   "acknowledged": [
     "entity/cortex.instance.SeenDocument/field-added/fields_hash",
     "command/cortex.instance.RunSource/outcome-response-payload-changed/fetched",
@@ -40,6 +40,8 @@
     "error/cortex.ask.ReaderFailed/field-added/input_tokens",
     "error/cortex.ask.ReaderFailed/field-added/output_tokens",
     "error/cortex.ask.ReaderFailed/field-added/steps",
+    "command/cortex.instance.MeasureQuality/outcome-response-payload-changed/measured",
+    "event/cortex.instance.QualityMeasured/field-added/unjudged",
     "command/cortex.instance.RunSource/input-added/extract_only",
     "command/cortex.instance.RunSource/outcome-added/extract-only-failed",
     "command/cortex.instance.RunSource/outcome-added/extracted",

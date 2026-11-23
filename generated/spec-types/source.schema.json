@@ -2021,7 +2021,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
     "contract_digest": "slice-sha256/2:b93adc0ed309a86585e42b536c10e2fab1b4148b9bcfee5a5ad1903d38531415",
-    "source_digest": "29fd0487afecf3d694b1251edb50e6cf44012cca74ef1d52f2fe654acdc8dc24",
+    "source_digest": "a25bc94edd0495b48afb8e1d64b7baf53aa64a26788c32a1d4dc17e3b3f3fad1",
     "specification_version": "v1",
     "system": "cortex"
   }
