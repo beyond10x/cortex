@@ -55,6 +55,17 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   a read. Before, an id on the second page was reported missing, and two timer runs then disabled
   the source. A list that names a cursor a second time, or runs past 1000 pages, ends the read
   with a reason naming the cursor instead of a loop.
+- **One current value per single-valued property.** A `!Property` fact of a property declared
+  `cardinality: One` (by the store, or by the model's document for a new one) is marked
+  `replaces: true` by cortex before it is applied. EKR 0.0.34 adds an unmarked fact as one more
+  active value whatever the cardinality, so a merge request's state read from its tracker record
+  and again from a later chat message stayed current twice. Now the newest value stays current,
+  an older one is listed in `rejected` (`invalid-supersession`), and a first value is stored
+  through `facts_reapplied` (`story:extraction-coverage`).
+- **The prompt asks for every document's own facts.** The extraction rules tell the model to go
+  through every document to its end, to extract a thread reply's own facts apart from the message
+  it answers and every item of a message that lists several, and to read `[context]` paragraphs
+  as context (`story:extraction-coverage`).
 
 ## 0.7.2 — 2026-10-30
 
