@@ -194,7 +194,7 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    `structured` record whose mapping changed (a property, alias, relation, child `time` or link
    added, removed or edited by `cortex update`): every such record is applied again, its text
    changed or not.
-   A document applied before cortex remembered these fields (0.7.2 and earlier) counts as
+   A document applied before cortex remembered these fields (0.8.0 and earlier) counts as
    follows on the first run that fetches it: a web page takes the title, description and date of
    that fetch as applied, so it is not extracted again for them; a `structured` record is applied
    again, since the mapping it was applied with is unknown and applying a record calls no model.

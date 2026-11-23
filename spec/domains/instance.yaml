@@ -1203,7 +1203,7 @@ entities:
       # The hash of what cortex stores from the document beside its text: a Web page's title,
       # description and publication date, or how a structured source's record is mapped (its
       # mapping, its child's time and parent relation, its links). Absent for another document,
-      # and for one applied before cortex 0.8 remembered it.
+      # and for one applied by cortex 0.8.0 or earlier.
       - {name: fields_hash, type: Optional<String>}
       - {name: applied_at, type: Integer}
     invariants:
