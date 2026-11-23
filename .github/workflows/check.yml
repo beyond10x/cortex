@@ -16,8 +16,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_TARGET_DIR: ${{ github.workspace }}/target
-  CARGO_PROFILE_DEV_DEBUG: "0"
-  CARGO_PROFILE_TEST_DEBUG: "0"
   EKR_VERSION: "0.0.34"
 
 jobs:
@@ -31,12 +29,38 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+      - name: Decide whether the change needs the build and the tests
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            git diff --name-only "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed"
+            scope=$(sh .github/scripts/scope.sh < "$RUNNER_TEMP/changed")
+          else
+            scope=run
+          fi
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+          echo "scope: $scope"
+
+      - name: Install the Rust toolchain rust-toolchain.toml pins
+        id: toolchain
+        if: steps.scope.outputs.scope == 'run'
+        run: |
+          rustup toolchain install
+          rustc --version
+          echo "channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - name: Install cargo-nextest
+        if: steps.scope.outputs.scope == 'run'
+        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
         with:
-          toolchain: 1.99.0
-          components: rustfmt, clippy
+          tool: cargo-nextest@0.9.143
 
       - name: Install task runner
+        if: steps.scope.outputs.scope == 'run'
         env:
           TASK_VERSION: "3.54.0"
           TASK_SHA256: 680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb
@@ -75,26 +99,42 @@ jobs:
 
       - name: Restore the ekr binary
         id: ekr-cache
+        if: steps.scope.outputs.scope == 'run'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.ekr/${{ env.EKR_VERSION }}
-          key: ekr-${{ env.EKR_VERSION }}-rust-1.99.0
+          key: ekr-${{ env.EKR_VERSION }}-rust-${{ steps.toolchain.outputs.channel }}
 
       - name: Build ekr from its release tag
-        if: steps.ekr-cache.outputs.cache-hit != 'true'
+        if: steps.scope.outputs.scope == 'run' && steps.ekr-cache.outputs.cache-hit != 'true'
         run: |
           cargo install --locked --git https://github.com/beyond10x/epistemic-knowledge-runtime \
             --tag "$EKR_VERSION" --bin ekr --root "$HOME/.ekr/$EKR_VERSION" ekr
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        if: steps.scope.outputs.scope == 'run'
         with:
-          shared-key: check-rust-1.99.0
+          shared-key: check-rust-${{ steps.toolchain.outputs.channel }}
 
       - name: Validate the planning store
         run: aep plan artifact validate
 
       - name: task check
+        if: steps.scope.outputs.scope == 'run'
         run: |
           export CORTEX_TEST_EKR="$HOME/.ekr/$EKR_VERSION/bin/ekr"
           "$CORTEX_TEST_EKR" --version
           task check
+
+      - name: Keep the test report
+        if: always() && steps.scope.outputs.scope == 'run'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nextest-junit
+          path: target/nextest/*/junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Planning or prose only
+        if: steps.scope.outputs.scope == 'skip'
+        run: echo "every changed path is planning or prose (.github/scripts/scope.sh); build and tests skipped"
