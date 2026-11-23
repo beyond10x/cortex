@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 2b4c97d0b48bef360a506d832f098e346fd275e38cbe5d10f71d010956a32f90
-contract digest slice-sha256/2:7474aa2c0d83210bf86d413a8f1f3e3139b0d120f6f0cb43bc49db869ba66964
+model digest b77e573a24f45c33d239857ef5217a99252c69722f75361972dcf01ec51cdf99
+contract digest slice-sha256/2:87251c0e6433addce272c9fe980f70428a62d6a0d106e262797dfc294a6a890d
 do not edit: regenerate with `ess generate`
 -->
 
@@ -1071,7 +1071,7 @@ It has five outcomes.
 
 **`partial`** — As `created`, but some seed documents were not extracted. They are not recorded as seen, so `cortex run <name>/seed` extracts them. Decided outside the input: The seed extraction stops before every seed document is extracted: the budget is spent, or a model call or an apply fails. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It creates a `cortex.instance.Instance`, which starts in `Active`. The new instance's identity is published as `name` on `cortex.instance.InstanceCreated`. It emits `cortex.instance.InstanceCreated`. It sets `description` from `input.description`, `model` from `input.model`, `ekr_version` from `input.ekr_version` and `seed_digest` from `input.seed_digest`. A test reaches it by injecting the declared fault, because no input can.
 
-**`created`** — The store is seeded, the seed schema applied and the seed documents extracted into it. The viewer runs on its port. The sources are added by AddSource, one per source in the spec. The default branch, taken when no other outcome's condition matched. It creates a `cortex.instance.Instance`, which starts in `Active`. The new instance's identity is published as `name` on `cortex.instance.InstanceCreated`. It emits `cortex.instance.InstanceCreated`. It sets `description` from `input.description`, `model` from `input.model`, `ekr_version` from `input.ekr_version` and `seed_digest` from `input.seed_digest`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+**`created`** — The store is seeded, the seed schema applied and the seed documents extracted into it. The viewer runs on its port, unless the instance was created without units, which starts no viewer and names no address. The sources are added by AddSource, one per source in the spec. The default branch, taken when no other outcome's condition matched. It creates a `cortex.instance.Instance`, which starts in `Active`. The new instance's identity is published as `name` on `cortex.instance.InstanceCreated`. It emits `cortex.instance.InstanceCreated`. It sets `description` from `input.description`, `model` from `input.model`, `ekr_version` from `input.ekr_version` and `seed_digest` from `input.seed_digest`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
 ### `EnableSource`
 
@@ -1243,12 +1243,15 @@ It takes:
 - `source_id` — `cortex.instance.SourceId`
 - `fetch_only` — `Optional<Boolean>`, which may be absent
 - `no_wait` — `Optional<Boolean>`, which may be absent
+- `path` — `Optional<String>`, which may be absent
 
-It has 14 outcomes.
+It has 15 outcomes.
 
 **`disabled`** — The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome. Taken when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)` holds of the input. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.RunSkipped`. It sets `last_outcome` from `"disabled"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test establishes the declared subject state and constructs input selecting this branch in that state.
 
 **`busy`** — Nothing ran: the source was not read, nothing was counted, and the source's status, metrics and hook are untouched, so an external scheduler can skip this collection. Eligible when (defined(no_wait) and no_wait == true); externally decided: Another cortex command holds the home's lock. No entity in this specification changes. It reports `cortex.instance.InstanceBusy`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`path-refused`** — The source is not a `files` source, so it has no directory to read. Nothing ran and nothing was written. Eligible when defined(path); externally decided: The source named is not a `files` source, or is the instance's seed documents. No entity in this specification changes. It reports `cortex.instance.PathRefused`, carrying `source_id` and `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`fetch-only-failed`** — Nothing was written: not the source's status, its seen documents or its window, and no failure is counted. The command line prints it as `fetch-failed`. Eligible when (defined(fetch_only) and fetch_only == true); externally decided: Connectors or the filesystem fails to deliver the source's documents in a fetch-only run. No entity in this specification changes. It reports `cortex.instance.FetchFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
@@ -1814,6 +1817,17 @@ Reported by `cortex.instance.AdoptInstance` on its `name-taken` outcome.
 
 Reported by `cortex.instance.CreateInstance` on its `name-taken` outcome.
 
+### `PathRefused`
+
+A run was given a directory (`path`) for a source that is not a `files` source; only a `files` source reads one. Nothing ran.
+
+It carries:
+
+- `source_id` — `cortex.instance.SourceId`
+- `reason` — `String`
+
+Reported by `cortex.instance.RunSource` on its `path-refused` outcome.
+
 ### `ProposeFailed`
 
 A model call for schema proposals failed, timed out, answered no valid proposals or found the budget or the instance's daily ceiling spent, the redaction policy refused what the model would be shown, or EKR could not read the store's ontology, or `proposals.jsonl` could not be written. Nothing was applied and no proposal was recorded, except when a line of `proposals.jsonl` could not be written after earlier proposals were applied: those stay applied, the lines before stay written, and the reason names both counts.
@@ -2052,4 +2066,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `2b4c97d0b48bef360a506d832f098e346fd275e38cbe5d10f71d010956a32f90` · contract digest `slice-sha256/2:7474aa2c0d83210bf86d413a8f1f3e3139b0d120f6f0cb43bc49db869ba66964`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `b77e573a24f45c33d239857ef5217a99252c69722f75361972dcf01ec51cdf99` · contract digest `slice-sha256/2:87251c0e6433addce272c9fe980f70428a62d6a0d106e262797dfc294a6a890d`. Do not edit this file; change the specification and regenerate it with `ess generate`.

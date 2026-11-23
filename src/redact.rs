@@ -6,8 +6,10 @@
 //! placeholder, `[Email-1]`, `[Phone-2]`, `[Card-1]`, `[IpAddress-1]`, `[Url-1]`, `[Name-1]` or
 //! `[<rule name>-1]`, the same value by the same placeholder in every text of the batch. Before the
 //! answer is applied, every placeholder in it is replaced by the value it stands for; one that has
-//! no value (mangled or invented by the model) stays as it is and is counted as unrestored. The
-//! mapping lives in memory for one batch only. The stored evidence is the original text.
+//! no value (mangled or invented by the model) stays as it is and is counted as unrestored. In a
+//! node type, property or relation name ([`Batch::restore_name`]) a mangled one is restored too,
+//! and one with no value is answered, so the batch fails naming it. The mapping lives in memory
+//! for one batch only. The stored evidence is the original text.
 //!
 //! One answer of the ask service, and one case of the eval `mcp` runner, is one batch whose texts
 //! (the question, then each tool result) arrive one by one: each is reserved just before it is
@@ -18,7 +20,8 @@
 //! `known_names` are names replaced wherever they appear as whole words, however often, in any case
 //! and either Unicode normal form. `RareName` replaces a capitalised word (one capital and at least
 //! one lower-case letter) seen at most `rare_limit` times (default 1) in the batch's document texts,
-//! unless it is a stop word or a placeholder's label. A word, hyphenated or not, is replaced whole
+//! unless it is a stop word, a placeholder's label or a word of the store's ontology names the
+//! prompt shows ([`Batch::keep_names`]). A word, hyphenated or not, is replaced whole
 //! or not at all: no part of a word the batch holds more often is a rare name, in the replacement
 //! and in [`Batch::left`] alike. A word glued directly to a lower-case letter before it, or after
 //! underscores to a run of letters and digits that begins with one (`snake_case_Identifier`), is
@@ -1316,11 +1319,27 @@ impl<'a> Batch<'a> {
                     && !hidden.iter().any(|h| h.start < r.end && r.start < h.end)
                     && !self.named.contains(found.as_str())
                 {
-                    *self.words.entry(found.as_str().to_string()).or_default() += 1;
+                    let n = self.words.entry(found.as_str().to_string()).or_default();
+                    *n = n.saturating_add(1);
                 }
             }
         }
         self.reserve_name(text);
+    }
+
+    /// Notes every capitalised word of `text`, an ontology line the prompt shows (node type,
+    /// property and relation names, value kinds), as never a rare name in this batch: counted as
+    /// seen more often than any `rare_limit`, it is kept whole wherever the batch holds it, by
+    /// the replacement and by [`Batch::left`] alike. The model writes these names back as the
+    /// types of what it extracts, so a placeholder in their place makes it invent types.
+    /// `known_names` and the rules still replace them.
+    pub fn keep_names(&mut self, text: &str) {
+        if !self.redactor.words {
+            return;
+        }
+        for found in capitalised_word().find_iter(text) {
+            self.words.insert(found.as_str().to_string(), usize::MAX);
+        }
     }
 
     /// Notes the placeholder-shaped text in a known entity name, as `reserve` does for a
@@ -1476,6 +1495,65 @@ impl<'a> Batch<'a> {
             Value::Object(map) => map.values_mut().map(|v| self.restore(v)).sum(),
             _ => 0,
         }
+    }
+
+    /// `name`, a node type, property or relation name of an answer, with every placeholder of
+    /// this batch in it replaced by its value, also one written in another shape than it was
+    /// shown (`Name-3`, `[name 3]` for `[Name-3]`): a model writes a type name as an identifier.
+    /// Answers the placeholder-shaped text that stands for no value of the batch and is no text
+    /// an original held; it stays as it is.
+    pub fn restore_name(&self, name: &mut String) -> Vec<String> {
+        let Some(placeholder) = &self.redactor.placeholder else {
+            return Vec::new();
+        };
+        let mut left = Vec::new();
+        let restored = placeholder.replace_all(name, |c: &regex::Captures| {
+            let found = &c[0];
+            if let Some(original) = self.back.get(found) {
+                return original.clone();
+            }
+            if self.reserved.contains(found) {
+                return found.to_string();
+            }
+            match self.canonical(found).and_then(|p| self.back.get(&p)) {
+                Some(original) => original.clone(),
+                None => {
+                    left.push(found.to_string());
+                    found.to_string()
+                }
+            }
+        });
+        if let std::borrow::Cow::Owned(r) = restored {
+            *name = r;
+        }
+        left
+    }
+
+    /// The placeholder `found` stands for as this batch writes it, `[<label>-<n>]`, when its
+    /// label is one of this redactor's in any case: `found` is placeholder-shaped text an answer
+    /// holds, with or without brackets, spaces or a separator before the number.
+    fn canonical(&self, found: &str) -> Option<String> {
+        let inner = found
+            .trim()
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .trim();
+        let digits = inner.len() - inner.trim_end_matches(|c: char| c.is_ascii_digit()).len();
+        let (label, n) = inner.split_at(inner.len() - digits);
+        let n: usize = n.parse().ok()?;
+        let label = label
+            .trim_end()
+            .trim_end_matches(['-', '_', ' '])
+            .trim_end()
+            .to_lowercase();
+        let label = self
+            .redactor
+            .steps
+            .iter()
+            .filter(|s| s.replacement.is_none())
+            .map(|s| s.label.as_str())
+            .find(|l| l.to_lowercase() == label)?;
+        Some(format!("[{label}-{n}]"))
     }
 
     /// The replacements made so far, by class or rule.
@@ -2227,6 +2305,83 @@ mod tests {
         compile(Some(policy))
             .expect("a valid policy")
             .expect("a policy that redacts")
+    }
+
+    /// The ontology lines' words are never a rare name, in those lines or in a document, and the
+    /// gate finds none of them left; a known name still replaces one (`story:runbook-probe-fixes`).
+    #[test]
+    fn an_ontology_name_is_never_a_rare_name_and_a_known_name_still_replaces_it() {
+        let r = compiled(&full_policy(
+            &[m::RedactionClass::RareName],
+            &["Zorblat"],
+            None,
+            &[m::RedactionClass::RareName],
+        ));
+        let mut batch = r.batch();
+        let doc = "the Runbook names Quentin and the Zorblat";
+        batch.reserve(doc);
+        let lines = [
+            "Runbook(owner: String); Service; Zorblat",
+            "COVERS: Runbook -> Service",
+        ];
+        for line in lines {
+            batch.keep_names(line);
+        }
+        assert_eq!(
+            batch.replace(doc),
+            "the Runbook names [Name-1] and the [Name-2]"
+        );
+        assert_eq!(
+            batch.replace(lines[0]),
+            "Runbook(owner: String); Service; [Name-2]"
+        );
+        assert_eq!(batch.replace(lines[1]), "COVERS: Runbook -> Service");
+        assert_eq!(batch.counts()["RareName"], 1);
+        assert!(
+            batch.left(&batch.clone().replace(lines[0])).is_empty(),
+            "the gate reads a kept name as kept"
+        );
+        // Without the ontology, the same type names are rare.
+        let mut plain = r.batch();
+        plain.reserve(doc);
+        assert_eq!(plain.replace(lines[1]), "COVERS: [Name-1] -> [Name-2]");
+    }
+
+    /// A placeholder in a type position is restored in any shape the model writes it; one with
+    /// no value of the batch is answered, and text an original held stays as it is.
+    #[test]
+    fn a_type_name_placeholder_is_restored_in_any_shape_and_one_without_a_value_is_answered() {
+        let r = compiled(&full_policy(
+            &[m::RedactionClass::Email],
+            &["Runbook"],
+            None,
+            &[],
+        ));
+        let mut batch = r.batch();
+        batch.reserve_name("Email-7");
+        let shown = batch.replace("Runbook for jane.doe@example.com");
+        assert_eq!(shown, "[Name-1] for [Email-1]");
+        for written in [
+            "[Name-1]",
+            "Name-1",
+            "name-1",
+            "[name 1]",
+            "[NAME_1]",
+            "[ Name-01 ]",
+        ] {
+            let mut name = written.to_string();
+            assert!(batch.restore_name(&mut name).is_empty(), "{written}");
+            assert_eq!(name, "Runbook", "{written}");
+        }
+        let mut name = "Name-32".to_string();
+        assert_eq!(batch.restore_name(&mut name), vec!["Name-32".to_string()]);
+        assert_eq!(name, "Name-32");
+        let mut name = "Email-7".to_string();
+        assert!(
+            batch.restore_name(&mut name).is_empty(),
+            "an original's text"
+        );
+        assert_eq!(name, "Email-7");
     }
 
     #[test]
