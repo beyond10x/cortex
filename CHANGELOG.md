@@ -43,6 +43,16 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   a read. Before, an id on the second page was reported missing, and two timer runs then disabled
   the source. A list that names a cursor a second time, or runs past 1000 pages, ends the read
   with a reason naming the cursor instead of a loop.
+- A document read after a newer one no longer loses its changed value: a fact marked
+  `replaces: true` that is older than the current value, which EKR refuses
+  (`invalid-supersession`), is stored as that value's history, ending where the current value
+  begins, and counted in the run's `facts_history` instead of `rejected`. Before, the fact was
+  lost and listed as rejected.
+- One document whose extraction redeclares a type the store holds otherwise
+  (`extraction-type-conflict`) no longer fails its whole batch: that document is refused alone,
+  named in `rejected` with `extraction-type-conflict: <type>` and not marked seen, so a later run
+  asks for it again, and the rest of the batch applies. Before, the batch's apply failed, which
+  failed the run when nothing had been applied yet and stopped it otherwise.
 
 ## 0.7.2 — 2026-10-30
 

@@ -1274,40 +1274,7 @@ pub fn reapply_rounds(doc: &Yaml, report: &Value) -> Option<Reapply> {
     }
     let rounds = rounds
         .into_iter()
-        .map(|round| {
-            let cited: BTreeSet<String> = round.iter().flat_map(cites).collect();
-            let evidence: Vec<Yaml> = items
-                .iter()
-                .filter(|item| {
-                    item["evidence"]["id"]
-                        .as_str()
-                        .is_some_and(|id| cited.contains(id))
-                })
-                .cloned()
-                .collect();
-            let mut out = Mapping::new();
-            for key in ["format", "ontology", "entities"] {
-                if let Some(value) = doc.get(key) {
-                    out.insert(Yaml::String(key.into()), value.clone());
-                }
-            }
-            let facts = round.len();
-            out.insert(
-                Yaml::String("facts".into()),
-                Yaml::Sequence(
-                    round
-                        .into_iter()
-                        .map(|f| Yaml::Tagged(Box::new(f)))
-                        .collect(),
-                ),
-            );
-            out.insert(Yaml::String("evidence".into()), Yaml::Sequence(evidence));
-            Round {
-                doc: Yaml::Mapping(out),
-                facts,
-                cited,
-            }
-        })
+        .map(|round| round_of(doc, round))
         .collect();
     let mut report = report.clone();
     report["rejected"] = Value::Array(rest);
@@ -1315,6 +1282,309 @@ pub fn reapply_rounds(doc: &Yaml, report: &Value) -> Option<Reapply> {
         rounds,
         rest: report,
     })
+}
+
+/// The evidence ids `fact` cites.
+fn cited_ids(fact: &TaggedValue) -> Vec<String> {
+    fact.value["evidence"]
+        .as_sequence()
+        .into_iter()
+        .flatten()
+        .filter_map(Yaml::as_str)
+        .map(str::to_string)
+        .collect()
+}
+
+/// The part `item` names (`facts[<index>]`), when it is a fact of `facts`.
+fn fact_named<'d>(facts: &'d [Yaml], item: &Value) -> Option<&'d TaggedValue> {
+    let i = item
+        .as_str()?
+        .strip_prefix("facts[")?
+        .split(']')
+        .next()?
+        .parse::<usize>()
+        .ok()?;
+    match facts.get(i)? {
+        Yaml::Tagged(fact) => Some(fact),
+        _ => None,
+    }
+}
+
+/// A document of `doc`'s format, ontology and entities holding `facts` and the evidence items
+/// they cite.
+fn round_of(doc: &Yaml, facts: Vec<TaggedValue>) -> Round {
+    let items = doc["evidence"].as_sequence().map_or(&[][..], Vec::as_slice);
+    let cited: BTreeSet<String> = facts.iter().flat_map(cited_ids).collect();
+    let evidence: Vec<Yaml> = items
+        .iter()
+        .filter(|item| {
+            item["evidence"]["id"]
+                .as_str()
+                .is_some_and(|id| cited.contains(id))
+        })
+        .cloned()
+        .collect();
+    let mut out = Mapping::new();
+    for key in ["format", "ontology", "entities"] {
+        if let Some(value) = doc.get(key) {
+            out.insert(Yaml::String(key.into()), value.clone());
+        }
+    }
+    let n = facts.len();
+    out.insert(
+        Yaml::String("facts".into()),
+        Yaml::Sequence(
+            facts
+                .into_iter()
+                .map(|f| Yaml::Tagged(Box::new(f)))
+                .collect(),
+        ),
+    );
+    out.insert(Yaml::String("evidence".into()), Yaml::Sequence(evidence));
+    Round {
+        doc: Yaml::Mapping(out),
+        facts: n,
+        cited,
+    }
+}
+
+/// EKR's refusal of a replacement whose valid time starts before the active value it would
+/// supersede: the fact's document is older than that value's.
+pub const OLDER_THAN_CURRENT: &str = "invalid-supersession";
+
+/// The facts of `doc` (a merged document) that `report` (its `ekr.integrate.ExtractionReport`)
+/// rejected for [`OLDER_THAN_CURRENT`] alone, each a `!Property` marked `replaces: true`: one
+/// document of those facts without `replaces`, and the report with them taken out of its
+/// `rejected`; `None` when there are none.
+///
+/// A record read out of order is older than the value the store holds: its value held until the
+/// current one began. Applied without `replaces` it is stored from its own time on, and
+/// [`closings`] then ends it where the current value begins, so it becomes that value's history.
+pub fn history(doc: &Yaml, report: &Value) -> Option<(Round, Value)> {
+    let facts = doc["facts"].as_sequence().map_or(&[][..], Vec::as_slice);
+    let mut older = Vec::new();
+    let mut rest = Vec::new();
+    for part in report["rejected"].as_array().into_iter().flatten() {
+        let codes: Vec<&str> = part["issues"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|i| i["code"].as_str())
+            .collect();
+        let only_older = part["refusal"].is_null()
+            && !codes.is_empty()
+            && codes.iter().all(|c| *c == OLDER_THAN_CURRENT);
+        match fact_named(facts, &part["item"]) {
+            Some(fact)
+                if only_older
+                    && fact.tag == "Property"
+                    && fact.value["replaces"].as_bool() == Some(true) =>
+            {
+                let mut fact = fact.clone();
+                if let Yaml::Mapping(body) = &mut fact.value {
+                    body.remove("replaces");
+                }
+                older.push(fact);
+            }
+            _ => rest.push(part.clone()),
+        }
+    }
+    if older.is_empty() {
+        return None;
+    }
+    let mut report = report.clone();
+    report["rejected"] = Value::Array(rest);
+    Some((round_of(doc, older), report))
+}
+
+/// The supersessions that end each value a [`history`] document stored where the value after it
+/// begins. For each active assertion of one of its facts (the fact's property, a subject named by
+/// one of its aliases, exactly the evidence it cites): the active assertion of the same subject
+/// and property that starts soonest after it supersedes it from its own start. One with no later
+/// active value is left as it is. Two older values of one subject and property close one into the
+/// other and the newer into the current value, in one transaction.
+pub fn closings(
+    history: &Yaml,
+    snapshot: &crate::ekr::Snapshot,
+    ontology: &Value,
+) -> Vec<crate::ekr::Operation> {
+    let graph = &snapshot.graph.graph;
+    let mut properties: BTreeMap<&str, &str> = BTreeMap::new();
+    for t in ontology["node_types"].as_array().into_iter().flatten() {
+        for p in t["properties"].as_array().into_iter().flatten() {
+            if let (Some(id), Some(name)) = (p["id"].as_str(), p["name"].as_str()) {
+                properties.insert(id, name);
+            }
+        }
+    }
+    // Each active property assertion: (id, subject, property id, start, evidence).
+    type Held<'g> = (&'g str, &'g str, &'g str, i64, BTreeSet<&'g str>);
+    let active: Vec<Held<'_>> = graph
+        .assertions
+        .iter()
+        .filter(|(_, a)| a.lifecycle.as_deref() == Some("Active"))
+        .filter_map(|(id, a)| {
+            Some((
+                id.as_str(),
+                a.subject["Node"].as_str()?,
+                a.predicate["Property"].as_str()?,
+                a.valid_time["from"].as_i64()?,
+                a.evidence.iter().map(String::as_str).collect(),
+            ))
+        })
+        .collect();
+    let mut slots: BTreeMap<(&str, &str), Vec<(i64, &str)>> = BTreeMap::new();
+    for (id, subject, property, from, _) in &active {
+        slots
+            .entry((*subject, *property))
+            .or_default()
+            .push((*from, *id));
+    }
+    for values in slots.values_mut() {
+        values.sort_unstable();
+    }
+    let names = |node: &str| -> BTreeSet<&str> {
+        graph.nodes.get(node).map_or_else(BTreeSet::new, |n| {
+            n.aliases
+                .iter()
+                .chain(&n.canonical_name)
+                .map(String::as_str)
+                .collect()
+        })
+    };
+    let mut ops = Vec::new();
+    let mut closed: BTreeSet<&str> = BTreeSet::new();
+    for fact in history["facts"].as_sequence().into_iter().flatten() {
+        let Yaml::Tagged(fact) = fact else { continue };
+        let Some(property) = fact.value["property"].as_str() else {
+            continue;
+        };
+        let aliases: BTreeSet<&str> = fact.value["subject"]["aliases"]
+            .as_sequence()
+            .into_iter()
+            .flatten()
+            .filter_map(Yaml::as_str)
+            .collect();
+        let cited = cited_ids(fact);
+        let cited: BTreeSet<&str> = cited.iter().map(String::as_str).collect();
+        for (id, subject, pid, from, evidence) in &active {
+            let mine = properties.get(pid) == Some(&property)
+                && *evidence == cited
+                && !names(subject).is_disjoint(&aliases);
+            if !mine || closed.contains(id) {
+                continue;
+            }
+            let later = slots[&(*subject, *pid)]
+                .iter()
+                .find(|(start, other)| start > from && other != id);
+            if let Some((start, by)) = later {
+                closed.insert(*id);
+                ops.push(crate::ekr::Operation::Supersede {
+                    assertion: id.to_string(),
+                    by: by.to_string(),
+                    effective_from: *start,
+                });
+            }
+        }
+    }
+    ops
+}
+
+/// The code of EKR's refusal of a whole document that redeclares a type the store holds with other
+/// parents, abstractness or cardinality.
+pub const TYPE_CONFLICT: &str = "extraction-type-conflict";
+
+/// A merged document with the records that named a conflicting type taken out ([`isolate`]).
+pub struct Isolated {
+    /// What is left to apply: the document without the type's declaration, every fact of a
+    /// refused record and the evidence items of those records.
+    pub doc: Yaml,
+    /// The evidence ids of the refused records, each with its refusal.
+    pub refused: BTreeMap<String, String>,
+}
+
+/// When `error` (a failed `ekr apply-extraction` of `doc`, a merged document) is EKR's
+/// [`TYPE_CONFLICT`] refusal of a type `doc` declares: `doc` without that declaration and without
+/// the records whose facts name the type (a `!Relation` of that edge type, or a subject or object
+/// of that node type), each refused with the code and the type's name. The rest of the batch then
+/// applies on its own, against the store's own declaration of the type. `None` for any other
+/// error, or a type `doc` does not declare.
+pub fn isolate(doc: &Yaml, error: &str) -> Option<Isolated> {
+    let at = error.find(TYPE_CONFLICT)?;
+    let said = error[at + TYPE_CONFLICT.len()..].trim_end();
+    let declared = |kind: &str| -> Vec<String> {
+        doc["ontology"][kind]
+            .as_sequence()
+            .into_iter()
+            .flatten()
+            .filter_map(|t| t["name"].as_str().map(str::to_string))
+            .collect()
+    };
+    // EKR ends its refusal with the type's name.
+    let named = |name: &str| {
+        said.strip_suffix(name).is_some_and(|before| {
+            before.ends_with(|c: char| c.is_whitespace() || matches!(c, ':' | '`' | '"'))
+        })
+    };
+    let pick = |kind: &str| {
+        declared(kind)
+            .into_iter()
+            .filter(|n| named(n))
+            .max_by_key(String::len)
+    };
+    let (kind, name) = match (pick("node_types"), pick("edge_types")) {
+        (Some(n), Some(e)) if e.len() > n.len() => ("edge_types", e),
+        (Some(n), _) => ("node_types", n),
+        (None, Some(e)) => ("edge_types", e),
+        (None, None) => return None,
+    };
+    let uses = |fact: &TaggedValue| -> bool {
+        let body = &fact.value;
+        if kind == "edge_types" {
+            fact.tag == "Relation" && body["relation"].as_str() == Some(name.as_str())
+        } else {
+            body["subject"]["node_type"].as_str() == Some(name.as_str())
+                || body["object"]["node_type"].as_str() == Some(name.as_str())
+        }
+    };
+    let facts = doc["facts"].as_sequence().map_or(&[][..], Vec::as_slice);
+    let refusal = format!("{TYPE_CONFLICT}: {name}");
+    let refused: BTreeMap<String, String> = facts
+        .iter()
+        .filter_map(|f| match f {
+            Yaml::Tagged(f) if uses(f) => Some(cited_ids(f)),
+            _ => None,
+        })
+        .flatten()
+        .map(|id| (id, refusal.clone()))
+        .collect();
+    let mut out = doc.clone();
+    if let Some(types) = out
+        .get_mut("ontology")
+        .and_then(|o| o.get_mut(kind))
+        .and_then(Yaml::as_sequence_mut)
+    {
+        types.retain(|t| t["name"].as_str() != Some(name.as_str()));
+    }
+    if kind == "node_types" {
+        if let Some(entities) = out.get_mut("entities").and_then(Yaml::as_sequence_mut) {
+            entities.retain(|e| e["node_type"].as_str() != Some(name.as_str()));
+        }
+    }
+    if let Some(facts) = out.get_mut("facts").and_then(Yaml::as_sequence_mut) {
+        facts.retain(|f| match f {
+            Yaml::Tagged(f) => !uses(f) && cited_ids(f).iter().all(|id| !refused.contains_key(id)),
+            _ => true,
+        });
+    }
+    if let Some(items) = out.get_mut("evidence").and_then(Yaml::as_sequence_mut) {
+        items.retain(|item| {
+            item["evidence"]["id"]
+                .as_str()
+                .is_none_or(|id| !refused.contains_key(id))
+        });
+    }
+    Some(Isolated { doc: out, refused })
 }
 
 /// Entity names per node type in a merged document, for the next run's prompt.
@@ -1412,6 +1682,102 @@ mod tests {
         let refused = Refused::finished_at_sigterm(b"");
         assert_eq!(refused.terminated, Some(Stopped::Call));
         assert_eq!(refused.cost_usd, None);
+    }
+
+    /// `story:apply-out-of-order-and-isolated`: only a replacing `!Property` rejected for
+    /// `invalid-supersession` alone is kept as history, without `replaces`; every other rejected
+    /// part stays in the report.
+    #[test]
+    fn only_a_replacement_older_than_the_current_value_is_kept_as_history() {
+        let doc = tagged(&json!({
+            "format": "ekr.extraction-document/1",
+            "ontology": {"node_types": [], "edge_types": []},
+            "entities": [],
+            "facts": [
+                {"!Property": {"property": "p", "replaces": true, "evidence": ["e1"]}},
+                {"!Property": {"property": "q", "evidence": ["e2"]}},
+                {"!Property": {"property": "r", "replaces": true, "evidence": ["e2"]}},
+            ],
+            "evidence": [
+                {"evidence": {"id": "e1"}, "payload": []},
+                {"evidence": {"id": "e2"}, "payload": []},
+            ],
+        }));
+        let report = json!({"rejected": [
+            {"item": "facts[0]", "refusal": null, "issues": [{"code": "invalid-supersession"}]},
+            {"item": "facts[1]", "refusal": null, "issues": [{"code": "invalid-supersession"}]},
+            {"item": "facts[2]", "refusal": null,
+                "issues": [{"code": "invalid-supersession"}, {"code": "other"}]},
+        ]});
+        let (older, rest) = history(&doc, &report).expect("one to keep");
+        assert_eq!(older.facts, 1);
+        assert_eq!(older.cited, BTreeSet::from(["e1".to_string()]));
+        let Yaml::Tagged(fact) = &older.doc["facts"][0] else {
+            panic!("{:?}", older.doc)
+        };
+        assert_eq!(fact.value["property"].as_str(), Some("p"));
+        assert!(fact.value.get("replaces").is_none(), "{fact:?}");
+        let left: Vec<&str> = rest["rejected"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["item"].as_str().unwrap())
+            .collect();
+        assert_eq!(left, ["facts[1]", "facts[2]"]);
+    }
+
+    /// `story:apply-out-of-order-and-isolated`: EKR's `extraction-type-conflict` naming a type the
+    /// document declares takes out that declaration and every fact of the records whose facts
+    /// name it; another refusal, or a type the document does not declare, isolates nothing.
+    #[test]
+    fn a_type_conflict_takes_out_the_records_that_name_the_type() {
+        let doc = tagged(&json!({
+            "format": "ekr.extraction-document/1",
+            "ontology": {"node_types": [{"name": "Org"}], "edge_types": [
+                {"name": "OWNS", "cardinality": "One"}, {"name": "DEVELOPS"}]},
+            "entities": [{"node_type": "Org", "aliases": ["A"]}],
+            "facts": [
+                {"!Relation": {"relation": "DEVELOPS", "evidence": ["e1"]}},
+                {"!Relation": {"relation": "OWNS", "evidence": ["e1"]}},
+                {"!Relation": {"relation": "DEVELOPS", "evidence": ["e2"]}},
+                {"!Property": {"property": "p", "evidence": ["e2"]}},
+            ],
+            "evidence": [
+                {"evidence": {"id": "e1"}, "payload": []},
+                {"evidence": {"id": "e2"}, "payload": []},
+            ],
+        }));
+        let error = "ekr apply-extraction failed: ekr: extraction-type-conflict: the store \
+                     declares this type with other parents, abstractness or cardinality, which \
+                     no schema operation changes: OWNS";
+        let Isolated { doc: rest, refused } = isolate(&doc, error).expect("isolated");
+        assert_eq!(
+            refused,
+            BTreeMap::from([(
+                "e1".to_string(),
+                "extraction-type-conflict: OWNS".to_string()
+            )])
+        );
+        let edges: Vec<&str> = rest["ontology"]["edge_types"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(edges, ["DEVELOPS"]);
+        let facts = rest["facts"].as_sequence().unwrap();
+        assert_eq!(facts.len(), 2, "{facts:?}");
+        assert!(facts.iter().all(|f| match f {
+            Yaml::Tagged(f) => f.value["evidence"][0].as_str() == Some("e2"),
+            _ => false,
+        }));
+        assert_eq!(rest["evidence"].as_sequence().unwrap().len(), 1);
+        assert!(isolate(&doc, "ekr: extraction-type-conflict: … other: Thing").is_none());
+        assert!(isolate(&doc, "ekr: extraction-name-duplicate: OWNS").is_none());
+        // A node type: its entities go too.
+        let node = isolate(&doc, "ekr: extraction-type-conflict: … changes: Org").expect("Org");
+        assert!(node.refused.is_empty());
+        assert!(node.doc["entities"].as_sequence().unwrap().is_empty());
     }
 
     /// `story:replacement-applied-as-assertion`: only a fact rejected for having nothing active
