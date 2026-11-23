@@ -23,7 +23,7 @@ fn staged_pg_ekr(w: &World) -> PathBuf {
 printf '%s|%s\n' "${EKR_STAGE:--}" "$*" >> "$R/ekr-argv.log"
 if [ "$1" = postgres-schema ]; then echo '{"format":"ekr.postgres-schema/1","ready":true}'; exit 0; fi
 if [ "$EKR_BACKEND" = postgres ]; then
-  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "the lineage has no seed" >&2; exit 1; fi
+  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "ekr: ekr.views.NotSeeded: the lineage has no seed" >&2; exit 2; fi
   EKR_BACKEND=sqlite; EKR_STORE="$DB"; export EKR_BACKEND EKR_STORE
 fi
 case "$1 $2" in
@@ -72,7 +72,7 @@ fn spec(w: &World, bin: &Path, max: &str, budget: &str, max_chars: usize) -> Pat
         r#"format: cortex.instance/1
 name: pg
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{bin}"}}
+ekr: {{version: "0.0.43", bin: "{bin}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "{budget}", timeout_s: 60}}
 sources:

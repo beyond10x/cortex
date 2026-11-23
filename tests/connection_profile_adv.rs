@@ -119,7 +119,7 @@ fn sqlite_backed_ekr(w: &World) -> PathBuf {
             r#"R="{root}"; EKR="{ekr}"; DB="$R/pg-as-sqlite.sqlite"
 if [ "$1" = postgres-schema ]; then echo '{{"format":"ekr.postgres-schema/1","ready":true}}'; exit 0; fi
 if [ "$EKR_BACKEND" = postgres ]; then
-  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "the lineage has no seed" >&2; exit 1; fi
+  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "ekr: ekr.views.NotSeeded: the lineage has no seed" >&2; exit 2; fi
   EKR_BACKEND=sqlite; EKR_STORE="$DB"; export EKR_BACKEND EKR_STORE
 fi
 exec "$EKR" "$@"
@@ -178,7 +178,7 @@ fn postgres_world(
             r#"format: cortex.instance/1
 name: pg
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:
@@ -426,7 +426,7 @@ fn adv_both_or_neither_is_refused_on_every_place_and_by_update() {
                 r#"format: cortex.instance/1
 name: kinds
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

@@ -235,7 +235,7 @@ EKR could not read the ontology) applies nothing and writes no `proposals.jsonl`
 the cost so far. When a line of `proposals.jsonl` cannot be written after earlier proposals were
 applied, `propose-failed` leaves those applied and the lines before it written, and its reason
 counts both. When EKR cannot say whether a proposal's schema transaction took effect (`ekr commit`
-answers that the publication outcome is unknown), the round stops there as
+answers `publication-outcome-unknown` with exit 3), the round stops there as
 `store-outcome-unknown`, exit 4: no later proposal is asked of EKR, the proposals before it stay
 recorded, and the reason names the proposal; `ekr ontology` answers whether its change took effect.
 
@@ -329,5 +329,5 @@ counts `fetched`, `new`, `changed`, `held` and `unchanged`, and `unread`.
 
 | command | does |
 |---|---|
-| `cortex setup [--ekr-version <v>]` | install `ekr` at the version (default 0.0.34) with `cargo install` when it is missing. A binary already in the cache is kept only when `ekr --version` reports that version; one of another version exits 2, naming the version it reported |
+| `cortex setup [--ekr-version <v>]` | install `ekr` at the version (default 0.0.43) with `cargo install` when it is missing. A binary already in the cache is kept only when `ekr --version` reports that version; one of another version exits 2, naming the version it reported |
 | `cortex schema` | print the spec file's JSON Schema (with an instance name it proposes schema changes instead, see [Proposing schema changes](#proposing-schema-changes)) |

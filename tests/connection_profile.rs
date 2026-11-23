@@ -374,7 +374,7 @@ fn connectors_and_structured_sources_named_by_profile_invoke_their_resolved_id()
             r#"format: cortex.instance/1
 name: kinds
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:
@@ -451,7 +451,7 @@ serve: {{view_port: 18994}}
 
 /// An `ekr` at `<bin>/ekr-pg` that answers a `postgres` store from `<root>/pg-as-sqlite.sqlite`
 /// through the real `ekr`, as `tests/store_backend.rs` does: `head` before that file exists answers
-/// PostgreSQL's "the lineage has no seed", and `postgres-schema` answers ready.
+/// `ekr.views.NotSeeded` (exit 2), and `postgres-schema` answers ready.
 fn sqlite_backed_ekr(w: &World) -> PathBuf {
     let path = w.bin.join("ekr-pg");
     executable(
@@ -460,7 +460,7 @@ fn sqlite_backed_ekr(w: &World) -> PathBuf {
             r#"R="{root}"; EKR="{ekr}"; DB="$R/pg-as-sqlite.sqlite"
 if [ "$1" = postgres-schema ]; then echo '{{"format":"ekr.postgres-schema/1","ready":true}}'; exit 0; fi
 if [ "$EKR_BACKEND" = postgres ]; then
-  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "the lineage has no seed" >&2; exit 1; fi
+  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "ekr: ekr.views.NotSeeded: the lineage has no seed" >&2; exit 2; fi
   EKR_BACKEND=sqlite; EKR_STORE="$DB"; export EKR_BACKEND EKR_STORE
 fi
 exec "$EKR" "$@"
@@ -524,7 +524,7 @@ fn postgres_world(entries: &[(&str, &str, &str)]) -> (World, PathBuf, PathBuf) {
             r#"format: cortex.instance/1
 name: pg
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

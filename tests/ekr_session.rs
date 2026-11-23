@@ -35,7 +35,7 @@ const EKR: &str = r#"R="@ROOT@"; EKR="@EKR@"; DB="$R/pg-as-sqlite.sqlite"
 printf '%s|%s\n' "${EKR_STAGE:--}" "$*" >> "$R/ekr-argv.log"
 if [ "$1" = postgres-schema ]; then echo '{"format":"ekr.postgres-schema/1","ready":true}'; exit 0; fi
 if [ "$EKR_BACKEND" = postgres ]; then
-  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "the lineage has no seed" >&2; exit 1; fi
+  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "ekr: ekr.views.NotSeeded: the lineage has no seed" >&2; exit 2; fi
   EKR_BACKEND=sqlite; EKR_STORE="$DB"; export EKR_BACKEND EKR_STORE
 fi
 if [ -e "$R/unit-stop" ] && [ "$1" = apply-extraction ]; then
@@ -129,7 +129,7 @@ fn world(store: impl FnOnce(&World) -> String, gate: &str) -> World {
         &spec,
         format!(
             "format: cortex.instance/1\nname: s\ndescription: Test brain.\n\
-             ekr: {{version: \"0.0.34\", bin: \"{bin}\"}}\nseed: {{documents: []}}\n\
+             ekr: {{version: \"0.0.43\", bin: \"{bin}\"}}\nseed: {{documents: []}}\n\
              model: {{model: claude-haiku-4-5-20251001, budget_usd: \"1\", timeout_s: 60, \
              batch_chars: 1000}}\n\
              sources:\n  - name: repos\n    schedule: daily\n    settings:\n      kind: files\n      \

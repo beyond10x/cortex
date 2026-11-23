@@ -12,8 +12,9 @@ use std::process::Command;
 use common::{ekr, executable, World};
 use serde_json::{json, Value};
 
-/// What EKR 0.0.34 prints for `StoreError::UnknownCommit` (a fault, `ekr: <message>`, exit 1).
-const UNKNOWN: &str = "ekr: publication outcome is unknown; resolve the exact retained occurrence";
+/// What EKR 0.0.43 prints for `StoreError::UnknownCommit`, with exit 3 (`docs/cli.md`, exit codes).
+const UNKNOWN: &str =
+    "ekr: publication-outcome-unknown: publication outcome is unknown; resolve the exact retained occurrence";
 
 /// A stand-in `ekr` in front of the real one. Hooks are files under `<root>`:
 /// - `unknown-apply-at`: holds `n`; the `n`th `apply-extraction` counted since the file was
@@ -25,11 +26,11 @@ fn unknown_ekr(w: &World) -> PathBuf {
 if [ "$1" = apply-extraction ] && [ -e "$R/unknown-apply-at" ]; then
   n=$(( $(cat "$R/applies" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$R/applies"
   if [ "$n" = "$(cat "$R/unknown-apply-at")" ]; then
-    "$EKR" "$@" > /dev/null || exit 1; echo "$UNKNOWN" >&2; exit 1
+    "$EKR" "$@" > /dev/null || exit 1; echo "$UNKNOWN" >&2; exit 3
   fi
 fi
 if [ "$1" = commit ] && [ -e "$R/unknown-commit" ]; then
-  "$EKR" "$@" > /dev/null || exit 1; echo "$UNKNOWN" >&2; exit 1
+  "$EKR" "$@" > /dev/null || exit 1; echo "$UNKNOWN" >&2; exit 3
 fi
 exec "$EKR" "$@"
 "#
@@ -222,7 +223,7 @@ fn items_instance(w: &World, supersede: bool) -> PathBuf {
             r#"format: cortex.instance/1
 name: s
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

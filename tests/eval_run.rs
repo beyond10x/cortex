@@ -514,7 +514,7 @@ fn mcp_reader(w: &World, text: &str) -> PathBuf {
     executable(
         &path,
         &format!(
-            r#"[ "$1" = mcp ] || {{ echo "ekr 0.0.34"; exit 0; }}
+            r#"[ "$1" = mcp ] || {{ echo "ekr 0.0.43"; exit 0; }}
 while IFS= read -r line; do
   id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
   case "$line" in

@@ -56,7 +56,7 @@ fn spec(w: &World, name: &str, model: &str) -> PathBuf {
             r#"format: cortex.instance/1
 name: {name}
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "5", timeout_s: 60{model}}}
 sources:
@@ -278,7 +278,7 @@ fn quality_and_schema_count_against_the_daily_token_ceiling() {
 /// A spec text with `model` as its model line.
 fn spec_text(model: &str) -> String {
     format!(
-        "format: cortex.instance/1\nname: t\ndescription: T.\nekr: {{version: \"0.0.34\"}}\n\
+        "format: cortex.instance/1\nname: t\ndescription: T.\nekr: {{version: \"0.0.43\"}}\n\
          seed: {{documents: []}}\nmodel: {model}\nsources: []\nserve: {{view_port: 18996}}\n"
     )
 }

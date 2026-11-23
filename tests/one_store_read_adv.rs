@@ -101,7 +101,7 @@ fn world() -> World {
         &spec,
         format!(
             "format: cortex.instance/1\nname: k\ndescription: Test brain.\n\
-             ekr: {{version: \"0.0.34\", bin: \"{bin}\"}}\n\
+             ekr: {{version: \"0.0.43\", bin: \"{bin}\"}}\n\
              seed: {{ekr_seed: seed.yaml, documents: []}}\n\
              model: {{model: claude-haiku-4-5-20251001, budget_usd: \"1\", timeout_s: 60}}\n\
              sources: []\nserve: {{view_port: 18996}}\n",

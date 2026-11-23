@@ -29,7 +29,7 @@ fn spec(w: &World, name: &str, budget: &str) -> PathBuf {
             r#"format: cortex.instance/1
 name: {name}
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: [docs]}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "{budget}", timeout_s: 60}}
 sources: []

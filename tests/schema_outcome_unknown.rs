@@ -1,7 +1,8 @@
 //! `story:schema-apply-outcome-unknown`: a schema transaction EKR cannot say took effect stops
 //! `cortex schema <instance>` as it stops a run: the outcome is `store-outcome-unknown`, exit 4,
 //! naming the proposal whose write is unknown, and no later proposal is asked of EKR. A stand-in
-//! `ekr` in front of the real one answers "publication outcome is unknown" for one `ekr commit`.
+//! `ekr` in front of the real one answers `publication-outcome-unknown`, exit 3, for one `ekr
+//! commit`.
 
 mod common;
 
@@ -10,9 +11,9 @@ use std::path::{Path, PathBuf};
 use common::{executable, World};
 use serde_json::{json, Value};
 
-/// What EKR 0.0.34 prints for `StoreError::UnknownCommit` (`crates/ekr/src/exit.rs`: a fault,
-/// `ekr: <message>`, exit 1).
-const UNKNOWN: &str = "ekr: publication outcome is unknown; resolve the exact retained occurrence";
+/// What EKR 0.0.43 prints for `StoreError::UnknownCommit`, with exit 3 (`docs/cli.md`, exit codes).
+const UNKNOWN: &str =
+    "ekr: publication-outcome-unknown: publication outcome is unknown; resolve the exact retained occurrence";
 
 /// The stand-in: every verb goes to the real `ekr`, except that while `<root>/unknown-commit`
 /// holds `n`, the `n`th `ekr commit` from then on commits nothing and answers the unknown outcome.
@@ -26,7 +27,7 @@ if [ "$1" = commit ]; then
   if [ -e "$R/readonly-at-commit" ]; then chmod 444 "$RUNS"/*/schema/*/proposals.jsonl; fi
   if [ -e "$R/unknown-commit" ]; then
     n=$(( $(cat "$R/commits-armed" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$R/commits-armed"
-    if [ "$n" = "$(cat "$R/unknown-commit")" ]; then echo "$UNKNOWN" >&2; exit 1; fi
+    if [ "$n" = "$(cat "$R/unknown-commit")" ]; then echo "$UNKNOWN" >&2; exit 3; fi
   fi
 fi
 exec "$EKR" "$@"
@@ -226,7 +227,7 @@ fn pg_ekr(w: &World) -> PathBuf {
     let body = r#"R="@R@"; EKR="@EKR@"; DB="$R/pg-as-sqlite.sqlite"
 if [ "$1" = postgres-schema ]; then echo '{"format":"ekr.postgres-schema/1","ready":true}'; exit 0; fi
 if [ "$EKR_BACKEND" = postgres ]; then
-  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "the lineage has no seed" >&2; exit 1; fi
+  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "ekr: ekr.views.NotSeeded: the lineage has no seed" >&2; exit 2; fi
   EKR_BACKEND=sqlite; EKR_STORE="$DB"; export EKR_BACKEND EKR_STORE
 fi
 if [ "$1 $2" = "stage publish" ] && [ -e "$R/fail-head-after-publish" ]; then
@@ -275,7 +276,7 @@ fn pg_instance() -> (World, PathBuf) {
             r#"format: cortex.instance/1
 name: pg
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{bin}"}}
+ekr: {{version: "0.0.43", bin: "{bin}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

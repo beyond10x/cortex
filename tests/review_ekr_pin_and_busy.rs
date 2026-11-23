@@ -42,11 +42,11 @@ fn calls(ekr: &Path) -> Vec<String> {
         .collect()
 }
 
-/// A spec of instance `t` pinning EKR 0.0.34, with `ekr.bin` when `bin` is given.
+/// A spec of instance `t` pinning EKR 0.0.43, with `ekr.bin` when `bin` is given.
 fn spec(w: &World, bin: Option<&Path>) -> PathBuf {
     let ekr = match bin {
-        Some(bin) => format!(r#"{{version: "0.0.34", bin: "{}"}}"#, bin.display()),
-        None => r#"{version: "0.0.34"}"#.to_string(),
+        Some(bin) => format!(r#"{{version: "0.0.43", bin: "{}"}}"#, bin.display()),
+        None => r#"{version: "0.0.43"}"#.to_string(),
     };
     let path = w.root.join("t.yaml");
     std::fs::write(
@@ -133,7 +133,7 @@ fn create_refuses_an_explicit_ekr_that_reports_another_version_than_the_pin() {
     );
     let reason = created["detail"].to_string();
     assert!(
-        reason.contains("reports version 0.0.32") && reason.contains("0.0.34"),
+        reason.contains("reports version 0.0.32") && reason.contains("0.0.43"),
         "{created}"
     );
     assert_not_created(&w, &w.root, &ekr);
@@ -143,7 +143,7 @@ fn create_refuses_an_explicit_ekr_that_reports_another_version_than_the_pin() {
 fn create_refuses_a_cached_ekr_that_reports_another_version_than_the_pin() {
     let w = World::new();
     let home = w.root.join("user");
-    let ekr = home.join(".cache/cortex/bin/0.0.34/bin/ekr");
+    let ekr = home.join(".cache/cortex/bin/0.0.43/bin/ekr");
     stand_in_ekr(&ekr, "0.0.32");
     let spec = spec(&w, None);
     let (code, created, _) = cortex_at(
@@ -169,18 +169,18 @@ fn create_refuses_a_cached_ekr_that_reports_another_version_than_the_pin() {
 fn setup_refuses_a_cached_ekr_of_another_version_and_keeps_one_of_the_pinned_version() {
     let w = World::new();
     let home = w.root.join("user");
-    let ekr = home.join(".cache/cortex/bin/0.0.34/bin/ekr");
+    let ekr = home.join(".cache/cortex/bin/0.0.43/bin/ekr");
 
     stand_in_ekr(&ekr, "0.0.32");
-    let (code, _, stderr) = cortex_at(&w, &home, &["setup", "--ekr-version", "0.0.34"]);
+    let (code, _, stderr) = cortex_at(&w, &home, &["setup", "--ekr-version", "0.0.43"]);
     assert_eq!(code, 2, "{stderr}");
     assert!(
-        stderr.contains("reports version 0.0.32, not the pinned 0.0.34"),
+        stderr.contains("reports version 0.0.32, not the pinned 0.0.43"),
         "{stderr}"
     );
 
-    stand_in_ekr(&ekr, "0.0.34");
-    let (code, out, stderr) = cortex_at(&w, &home, &["setup", "--ekr-version", "0.0.34"]);
+    stand_in_ekr(&ekr, "0.0.43");
+    let (code, out, stderr) = cortex_at(&w, &home, &["setup", "--ekr-version", "0.0.43"]);
     assert_eq!(code, 0, "{stderr}");
     assert_eq!(out["ekr"].as_str(), Some(ekr.to_str().unwrap()), "{out}");
     assert_eq!(calls(&ekr), Vec::<String>::new());

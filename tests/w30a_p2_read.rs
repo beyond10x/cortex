@@ -54,7 +54,7 @@ fn world_of(ids: &[&str]) -> World {
         &spec,
         format!(
             "format: cortex.instance/1\nname: r\ndescription: Test brain.\n\
-             ekr: {{version: \"0.0.34\", bin: \"{bin}\"}}\nseed: {{documents: []}}\n\
+             ekr: {{version: \"0.0.43\", bin: \"{bin}\"}}\nseed: {{documents: []}}\n\
              model: {{model: claude-haiku-4-5-20251001, budget_usd: \"1\", timeout_s: 60, \
              batch_chars: 1000}}\n\
              sources:\n  - name: repos\n    schedule: daily\n    settings:\n      kind: files\n      \

@@ -14,13 +14,13 @@ timeline:
       name: vector-databases
       description: Open-source vector databases.
       model: claude-haiku-4-5
-      ekr_version: 0.0.34
+      ekr_version: 0.0.43
       seed_digest: 2ff1b8f4636e011835284dfa1480606c60c4af8965e03ba527623dd8c83ae843
       spec:
         format: cortex.instance/1
         name: vector-databases
         description: Open-source vector databases.
-        ekr: {version: 0.0.34}
+        ekr: {version: 0.0.43}
         seed: {documents: []}
         model:
           model: claude-haiku-4-5
@@ -43,7 +43,7 @@ timeline:
         format: cortex.instance/1
         name: vector-databases
         description: Open-source vector databases and the companies behind them.
-        ekr: {version: 0.0.34}
+        ekr: {version: 0.0.43}
         seed: {documents: []}
         model:
           model: claude-sonnet-5-5

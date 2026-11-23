@@ -28,7 +28,7 @@ format: cortex.instance/1
 name: example
 description: >-
   Developments in open-source vector databases and the companies behind them.
-ekr: {version: "0.0.34"}
+ekr: {version: "0.0.43"}
 seed: {schema: seed/schema.yaml, documents: []}
 model: {model: claude-sonnet-5-5, budget_usd: "1", timeout_s: 900}
 sources: []

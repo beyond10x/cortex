@@ -19,7 +19,7 @@ fn spec(w: &World, name: &str, timeout: &str, json: bool) -> PathBuf {
             format!("{name}.json"),
             format!(
                 r#"{{"format": "cortex.instance/1", "name": "{name}", "description": "Test brain.",
- "ekr": {{"version": "0.0.34", "bin": "{ekr}"}}, "seed": {{"documents": []}},
+ "ekr": {{"version": "0.0.43", "bin": "{ekr}"}}, "seed": {{"documents": []}},
  "model": {{"model": "claude-haiku-4-5-20251001", "budget_usd": "1", "timeout_s": {timeout}}},
  "sources": [], "serve": {{"view_port": 0}}}}"#,
                 ekr = ekr.display()
@@ -30,7 +30,7 @@ fn spec(w: &World, name: &str, timeout: &str, json: bool) -> PathBuf {
             format!("{name}.yaml"),
             format!(
                 "format: cortex.instance/1\nname: {name}\ndescription: Test brain.\n\
-                 ekr: {{version: \"0.0.34\", bin: \"{ekr}\"}}\nseed: {{documents: []}}\n\
+                 ekr: {{version: \"0.0.43\", bin: \"{ekr}\"}}\nseed: {{documents: []}}\n\
                  model: {{model: claude-haiku-4-5-20251001, budget_usd: \"1\", timeout_s: {timeout}}}\n\
                  sources: []\nserve: {{view_port: 0}}\n",
                 ekr = ekr.display()
@@ -103,7 +103,7 @@ fn create_reads_a_whole_number_in_any_spelling_and_refuses_a_fraction() {
 fn every_integer_of_the_spec_reads_a_whole_number_in_any_spelling() {
     let base = |model: &str, extra: &str| {
         format!(
-            "format: cortex.instance/1\nname: brain\ndescription: d\nekr: {{version: \"0.0.34\"}}\n\
+            "format: cortex.instance/1\nname: brain\ndescription: d\nekr: {{version: \"0.0.43\"}}\n\
              seed: {{documents: []}}\nmodel: {{model: m, {model}}}\nsources: []\nserve: {{}}\n{extra}"
         )
     };

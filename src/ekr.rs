@@ -69,7 +69,7 @@ pub fn expand(path: &str) -> PathBuf {
     }
 }
 
-/// The version `bin --version` reports (`ekr 0.0.34`): its last word, without a leading `v`.
+/// The version `bin --version` reports (`ekr 0.0.43`): its last word, without a leading `v`.
 pub fn reported_version(bin: &Path) -> Result<String, String> {
     let mut cmd = Command::new(bin);
     cmd.arg("--version").stdin(Stdio::null());
@@ -147,32 +147,72 @@ fn output(mut cmd: Command, what: &str) -> Result<std::process::Output, String> 
         .map_err(|e| format!("cannot run ekr for {what}: {e}"))
 }
 
-/// The stdout of `out`, or `ekr <what> failed: <its stderr>` when it exited other than 0, its
-/// stderr masked ([`said`]).
+/// The stdout of `out`, or [`failed`] when it exited other than 0.
 fn finished(out: std::process::Output, what: &str) -> Result<Vec<u8>, String> {
     if out.status.success() {
         Ok(out.stdout)
     } else {
-        Err(format!("ekr {what} failed: {}", said(&out.stderr)))
+        Err(failed(what, out.status.code(), &out.stderr))
     }
 }
 
+/// The error of the verb `what` that exited with `exit` (none when a signal ended it) and wrote
+/// `stderr`: `ekr <what> failed: <its stderr>`, its stderr masked ([`said`]). A write EKR cannot
+/// say took effect (exit [`OUTCOME_UNKNOWN_EXIT`], refused as [`OUTCOME_UNKNOWN_NAME`]) carries
+/// [`OUTCOME_UNKNOWN`] before its stderr, which [`outcome_unknown`] reads.
+fn failed(what: &str, exit: Option<i32>, stderr: &[u8]) -> String {
+    let unknown = exit == Some(OUTCOME_UNKNOWN_EXIT)
+        && refused_as(&String::from_utf8_lossy(stderr), OUTCOME_UNKNOWN_NAME);
+    let mark = if unknown { OUTCOME_UNKNOWN } else { "" };
+    format!("ekr {what} failed: {mark}{}", said(stderr))
+}
+
+/// Whether `stderr` holds EKR's refusal `name`: a line `ekr: <name>: <reason>` (EKR 0.0.43
+/// `docs/cli.md`, "Exit codes and output").
+fn refused_as(stderr: &str, name: &str) -> bool {
+    stderr.lines().any(|line| {
+        line.trim()
+            .strip_prefix("ekr: ")
+            .and_then(|rest| rest.strip_prefix(name))
+            .is_some_and(|rest| rest.starts_with(':'))
+    })
+}
+
 /// What an `ekr` wrote to stderr, trimmed and masked for credential shapes ([`crate::mask`]):
-/// an error built from it reaches the run's report, `cortex.log` and the source's status. Masking
-/// keeps prose, so [`OUTCOME_UNKNOWN`] still reads as written.
+/// an error built from it reaches the run's report, `cortex.log` and the source's status.
 pub(crate) fn said(stderr: &[u8]) -> String {
     crate::mask::mask(String::from_utf8_lossy(stderr).trim()).0
 }
 
-/// What EKR prints when it cannot say whether a publication took effect (`StoreError::UnknownCommit`
-/// in EKR 0.0.34, `crates/ekr-store/src/lib.rs`). EKR gives it no refusal name and no exit status
-/// of its own (a fault: `ekr: <message>`, exit 1), so the message is what tells it apart.
-const OUTCOME_UNKNOWN: &str = "publication outcome is unknown";
+/// The exit status of a write whose publication EKR cannot confirm (EKR 0.0.43 `docs/cli.md`,
+/// "Exit codes and output": `StoreError::UnknownCommit`).
+const OUTCOME_UNKNOWN_EXIT: i32 = 3;
 
-/// Whether `error`, as a store verb answered it, says the verb's outcome is unknown: it may or may
-/// not have taken effect, and the store, not the caller, is at fault.
+/// The refusal name EKR gives that write on stderr: `ekr: publication-outcome-unknown: <reason>`.
+const OUTCOME_UNKNOWN_NAME: &str = "publication-outcome-unknown";
+
+/// What cortex writes before EKR's stderr in the error of a verb EKR answered with
+/// [`OUTCOME_UNKNOWN_EXIT`] and [`OUTCOME_UNKNOWN_NAME`]. EKR's own message is not read: only the
+/// exit status and the refusal name tell the outcome apart.
+const OUTCOME_UNKNOWN: &str = "the store cannot say whether it took effect (exit 3): ";
+
+/// Whether `error`, as a store verb answered it ([`failed`]), says the verb's outcome is unknown:
+/// it may or may not have taken effect, and the store, not the caller, is at fault.
 pub fn outcome_unknown(error: &str) -> bool {
     error.contains(OUTCOME_UNKNOWN)
+}
+
+/// The exit status of a verb that meets a tenant with no seed (EKR 0.0.43 `docs/cli.md`, "Exit
+/// codes and output": a named refusal).
+const NOT_SEEDED_EXIT: i32 = 2;
+
+/// The refusal name EKR gives every verb that meets a tenant with no seed.
+const NOT_SEEDED_NAME: &str = "ekr.views.NotSeeded";
+
+/// Whether a verb that exited with `exit` and wrote `stderr` was refused because the store's
+/// tenant has no seed.
+fn not_seeded(exit: Option<i32>, stderr: &[u8]) -> bool {
+    exit == Some(NOT_SEEDED_EXIT) && refused_as(&String::from_utf8_lossy(stderr), NOT_SEEDED_NAME)
 }
 
 fn json(bytes: &[u8], what: &str) -> Result<Value, String> {
@@ -658,18 +698,18 @@ impl Store {
         })
     }
 
-    /// Whether the store's lineage holds a seed: `ekr head` answers a head, or says "the lineage
-    /// has no seed" (EKR 0.0.30, measured on PostgreSQL). Any other answer is an error.
+    /// Whether the store's lineage holds a seed: `ekr head` answers a head, or refuses the store
+    /// as [`NOT_SEEDED_NAME`] with exit [`NOT_SEEDED_EXIT`] ([`not_seeded`]). Any other answer is
+    /// an error.
     pub fn seeded(&self) -> Result<bool, String> {
         let out = self.launched_output(|| self.command(&[OsStr::new("head")]), "head")?;
         if out.status.success() {
             return Ok(true);
         }
-        let err = said(&out.stderr);
-        if err.contains("the lineage has no seed") {
+        if not_seeded(out.status.code(), &out.stderr) {
             Ok(false)
         } else {
-            Err(format!("ekr head failed: {err}"))
+            Err(failed("head", out.status.code(), &out.stderr))
         }
     }
 
@@ -1206,10 +1246,7 @@ impl Session {
         }
         match answer {
             Ok(answer) if answer.exit == 0 => Ok(answer.stdout),
-            Ok(answer) => Err(format!(
-                "ekr {what} failed: {}",
-                said(answer.stderr.as_bytes())
-            )),
+            Ok(answer) => Err(failed(what, Some(answer.exit), answer.stderr.as_bytes())),
             Err(Unread::Malformed(e)) => Err(format!("ekr {what} printed no JSON: {e}")),
             // A session whose output ended (end of file, a failed read or write, or a process a
             // signal ended) while the run was sent SIGTERM ended because of it, a stop of the
@@ -1407,7 +1444,8 @@ pub struct Assertion {
     pub valid_time: Value,
 }
 
-/// An evidence item: the identity of its `HumanStatement` source, the only kind cortex writes.
+/// An evidence item: the identity of its source, the two kinds cortex writes (`HumanStatement`
+/// for a file or a record, `Url` for a web page).
 #[derive(Debug, Default, Deserialize)]
 pub struct Evidence {
     #[serde(default, deserialize_with = "lenient")]
@@ -1418,6 +1456,8 @@ pub struct Evidence {
 pub struct EvidenceSource {
     #[serde(rename = "HumanStatement", default, deserialize_with = "lenient")]
     pub human_statement: Option<Statement>,
+    #[serde(rename = "Url", default, deserialize_with = "lenient")]
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -1427,14 +1467,14 @@ pub struct Statement {
 }
 
 impl Evidence {
-    /// The identity of its `HumanStatement` source, if it has one.
+    /// The identity of its `HumanStatement` source, or the URL of its `Url` source, if it has one.
     pub fn identity(&self) -> Option<&str> {
-        self.source
-            .as_ref()?
+        let source = self.source.as_ref()?;
+        source
             .human_statement
-            .as_ref()?
-            .identity
-            .as_deref()
+            .as_ref()
+            .and_then(|s| s.identity.as_deref())
+            .or(source.url.as_deref())
     }
 }
 
@@ -1753,7 +1793,8 @@ mod tests {
                     "object": {"Value": {"value": 12345678901234567890u64}},
                     "valid_time": {"from": 5, "to": null}}},
                 "evidence": {"ev-1": {"source": {"HumanStatement": {"identity": "record:r-1"}},
-                    "payload": payload}}}},
+                    "payload": payload},
+                    "ev-2": {"source": {"Url": "https://example.org/a"}}}}},
             "evidence_payloads": {"ev-1": payload},
             "root": {"knowledge_root": "abc"},
         });
@@ -1786,6 +1827,10 @@ mod tests {
             "a number keeps its digits"
         );
         assert_eq!(graph.evidence["ev-1"].identity(), Some("record:r-1"));
+        assert_eq!(
+            graph.evidence["ev-2"].identity(),
+            Some("https://example.org/a")
+        );
 
         let next = read_answer::<serde_json::Value>(&mut reader).expect("the next answer");
         assert_eq!(next.stdout.unwrap()["revision"], 3);
@@ -1854,19 +1899,112 @@ mod tests {
             .is_empty());
     }
 
-    /// EKR 0.0.34 has no refusal name or exit status of its own for an unknown publication outcome
-    /// (`StoreError::UnknownCommit` is a fault, exit 1): its message is what tells it apart.
+    /// `story:ekr-pin-0-0-43`: EKR 0.0.43 answers a write whose publication it cannot confirm
+    /// with exit 3 and the refusal `publication-outcome-unknown`. Those two tell the outcome
+    /// apart, whatever the message after the name says; the message alone tells nothing.
     #[test]
-    fn an_unknown_publication_outcome_is_told_from_a_refusal_by_its_message() {
-        let unknown = "ekr stage begin failed: ekr: publication outcome is unknown; resolve the \
-                       exact retained occurrence";
-        assert!(outcome_unknown(unknown));
-        for other in [
-            "ekr stage publish failed: ekr: stage-head-moved: the head is 9, not 7",
-            "ekr stage begin failed: ekr: the store is unavailable: connection refused",
-            "ekr stage abandon failed: ekr: stage-already-published: st-1",
+    fn an_unknown_publication_outcome_is_read_from_its_exit_status_and_name() {
+        for (exit, stderr) in [
+            (
+                Some(3),
+                "ekr: publication-outcome-unknown: publication outcome is unknown; resolve the \
+                 exact retained occurrence\n",
+            ),
+            (
+                Some(3),
+                "ekr: publication-outcome-unknown: worded otherwise now\n",
+            ),
+            (
+                Some(3),
+                "warning: slow store\nekr: publication-outcome-unknown: worded otherwise\n",
+            ),
         ] {
-            assert!(!outcome_unknown(other), "{other}");
+            let err = super::failed("stage begin", exit, stderr.as_bytes());
+            assert!(outcome_unknown(&err), "{exit:?} {stderr}: {err}");
+            assert!(err.starts_with("ekr stage begin failed: "), "{err}");
+            assert!(err.ends_with(stderr.trim()), "{err}");
+        }
+        for (exit, stderr) in [
+            // EKR 0.0.34's shape: a fault, exit 1, the message and no name.
+            (
+                Some(1),
+                "ekr: publication outcome is unknown; resolve the exact retained occurrence",
+            ),
+            (
+                Some(1),
+                "ekr: publication-outcome-unknown: publication outcome is unknown",
+            ),
+            (
+                Some(2),
+                "ekr: publication-outcome-unknown: publication outcome is unknown",
+            ),
+            (
+                None,
+                "ekr: publication-outcome-unknown: publication outcome is unknown",
+            ),
+            (
+                Some(3),
+                "ekr: publication outcome is unknown; resolve the exact retained occurrence",
+            ),
+            (Some(3), "ekr: publication-outcome-unknownish: no"),
+            (Some(2), "ekr: stage-head-moved: the head is 9, not 7"),
+            (Some(1), "ekr: the store is unavailable: connection refused"),
+            (Some(2), "ekr: stage-already-published: st-1"),
+        ] {
+            let err = super::failed("stage begin", exit, stderr.as_bytes());
+            assert!(!outcome_unknown(&err), "{exit:?} {stderr}: {err}");
+            assert_eq!(err, format!("ekr stage begin failed: {stderr}"));
+        }
+        // A one-shot verb and a session request answer it the same way.
+        use std::os::unix::process::ExitStatusExt;
+        let out = |code: i32| std::process::Output {
+            status: std::process::ExitStatus::from_raw(code << 8),
+            stdout: Vec::new(),
+            stderr: b"ekr: publication-outcome-unknown: reworded\n".to_vec(),
+        };
+        let err = super::finished(out(3), "apply-extraction").unwrap_err();
+        assert!(outcome_unknown(&err), "{err}");
+        assert_eq!(
+            err,
+            super::failed(
+                "apply-extraction",
+                Some(3),
+                b"ekr: publication-outcome-unknown: reworded\n"
+            )
+        );
+        assert!(!outcome_unknown(
+            &super::finished(out(1), "apply-extraction").unwrap_err()
+        ));
+    }
+
+    /// `story:ekr-pin-0-0-43`: EKR 0.0.43 refuses every verb on a tenant with no seed as
+    /// `ekr.views.NotSeeded`, exit 2. Those two say the store is unseeded, whatever the reason
+    /// after the name says; the reason alone says nothing.
+    #[test]
+    fn an_unseeded_store_is_read_from_its_exit_status_and_name() {
+        for stderr in [
+            "ekr: ekr.views.NotSeeded: the lineage has no seed\n",
+            "ekr: ekr.views.NotSeeded: the store was never seeded\n",
+            "ekr: ekr.views.NotSeeded: worded otherwise now\n",
+        ] {
+            assert!(super::not_seeded(Some(2), stderr.as_bytes()), "{stderr}");
+        }
+        for (exit, stderr) in [
+            // EKR 0.0.34's shape: a fault, exit 1, the message and no name.
+            (Some(1), "ekr: the lineage has no seed"),
+            (Some(2), "ekr: the lineage has no seed"),
+            (Some(1), "ekr: ekr.views.NotSeeded: the lineage has no seed"),
+            (None, "ekr: ekr.views.NotSeeded: the lineage has no seed"),
+            (
+                Some(2),
+                "ekr: ekr.views.NotSeededYet: the lineage has no seed",
+            ),
+            (Some(2), "ekr: ekr.kernel.Other: the lineage has no seed"),
+        ] {
+            assert!(
+                !super::not_seeded(exit, stderr.as_bytes()),
+                "{exit:?} {stderr}"
+            );
         }
     }
 
@@ -2072,18 +2210,18 @@ mod tests {
     }
 
     /// `story:small-robustness`: what EKR wrote to stderr is masked in the error a failed verb
-    /// answers, and the text that marks an unknown outcome survives the masking, so a run still
-    /// tells `store-outcome-unknown` apart.
+    /// answers, and an unknown outcome (exit 3, `publication-outcome-unknown`) still reads as one
+    /// after the masking, so a run still tells `store-outcome-unknown` apart.
     #[test]
     fn a_failed_verbs_stderr_is_masked_and_an_unknown_outcome_still_reads_as_one() {
         use std::os::unix::process::ExitStatusExt;
         let failed = |stderr: &str| std::process::Output {
-            status: std::process::ExitStatus::from_raw(256),
+            status: std::process::ExitStatus::from_raw(3 << 8),
             stdout: Vec::new(),
             stderr: stderr.as_bytes().to_vec(),
         };
         let err = super::finished(
-            failed("ekr: publication outcome is unknown; dsn password=hunter2secret\n"),
+            failed("ekr: publication-outcome-unknown: dsn password=hunter2secret\n"),
             "apply-extraction",
         )
         .unwrap_err();
