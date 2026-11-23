@@ -121,10 +121,20 @@ enum Command {
         /// the home runs that binary; without this flag a newer one is kept.
         #[arg(long)]
         replace_binary: bool,
+        /// Do not wait for the home's lock: while another cortex command holds it, answer `busy`
+        /// at once (exit 9) and change nothing.
+        #[arg(long)]
+        no_wait: bool,
     },
     /// Remove an instance's timers and viewer; its directory and store stay
     /// (`cortex.instance.RemoveInstance`).
-    Remove { name: String },
+    Remove {
+        name: String,
+        /// Do not wait for the home's lock: while another cortex command holds it, answer `busy`
+        /// at once (exit 9) and change nothing.
+        #[arg(long)]
+        no_wait: bool,
+    },
     /// Run one source once (`cortex.instance.RunSource`).
     Run {
         /// `<instance>/<source>`.
@@ -329,7 +339,13 @@ enum SourceCommand {
         reason: String,
     },
     /// Enable a disabled source again (`cortex.instance.EnableSource`).
-    Enable { source_id: String },
+    Enable {
+        source_id: String,
+        /// Do not wait for the home's lock: while another cortex command holds it, answer `busy`
+        /// at once (exit 9) and change nothing.
+        #[arg(long)]
+        no_wait: bool,
+    },
 }
 
 const SPEC_SCHEMA: &str =
@@ -406,10 +422,16 @@ fn main() -> ExitCode {
             }
         },
         command => {
-            // `restore` and `run --no-wait` do not wait for the lock: while another command holds
+            // `restore` and every `--no-wait` do not wait for the lock: while another command holds
             // it, they answer `busy` and write nothing.
             let lock = match &command {
-                Command::Restore { .. } | Command::Run { no_wait: true, .. } => home.try_lock(),
+                Command::Restore { .. }
+                | Command::Run { no_wait: true, .. }
+                | Command::Update { no_wait: true, .. }
+                | Command::Remove { no_wait: true, .. }
+                | Command::Source {
+                    command: SourceCommand::Enable { no_wait: true, .. },
+                } => home.try_lock(),
                 _ => home.lock().map(Some),
             };
             let lock = match lock {
@@ -463,8 +485,8 @@ struct Ctx<'a> {
     home: &'a Home,
     shared: SharedRef,
     tools: run::Tools,
-    /// Whether this command took the home's lock; only `restore` and `run --no-wait` run without
-    /// it, and only to answer `busy`.
+    /// Whether this command took the home's lock; only `restore` and a `--no-wait` command run
+    /// without it, and only to answer `busy`.
     locked: bool,
     /// The home's lock while this command holds it. `quality` lets it go once its sample is drawn.
     lock: RefCell<Option<std::fs::File>>,
@@ -509,8 +531,16 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             spec,
             no_units,
             replace_binary,
-        } => update(app, ctx, &name, &spec, Units::of(no_units, replace_binary)),
-        Command::Remove { name } => remove(app, ctx, &name),
+            no_wait,
+        } => update(
+            app,
+            ctx,
+            &name,
+            &spec,
+            Units::of(no_units, replace_binary),
+            no_wait,
+        ),
+        Command::Remove { name, no_wait } => remove(app, ctx, &name, no_wait),
         Command::Restore { name, snapshot } => restore(app, ctx, &name, &snapshot),
         Command::Quality { name, sample } => quality(app, ctx, &name, sample),
         Command::Eval {
@@ -610,7 +640,7 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             SourceCommand::RecordFailure { source_id, reason } => {
                 record_failure(app, ctx, &source_id, &reason).0
             }
-            SourceCommand::Enable { source_id } => enable(app, ctx, &source_id),
+            SourceCommand::Enable { source_id, no_wait } => enable(app, ctx, &source_id, no_wait),
         },
         Command::List => match app.instances() {
             Ok(rows) => {
@@ -1793,7 +1823,14 @@ fn rekeyed(
     })
 }
 
-fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> ExitCode {
+fn update(
+    app: &mut App,
+    ctx: &Ctx,
+    name: &str,
+    path: &Path,
+    units: Units,
+    no_wait: bool,
+) -> ExitCode {
     let loaded = match spec::load_given(path) {
         Ok(l) => l,
         Err(e) => return fail(e),
@@ -1802,6 +1839,9 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
     if spec.name.0 != name {
         return fail(format!("the spec names {:?}, not {name:?}", spec.name.0));
     }
+    // `--no-wait` found the lock held: the update answers `busy`, and reads neither Connectors
+    // nor the store on the way.
+    let busy = busy_unless_locked(ctx, "cortex.instance.UpdateInstance");
     let layout = Layout::new(ctx.home.instance_dir(name));
     // The viewer unit is written only when the store's `ekr` now launches through another
     // connection, or newly or no longer through one: an update that adds, drops or changes
@@ -1809,10 +1849,11 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
     // viewer unit holds (the connection was connected anew). Otherwise the update leaves the
     // viewer alone, and a viewer the operator stopped stays stopped. A frozen spec that cannot be
     // read writes it.
-    let relaunch = layout.load_spec().map_or(true, |old| {
-        layout.store_handle(&old).launched_through()
-            != layout.store_handle(&spec).launched_through()
-    }) || viewer_resolves_anew(ctx, name, &layout.store_handle(&spec), units);
+    let relaunch = !busy
+        && (layout.load_spec().map_or(true, |old| {
+            layout.store_handle(&old).launched_through()
+                != layout.store_handle(&spec).launched_through()
+        }) || viewer_resolves_anew(ctx, name, &layout.store_handle(&spec), units));
     if let Some(reason) = foreign_units(ctx, name, &spec, units, relaunch) {
         return fail(reason);
     }
@@ -1838,7 +1879,7 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
     }
     // A structured mapping whose value kind differs from the one the instance's store declares is
     // refused as well; a store that cannot be read now leaves that to the run.
-    if refusal.is_none() && structured::has_structured(&spec) && layout.host().is_file() {
+    if !busy && refusal.is_none() && structured::has_structured(&spec) && layout.host().is_file() {
         if let Ok(ontology) = layout.store_handle(&spec).ontology() {
             refusal = structured::spec_refusal(&spec, &ontology);
         }
@@ -1877,9 +1918,11 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
         model: spec.model.model.clone(),
         spec: spec.clone(),
         seed_digest,
+        no_wait: no_wait.then_some(true),
     };
     let done = match app.update_instance(input) {
         Err(e) => return fail(e),
+        Ok(m::UpdateInstanceOutcome::Busy { error }) => busy_done(error),
         Ok(m::UpdateInstanceOutcome::SeedChangeRefused { error }) => Done {
             outcome: "seed-change-refused",
             ok: false,
@@ -1949,14 +1992,17 @@ fn update(app: &mut App, ctx: &Ctx, name: &str, path: &Path, units: Units) -> Ex
             }
         }
     };
-    print("update", &done)
+    print_status("update", &done)
 }
 
-fn remove(app: &mut App, ctx: &Ctx, name: &str) -> ExitCode {
+fn remove(app: &mut App, ctx: &Ctx, name: &str, no_wait: bool) -> ExitCode {
+    busy_unless_locked(ctx, "cortex.instance.RemoveInstance");
     let done = match app.remove_instance(m::RemoveInstance {
         name: m::InstanceName(name.to_string()),
+        no_wait: no_wait.then_some(true),
     }) {
         Err(e) => return fail(e),
+        Ok(m::RemoveInstanceOutcome::Busy { error }) => busy_done(error),
         Ok(m::RemoveInstanceOutcome::Removed { instance_removed }) => {
             let sources: Vec<String> = ctx
                 .shared
@@ -1991,7 +2037,7 @@ fn remove(app: &mut App, ctx: &Ctx, name: &str) -> ExitCode {
             detail: json!({"name": error.name.0}),
         },
     };
-    print("remove", &done)
+    print_status("remove", &done)
 }
 
 fn restore(app: &mut App, ctx: &Ctx, name: &str, snapshot: &str) -> ExitCode {
@@ -2731,9 +2777,43 @@ fn split(source_id: &str) -> (&str, &str) {
 /// scheduler tells "switched off" from "broken".
 const EXIT_DISABLED: u8 = 3;
 
-/// The exit status of a `run --no-wait` while another cortex command holds the home's lock:
-/// nothing ran and nothing was recorded, so a scheduler skips this collection and counts nothing.
+/// The exit status of a `--no-wait` command (`run`, `update`, `remove`, `source enable`) while
+/// another cortex command holds the home's lock: nothing ran or changed and nothing was recorded,
+/// so a scheduler skips this collection and an orchestrator tries again later.
 const EXIT_BUSY: u8 = 9;
+
+/// Whether `command` runs without the home's lock, which only a `--no-wait` command that found it
+/// held does: then the command's declared `busy` branch is taken, with its reason.
+fn busy_unless_locked(ctx: &Ctx, command: &'static str) -> bool {
+    if ctx.locked {
+        return false;
+    }
+    let mut shared = ctx.shared.borrow_mut();
+    shared.external.insert((command, "busy"), true);
+    shared.strings.push_back(format!(
+        "another cortex command holds the lock of {}",
+        ctx.home.root.display()
+    ));
+    true
+}
+
+fn busy_done(error: m::InstanceBusy) -> Done {
+    Done {
+        outcome: "busy",
+        ok: false,
+        detail: json!({"reason": error.reason}),
+    }
+}
+
+/// [`print`], with `busy` (a `--no-wait` command that found the lock held) exiting [`EXIT_BUSY`].
+fn print_status(command: &str, done: &Done) -> ExitCode {
+    let code = print(command, done);
+    if done.outcome == "busy" {
+        ExitCode::from(EXIT_BUSY)
+    } else {
+        code
+    }
+}
 
 /// The exit status of a `run` that ended because EKR could not say whether a store write took
 /// effect (a stage verb, `apply-extraction` or a transaction's commit; a gated `sqlite` run that
@@ -3205,11 +3285,14 @@ fn record_failure(app: &mut App, ctx: &Ctx, source_id: &str, reason: &str) -> (E
     )
 }
 
-fn enable(app: &mut App, ctx: &Ctx, source_id: &str) -> ExitCode {
+fn enable(app: &mut App, ctx: &Ctx, source_id: &str, no_wait: bool) -> ExitCode {
+    busy_unless_locked(ctx, "cortex.instance.EnableSource");
     let done = match app.enable_source(m::EnableSource {
         source_id: m::SourceId(source_id.to_string()),
+        no_wait: no_wait.then_some(true),
     }) {
         Err(e) => return fail(e),
+        Ok(m::EnableSourceOutcome::Busy { error }) => busy_done(error),
         Ok(m::EnableSourceOutcome::Enabled { source_enabled }) => {
             let (instance, source) = split(source_id);
             let mut detail = json!({"source_id": source_enabled.source_id.0});
@@ -3235,7 +3318,7 @@ fn enable(app: &mut App, ctx: &Ctx, source_id: &str) -> ExitCode {
             detail: json!({"source_id": error.source_id.0}),
         },
     };
-    print("source enable", &done)
+    print_status("source enable", &done)
 }
 
 /// `cortex ask serve`: a spec the service cannot serve is refused (exit 2, naming the field)
