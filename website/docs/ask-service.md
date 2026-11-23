@@ -100,12 +100,16 @@ the event's name and its `data:` line the event as one JSON object, `{"event": <
 | `tool` | `step`, `name`, `arguments`, `result_bytes`, `truncated`, `failed`, `withheld` | after each tool call the model asked for |
 | `delta` | `text` | a piece of the model's text, in order |
 | `discard` | `step` | withdraws the `delta`s since the last `discard`: text before a tool call, not the answer |
-| `done` | `answer_id`, `answer`, `nodes`, `evidence`, `input_tokens`, `output_tokens`, `cached_tokens`, `context_tokens`, `steps`, `unrestored` | the last event of an answer |
+| `done` | `answer_id`, `answer`, `nodes`, `evidence`, `unsupported`, `input_tokens`, `output_tokens`, `cached_tokens`, `context_tokens`, `steps`, `unrestored` | the last event of an answer |
 | `error` | `reason`, `message`, `retry_after` (with `rate-limit` only) | the last event of a request with no answer |
 
 `done.answer` is the answer with each citation marker, `[node:<id>]` or `[evidence:<id>]`, turned
 into a Markdown link from `link_templates` (left as written without a template); `nodes` and
-`evidence` are the cited ids, each once, in order. The token counts add up the gateway's `usage`
+`evidence` are the cited ids, each once, in order. A citation counts only when the reader returned
+its id: the id occurs as a whole word in a tool result the model was shown in this answer. A
+marker naming any other id is an unsupported reference: it is written `[unsupported node:<id>]`
+(or `evidence`), never linked, left out of `nodes` and `evidence`, and listed once in
+`unsupported` as `node:<id>` or `evidence:<id>`. The token counts add up the gateway's `usage`
 over every model call (`prompt_tokens`, `completion_tokens`, `prompt_tokens_details.cached_tokens`;
 0 where not reported); `context_tokens` is the prompt tokens of the last call. `answer_id` is the
 answer's UUIDv7, the id its record and its votes carry.
@@ -123,6 +127,7 @@ answer's UUIDv7, the id its record and its votes carry.
 | `model-failed` | 200 | the gateway could not be reached, answered an error or no message |
 | `reader-failed` | 200 | the reader could not be started or stopped answering |
 | `cut-off` | 200 | the model's reply ended at its token limit (`finish_reason` `length`) or at a content filter (`content_filter`); its text is no answer and is not streamed |
+| `refused` | 200 | the model declined: its chat completion carried a non-empty `message.refusal` (the Chat Completions refusal). `message` is the refusal text; no `delta` is streamed and no tool call it asked for is made |
 
 The `error` event of an answer that started ends its `message` with `(request <answer_id>)`, the id
 of its record. The `message` of `model-failed` and `reader-failed` is a fixed text: what the
@@ -190,7 +195,7 @@ data: {"event":"done","value":{"answer":"…",
   "answer_id":"0192f3a1-7c2e-7d41-9b0a-3f5e6d7c8b9a",
   "cached_tokens":100,"context_tokens":200,"evidence":[],
   "input_tokens":300,"nodes":["n-42"],"output_tokens":30,"steps":2,
-  "unrestored":0}}
+  "unrestored":0,"unsupported":[]}}
 ```
 
 ## Answer records, votes and review
@@ -198,8 +203,10 @@ data: {"event":"done","value":{"answer":"…",
 Every answer the service gives, and every one that failed or hit a limit, is kept as a record
 (`cortex.ask.AnswerRecord`) before its last event is sent: the question, the identity, the answer or
 the reason there is none, the outcome (`answered`, `failed`, `limited`, `client-closed`,
-`cut-off`), the `tool` events, the latency, the token counts and steps (of its `done` event; for
-`client-closed` and `cut-off`, of the model calls made before it ended; otherwise 0) and the time. A request refused before it started
+`cut-off`, `refused`), the `tool` events, the latency, the token counts and steps (of its `done`
+event; for every other outcome, of the model calls made before it ended, 0 when none was made)
+and the time. A `refused` record keeps the model's refusal text as its `answer`, with the reason
+`refused`. A request refused before it started
 (401, 429, 400) leaves no record. The records are cortex's own, never in the EKR store: on a `sqlite`
 store they live in `instances/<name>/ask.sqlite` in the instance directory, on a `postgres` store in
 a schema of their own ([below](#records-on-a-postgresql-store)). Either carries its schema version,
@@ -230,7 +237,7 @@ cause, and an item, once opened, stays as it was whatever happens after:
 | cause | opened when |
 |---|---|
 | `voted-down` | a `down` vote is cast on the answer, by anyone |
-| `failed` | the answer's outcome is `failed`, `limited` or `cut-off` (a `client-closed` answer opens none) |
+| `failed` | the answer's outcome is `failed`, `limited`, `cut-off` or `refused` (a `client-closed` answer opens none) |
 | `slow` | the answer took longer than `slow_after_ms` |
 
 A vote or a close that meets a purge or another close keeps to these answers: a vote whose answer

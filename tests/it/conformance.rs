@@ -2,7 +2,8 @@
 //! the generated behaviours over cortex's ports, in process. External branches are forced the way
 //! each scenario says, through the context the ports ask first; `RunSource`'s pipeline is replaced
 //! by a stand-in that answers `ran`. Every scenario must answer; an unknown step, value kind,
-//! field shape or scenario initial state fails rather than skips.
+//! field shape or scenario initial state fails rather than skips. The spec document a create,
+//! adopt or update step supplies is read through the command line's loader ([`supplied`]).
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -44,9 +45,106 @@ struct Scenario {
     last: Option<Last>,
     views: BTreeMap<String, Vec<Value>>,
     snapshots: BTreeMap<String, Value>,
+    /// Where the spec documents the steps supply are written for the loader to read.
+    specs: tempfile::TempDir,
+    /// The steps whose document was a [`Supplied::Witness`].
+    witnesses: usize,
 }
 
-fn placeholder_spec() -> m::InstanceSpec {
+/// What `create`, `adopt` or `update` reads from the spec document a step supplies, through the
+/// command line's own loader (`cortex_cli::spec::load_given`), as `cortex create --spec` reads it.
+enum Supplied {
+    /// The loader accepted the document: the behaviour is given the spec it loaded.
+    Loaded(Box<m::InstanceSpec>),
+    /// A synthesized witness of `InstanceSpec`: ESS 0.77.0 fills every text of a synthesized value
+    /// with its path (`format: spec.format`, `spec.format-1`, ...) and cannot be given a document
+    /// for a struct input (`example:` on one needs `ess/33`, ESS 0.78.0), so the loader refuses
+    /// it at `format`, after every number of it was read. The behaviour is given
+    /// [`unloadable_witness_spec`]; [`WITNESS_STEPS`] counts these steps.
+    Witness,
+}
+
+/// The create, adopt and update steps of `spec/suite.json` whose document is a synthesized
+/// witness the loader refuses ([`Supplied::Witness`]). Every other such step's document goes
+/// through the loader and must load. A ratchet: lower it when the suite carries fewer.
+const WITNESS_STEPS: usize = 100;
+
+/// Whether `document` is a synthesized witness: each text ESS's synthesis writes at `format`,
+/// `name`, `description` and `model.model` is that field's path (`spec.format`), with the
+/// instance's `-<n>` suffix past the first.
+fn synthesized(document: &Value) -> bool {
+    let path_text = |path: &str, value: &Value| {
+        value.as_str().is_some_and(|text| {
+            text == path
+                || text
+                    .strip_prefix(path)
+                    .and_then(|rest| rest.strip_prefix('-'))
+                    .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        })
+    };
+    path_text("spec.format", &document["format"])
+        && path_text("spec.name", &document["name"])
+        && path_text("spec.description", &document["description"])
+        && path_text("spec.model.model", &document["model"]["model"])
+}
+
+/// Writes the document a step supplies to a file and reads it with the command line's loader.
+/// A document the loader refuses fails the step, unless it is a synthesized witness refused at
+/// its `format`; for a loaded one, the step's other inputs must be the values the command line
+/// reads from that document (`src/main.rs`): its name, description, model, EKR version and the
+/// digest of its seed.
+fn supplied(
+    dir: &std::path::Path,
+    command: &str,
+    document: &Value,
+    input: &serde_json::Map<String, Value>,
+) -> Supplied {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let path = dir.join(format!("spec-{n}.yaml"));
+    std::fs::write(&path, serde_json::to_string_pretty(document).unwrap()).unwrap();
+    let loaded = match cortex_cli::spec::load_given(&path) {
+        Ok(loaded) => loaded,
+        Err(refusal) => {
+            assert!(
+                synthesized(document),
+                "{command}: the loader refuses the supplied spec: {refusal}"
+            );
+            let format = document["format"].as_str().unwrap_or_default();
+            let at_format = format!("format is {format:?}, not \"cortex.instance/1\"");
+            assert!(
+                refusal.ends_with(&at_format),
+                "{command}: the synthesized witness is refused before its format: {refusal}"
+            );
+            return Supplied::Witness;
+        }
+    };
+    let spec = loaded.model;
+    let mut read = vec![
+        ("name", spec.name.0.clone()),
+        ("description", spec.description.clone()),
+        ("model", spec.model.model.clone()),
+        (
+            "seed_digest",
+            cortex_cli::home::seed_digest(&loaded.dir, &spec),
+        ),
+    ];
+    if command != "cortex.instance.UpdateInstance" {
+        read.push(("ekr_version", spec.ekr.version.clone()));
+    }
+    for (field, value) in read {
+        assert_eq!(
+            input.get(field).map(text),
+            Some(value),
+            "{command}: input {field} is not what the command line reads from the spec"
+        );
+    }
+    Supplied::Loaded(Box::new(spec))
+}
+
+/// The spec a [`Supplied::Witness`] step's behaviour is given in place of the document the loader
+/// refused. No outcome of `CreateInstance`, `AdoptInstance` or `UpdateInstance` reads it.
+fn unloadable_witness_spec() -> m::InstanceSpec {
     m::InstanceSpec {
         format: "cortex.instance/1".into(),
         name: m::InstanceName("placeholder".into()),
@@ -230,6 +328,8 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "source_id": e.source_id.0,
                 "documents_new": e.documents_new,
                 "documents_applied": e.documents_applied,
+                "documents_left": e.documents_left,
+                "stopped": e.stopped,
                 "facts_reapplied": e.facts_reapplied,
                 "cost_usd": e.cost_usd.map(|c| c.0),
                 "cost_counted": e.cost_counted,
@@ -303,6 +403,7 @@ fn ask_event(e: AskPublished) -> (String, Value) {
                     "answer": e.done.answer,
                     "nodes": e.done.nodes,
                     "evidence": e.done.evidence,
+                    "unsupported": e.done.unsupported,
                     "input_tokens": e.done.input_tokens,
                     "output_tokens": e.done.output_tokens,
                     "cached_tokens": e.done.cached_tokens,
@@ -572,6 +673,11 @@ impl Scenario {
             last: None,
             views: BTreeMap::new(),
             snapshots: BTreeMap::new(),
+            specs: tempfile::Builder::new()
+                .prefix("cortex-conformance-spec")
+                .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
+                .unwrap(),
+            witnesses: 0,
         }
     }
 
@@ -628,6 +734,18 @@ impl Scenario {
                 .map(|a| a.iter().map(text).collect())
                 .unwrap_or_default()
         };
+        // The spec document `create`, `adopt` and `update` supply, read as the command line reads
+        // it: through its loader.
+        let mut spec = || match input.get("spec") {
+            Some(document) => match supplied(self.specs.path(), command, document, &input) {
+                Supplied::Loaded(spec) => *spec,
+                Supplied::Witness => {
+                    self.witnesses += 1;
+                    unloadable_witness_spec()
+                }
+            },
+            None => panic!("{command}: the step supplies no spec"),
+        };
         let app = &mut self.app;
         // Events an outcome carries that the generated port does not publish (below).
         let mut unpublished: Vec<(String, Value)> = Vec::new();
@@ -639,7 +757,7 @@ impl Scenario {
                     model: s("model"),
                     ekr_version: s("ekr_version"),
                     seed_digest: s("seed_digest"),
-                    spec: placeholder_spec(),
+                    spec: spec(),
                 })
                 .unwrap()
             {
@@ -668,7 +786,7 @@ impl Scenario {
                     model: s("model"),
                     ekr_version: s("ekr_version"),
                     seed_digest: s("seed_digest"),
-                    spec: placeholder_spec(),
+                    spec: spec(),
                     store: s("store"),
                 })
                 .unwrap()
@@ -700,8 +818,9 @@ impl Scenario {
                     name: m::InstanceName(s("name")),
                     description: s("description"),
                     model: s("model"),
-                    spec: placeholder_spec(),
+                    spec: spec(),
                     seed_digest: s("seed_digest"),
+                    no_wait: input.get("no_wait").and_then(Value::as_bool),
                 })
                 .unwrap()
             {
@@ -710,6 +829,10 @@ impl Scenario {
                     Some(("SeedChangeRefused", json!({"name": error.name.0}))),
                 ),
                 m::UpdateInstanceOutcome::Updated { .. } => ("updated", None),
+                m::UpdateInstanceOutcome::Busy { error } => (
+                    "busy",
+                    Some(("InstanceBusy", json!({"reason": error.reason}))),
+                ),
                 m::UpdateInstanceOutcome::RekeyRefused { error } => (
                     "rekey-refused",
                     Some((
@@ -732,10 +855,22 @@ impl Scenario {
             "cortex.instance.RemoveInstance" => match app
                 .remove_instance(m::RemoveInstance {
                     name: m::InstanceName(s("name")),
+                    no_wait: input.get("no_wait").and_then(Value::as_bool),
                 })
                 .unwrap()
             {
                 m::RemoveInstanceOutcome::Removed { .. } => ("removed", None),
+                m::RemoveInstanceOutcome::StopFailed { error } => (
+                    "stop-failed",
+                    Some((
+                        "UnitsNotStopped",
+                        json!({"name": error.name.0, "reason": error.reason}),
+                    )),
+                ),
+                m::RemoveInstanceOutcome::Busy { error } => (
+                    "busy",
+                    Some(("InstanceBusy", json!({"reason": error.reason}))),
+                ),
                 m::RemoveInstanceOutcome::WrongState { error } => (
                     "wrong-state",
                     Some((
@@ -764,6 +899,21 @@ impl Scenario {
                 .unwrap()
             {
                 m::AddSourceOutcome::Added { .. } => ("added", None),
+                m::AddSourceOutcome::SourceExists { error } => (
+                    "source-exists",
+                    Some(("SourceExists", json!({"source_id": error.source_id.0}))),
+                ),
+                m::AddSourceOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+                m::AddSourceOutcome::NotActive { error } => (
+                    "not-active",
+                    Some((
+                        "InstanceNotActive",
+                        json!({"state": home::instance_state_name(error.state)}),
+                    )),
+                ),
             },
             "cortex.instance.RunSource" => match app
                 .run_source(m::RunSource {
@@ -832,6 +982,7 @@ impl Scenario {
                             "held": f.held,
                             "unchanged": f.unchanged,
                             "unread": f.unread,
+                            "skipped": f.skipped,
                         }),
                     ));
                     ("fetched", None)
@@ -882,10 +1033,15 @@ impl Scenario {
             "cortex.instance.EnableSource" => match app
                 .enable_source(m::EnableSource {
                     source_id: m::SourceId(s("source_id")),
+                    no_wait: input.get("no_wait").and_then(Value::as_bool),
                 })
                 .unwrap()
             {
                 m::EnableSourceOutcome::Enabled { .. } => ("enabled", None),
+                m::EnableSourceOutcome::Busy { error } => (
+                    "busy",
+                    Some(("InstanceBusy", json!({"reason": error.reason}))),
+                ),
                 m::EnableSourceOutcome::WrongState { error } => (
                     "wrong-state",
                     Some((
@@ -1163,15 +1319,59 @@ impl Scenario {
                 ),
                 ma::AskOutcome::LimitReached { error } => (
                     "limit-reached",
-                    Some(("cortex.ask.LimitReached", json!({"limit": error.limit}))),
+                    Some((
+                        "cortex.ask.LimitReached",
+                        json!({
+                            "limit": error.limit,
+                            "steps": error.steps,
+                            "input_tokens": error.input_tokens,
+                            "output_tokens": error.output_tokens,
+                            "cached_tokens": error.cached_tokens,
+                            "context_tokens": error.context_tokens,
+                        }),
+                    )),
                 ),
                 ma::AskOutcome::ModelFailed { error } => (
                     "model-failed",
-                    Some(("cortex.ask.ModelFailed", json!({"reason": error.reason}))),
+                    Some((
+                        "cortex.ask.ModelFailed",
+                        json!({
+                            "reason": error.reason,
+                            "steps": error.steps,
+                            "input_tokens": error.input_tokens,
+                            "output_tokens": error.output_tokens,
+                            "cached_tokens": error.cached_tokens,
+                            "context_tokens": error.context_tokens,
+                        }),
+                    )),
                 ),
                 ma::AskOutcome::ReaderFailed { error } => (
                     "reader-failed",
-                    Some(("cortex.ask.ReaderFailed", json!({"reason": error.reason}))),
+                    Some((
+                        "cortex.ask.ReaderFailed",
+                        json!({
+                            "reason": error.reason,
+                            "steps": error.steps,
+                            "input_tokens": error.input_tokens,
+                            "output_tokens": error.output_tokens,
+                            "cached_tokens": error.cached_tokens,
+                            "context_tokens": error.context_tokens,
+                        }),
+                    )),
+                ),
+                ma::AskOutcome::Refused { error } => (
+                    "refused",
+                    Some((
+                        "cortex.ask.Refused",
+                        json!({
+                            "refusal": error.refusal,
+                            "steps": error.steps,
+                            "input_tokens": error.input_tokens,
+                            "output_tokens": error.output_tokens,
+                            "cached_tokens": error.cached_tokens,
+                            "context_tokens": error.context_tokens,
+                        }),
+                    )),
                 ),
                 ma::AskOutcome::Busy { error } => (
                     "busy",
@@ -1677,6 +1877,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     let scenarios = suite["scenarios"].as_object().expect("scenarios");
     let mut failed = Vec::new();
     let (mut passed_ids, mut failed_ids) = (Vec::new(), Vec::new());
+    let mut witnesses = 0;
     for (name, scenario) in scenarios {
         let steps = scenario["steps"].as_array().expect("steps").clone();
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -1684,6 +1885,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
             for step in &steps {
                 s.step(step);
             }
+            witnesses += s.witnesses;
         }));
         if let Err(e) = result {
             let msg = e
@@ -1703,7 +1905,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     if std::env::var_os(SUITE_ENV).is_none() {
         assert_eq!(
             scenarios.len(),
-            126,
+            137,
             "the suite's scenario count moved; update this floor"
         );
     }
@@ -1713,6 +1915,87 @@ fn every_scenario_of_the_synthesized_suite_holds() {
         failed.len(),
         scenarios.len(),
         failed.join("\n")
+    );
+    if std::env::var_os(SUITE_ENV).is_none() {
+        let supplied = scenarios
+            .values()
+            .flat_map(|s| s["steps"].as_array().unwrap())
+            .filter(|step| step["step"] == "execute_command" && step["input"].get("spec").is_some())
+            .count();
+        assert_eq!(
+            (supplied, witnesses),
+            (104, WITNESS_STEPS),
+            "the steps supplying a spec, and the synthesized witnesses among them, moved: {} \
+             loaded; update these counts",
+            supplied - witnesses
+        );
+    }
+}
+
+/// A step whose spec document the loader refuses fails its scenario, whatever outcome the
+/// behaviour would answer: a wrong format, a fractional whole number, a name the loader refuses.
+/// A whole number written `300.0` loads, as the published schema admits it.
+#[test]
+fn a_spec_document_the_loader_refuses_fails_its_step() {
+    let suite = suite();
+    let steps = suite["scenarios"]["cortex.instance/authored/create-from-a-loaded-spec"]["steps"]
+        .as_array()
+        .expect("the authored create scenario")
+        .clone();
+    assert_eq!(
+        steps[0]["input"]["spec"]["value"]["model"]["timeout_s"],
+        serde_json::from_str::<Value>("300.0").unwrap(),
+        "the suite writes a whole number as 300.0"
+    );
+    let run = |edit: &dyn Fn(&mut Value)| {
+        let mut steps = steps.clone();
+        edit(&mut steps[0]["input"]["spec"]["value"]);
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut s = Scenario::new();
+            for step in &steps {
+                s.step(step);
+            }
+        }))
+        .err()
+        .map(|e| {
+            e.downcast_ref::<String>()
+                .cloned()
+                .unwrap_or_else(|| e.downcast_ref::<&str>().unwrap_or(&"").to_string())
+        })
+    };
+    assert_eq!(
+        run(&|_: &mut Value| {}),
+        None,
+        "the document as the suite writes it loads"
+    );
+    type Edit<'a> = (&'a str, &'a dyn Fn(&mut Value));
+    let refused: [Edit; 4] = [
+        ("format", &|d: &mut Value| {
+            d["format"] = json!("cortex.instance/2")
+        }),
+        ("fraction", &|d: &mut Value| {
+            d["model"]["timeout_s"] = serde_json::from_str("1.5").unwrap()
+        }),
+        ("name", &|d: &mut Value| d["name"] = json!("Release Notes")),
+        ("no budget", &|d: &mut Value| {
+            d["model"].as_object_mut().unwrap().remove("budget_tokens");
+        }),
+    ];
+    for (case, edit) in refused {
+        let message = run(edit).unwrap_or_else(|| panic!("{case}: the scenario passed"));
+        assert!(
+            message.contains("the loader refuses the supplied spec"),
+            "{case}: {message}"
+        );
+    }
+    // A document is a synthesized witness only when every text synthesis writes is its path, not
+    // when its format alone is.
+    let witness = run(&|d: &mut Value| d["format"] = json!("spec.format"));
+    assert!(
+        witness
+            .as_deref()
+            .is_some_and(|m| m.contains("the loader refuses the supplied spec")),
+        "{witness:?}"
     );
 }
 

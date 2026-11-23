@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SourceExists payload",
+  "description": "The registry already holds a source with this id; its schedule, counters and state are as they were. `cortex update` changes a source of the spec.",
+  "x-ess-name": "cortex.instance.SourceExists",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "source_id": {
+      "$ref": "#/$defs/cortex.instance.SourceId"
+    }
+  },
+  "required": [
+    "source_id"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
+    "contract_digest": "slice-sha256/2:2e4c4e9658bdacf4365fa2a6f621e5662dc13093283b12b47e66b59546ebc09a",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.SourceId": {
+      "title": "SourceId",
+      "x-ess-name": "cortex.instance.SourceId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

@@ -355,11 +355,14 @@ fn fetch_only_with_the_connection_unavailable_exits_1_and_records_nothing() {
     assert!(r["last_outcome"].is_null(), "{r}");
 }
 
-/// The pauses are the setting, then twice it, then four times it: bounded from above too, so a
-/// mutant that doubles before the first pause (10, 20, 40 s) is caught. The unit's own case
-/// asserts lower bounds only.
+/// The pauses the run sleeps are at least the setting, then twice it, then four times it. A gap
+/// between two revalidations is the pause plus the start of two `connectors` processes, which
+/// load on the machine stretches without bound (1,193 ms for a pause of 400 ms at a load of 70),
+/// so a gap bounds a pause from below only. That the first pause is the setting and not twice
+/// it (a mutant that doubles before the first pause) is held by the unit cases of `retried` in
+/// `src/connectors.rs`, which count the pauses without a clock.
 #[test]
-fn the_pauses_start_at_the_setting_and_not_at_twice_it() {
+fn the_pauses_sleep_at_least_the_setting_and_then_double() {
     let w = world();
     created(&w, "pu", "connection: conn_test");
     std::fs::write(w.root.join("fail-always"), "").unwrap();
@@ -375,15 +378,16 @@ fn the_pauses_start_at_the_setting_and_not_at_twice_it() {
     for (i, gap) in gaps.iter().enumerate() {
         let pause = 400u128 << i;
         assert!(
-            *gap >= pause && *gap < 2 * pause,
-            "pause {i} is {gap} ms, expected {pause} up to {}: {gaps:?}",
-            2 * pause
+            *gap >= pause,
+            "pause {i} is {gap} ms, at least {pause}: {gaps:?}"
         );
     }
 }
 
 /// With `CORTEX_REVALIDATE_PAUSE_MS` unset the first pause is the default 5 s. Nothing in the
-/// unit's suite runs without the variable, so the default is otherwise untested.
+/// unit's suite runs without the variable, so the default is otherwise untested. The gap is
+/// bounded from above by twice the default: a doubled default (10 s) never ends under it, and
+/// the right one leaves 5 s for starting two `connectors` processes on a loaded machine.
 #[test]
 fn the_first_pause_defaults_to_five_seconds() {
     let w = world();
@@ -399,7 +403,7 @@ fn the_first_pause_defaults_to_five_seconds() {
     let gaps = gaps(&instants(&w, "revalidations.log"));
     assert_eq!(gaps.len(), 1, "{gaps:?}");
     assert!(
-        gaps[0] >= 5_000 && gaps[0] < 9_000,
+        gaps[0] >= 5_000 && gaps[0] < 10_000,
         "the first pause is {} ms",
         gaps[0]
     );

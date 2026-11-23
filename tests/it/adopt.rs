@@ -1127,6 +1127,7 @@ fn adv_a_hashed_record_carries_its_unlinked_hash_as_an_applied_one_does() {
             hash: None,
             applied_at: now,
             unlinked_hash: None,
+            fields_hash: None,
         },
     );
     adopted.unlinked = [("changes:1".to_string(), unlinked.clone())].into();

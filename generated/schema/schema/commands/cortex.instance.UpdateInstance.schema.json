@@ -19,6 +19,9 @@
     },
     "seed_digest": {
       "type": "string"
+    },
+    "no_wait": {
+      "type": "boolean"
     }
   },
   "required": [
@@ -32,8 +35,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "8fc1fa1334160fc5eedc948dcba9fb351db04fd7a002b80a9b8471a75a724dcc",
-    "contract_digest": "slice-sha256/2:24fd7784558b24b7f8f3cf851378b1cc3d95a578ff65d8dec32b895f14cac510",
+    "source_digest": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
+    "contract_digest": "slice-sha256/2:6d8b712983e335ce2ad9fef9168100d71d028eb2caa3f85ed4ed71bd06aa698f",
     "regenerate": "ess generate"
   },
   "$defs": {

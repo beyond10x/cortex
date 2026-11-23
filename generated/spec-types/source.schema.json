@@ -68,6 +68,12 @@
         },
         "unrestored": {
           "type": "integer"
+        },
+        "unsupported": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -75,6 +81,7 @@
         "answer",
         "nodes",
         "evidence",
+        "unsupported",
         "input_tokens",
         "output_tokens",
         "cached_tokens",
@@ -2013,8 +2020,8 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-ess-provenance": {
-    "contract_digest": "slice-sha256/2:8151cae31066ee50242dfa5aca21c86076641471245bc59332dedd4ec0042726",
-    "source_digest": "8fc1fa1334160fc5eedc948dcba9fb351db04fd7a002b80a9b8471a75a724dcc",
+    "contract_digest": "slice-sha256/2:fb70507c45809f8b9d7dd018fa5c9fe591112c9aa069873b65c5c012157f3426",
+    "source_digest": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
     "specification_version": "v1",
     "system": "cortex"
   }

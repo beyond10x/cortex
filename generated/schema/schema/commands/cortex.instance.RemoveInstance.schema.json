@@ -7,6 +7,9 @@
   "properties": {
     "name": {
       "$ref": "#/$defs/cortex.instance.InstanceName"
+    },
+    "no_wait": {
+      "type": "boolean"
     }
   },
   "required": [
@@ -16,8 +19,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "8fc1fa1334160fc5eedc948dcba9fb351db04fd7a002b80a9b8471a75a724dcc",
-    "contract_digest": "slice-sha256/2:ffb37ed8963ae0da5d81af6e9d8faed4414d71e696937fe0ad64c4ebf3187e52",
+    "source_digest": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
+    "contract_digest": "slice-sha256/2:10cd5a6837ed4baf6fc67825facf2c0b59592533dc88afedbd6ba5057c24d425",
     "regenerate": "ess generate"
   },
   "$defs": {

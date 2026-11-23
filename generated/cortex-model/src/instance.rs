@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 8fc1fa1334160fc5eedc948dcba9fb351db04fd7a002b80a9b8471a75a724dcc
-// contract digest 2b797601e89158bb5830c5917c9520ff3700b3ab235069ad63ab79f946ad66e6
+// model digest 1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea
+// contract digest edb08f72285adea731056f77a39b2f4b42617ddf03746589b9ce338333a0e3ad
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -210,6 +210,8 @@ pub struct EvalResult {
     pub missing_facts: Vec<String>,
     /// `missing_nodes` — `List<String>`.
     pub missing_nodes: Vec<String>,
+    /// `outcome` — `Optional<String>`.
+    pub outcome: Option<String>,
 }
 
 /// The states of `cortex.instance.EvalRun`, as runtime values.
@@ -1535,6 +1537,8 @@ pub struct SeenDocumentData {
     pub content_hash: Option<String>,
     /// `unlinked_hash` — `Optional<String>`.
     pub unlinked_hash: Option<String>,
+    /// `fields_hash` — `Optional<String>`.
+    pub fields_hash: Option<String>,
     /// `applied_at` — `Integer`.
     pub applied_at: i64,
 }
@@ -1973,6 +1977,27 @@ pub struct AddSource {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AddSourceOutcome {
+    /// `source-exists` — for an identity a record already carries.
+    ///
+    /// Nothing changed; the source keeps its schedule, counters and state.
+    SourceExists {
+        /// Why it was refused: `cortex.instance.SourceExists`.
+        error: SourceExists,
+    },
+    /// `no-such-instance` — when no `cortex.instance.Instance` carries the identity `input.instance_name` names.
+    ///
+    /// Nothing changed.
+    NoSuchInstance {
+        /// Why it was refused: `cortex.instance.InstanceNotFound`.
+        error: InstanceNotFound,
+    },
+    /// `not-active` — when the `cortex.instance.Instance` that `input.instance_name` names satisfies `state == Removed`.
+    ///
+    /// The instance is removed; nothing changed.
+    NotActive {
+        /// Why it was refused: `cortex.instance.InstanceNotActive`.
+        error: InstanceNotActive,
+    },
     /// `added` — otherwise.
     ///
     /// The source's timer is installed and enabled.
@@ -2231,7 +2256,7 @@ pub enum CreateInstanceOutcome {
     },
     /// `created` — otherwise.
     ///
-    /// The store is seeded, the seed schema applied and the seed documents extracted into it. The viewer runs on its port. The sources are added by AddSource, one per source in the spec.
+    /// The store is seeded, the seed schema applied and the seed documents extracted into it. The viewer runs on its port, unless the instance was created without units, which starts no viewer and names no address. The sources are added by AddSource, one per source in the spec.
     Created {
         /// The `cortex.instance.InstanceCreated` this outcome publishes.
         instance_created: InstanceCreated,
@@ -2245,6 +2270,8 @@ pub enum CreateInstanceOutcome {
 pub struct EnableSource {
     /// `source_id` — `cortex.instance.SourceId`.
     pub source_id: SourceId,
+    /// `no_wait` — `Optional<Boolean>`.
+    pub no_wait: Option<bool>,
 }
 
 /// Everything `cortex.instance.EnableSource` can result in — one variant per declared outcome.
@@ -2254,6 +2281,13 @@ pub struct EnableSource {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EnableSourceOutcome {
+    /// `busy` — externally decided (Another cortex command holds the home's lock) when eligible ((defined(no_wait) and no_wait == true)).
+    ///
+    /// Nothing changed; the source stays disabled and its timer as it was.
+    Busy {
+        /// Why it was refused: `cortex.instance.InstanceBusy`.
+        error: InstanceBusy,
+    },
     /// `enabled` — otherwise.
     ///
     /// The failure count is reset and the timer is enabled again.
@@ -2507,6 +2541,8 @@ pub enum RejectSchemaProposalsOutcome {
 pub struct RemoveInstance {
     /// `name` — `cortex.instance.InstanceName`.
     pub name: InstanceName,
+    /// `no_wait` — `Optional<Boolean>`.
+    pub no_wait: Option<bool>,
 }
 
 /// Everything `cortex.instance.RemoveInstance` can result in — one variant per declared outcome.
@@ -2516,12 +2552,26 @@ pub struct RemoveInstance {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RemoveInstanceOutcome {
+    /// `busy` — externally decided (Another cortex command holds the home's lock) when eligible ((defined(no_wait) and no_wait == true)).
+    ///
+    /// Nothing changed; the timers and the viewer are as they were.
+    Busy {
+        /// Why it was refused: `cortex.instance.InstanceBusy`.
+        error: InstanceBusy,
+    },
     /// `removed` — otherwise.
     ///
     /// The timers and the viewer are gone; the directory and the store stay.
     Removed {
         /// The `cortex.instance.InstanceRemoved` this outcome publishes.
         instance_removed: InstanceRemoved,
+    },
+    /// `stop-failed` — externally decided (`systemctl --user disable --now` failed for a timer or the viewer of the instance whose unit file the home wrote).
+    ///
+    /// Nothing was deleted: the instance stays active and its unit files stay, so a second remove tries again.
+    StopFailed {
+        /// Why it was refused: `cortex.instance.UnitsNotStopped`.
+        error: UnitsNotStopped,
     },
     /// `wrong-state` — from a state no declared move starts in.
     ///
@@ -2698,7 +2748,7 @@ pub enum RunSourceOutcome {
     },
     /// `fetched` — when `(defined(fetch_only) and fetch_only == true)`.
     ///
-    /// A fetch-only run: the source was fetched over the window a run would ask about, its documents masked and scrubbed as a run's are and compared with its seen documents by content hash. `new` counts keys no seen document carries; `changed` those a run would extract now; `held` those whose change `refresh_after_days` holds back; `unchanged` the rest. No model was asked, and nothing was written: not the store, the seen documents, the source's status or `cortex.log`; no snapshot or stage was taken and no run counted.
+    /// A fetch-only run: the source was fetched over the window a run would ask about, its documents masked and scrubbed as a run's are and compared with its seen documents by content hash and stored fields. `new` counts keys no seen document carries; `changed` those a run would extract now; `held` those whose change `refresh_after_days` holds back; `skipped` names those a run would leave out after they failed alone on 3 consecutive runs, which are counted neither `new` nor `changed`; `unchanged` the rest. No model was asked, and nothing was written: not the store, the seen documents, the source's status or `cortex.log`; no snapshot or stage was taken and no run counted.
     Fetched {
         /// The `cortex.instance.SourceFetched` this outcome publishes.
         source_fetched: SourceFetched,
@@ -2761,7 +2811,7 @@ pub enum RunSourceOutcome {
     },
     /// `ran` — otherwise.
     ///
-    /// Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it. `cost_counted` is false behind a model gateway, where `cost_usd` is as reported and bounded nothing.
+    /// Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. A run that `max_documents_per_run` capped has `stopped` `document-cap` and counts in `documents_left` the wanted documents it left for the next run; a run that applied every wanted document has no `stopped` and `documents_left` 0. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it. `cost_counted` is false behind a model gateway, where `cost_usd` is as reported and bounded nothing.
     Ran {
         /// The `cortex.instance.SourceRan` this outcome publishes.
         source_ran: SourceRan,
@@ -2790,6 +2840,8 @@ pub struct UpdateInstance {
     pub spec: InstanceSpec,
     /// `seed_digest` — `String`.
     pub seed_digest: String,
+    /// `no_wait` — `Optional<Boolean>`.
+    pub no_wait: Option<bool>,
 }
 
 /// Everything `cortex.instance.UpdateInstance` can result in — one variant per declared outcome.
@@ -2813,6 +2865,13 @@ pub enum UpdateInstanceOutcome {
         /// Why it was refused: `cortex.instance.InstanceNotActive`.
         error: InstanceNotActive,
     },
+    /// `busy` — externally decided (Another cortex command holds the home's lock) when eligible ((defined(no_wait) and no_wait == true)).
+    ///
+    /// Nothing changed: the frozen spec, the sources and the units are as they were, so an orchestrator can try the update again between runs.
+    Busy {
+        /// Why it was refused: `cortex.instance.InstanceBusy`.
+        error: InstanceBusy,
+    },
     /// `rekey-refused` — externally decided (A source the frozen spec and the new one both name, whose `state/<source>.json` holds a seen document, changes a field its documents are keyed by: its `kind`; a `connectors` source's `adapter`, `operation` or `id`; a `files` source's `records` format (no `records` and `WholeFile` are one), with a per-record format their `records.id`, or a root of its `paths` that reaches a seen file under another spelling (`docs` and `./docs`; adding, removing or reordering roots is not one); a `structured` source's `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths` or `glob` as written, or its `mapping.id`. A record path is compared as it is read (`key` and `$.key` are one path)).
     ///
     /// Nothing changed; the frozen spec and every source's seen state are as they were.
@@ -2822,7 +2881,7 @@ pub enum UpdateInstanceOutcome {
     },
     /// `updated` — otherwise.
     ///
-    /// The frozen spec is replaced; sources, model and serve settings take effect on the next run. The viewer unit holds the connection id resolved at the last create, adopt or update: it is rewritten when the store's connection changed, or when its profile now resolves to another id.
+    /// The frozen spec is replaced; model settings take effect on the next run. Sources the spec adds are added, sources it keeps take its kind and schedule and keep their counters and state, and sources it drops leave the registry with their timers stopped and deleted. A changed `serve.view_port` moves the viewer to it. The viewer unit holds the connection id resolved at the last create, adopt or update: it is rewritten when the store's connection or the port changed, or when its profile now resolves to another id.
     Updated {
         /// The `cortex.instance.InstanceUpdated` this outcome publishes.
         instance_updated: InstanceUpdated,
@@ -3075,6 +3134,8 @@ pub struct SourceFetched {
     pub unchanged: i64,
     /// `unread` — `List<String>`.
     pub unread: Vec<String>,
+    /// `skipped` — `List<String>`.
+    pub skipped: Vec<String>,
 }
 
 /// SourceRan — the event `cortex.instance.SourceRan`.
@@ -3086,6 +3147,10 @@ pub struct SourceRan {
     pub documents_new: i64,
     /// `documents_applied` — `Integer`.
     pub documents_applied: i64,
+    /// `documents_left` — `Integer`.
+    pub documents_left: i64,
+    /// `stopped` — `Optional<String>`.
+    pub stopped: Option<String>,
     /// `facts_reapplied` — `Integer`.
     pub facts_reapplied: i64,
     /// `cost_usd` — `Optional<Decimal>`.
@@ -3199,7 +3264,7 @@ pub struct EvalReviewOpen {
 
 /// The declared error `cortex.instance.EvalRunnerFailed`.
 ///
-/// The runner could not answer a case: the model call failed, timed out, answered no valid answer or found the budget or the instance's daily ceiling spent; no `cortex ask serve` answered; or the run `replay` names holds no recorded answer for a case. `results.jsonl` keeps the results of the cases answered before; no `summary.json` was written.
+/// The runner could not answer a case: the model call failed, timed out, answered no valid answer or found the budget or the instance's daily ceiling spent; no `cortex ask serve` answered at the address the spec's `ask.listen` names, the spec has no `ask` section, or the service answered `model-failed`, `reader-failed` or a refusal of the request itself (`unidentified`, `bad-request`, or `rate-limit` and `busy` still after its retries); or the run `replay` names holds no recorded answer for a case. `results.jsonl` keeps the results of the cases answered before; no `summary.json` was written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EvalRunnerFailed {
     /// `reason` — `String`.
@@ -3235,7 +3300,7 @@ pub struct FetchFailed {
 
 /// The declared error `cortex.instance.InstanceBusy`.
 ///
-/// Another cortex command holds the home's lock, or, for a restore, another connection held the store's write lock for 5 seconds; nothing was restored or run. A reader that holds the store open does not.
+/// Another cortex command holds the home's lock, or, for a restore, another connection held the store's write lock for 5 seconds; nothing was restored, run, updated, removed or enabled. A reader that holds the store open does not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceBusy {
     /// `reason` — `String`.
@@ -3441,6 +3506,15 @@ pub struct SourceDisabledError {
     pub source_id: SourceId,
 }
 
+/// The declared error `cortex.instance.SourceExists`.
+///
+/// The registry already holds a source with this id; its schedule, counters and state are as they were. `cortex update` changes a source of the spec.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceExists {
+    /// `source_id` — `cortex.instance.SourceId`.
+    pub source_id: SourceId,
+}
+
 /// The declared error `cortex.instance.SourceNotDisabled`.
 ///
 /// The source is already enabled, so nothing changed.
@@ -3482,6 +3556,17 @@ pub struct StoreOutcomeUnknown {
 /// The store named for adoption cannot be read, or EKR cannot open it under the instance's host document (another tenant or authority than the store was seeded under, or no seed).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreUnreadable {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
+/// The declared error `cortex.instance.UnitsNotStopped`.
+///
+/// `systemctl` did not stop a timer or the viewer the home wrote for the instance. The instance stays active and every unit file stays, so `cortex remove` can be run again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnitsNotStopped {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
     /// `reason` — `String`.
     pub reason: String,
 }

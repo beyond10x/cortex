@@ -5,7 +5,8 @@
 //!
 //! Facts are dated by their document's time, so documents can arrive out of order. A replacement
 //! older than the value it would supersede is rejected by EKR (`invalid-supersession`); cortex
-//! lists it under the run's `rejected`, with the document it cites, and the run goes on. One with
+//! keeps it as that value's history, closed where the value begins, and counts it in the run's
+//! `facts_history` (`story:apply-out-of-order-and-isolated`). One with
 //! nothing active to replace is rejected too (`replacement-without-active-assertion`); cortex
 //! applies it again without `replaces`, so its value is stored as a plain assertion, and counts it
 //! in the run's `facts_reapplied` (`story:replacement-applied-as-assertion`).
@@ -256,10 +257,11 @@ fn a_newer_document_supersedes_the_value_it_replaces() {
 }
 
 /// Out of order: a replacement dated before the value it would supersede is rejected by EKR as
-/// `invalid-supersession`. The run lists it with its document and goes on: the newer value stays
-/// the one active, and the rest of the older document applies.
+/// `invalid-supersession`. cortex keeps it as the newer value's history and refuses nothing: the
+/// newer value stays the one active, the older ends where it begins, and the rest of the older
+/// document applies.
 #[test]
-fn a_replacement_older_than_the_value_it_replaces_is_listed_and_the_run_goes_on() {
+fn a_replacement_older_than_the_value_it_replaces_becomes_its_history() {
     let w = world();
     run_with(
         &w,
@@ -273,17 +275,24 @@ fn a_replacement_older_than_the_value_it_replaces_is_listed_and_the_run_goes_on(
         ],
     );
     assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
-    assert_eq!(ran["detail"]["parts_rejected"], 1, "{ran}");
-    let refusals = refusals(&ran);
-    assert_eq!(refusals.len(), 1, "{ran}");
-    assert_eq!(refusals[0].0, "a", "{ran}");
-    assert!(refusals[0].1.contains("invalid-supersession"), "{ran}");
+    assert_eq!(ran["detail"]["parts_rejected"], 0, "{ran}");
+    assert_eq!(ran["detail"]["facts_history"], 1, "{ran}");
+    assert!(refusals(&ran).is_empty(), "{ran}");
 
     let snap = snapshot(&w);
     let graph = &snap["graph"]["graph"];
     let owners = owners(graph);
-    assert_eq!(owners.len(), 1, "{owners:?}");
-    assert!(active(&owners[0]) && owners[0].value == "Bob", "{owners:?}");
+    assert_eq!(owners.len(), 2, "{owners:?}");
+    let bob = owners.iter().find(|o| active(o)).expect("one active");
+    let alice = owners.iter().find(|o| !active(o)).expect("one history");
+    assert_eq!(
+        (bob.value.as_str(), bob.from, bob.to),
+        ("Bob", Some(JAN_3), None)
+    );
+    assert_eq!(
+        (alice.value.as_str(), alice.from, alice.to),
+        ("Alice", Some(JAN_2), Some(JAN_3))
+    );
     assert_eq!(developed_by(graph), ["a", "b"]);
 }
 

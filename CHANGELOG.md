@@ -7,6 +7,120 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Added
 
+- `cortex update`, `cortex remove` and `cortex source enable` take `--no-wait` too: while another
+  cortex command holds the home's lock they answer `busy` at once with exit status 9 and change
+  nothing (an update leaves the frozen spec as it was), so an orchestrator that changes an
+  instance's spec while a run may be in flight gets an answer at once instead of waiting minutes.
+  Without the flag they wait for the lock, as before (story `update-no-wait`).
+
+### Changed
+
+- A run that `max_documents_per_run` capped reports `stopped: document-cap` instead of
+  `stopped: null`, and every `ran` report carries `documents_left`, the wanted documents the run
+  neither applied nor marked seen (`0` when it left none; `SourceRan` carries both). Before, a
+  capped run looked like one that read everything, and a caller counted what was left with a
+  second `--fetch-only` call.
+- A batch directory under `runs/` keeps each part EKR refused in `refusals.json`: the part, the
+  outcome EKR named and its reason. Under a `redaction` policy every value the policy finds in it
+  is replaced by a placeholder of the batch, as in `prompt.txt` and `answer.json`. Before, a
+  refusal's reason was in no file of the run directory under a policy.
+
+### Fixed
+
+- **Redaction takes time linear in the matches.** Each match a redaction class found was checked
+  against every match found before it, so a text of many matches, such as links in brackets
+  back to back, took time quadratic in their number (4x the links, 14x the time). The check is a
+  binary search now; what is replaced is unchanged.
+- **A commit or a version after `@` at the end of a text is no email address.** `Email` reads an
+  address a provider cut before its top-level domain at the very end of a text (`jane.doe@exam`).
+  It also read a document key such as `group/repo@3f2a9c1` there, and the model was shown
+  `[Email-1]` for it. What is left of a cut address's domain now holds no digit, so a commit id
+  or a version (`tool@1.4.2`) after `@` is kept.
+- A batch that holds several replacing values of one entity and property with nothing stored to
+  replace orders them by the earliest document each fact cites, the time EKR stores the fact
+  from. 0.8.0 ordered a fact citing an early and a late document by the late one, applied it
+  after a value it is older than, and EKR refused it with `invalid-supersession`, naming every
+  document it cited in `rejected`. A replacement applied again that EKR still refuses that way
+  is kept as history, as one of the batch's first apply is (`facts_history`).
+- A `web` source reports what the provider did not read. Each URL in a `websearch.fetch` or
+  `websearch.crawl` answer's `failed` list, and an answer that says `complete: false`, is named in
+  fetch-only's `unread` and in the run's `stopped`, with the provider's reason or truncation
+  causes. A search short of `max_results` alone is not named. 0.8.0 ignored both and reported a
+  run whose only URL failed as a plain `ran` (review of 0.7.2, finding 7).
+- A web page's description is cut, with its title, to what the 16,384-byte evidence payload
+  holds, leaving the page's text its own length or 8,192 bytes. The prompt, the evidence and the
+  stored `WebPage` `description` hold the same text. 0.8.0 showed the model and stored a long
+  description whose tail its evidence did not hold (review of 0.7.2, finding 10).
+- A `structured` record whose mapping changed is applied again at the next run, at once and
+  whatever `refresh_after_days`, its text changed or not. 0.8.0 answered `cortex update` with
+  `updated` and left every unchanged record on the old mapping, so a property added to the mapping
+  reached the store only for records that changed later. The state file remembers each record's
+  mapping (`fields_hash`); a record applied by 0.8.0 has none and is applied again once, with no
+  model call.
+- A web page whose title, description or publication date changed while its URL and body stayed
+  the same is a changed document, extracted again once `refresh_after_days` have passed, so its
+  `WebPage` node gets the new values. 0.8.0 counted it unchanged. A page applied by 0.8.0 takes
+  the fields of its next fetch as applied and is not extracted again for them.
+- `cortex run --fetch-only` names in the new `skipped` list each document a run would leave out
+  after it failed alone on 3 consecutive runs, and counts it neither `new` nor `changed`.
+  0.8.0 forecast it as model work that the run then skipped.
+- `create`, `update` and `adopt` read every field the published JSON Schema types `integer` as
+  that schema does: a number with no fractional part in any spelling (`timeout_s: 1.0`, `1e3`) is
+  that whole number, where 0.8.0 refused `1.0` as not a whole number. A fraction (`1.5`) is still
+  refused, naming the field (review of 0.7.2, finding 25).
+- The conformance suite reads the spec document each create, adopt and update step supplies
+  through the command line's own loader (`load_given`) and gives the behaviour the spec it
+  loaded, where it gave every step one fixed spec; a document the loader refuses fails its
+  scenario. Three authored scenarios (`spec/scenarios/`) create, adopt and update from
+  `cortex.instance/1` documents the loader accepts. The 100 steps whose document is ESS 0.77.0's
+  synthesized witness (`format: spec.format`) are counted and must be refused at their format;
+  ESS gives a struct input a document of its own only from `ess/33` (ESS 0.78.0) (review of
+  0.7.2, finding 26).
+- `cortex update` takes a source the new spec drops out of the registry, and stops and deletes
+  its timer and service (`removed_sources`). Before, the source stayed `Enabled` and its timer
+  kept firing a run that failed and was counted. A timer that does not stop keeps its source and
+  unit files, `units.failed` names it, and the next update tries again.
+- `cortex update` gives a source the spec keeps its new `kind` and `schedule` in the registry, so
+  `cortex sources` lists the schedule its timer runs on; its runs, failures and state are kept.
+- `cortex update` with another `serve.view_port` moves the viewer: `meta.json` and `cortex list`
+  hold the new port, and the viewer unit is written on it and restarted. Before, the old port
+  stayed. A viewer unit an update rewrites for a changed connection is restarted too.
+- `cortex source add` for a source the registry holds answers `source-exists` (exit 1) and
+  changes nothing; before, it reset the source's counters and enabled a disabled source. A source
+  of an instance the home does not hold is refused (`no-such-instance`), and one of a removed
+  instance (`not-active`).
+- `cortex remove` answers `stop-failed` (exit 1) and names each failure when
+  `systemctl disable --now` fails for a timer or the viewer. It deletes no unit file and keeps the
+  instance active, so `cortex remove` can be run again. Before, it answered `removed`, deleted the
+  unit files and refused a second remove as `wrong-state`. A unit file that is not there is no
+  longer stopped, and `daemon-reload` runs only once a file was deleted.
+
+### Fixed: answers and evaluations (review of 0.7.2, findings 19 to 24)
+
+- `cortex eval run --runner ask` asks the instance's running `cortex ask serve` at the address its
+  spec's `ask.listen` names, instead of answering `runner-failed` "no service".
+- A Chat Completions refusal (no content, a non-empty `message.refusal`) ends the answer with an
+  `error` event whose reason is `refused` and whose message is the refusal text, streams no text,
+  and is recorded with the outcome `refused`, the text as its `answer` and a `failed` review item.
+  It was a `done` event with an empty answer, recorded as `answered`. Breaking: a new
+  `cortex.ask.AnswerOutcome` variant and `cortex.ask.Ask` outcome.
+- A citation marker naming an id no tool result of the answer held is written
+  `[unsupported node:<id>]`, never linked, and listed in the new `done.unsupported`, not in
+  `done.nodes` or `done.evidence`. Breaking: `cortex.ask.AskDone` has the field `unsupported`.
+- `replay` keeps a recorded non-answer (a refused case) failed, whatever its text holds; each
+  `results.jsonl` line of a case with no answer names it in `outcome`, and its scores count every
+  expectation missed.
+- The quality judge is shown each fact's validity interval (`Valid: <from> to <to>`), so one fact
+  valid in January and in February is judged at its own time.
+- An answer ended by the step or time limit, a model failure or a reader failure after a model
+  call keeps the steps and tokens of the calls made, in its error and in its record; they were 0.
+  Breaking: `cortex.ask.LimitReached`, `ModelFailed` and `ReaderFailed` carry `steps` and the
+  token counts.
+
+## 0.8.0 — 2026-11-23
+
+### Added
+
 - `cortex run <instance>/<source> --path <dir>`, also with `--fetch-only`, reads a `files` source
   from `<dir>` instead of its spec's `paths`, for that run only. Each document is keyed by its
   path relative to `<dir>` (`<relative path>#<id>`, evidence `file:<key>`), so a record read from
@@ -36,7 +150,7 @@ feature set after a real instance ran for 7 days with nobody at the keyboard.
   stage it abandons on failure; two failed runs in a row disable a source, and a daily ceiling
   holds model spend. A metric file, a failure hook and `cortex sources` show how each run ended.
   `cortex quality` judges a sample of facts; `cortex schema` proposes schema changes.
-- **Project.** Specified in ESS with 126 conformance scenarios; CI runs `task check` on every pull
+- **Project.** Specified in ESS with 132 conformance scenarios; CI runs `task check` on every pull
   request; each release carries an `x86_64-unknown-linux-gnu` binary checked against `SHA256SUMS`.
 
 Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
@@ -91,17 +205,40 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   a read. Before, an id on the second page was reported missing, and two timer runs then disabled
   the source. A list that names a cursor a second time, or runs past 1000 pages, ends the read
   with a reason naming the cursor instead of a loop.
+- `RareName` no longer replaces the store's ontology names (node types, properties, value kinds,
+  relations) in the prompt or in a document, and does not count them. A model writes back the
+  type names it is shown; a replaced one made EKR refuse every entity
+  (`extraction-type-undeclared: Name-32`) and the run was undone. `known_names` and `rules` still
+  replace a type name they match.
+- A placeholder the model writes where a node type, property or relation name goes is restored
+  before the answer is applied, also without its brackets (`Name-3`); one that stands for no value
+  fails the batch, naming it and where it stood.
+- A batch directory under `runs/` keeps the prompt as sent (`prompt.txt`) and the model's raw
+  answer (`answer.json`, formerly `model.json`) under a `redaction` policy too. Both hold
+  placeholders, not originals; the mapping is never written.
+- `cortex create --no-units` and `cortex adopt --no-units` print `view: null` instead of an address
+  no viewer serves, and `cortex list` prints `view: null` for an instance with no viewer unit.
 - **One current value per single-valued property.** A `!Property` fact of a property declared
   `cardinality: One` (by the store, or by the model's document for a new one) is marked
   `replaces: true` by cortex before it is applied. EKR 0.0.34 adds an unmarked fact as one more
   active value whatever the cardinality, so a merge request's state read from its tracker record
   and again from a later chat message stayed current twice. Now the newest value stays current,
-  an older one is listed in `rejected` (`invalid-supersession`), and a first value is stored
+  an older one is kept as its history (below), and a first value is stored
   through `facts_reapplied` (`story:extraction-coverage`).
 - **The prompt asks for every document's own facts.** The extraction rules tell the model to go
   through every document to its end, to extract a thread reply's own facts apart from the message
   it answers and every item of a message that lists several, and to read `[context]` paragraphs
   as context (`story:extraction-coverage`).
+- A document read after a newer one no longer loses its changed value: a fact marked
+  `replaces: true` that is older than the current value, which EKR refuses
+  (`invalid-supersession`), is stored as that value's history, ending where the current value
+  begins, and counted in the run's `facts_history` instead of `rejected`. Before, the fact was
+  lost and listed as rejected.
+- One document whose extraction redeclares a type the store holds otherwise
+  (`extraction-type-conflict`) no longer fails its whole batch: that document is refused alone,
+  named in `rejected` with `extraction-type-conflict: <type>` and not marked seen, so a later run
+  asks for it again, and the rest of the batch applies. Before, the batch's apply failed, which
+  failed the run when nothing had been applied yet and stopped it otherwise.
 
 ## 0.7.2 — 2026-10-30
 

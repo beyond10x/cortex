@@ -153,8 +153,13 @@ this repository and published by the organisation's reusable workflow.
   placeholder in the answer is restored before it is applied, so the store, the evidence and the
   extracted facts hold the originals and stay searchable. The mapping lives in memory for one batch
   and is never written to disk or to the log; with a policy, a batch directory under `runs/` keeps
-  only the restored `extraction.yaml`. A placeholder with no value is left as written and counted
-  as `unrestored`. Limits: detection is by pattern (the classes `Url`, `Email`, `Phone`,
+  the prompt as sent (`prompt.txt`), the raw answer (`answer.json`) and EKR's refusals
+  (`refusals.json`, every value the policy finds in them replaced by a placeholder of the batch),
+  which hold placeholders, not originals, and the restored `extraction.yaml`, and no EKR report. A
+  placeholder with no value is left as written and counted as `unrestored`; one in a node type,
+  property or relation position is restored also without its brackets, or fails the batch naming
+  it. `RareName` never takes the store's ontology names (`Batch::keep_names`): the model writes
+  back the type names it is shown, and a replaced one made EKR refuse every entity (`extraction-type-undeclared`). Limits: detection is by pattern (the classes `Url`, `Email`, `Phone`,
   `IpAddress`, `PaymentCard` and `RareName`, the `known_names` list, and the policy's regex
   `rules`), so four-part version numbers and long digit ids that look like an IP address or a card
   are hidden from the model too (and restored); a person's name is found only when listed in
@@ -205,7 +210,7 @@ this repository and published by the organisation's reusable workflow.
 - `task check` is the gate (see [Commands](#commands)); `STATUS.md` records its last result.
 - Format with `cargo fmt -p cortex-cli -p cortex-docs`. `cargo fmt --all` also rewrites the
   generated crates, which are path dependencies, and `task drift` then fails.
-- `tests/it/conformance.rs` runs every scenario of `spec/suite.json` (126) in process; `tests/it/e2e.rs`
+- `tests/it/conformance.rs` runs every scenario of `spec/suite.json` (137) in process; `tests/it/e2e.rs`
   drives the binary end to end; the clap ⇔ spec test in `src/main.rs` holds the command line to
   the commands, inputs and views `spec/` puts on it.
 - **One integration-test binary.** Every integration test is a module of `tests/main.rs`, in

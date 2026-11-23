@@ -735,6 +735,14 @@ impl Systemd {
         self.systemctl(&["enable", "--now", &format!("{unit}.service")])
     }
 
+    /// Whether this home wrote a viewer unit of `instance`: none was written for an instance
+    /// created or adopted with `--no-units`, and `remove` deletes it.
+    pub fn has_view(&self, instance: &str) -> bool {
+        let name = format!("{}.service", view_unit(instance));
+        std::fs::read_to_string(self.unit_dir.join(name))
+            .is_ok_and(|text| home_of(&text).is_none_or(|home| same_home(&home, &self.home_root)))
+    }
+
     /// The connection id this home's viewer unit of `instance` launches through, as
     /// [`Systemd::install_view`] wrote it: the id a profile resolved to then. `None` when there is
     /// no such unit, another home wrote it, or it launches through no connection.
@@ -794,13 +802,26 @@ impl Systemd {
         }
     }
 
-    /// Stops and deletes every unit of `instance` this home wrote. A unit of the same name another
-    /// home wrote is left running and in place; the answer names each, with its home.
-    pub fn remove_instance(
+    /// Stops and deletes every unit of `instance` this home wrote ([`Systemd::remove_units`]).
+    pub fn remove_instance(&self, instance: &str, sources: &[String]) -> Result<Removed, String> {
+        self.remove_units(instance, sources, true)
+    }
+
+    /// Stops and deletes the units of `instance` this home wrote: the timer and service of each
+    /// source of `sources`, and the viewer when `view`. Only a unit whose file is in the unit
+    /// directory is stopped and deleted. A unit of the same name another home wrote is left
+    /// running and in place; the answer names each, with its home.
+    ///
+    /// Every timer and the viewer is stopped first (`disable --now`). When one does not stop,
+    /// nothing is deleted and the answer is every failure, so a second call finds every file
+    /// again. `daemon-reload` runs once a file was deleted; its failure is
+    /// [`Removed::reload_failed`].
+    pub fn remove_units(
         &self,
         instance: &str,
         sources: &[String],
-    ) -> Result<Vec<String>, String> {
+        view: bool,
+    ) -> Result<Removed, String> {
         let mut files: Vec<String> = sources
             .iter()
             .flat_map(|s| {
@@ -808,31 +829,62 @@ impl Systemd {
                 [format!("{unit}.timer"), format!("{unit}.service")]
             })
             .collect();
-        let view = format!("{}.service", view_unit(instance));
-        files.push(view.clone());
+        let viewer = format!("{}.service", view_unit(instance));
+        if view {
+            files.push(viewer.clone());
+        }
         let (kept, own): (Vec<_>, Vec<_>) = files
             .into_iter()
             .map(|f| (self.foreign(instance, &f), f))
             .partition(|(home, _)| home.is_some());
+        let own: Vec<String> = own
+            .into_iter()
+            .map(|(_, f)| f)
+            .filter(|f| self.unit_dir.join(f).is_file())
+            .collect();
         // The timers and the viewer are what is enabled; a source's service only runs from its
         // timer.
-        for (_, file) in &own {
-            if file.ends_with(".timer") || *file == view {
-                let _ = self.systemctl(&["disable", "--now", file]);
-            }
+        let failed: Vec<String> = own
+            .iter()
+            .filter(|f| f.ends_with(".timer") || **f == viewer)
+            .filter_map(|f| self.systemctl(&["disable", "--now", f]).err())
+            .collect();
+        if !failed.is_empty() {
+            return Err(failed.join("; "));
         }
-        for (_, file) in &own {
+        for file in &own {
             let _ = std::fs::remove_file(self.unit_dir.join(file));
         }
-        self.systemctl(&["daemon-reload"])?;
-        Ok(kept
-            .into_iter()
-            .map(|(owner, file)| match owner {
-                Some(owner) => format!("{file} (home {})", owner.home().display()),
-                None => file,
-            })
-            .collect())
+        let reload_failed = if own.is_empty() {
+            None
+        } else {
+            self.systemctl(&["daemon-reload"]).err()
+        };
+        Ok(Removed {
+            kept: kept
+                .into_iter()
+                .map(|(owner, file)| match owner {
+                    Some(owner) => format!("{file} (home {})", owner.home().display()),
+                    None => file,
+                })
+                .collect(),
+            reload_failed,
+        })
     }
+
+    /// Restarts the viewer of `instance`, so a rewritten unit takes effect.
+    pub fn restart_view_unit(&self, instance: &str) -> Result<(), String> {
+        self.systemctl(&["restart", &format!("{}.service", view_unit(instance))])
+    }
+}
+
+/// What [`Systemd::remove_units`] did once every unit stopped.
+#[derive(Debug, Default)]
+pub struct Removed {
+    /// The units of the same name another home wrote, each with its home, left in place.
+    pub kept: Vec<String>,
+    /// Why `systemctl --user daemon-reload` failed after the unit files were deleted.
+    pub reload_failed: Option<String>,
 }
 
 #[cfg(test)]

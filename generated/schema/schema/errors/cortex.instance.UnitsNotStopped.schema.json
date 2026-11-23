@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UnitsNotStopped payload",
+  "description": "`systemctl` did not stop a timer or the viewer the home wrote for the instance. The instance stays active and every unit file stays, so `cortex remove` can be run again.",
+  "x-ess-name": "cortex.instance.UnitsNotStopped",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "name": {
+      "$ref": "#/$defs/cortex.instance.InstanceName"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
+    "contract_digest": "slice-sha256/2:88d497a683533a1d528a433fc28e754b279eb041507346b27adffe6f88de1856",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.InstanceName": {
+      "title": "InstanceName",
+      "x-ess-name": "cortex.instance.InstanceName",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

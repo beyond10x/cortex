@@ -12,6 +12,10 @@ One YAML file in the `cortex.instance/1` format defines one instance. Its exact 
 Schema is [`instance-spec.schema.json`](https://beyond10x.github.io/cortex/schemas/instance-spec.schema.json),
 and `cortex schema` prints the same document. This page says what each section does.
 
+A field the JSON Schema types `integer` takes any number with no fractional part, as JSON Schema
+counts one: `timeout_s: 900`, `900.0` and `9e2` are one value. A fraction (`900.5`) is refused,
+naming the field.
+
 The repository's `examples/example.yaml` is a complete file with two web sources.
 `examples/agent-tooling.yaml` is another, with its own seed ontology
 (`examples/seed/agent-tooling.yaml`): a daily news search on three queries, a weekly crawl of the
@@ -348,7 +352,9 @@ Websites with their title, description and content, through a Connectors adapter
 | `policy` | optional crawl policy: `max_depth`, `max_breadth`, `limit`, `select_paths`, `exclude_paths`, `instructions`, `allow_external`. Without it a crawl is limited to 20 pages |
 
 A website with no content keeps its description as its text; one with neither is dropped. A URL
-returned twice in one run counts once.
+returned twice in one run counts once. A URL the provider could not read, and an answer it says
+is incomplete, are named in fetch-only's `unread` and in the run's `stopped`
+([Operating](./operating.md#counting-what-a-run-would-extract)).
 
 ### `kind: connectors`
 
@@ -950,9 +956,9 @@ applies. Shorten or unmap the value at the source to clear it. Change detection,
 
 | field | meaning |
 |---|---|
-| `refresh_after_days` | a document whose text changed is extracted again only when it was last applied at least this many days ago; 0 to 36500. A record read from a file ([`kind: files`](#kind-files)) and a `structured` source's change whose text changed only in its links ([`kind: structured`](#kind-structured)) wait for nothing |
+| `refresh_after_days` | a document whose text changed, or a web page whose title, description or publication date changed, is extracted again only when it was last applied at least this many days ago; 0 to 36500. A record read from a file ([`kind: files`](#kind-files)), a `structured` source's change whose text changed only in its links, and a `structured` record whose mapping changed ([`kind: structured`](#kind-structured)) wait for nothing |
 | `change` | how a change is detected; `ContentHash` is the only value |
-| `max_documents_per_run` | the most documents one run extracts; above 0 |
+| `max_documents_per_run` | the most documents one run extracts; above 0. A run that leaves wanted documents beyond it reports `stopped: document-cap` and their number in `documents_left` ([`cortex run`](./commands.md)) |
 | `max_chars_per_document` | longer text is cut to this many characters; above 0. Text is also cut, at a character boundary, to what a 16,384-byte evidence payload holds after its header (EKR 0.0.32's bound), so about 5,400 characters of a three-byte script such as Chinese fit. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |
 
 ## `redaction`
@@ -976,6 +982,26 @@ redaction:
 | `known_names` | optional names replaced by `[Name-1]`-style placeholders wherever they appear as whole words, in any case, and restored |
 | `rare_limit` | optional; for `RareName`, the most times a capitalised word may appear in a batch to be taken as a name. Default 1 |
 | `refuse_if_left` | optional classes that fail the run, before any model call, when they are still found in what the model would be shown |
+
+The prompt shows the store's ontology: its node type names with their property names and value
+kinds, and its relation names with their source and target types. `RareName` never takes these
+names, in the ontology lines or in a document, and does not count them: the model sees
+`Runbook(owner: String)` as the store holds it, and writes it back as the type of what it
+extracts. `known_names` and `rules` still replace a type name they match. A placeholder the model
+writes where a node type, property or relation name goes is restored before the answer is
+applied, also when it dropped the brackets (`Name-3` for `[Name-3]`); one that stands for no value
+of the batch fails the batch, naming the placeholder and where it stood, and nothing of that
+batch is applied.
+
+Each batch directory under `runs/` keeps the prompt as sent (`prompt.txt`), the model's raw
+answer (`answer.json`) and each part EKR refused (`refusals.json`: the part, the outcome EKR named
+and its reason) beside the extraction document applied
+([Operating](./operating.md#where-things-live)). With a policy, all three hold placeholders, not
+the values they stand for: the model was sent only placeholders, its answer is kept as it came,
+before restoring, and EKR's refusals, which can name the restored values, are written with
+every value the policy finds replaced by a placeholder of the batch. `extraction.yaml` holds the
+restored values, as the store does. The mapping from placeholder to value is never written. They
+are removed with the run directory after [`runs.keep_days`](#runs).
 
 ## `snapshots`
 
@@ -1047,7 +1073,7 @@ monitoring:
 
 | field | meaning |
 |---|---|
-| `view_port` | optional port for `ekr view` on 127.0.0.1, 0 to 65535; without it, `cortex create` takes the first free port from 18900 |
+| `view_port` | optional port for `ekr view` on 127.0.0.1, 0 to 65535; without it, `cortex create` takes the first free port from 18900, and `cortex update` keeps the instance's port. `cortex update` with another port moves the viewer to it |
 
 ## `store`
 

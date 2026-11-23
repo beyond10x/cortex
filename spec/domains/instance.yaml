@@ -717,7 +717,11 @@ types:
       - {name: replacement, type: String}
 
   # `RareName` replaces a capitalised word (one capital and at least one lower-case letter) that
-  # the batch's document texts hold at most `rare_limit` times (default 1). A word, hyphenated or
+  # the batch's document texts hold at most `rare_limit` times (default 1). A word of the store's
+  # ontology names the prompt shows (node types, properties, value kinds, relations) is never a
+  # rare name, anywhere in the batch; `known_names` and the rules still replace it. A placeholder
+  # in a node type, property or relation position of the answer is restored, bracketed or not,
+  # or the batch fails naming it. A word, hyphenated or
   # not (`Jean-Luc`, `Co-Authored-By`), is replaced whole or not at all: no part of a word seen
   # more than `rare_limit` times is a rare name, and the `refuse_if_left` check reads words the
   # same way, so it finds nothing left of a word that was kept. A word glued directly to a
@@ -786,9 +790,10 @@ types:
       - {name: bin, type: Optional<String>}
 
   # UNMAPPED: `view_port` is a port from 0 to 65535; a spec outside it is refused (exit 2, naming
-  # the field, for `create`, `update` and `adopt`: `spec::load_given`). The port is read only when
-  # an instance is made, so an instance's frozen copy is not held to it. A check on an Integer the
-  # specification has no construct for; `tests/spec_forms.rs` tests it.
+  # the field, for `create`, `update` and `adopt`: `spec::load_given`). The port is read when an
+  # instance is made and when an update names another one, so an instance's frozen copy is not
+  # held to it. A check on an Integer the specification has no construct for;
+  # `tests/spec_forms.rs` tests it.
   - name: cortex.instance.ServeSpec
     kind: struct
     fields:
@@ -908,8 +913,9 @@ types:
       - {name: reason, type: String}
 
   # How `cortex eval run` answers a case's question: `mcp` asks the instance's model with the
-  # store's MCP reader (`ekr mcp`) as its only tools; `ask` asks a running `cortex ask serve`;
-  # `replay` takes the answers an earlier eval run recorded and asks no model.
+  # store's MCP reader (`ekr mcp`) as its only tools; `ask` asks the instance's running
+  # `cortex ask serve` at the address its spec's `ask.listen` names; `replay` takes the answers an
+  # earlier eval run recorded and asks no model.
   - name: cortex.instance.EvalRunner
     kind: enum
     variants: [mcp, ask, replay]
@@ -944,6 +950,12 @@ types:
   # the case, the answer and the node ids it cites as the runner gave them, whether it passed, and
   # the expected fact strings it does not contain and expected node ids it does not cite. A line
   # holds nothing of the run's time or cost, so two replays of one run write the same bytes.
+  # `outcome` is absent when the runner gave an answer. A case the runner gave no answer for has
+  # it: `refused` (the redaction policy refused the question, or the model declined), or the ask
+  # service's `error` reason (`step-limit`, `time-limit`, `cut-off`); its `answer` is the reason
+  # or the refusal text, it cites nothing, misses every expectation and never passes. `replay`
+  # keeps a recorded line's `outcome` and scores it so again; a line of an earlier cortex with no
+  # `outcome` whose `answer` starts with `refused: ` is a refused case.
   - name: cortex.instance.EvalResult
     kind: struct
     fields:
@@ -955,6 +967,7 @@ types:
       - {name: passed, type: Boolean}
       - {name: missing_facts, type: List<String>}
       - {name: missing_nodes, type: List<String>}
+      - {name: outcome, type: Optional<String>}
 
   # The value kinds a schema proposal may give a property: those an extraction document writes as
   # a scalar. `NodeRef`, `Float` and `Duration` are not proposed.
@@ -1196,6 +1209,11 @@ entities:
       # `applied_at` and no hash) until the source's next run fetches it and records its hash.
       - {name: content_hash, type: Optional<String>}
       - {name: unlinked_hash, type: Optional<String>}
+      # The hash of what cortex stores from the document beside its text: a Web page's title,
+      # description and publication date, or how a structured source's record is mapped (its
+      # mapping, its child's time and parent relation, its links). Absent for another document,
+      # and for one applied by cortex 0.8.0 or earlier.
+      - {name: fields_hash, type: Optional<String>}
       - {name: applied_at, type: Integer}
     invariants:
       - applied_at >= 0
@@ -1299,6 +1317,21 @@ errors:
     fields:
       - {name: state, type: cortex.instance.Instance.State}
 
+  - name: cortex.instance.SourceExists
+    summary: >-
+      The registry already holds a source with this id; its schedule, counters and state are as
+      they were. `cortex update` changes a source of the spec.
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+
+  - name: cortex.instance.UnitsNotStopped
+    summary: >-
+      `systemctl` did not stop a timer or the viewer the home wrote for the instance. The instance
+      stays active and every unit file stays, so `cortex remove` can be run again.
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: reason, type: String}
+
   - name: cortex.instance.SourceDisabledError
     summary: The source is disabled after repeated failures; enable it first.
     fields:
@@ -1371,8 +1404,8 @@ errors:
   - name: cortex.instance.InstanceBusy
     summary: >-
       Another cortex command holds the home's lock, or, for a restore, another connection held
-      the store's write lock for 5 seconds; nothing was restored or run. A reader that holds the
-      store open does not.
+      the store's write lock for 5 seconds; nothing was restored, run, updated, removed or
+      enabled. A reader that holds the store open does not.
     fields:
       - {name: reason, type: String}
 
@@ -1479,7 +1512,10 @@ errors:
     summary: >-
       The runner could not answer a case: the model call failed, timed out, answered no valid
       answer or found the budget or the instance's daily ceiling spent; no `cortex ask serve`
-      answered; or the run `replay` names holds no recorded answer for a case. `results.jsonl`
+      answered at the address the spec's `ask.listen` names, the spec has no `ask` section, or the
+      service answered `model-failed`, `reader-failed` or a refusal of the request itself
+      (`unidentified`, `bad-request`, or `rate-limit` and `busy` still after its retries); or the
+      run `replay` names holds no recorded answer for a case. `results.jsonl`
       keeps the results of the cases answered before; no `summary.json` was written.
     fields:
       - {name: reason, type: String}
@@ -1729,7 +1765,9 @@ commands:
             view_port: {generated: true}
         summary: >-
           The store is seeded, the seed schema applied and the seed documents extracted into it.
-          The viewer runs on its port. The sources are added by AddSource, one per source in the spec.
+          The viewer runs on its port, unless the instance was created without units, which
+          starts no viewer and names no address. The sources are added by AddSource, one per
+          source in the spec.
 
   - name: cortex.instance.UpdateInstance
     naming:
@@ -1741,7 +1779,12 @@ commands:
       - {name: model, type: String}
       - {name: spec, type: cortex.instance.InstanceSpec}
       - {name: seed_digest, type: String}
+      - {name: no_wait, type: Optional<Boolean>}
     outcomes:
+      # UNMAPPED: the exit status of each outcome: `updated` 0; `seed-change-refused`,
+      # `not-active`, `rekey-refused` and `no-such-instance` 1; `busy` 9; and 2 for an error before
+      # any outcome. ESS declares no exit status for a command line's outcomes;
+      # tests/review_update_no_wait.rs holds it.
       - name: seed-change-refused
         when_subject:
           predicate: seed_digest != input.seed_digest
@@ -1759,6 +1802,23 @@ commands:
           cortex.instance.InstanceNotActive:
             state: {generated: true}
         summary: The instance is removed; nothing changed.
+
+      # UNMAPPED: without `no_wait` an update waits for the home's lock while another cortex
+      # command holds it, and then updates. With `no_wait` the lock is tried first; while it is
+      # held the update reads neither the store nor Connectors, so a refusal that needs them (a
+      # structured mapping against the store's ontology) is left to an update that holds the lock.
+      # ESS has no construct for a lock or a wait, and orders the held-state branches above before
+      # every external branch; tests/review_update_no_wait.rs holds it.
+      - name: busy
+        external: Another cortex command holds the home's lock
+        when: {all: ["defined(no_wait)", no_wait == true]}
+        error: cortex.instance.InstanceBusy
+        payload:
+          cortex.instance.InstanceBusy:
+            reason: {generated: true}
+        summary: >-
+          Nothing changed: the frozen spec, the sources and the units are as they were, so an
+          orchestrator can try the update again between runs.
 
       - name: rekey-refused
         external: >-
@@ -1779,6 +1839,16 @@ commands:
             field: {generated: true}
         summary: Nothing changed; the frozen spec and every source's seen state are as they were.
 
+      # UNMAPPED: `updated` brings the instance's sources in line with the new spec. A source the
+      # spec adds is added (AddSource); a source it keeps takes the spec's `kind` and `schedule`
+      # and keeps its runs, failures, last outcome and state; a source it drops has its timer
+      # stopped and its unit files deleted, and leaves the registry. A dropped source whose timer
+      # `systemctl` does not stop keeps its row and its unit files, and the update names the
+      # failure in `units.failed`, so the next update tries again. A `serve.view_port` other than
+      # the instance's is recorded in `meta.json`, and the viewer unit is written on it and
+      # restarted. One outcome does one thing to one entity, and ESS has no effect over the
+      # records of another entity that one input names; src/main.rs holds it and
+      # tests/review_instance_update.rs tests it.
       - name: updated
         updates: cortex.instance.Instance
         instance: name
@@ -1791,10 +1861,12 @@ commands:
           cortex.instance.InstanceUpdated:
             name: input.name
         summary: >-
-          The frozen spec is replaced; sources, model and serve settings take effect on the next run.
-          The viewer unit holds the connection id resolved at the last create, adopt or update: it is
-          rewritten when the store's connection changed, or when its profile now resolves to
-          another id.
+          The frozen spec is replaced; model settings take effect on the next run. Sources the spec
+          adds are added, sources it keeps take its kind and schedule and keep their counters and
+          state, and sources it drops leave the registry with their timers stopped and deleted. A
+          changed `serve.view_port` moves the viewer to it. The viewer unit holds the connection id
+          resolved at the last create, adopt or update: it is rewritten when the store's
+          connection or the port changed, or when its profile now resolves to another id.
 
       - name: no-such-instance
         unknown_instance: true
@@ -1810,7 +1882,20 @@ commands:
       display: Remove an instance
     input:
       - {name: name, type: cortex.instance.InstanceName}
+      - {name: no_wait, type: Optional<Boolean>}
     outcomes:
+      # UNMAPPED: `busy` exits 9, every other refusal 1. Without `no_wait` a remove waits for the
+      # home's lock while another cortex command holds it; ESS has no construct for a lock, an
+      # exit status or a wait; tests/review_update_no_wait.rs holds it.
+      - name: busy
+        external: Another cortex command holds the home's lock
+        when: {all: ["defined(no_wait)", no_wait == true]}
+        error: cortex.instance.InstanceBusy
+        payload:
+          cortex.instance.InstanceBusy:
+            reason: {generated: true}
+        summary: Nothing changed; the timers and the viewer are as they were.
+
       - name: removed
         moves: cortex.instance.Instance.remove
         instance: name
@@ -1820,6 +1905,19 @@ commands:
           cortex.instance.InstanceRemoved:
             name: input.name
         summary: The timers and the viewer are gone; the directory and the store stay.
+
+      - name: stop-failed
+        external: >-
+          `systemctl --user disable --now` failed for a timer or the viewer of the instance whose
+          unit file the home wrote
+        error: cortex.instance.UnitsNotStopped
+        payload:
+          cortex.instance.UnitsNotStopped:
+            name: input.name
+            reason: {generated: true}
+        summary: >-
+          Nothing was deleted: the instance stays active and its unit files stay, so a second
+          remove tries again.
 
       - name: wrong-state
         wrong_state: true
@@ -1848,6 +1946,30 @@ commands:
       - {name: kind, type: cortex.instance.SourceKind}
       - {name: schedule, type: String}
     outcomes:
+      - name: source-exists
+        existing_instance: true
+        error: cortex.instance.SourceExists
+        payload:
+          cortex.instance.SourceExists:
+            source_id: input.source_id
+        summary: Nothing changed; the source keeps its schedule, counters and state.
+
+      - name: no-such-instance
+        when_related: {via: input.instance_name, exists: false}
+        error: cortex.instance.InstanceNotFound
+        payload:
+          cortex.instance.InstanceNotFound:
+            name: input.instance_name
+        summary: Nothing changed.
+
+      - name: not-active
+        when_related: {via: input.instance_name, predicate: state == Removed}
+        error: cortex.instance.InstanceNotActive
+        payload:
+          cortex.instance.InstanceNotActive:
+            state: {generated: true}
+        summary: The instance is removed; nothing changed.
+
       - name: added
         creates: cortex.instance.Source
         instance: source_id
@@ -1895,7 +2017,13 @@ commands:
       # source carries, or whose hash differs once `refresh_after_days` have passed. A structured
       # source's change record that holds links also records `unlinked_hash`, the hash of its text
       # without them; a change whose text differs from the one applied only in its links is
-      # extracted at once, without waiting for `refresh_after_days`. A SeenDocument with no
+      # extracted at once, without waiting for `refresh_after_days`. A Web page and a structured
+      # source's record also record `fields_hash`, the hash of what cortex stores from them beside
+      # the text: a page whose title, description or publication date changed is a changed
+      # document, extracted once `refresh_after_days` have passed; a record whose mapping changed
+      # is applied again at once, as is a record whose SeenDocument has no `fields_hash`. A page
+      # whose SeenDocument has none takes the fields of the first run that fetches it as applied.
+      # A SeenDocument with no
       # `content_hash` (adopted by key) is not extracted: the first run that fetches a document
       # under its key records the hash of that document as the run renders and masks it, keeps its
       # `applied_at`, and counts it as `hashed` in the run's report, not in `documents_new`; a
@@ -1981,8 +2109,9 @@ commands:
       # `fetch-only-failed` exits 1 and prints `fetch-failed`. Neither writes the source's status
       # file, `metrics.prom`, `cortex.log`, the seen documents or the window (`pending_since`),
       # calls the hook, takes the home's snapshot or an EKR stage, or reads the store; the counts
-      # compare each fetched document with the source's SeenDocuments, which ESS cannot state per
-      # element (beyond10x/ess#459). A disabled source is counted too, as `fetched`: a held-state
+      # compare each fetched document with the source's SeenDocuments and its failure counts
+      # (`failures/<source>.json`, read and not written), which ESS cannot state per element
+      # (beyond10x/ess#459). A disabled source is counted too, as `fetched`: a held-state
       # refusal beside `fetched` has no witness ESS 0.59.0 synthesizes. `<instance>/seed` with
       # `fetch_only` answers `fetch-only-failed`: its documents are not a source's. tests/e2e.rs
       # holds it.
@@ -2075,11 +2204,14 @@ commands:
             held: {generated: true}
             unchanged: {generated: true}
             unread: {generated: true}
+            skipped: {generated: true}
         summary: >-
           A fetch-only run: the source was fetched over the window a run would ask about, its
           documents masked and scrubbed as a run's are and compared with its seen documents by
-          content hash. `new` counts keys no seen document carries; `changed` those a run would
-          extract now; `held` those whose change `refresh_after_days` holds back; `unchanged` the
+          content hash and stored fields. `new` counts keys no seen document carries; `changed`
+          those a run would extract now; `held` those whose change `refresh_after_days` holds
+          back; `skipped` names those a run would leave out after they failed alone on 3
+          consecutive runs, which are counted neither `new` nor `changed`; `unchanged` the
           rest. No model was asked, and nothing was written: not the store, the seen documents,
           the source's status or `cortex.log`; no snapshot or stage was taken and no run counted.
 
@@ -2340,6 +2472,8 @@ commands:
             source_id: input.source_id
             documents_new: {generated: true}
             documents_applied: {generated: true}
+            documents_left: {generated: true}
+            stopped: {generated: true}
             facts_reapplied: {generated: true}
             cost_usd: {generated: true}
             cost_counted: {generated: true}
@@ -2356,7 +2490,9 @@ commands:
         summary: >-
           Every new or changed document within the policy's limits was extracted and applied, in
           batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no
-          model was called. `daily_ceiling_reached` is true when the run stopped before a batch
+          model was called. A run that `max_documents_per_run` capped has `stopped`
+          `document-cap` and counts in `documents_left` the wanted documents it left for the next
+          run; a run that applied every wanted document has no `stopped` and `documents_left` 0. `daily_ceiling_reached` is true when the run stopped before a batch
           because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its
           tokens reached `model.daily_ceiling_tokens`: the
           batches before it are applied, the rest are extracted by a run on a later day. A run
@@ -2429,7 +2565,20 @@ commands:
       display: Enable a source
     input:
       - {name: source_id, type: cortex.instance.SourceId}
+      - {name: no_wait, type: Optional<Boolean>}
     outcomes:
+      # UNMAPPED: `busy` exits 9, every other refusal 1. Without `no_wait` an enable waits for the
+      # home's lock while another cortex command holds it; ESS has no construct for a lock, an
+      # exit status or a wait; tests/review_update_no_wait.rs holds it.
+      - name: busy
+        external: Another cortex command holds the home's lock
+        when: {all: ["defined(no_wait)", no_wait == true]}
+        error: cortex.instance.InstanceBusy
+        payload:
+          cortex.instance.InstanceBusy:
+            reason: {generated: true}
+        summary: Nothing changed; the source stays disabled and its timer as it was.
+
       - name: enabled
         moves: cortex.instance.Source.enable
         instance: source_id
@@ -2527,7 +2676,10 @@ commands:
     # `ekr sample` draws `sample` of the store's active facts at its head, each with the evidence it
     # cites, seeded with the measurement's start in Unix milliseconds. Each batch of 20 goes to the
     # instance's model with no tools and the judge's own system prompt, shown as the redaction
-    # policy shows a run's documents; the model answers a `cortex.instance.QualityVerdict` per fact.
+    # policy shows a run's documents, each fact with the validity interval of its assertion
+    # (`Valid: <from> to <to>`, RFC 3339 UTC, an end the assertion leaves open written `open`), so
+    # the judge asks whether the evidence supports the fact for that time; the model answers a
+    # `cortex.instance.QualityVerdict` per fact.
     # `ekr fact-quality` turns the verdicts into a pass rate with its Wilson interval at 95 %. The
     # measurement writes `quality/<UTC stamp>/verdicts.jsonl` and `quality/<UTC stamp>/
     # fact-quality.json` (the `ekr.fact-quality/1` document, as EKR printed it) under the instance
@@ -2601,7 +2753,12 @@ commands:
     # prints it) as its only tools, and spends at most the spec's `model.budget_usd` and what is
     # left of its `model.daily_ceiling_usd` for the UTC day, held to `model.budget_tokens` and
     # `model.daily_ceiling_tokens` as MeasureQuality is; it answers a JSON object with `answer`
-    # and `cited_nodes`. `ask` asks a running `cortex ask serve`. `replay` reads the answers of
+    # and `cited_nodes`. `ask` posts each question to the instance's running `cortex ask serve`
+    # (`POST /ask` at the address the spec's `ask.listen` names, a wildcard host asked on
+    # loopback, with the identity `cortex-eval` in `ask.identity_header`): a `done` event is the
+    # answer and its `nodes` the cited ids, its `steps` and token counts the run's; a `rate-limit`
+    # or `busy` refusal is asked again after its wait, at most 3 times. The service spends its own
+    # budget, so the run's `cost_usd` is absent. `replay` reads the answers of
     # the earlier eval run `from` names (its stamp under `eval/`) by case id, and asks no model.
     # The run writes `eval/<UTC stamp>/results.jsonl` (a `cortex.instance.EvalResult` per case)
     # and `eval/<UTC stamp>/summary.json` (the `cortex.instance.EvalRun`, with the per-check
@@ -3169,11 +3326,19 @@ events:
   # `facts_reapplied` counts the facts marked `replaces: true` that EKR rejected because nothing
   # active was there to replace, applied again as plain assertions and stored; they are not
   # among the parts EKR rejected.
+  # `stopped` says why the run ended before applying every document it wanted, absent when it
+  # did not. It is `document-cap` when the source's `max_documents_per_run` left wanted documents
+  # for the next run and nothing else stopped the run; otherwise the reason, as text.
+  # `documents_left` counts the documents the run wanted (new, or changed past the refresh
+  # window) and did not apply or mark seen, so the next run wants them again: `0` when the run
+  # applied every one of them.
   - name: cortex.instance.SourceRan
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: documents_new, type: Integer}
       - {name: documents_applied, type: Integer}
+      - {name: documents_left, type: Integer}
+      - {name: stopped, type: Optional<String>}
       - {name: facts_reapplied, type: Integer}
       - {name: cost_usd, type: Optional<Decimal>}
       - {name: cost_counted, type: Boolean}
@@ -3195,7 +3360,9 @@ events:
 
   # A fetch-only run of a source: the window it asked about, as RFC 3339, and its documents
   # counted against the source's seen documents. `fetched` is `new` + `changed` + `held` +
-  # `unchanged`; `unread` says, one line each, why the fetch left records unread.
+  # `unchanged` + the number of `skipped`; `unread` says, one line each, why the fetch left
+  # records unread; `skipped` names, one line each as the run's `skipped` does, the documents a
+  # run would leave out after they failed alone on 3 consecutive runs.
   - name: cortex.instance.SourceFetched
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
@@ -3207,6 +3374,7 @@ events:
       - {name: held, type: Integer}
       - {name: unchanged, type: Integer}
       - {name: unread, type: List<String>}
+      - {name: skipped, type: List<String>}
 
   - name: cortex.instance.RunFailed
     fields:

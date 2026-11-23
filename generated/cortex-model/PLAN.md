@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 8fc1fa1334160fc5eedc948dcba9fb351db04fd7a002b80a9b8471a75a724dcc
-  contract digest 2b797601e89158bb5830c5917c9520ff3700b3ab235069ad63ab79f946ad66e6
+  model digest 1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea
+  contract digest edb08f72285adea731056f77a39b2f4b42617ddf03746589b9ce338333a0e3ad
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-264 capabilities: **256 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+267 capabilities: **259 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -218,6 +218,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | error type | `cortex.ask.ModelFailed` |
 | error type | `cortex.ask.RateLimited` |
 | error type | `cortex.ask.ReaderFailed` |
+| error type | `cortex.ask.Refused` |
 | error type | `cortex.ask.ReviewExists` |
 | error type | `cortex.ask.ReviewNotFound` |
 | error type | `cortex.ask.ReviewNotOpen` |
@@ -258,11 +259,13 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | error type | `cortex.instance.SeedTypesMissing` |
 | error type | `cortex.instance.SnapshotNotFound` |
 | error type | `cortex.instance.SourceDisabledError` |
+| error type | `cortex.instance.SourceExists` |
 | error type | `cortex.instance.SourceNotDisabled` |
 | error type | `cortex.instance.SourceNotFound` |
 | error type | `cortex.instance.StoreHeld` |
 | error type | `cortex.instance.StoreOutcomeUnknown` |
 | error type | `cortex.instance.StoreUnreadable` |
+| error type | `cortex.instance.UnitsNotStopped` |
 | view type | `cortex.ask.OpenReviews` |
 | view type | `cortex.instance.Instances` |
 | view query | `cortex.instance.Instances` |

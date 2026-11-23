@@ -20,10 +20,16 @@ use serde_json::Value;
 
 /// The deadline of one record call in these cases; the service's is 30 s.
 const DEADLINE: Duration = Duration::from_secs(1);
-/// What a call may take past its deadline: stopping the stalled process and answering.
-const SLACK: Duration = Duration::from_secs(4);
+/// A call to a process that answers nothing ends only through a deadline; one that ended within
+/// ten deadlines was ended by its own (or, queued behind a stalled call, by that one's, which
+/// makes two). The rest is room for stopping the stalled process and answering on a loaded
+/// machine: a call is timed from below by its deadline and from above by this bound only.
+const FIRED: Duration = Duration::from_secs(10);
+/// The deadline of the cases that order calls: long enough that no call reaches it while the
+/// case holds the records process, which these cases release themselves.
+const HELD: Duration = Duration::from_secs(10);
 /// How long a case waits for a call before it calls the call blocked.
-const BLOCKED: Duration = Duration::from_secs(15);
+const BLOCKED: Duration = Duration::from_secs(20);
 const HEADER: &str = "x-asker";
 
 /// A temporary root holding the stand-in `connectors` and the log of its launches.
@@ -118,8 +124,8 @@ fn a_stalled_records_process_fails_a_call_within_the_deadline_and_the_next_call_
             "{call}: a records process that answers nothing answered: {result:?}"
         );
         assert!(
-            took < DEADLINE + SLACK,
-            "{call} took {took:?}, past its deadline of {DEADLINE:?}"
+            took >= DEADLINE && took < FIRED,
+            "{call} took {took:?}: not ended by its deadline of {DEADLINE:?}"
         );
     }
     // The stalled process was stopped at the first deadline and another started for the next.
@@ -157,8 +163,8 @@ fn two_calls_at_once_on_a_stalled_records_process_each_end_within_their_deadline
             "call {i}: a records process that answers nothing answered"
         );
         assert!(
-            took < DEADLINE + SLACK,
-            "call {i} took {took:?}, past its deadline of {DEADLINE:?}"
+            took >= DEADLINE && took < FIRED,
+            "call {i} took {took:?}: not ended by a deadline of {DEADLINE:?}"
         );
     }
 }
@@ -257,10 +263,28 @@ fn the_record_routes_answer_store_failed_within_the_deadline_when_the_records_st
         assert_eq!(status, 500, "{route}: {body}");
         assert_eq!(body["error"], "store-failed", "{route}: {body}");
         assert!(
-            took < DEADLINE + SLACK,
-            "{route} took {took:?}, past the records' deadline of {DEADLINE:?}"
+            took >= DEADLINE && took < FIRED,
+            "{route} took {took:?}: not ended by the records' deadline of {DEADLINE:?}"
         );
     }
+}
+
+/// Waits until `ready` holds, and fails the case when it still does not after [`BLOCKED`].
+fn until(what: &str, ready: impl Fn() -> bool) {
+    let started = Instant::now();
+    while !ready() {
+        assert!(started.elapsed() < BLOCKED, "{what}: not after {BLOCKED:?}");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+/// The lines of `path`, none when it does not exist yet.
+fn lines(path: &std::path::Path) -> Vec<String> {
+    std::fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_string)
+        .collect()
 }
 
 /// Record calls are served in the order they arrive. A caller making statements back to back
@@ -268,9 +292,12 @@ fn the_record_routes_answer_store_failed_within_the_deadline_when_the_records_st
 /// call that was already waiting: that call is served after the statement in progress, not after
 /// the whole run of them, and so never fails in the queue behind a healthy process.
 ///
-/// Each statement takes 0.3 s. The runner makes 8 in a row (2.4 s); the waiter arrives 0.1 s
-/// into the first, so served in order it is answered at about 0.6 s, well inside its deadline of
-/// 1 s, while a caller let in ahead of it again and again leaves it to fail at 1 s.
+/// The runner makes 8 statements in a row; the records process holds the first until the case
+/// releases it. The waiter's statement is made while the first is held, and the case releases
+/// the first only once the waiter is queued behind it, so served in order the waiter's statement
+/// is the second the process reads, whatever the machine's load; a caller let in ahead of it
+/// again and again puts it after the runner's next one. The process logs each statement as it
+/// reads it, and nothing here is timed.
 #[test]
 fn a_waiting_call_is_served_before_the_next_statement_of_a_caller_making_them_back_to_back() {
     use cortex_cli::ask::records::postgres::{Remote, Sql};
@@ -282,17 +309,23 @@ fn a_waiting_call_is_served_before_the_next_statement_of_a_caller_making_them_ba
                 .unwrap_or_else(std::env::temp_dir),
         )
         .unwrap();
-    let root = tmp.path();
+    let root = tmp.path().to_path_buf();
+    let (served, go) = (root.join("served.log"), root.join("go"));
     executable(
         &root.join("connectors"),
         &format!(
             r#"printf '{{"ready":{{"schema_version":{SCHEMA_VERSION}}}}}\n'
 while IFS= read -r line; do
   case "$line" in
-    *'"op":"query"'*) sleep 0.3; printf '{{"rows":[[1]]}}\n' ;;
+    *'"op":"query"'*)
+      printf '%s\n' "$line" >> "{served}"
+      while [ ! -e "{go}" ]; do sleep 0.01; done
+      printf '{{"rows":[[1]]}}\n' ;;
   esac
 done
-"#
+"#,
+            served = served.display(),
+            go = go.display(),
         ),
     );
     let launch = Launch {
@@ -303,7 +336,7 @@ done
         schema: "cortex_ask".into(),
         ca_file: None,
         remove: Vec::new(),
-        deadline: DEADLINE,
+        deadline: HELD,
     };
     let remote = Arc::new(Remote::start(launch).expect("the stand-in starts"));
     let r = remote.clone();
@@ -312,24 +345,41 @@ done
             .map(|_| r.query("SELECT 1", &[]).is_ok())
             .collect::<Vec<_>>()
     });
-    std::thread::sleep(Duration::from_millis(100));
-    let r = remote.clone();
-    let (waiter, took) = timed("the waiting call", move || {
-        r.query("SELECT 1", &[]).map_err(|e| e.message)
+    until("the runner's first statement", || {
+        !lines(&served).is_empty()
     });
+    let r = remote.clone();
+    let (tx, waited) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(r.query("SELECT 2", &[]).map_err(|e| e.message));
+    });
+    until("the waiting call queued", || remote.waiting() == 1);
+    std::fs::write(&go, "").unwrap();
+    let waiter = waited.recv_timeout(BLOCKED).expect("the waiting call ends");
     let runs = runner.join().expect("the runner ends");
     assert!(
         waiter.is_ok(),
-        "the waiting call failed after {took:?} behind a caller making statements back to back: \
-         {waiter:?}"
-    );
-    assert!(
-        took < DEADLINE,
-        "the waiting call took {took:?}, served after more than the statement in progress"
+        "the waiting call failed behind a caller making statements back to back: {waiter:?}"
     );
     assert!(
         runs.iter().all(|ok| *ok),
         "the caller's statements: {runs:?}"
+    );
+    let order: Vec<&str> = lines(&served)
+        .iter()
+        .map(|l| {
+            if l.contains("SELECT 2") {
+                "waiter"
+            } else {
+                "runner"
+            }
+        })
+        .collect();
+    assert_eq!(order.len(), 9, "{order:?}");
+    assert_eq!(
+        order[..2],
+        ["runner", "waiter"],
+        "the waiting call was not served right after the statement in progress: {order:?}"
     );
 }
 
@@ -337,9 +387,10 @@ done
 /// it neither starts the records process again nor waits a start of its own. One outage costs
 /// one start, not one per caller queued behind it.
 ///
-/// Launch 1 is ready at once and stalls on its statement; every later launch takes 2 s to start,
-/// past the deadline of 1 s. After the stall, call B starts launch 2, and call C arrives 0.1 s
-/// later.
+/// Launch 1 is ready at once and then ends, so the first call finds the process gone. Call B
+/// starts launch 2, which waits until the case lets it refuse to start; call C is made while it
+/// waits, and the case lets launch 2 refuse only once C is queued behind B. The deadline is long
+/// enough that neither call reaches it: C fails because the start it waited through failed.
 #[test]
 fn a_call_queued_behind_a_failed_start_fails_with_it_and_starts_nothing() {
     use cortex_cli::ask::records::postgres::{Remote, Sql};
@@ -352,17 +403,21 @@ fn a_call_queued_behind_a_failed_start_fails_with_it_and_starts_nothing() {
         )
         .unwrap();
     let root = tmp.path().to_path_buf();
-    let log = root.join("launches.log");
+    let (log, refuse) = (root.join("launches.log"), root.join("refuse"));
     executable(
         &root.join("connectors"),
         &format!(
             r#"printf 'launch\n' >> "{log}"
 n=$(wc -l < "{log}" | tr -d ' ')
-[ "$n" = 1 ] || sleep 2
+if [ "$n" != 1 ]; then
+  while [ ! -e "{refuse}" ]; do sleep 0.01; done
+  printf '{{"err":"the records database refused the connection"}}\n'
+  exit 1
+fi
 printf '{{"ready":{{"schema_version":{SCHEMA_VERSION}}}}}\n'
-while IFS= read -r line; do :; done
 "#,
             log = log.display(),
+            refuse = refuse.display(),
         ),
     );
     let launch = Launch {
@@ -373,33 +428,37 @@ while IFS= read -r line; do :; done
         schema: "cortex_ask".into(),
         ca_file: None,
         remove: Vec::new(),
-        deadline: DEADLINE,
+        deadline: HELD,
     };
     let remote = Arc::new(Remote::start(launch).expect("the stand-in starts"));
     assert!(
         remote.query("SELECT 1", &[]).is_err(),
-        "a stalled process answered"
+        "a process that ended answered"
     );
     let r = remote.clone();
     let b = std::thread::spawn(move || r.query("SELECT 1", &[]).map_err(|e| e.message));
-    std::thread::sleep(Duration::from_millis(100));
+    until("launch 2", || lines(&log).len() == 2);
     let r = remote.clone();
-    let (c, took) = timed("the call queued behind the start", move || {
-        r.query("SELECT 1", &[]).map_err(|e| e.message)
+    let (tx, queued) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(r.query("SELECT 1", &[]).map_err(|e| e.message));
     });
-    let launches_after_c = std::fs::read_to_string(&log).unwrap().lines().count();
+    until("call C queued behind the start", || remote.waiting() == 1);
+    std::fs::write(&refuse, "").unwrap();
+    let c = queued.recv_timeout(BLOCKED).expect("call C ends");
     let b = b.join().expect("call B ends");
-    assert!(b.is_err(), "launch 2 started inside the deadline: {b:?}");
+    assert_eq!(
+        b,
+        Err("the records database refused the connection".to_string()),
+        "call B did not fail with the refused start"
+    );
     assert_eq!(
         c, b,
         "the queued call did not fail with the start it waited through"
     );
-    assert!(
-        took < DEADLINE + Duration::from_millis(400),
-        "the queued call took {took:?}: it waited a start of its own"
-    );
     assert_eq!(
-        launches_after_c, 2,
+        lines(&log).len(),
+        2,
         "the queued call started the records process again"
     );
 }

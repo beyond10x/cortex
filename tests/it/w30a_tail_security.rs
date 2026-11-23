@@ -296,7 +296,10 @@ esac
 #[test]
 fn a_connectors_process_left_holding_the_output_does_not_hold_the_call_past_its_deadline() {
     let w = World::new();
-    let hold = 10;
+    // The left process holds the output 30 s; a run held by it ends after that, one that is not
+    // ends about a second (the deadline) after its start. The bound sits halfway, so a loaded
+    // machine has 14 s of room before a correct run reaches it.
+    let hold = 30;
     executable(
         &w.bin.join("connectors"),
         &LEAVES_A_CHILD
@@ -315,7 +318,7 @@ fn a_connectors_process_left_holding_the_output_does_not_hold_the_call_past_its_
     let grandchild = std::fs::read_to_string(w.root.join("grandchild")).expect("invoke ran");
     let left = alive(&grandchild);
     assert!(
-        ran.took < Duration::from_secs(4),
+        ran.took < Duration::from_secs(hold / 2),
         "the call with a 1 s deadline held the run {:?} (the left process holds its output {hold} s)",
         ran.took
     );

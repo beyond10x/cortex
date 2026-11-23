@@ -7,9 +7,10 @@
 //! `replaces`, and EKR 0.0.34 kept every value active: `ekr apply-extraction` adds a `!Property`
 //! fact without `replaces` as one more assertion, and the kernel's cardinality check does not
 //! count assertions. cortex now marks every fact of a property declared `cardinality: One`
-//! `replaces: true` (`extract::mark_single_valued`), so EKR supersedes the stored value, rejects a
-//! value older than it (`invalid-supersession`), and a value with nothing stored is applied again
-//! by `extract::reapply_rounds` in time order. Every record here is synthetic.
+//! `replaces: true` (`extract::mark_single_valued`), so EKR supersedes the stored value, a value
+//! older than it is kept as its history (`story:apply-out-of-order-and-isolated`), and a value
+//! with nothing stored is applied again by `extract::reapply_rounds` in time order.
+//! Every record here is synthetic.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -239,9 +240,10 @@ fn values_of_one_batch_leave_the_newest_active() {
 }
 
 /// A record older than the stored value, read in a later run: EKR rejects its value as
-/// `invalid-supersession`, the run lists it and goes on, and the newer value stays the one active.
+/// `invalid-supersession`, cortex keeps it as history and refuses nothing, and the newer value
+/// stays the one active.
 #[test]
-fn an_older_value_read_later_leaves_the_newer_active_and_is_listed() {
+fn an_older_value_read_later_leaves_the_newer_active_and_becomes_history() {
     let w = world();
     let newer = record("msg-1", "2026-01-03", &["state: released"]);
     run_with(&w, std::slice::from_ref(&newer));
@@ -249,13 +251,8 @@ fn an_older_value_read_later_leaves_the_newer_active_and_is_listed() {
         &w,
         &[newer, record("mr-1", "2026-01-02", &["state: merged"])],
     );
-    let refusals = refusals(&ran);
-    assert!(
-        refusals.len() == 1
-            && refusals[0].0 == "mr-1"
-            && refusals[0].1.contains("invalid-supersession"),
-        "{ran}"
-    );
+    assert!(refusals(&ran).is_empty(), "{ran}");
+    assert_eq!(ran["detail"]["facts_history"], 1, "{ran}");
     let g = graph(&w);
     assert_eq!(
         active(&g, "state"),

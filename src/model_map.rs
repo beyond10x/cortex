@@ -19,9 +19,52 @@ impl std::fmt::Display for MapError {
     }
 }
 
+/// A number the schema types `integer`: any spelling of a whole number (`1`, `1.0`, `1e3`), as
+/// JSON Schema draft 2020-12 counts a number with a zero fractional part as an integer.
 fn int(n: &serde_json::Number, at: &str) -> Result<i64, MapError> {
     n.as_i64()
+        .or_else(|| integral(&n.to_string()))
         .ok_or_else(|| MapError(format!("{at}: {n} is not a whole number")))
+}
+
+/// The value of a JSON number's text when it is a whole number within `i64`, read exactly from its
+/// digits and exponent, so no rounding through binary64 turns a fraction into a whole number.
+fn integral(text: &str) -> Option<i64> {
+    let (negative, unsigned) = match text.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, text),
+    };
+    let (mantissa, exponent) = match unsigned.find(['e', 'E']) {
+        Some(at) => (&unsigned[..at], unsigned[at + 1..].parse::<i64>().ok()?),
+        None => (unsigned, 0),
+    };
+    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    if whole.is_empty()
+        || !whole
+            .bytes()
+            .chain(fraction.bytes())
+            .all(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    // The digits without leading or trailing zeros, and the power of ten they are scaled by.
+    let digits = format!("{whole}{fraction}");
+    let digits = digits.trim_start_matches('0');
+    let kept = digits.trim_end_matches('0');
+    if kept.is_empty() {
+        return Some(0);
+    }
+    let scale = exponent
+        .checked_sub(i64::try_from(fraction.len()).ok()?)?
+        .checked_add(i64::try_from(digits.len() - kept.len()).ok()?)?;
+    if !(0..=18).contains(&scale) {
+        return None;
+    }
+    let magnitude = kept
+        .parse::<i128>()
+        .ok()?
+        .checked_mul(10i128.pow(u32::try_from(scale).ok()?))?;
+    i64::try_from(if negative { -magnitude } else { magnitude }).ok()
 }
 
 fn opt<T: Clone>(p: &EssPresence<T>) -> Option<T> {
@@ -254,6 +297,7 @@ pub fn ask_event(event: &ma::AskEvent) -> s::CortexAskAskEvent {
                 output_tokens: n(d.output_tokens),
                 steps: n(d.steps),
                 unrestored: n(d.unrestored),
+                unsupported: d.unsupported.clone(),
             }),
         }),
         ma::AskEvent::Error(e) => s::CortexAskAskEvent::V3(s::CortexAskAskEventVariant3 {
@@ -677,5 +721,39 @@ pub fn kind(settings: &m::SourceSettings) -> m::SourceKind {
         m::SourceSettings::Connectors(_) => m::SourceKind::Connectors,
         m::SourceSettings::Files(_) => m::SourceKind::Files,
         m::SourceSettings::Structured(_) => m::SourceKind::Structured,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::integral;
+
+    /// A whole number is read exactly from its text; a fraction or a value past `i64` is none.
+    #[test]
+    fn integral_reads_whole_numbers_exactly_from_their_text() {
+        for (text, want) in [
+            ("1.0", Some(1)),
+            ("60.000", Some(60)),
+            ("1e3", Some(1000)),
+            ("1E+3", Some(1000)),
+            ("10e-1", Some(1)),
+            ("-2.0", Some(-2)),
+            ("-0.0", Some(0)),
+            ("0e400", Some(0)),
+            ("9007199254740993.0", Some(9_007_199_254_740_993)),
+            ("9223372036854775807.0", Some(i64::MAX)),
+            ("-9223372036854775808.0", Some(i64::MIN)),
+            ("1.5", None),
+            ("15e-1", None),
+            ("0.001", None),
+            ("9007199254740993.5", None),
+            ("9223372036854775808.0", None),
+            ("1e19", None),
+            ("1e-400", None),
+            ("", None),
+            (".5", None),
+        ] {
+            assert_eq!(integral(text), want, "{text}");
+        }
     }
 }

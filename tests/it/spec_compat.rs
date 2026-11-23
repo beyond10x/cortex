@@ -17,7 +17,11 @@
 //! entries carry them as the stand-in `claude` makes them (one call, no `usage`), and nothing else
 //! in it changed. They have since also gained the batch size the run used, `batch_chars` (60,000
 //! for this spec), and, in the result, its `splits` (`story:batch-fits-model-window`), and, in
-//! the result, `facts_reapplied` (`story:replacement-applied-as-assertion`).
+//! the result, `facts_reapplied` (`story:replacement-applied-as-assertion`). `create --no-units`
+//! has since named no viewer address, as it starts no viewer (`view: null`,
+//! `story:runbook-probe-fixes`); the fixture's `create` carries that. The result has since
+//! gained `documents_left` (`0` here: the run applies both wanted documents,
+//! `story:run-report-cap-and-refusals`).
 
 use std::path::{Path, PathBuf};
 
@@ -162,9 +166,11 @@ fn observe(spec_text: &str) -> Value {
     );
     let detail = &mut created["detail"];
     detail["dir"] = json!("<home>/instances/example");
-    let view = detail["view"].as_str().unwrap().to_string();
-    assert!(view.starts_with("http://127.0.0.1:"), "{view}");
-    detail["view"] = json!("http://127.0.0.1:<port>/");
+    // An address names a free port; `--no-units` names none.
+    if let Some(view) = detail["view"].as_str() {
+        assert!(view.starts_with("http://127.0.0.1:"), "{view}");
+        detail["view"] = json!("http://127.0.0.1:<port>/");
+    }
 
     json!({
         "create": created,

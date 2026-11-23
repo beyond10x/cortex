@@ -354,7 +354,7 @@ fn one_tool_call_then_an_answer_streams_status_tool_delta_and_done() {
             (200, 20, 60),
         ),
     ]);
-    let service = serve(&gateway, LIMITS, "Widget engine, made by Example Labs");
+    let service = serve(&gateway, LIMITS, "Widget engine n-42, made by Example Labs");
     let answer = ask(&service, Some("alice"), "Who makes the Widget engine?");
     assert_eq!(answer.status, 200, "{:?}", answer.events);
     let names = answer.names();
@@ -416,7 +416,7 @@ fn one_tool_call_then_an_answer_streams_status_tool_delta_and_done() {
     assert_eq!(tool_message["tool_call_id"], "call-1");
     assert_eq!(
         tool_message["content"],
-        "Widget engine, made by Example Labs"
+        "Widget engine n-42, made by Example Labs"
     );
     assert!(gateway
         .authorizations

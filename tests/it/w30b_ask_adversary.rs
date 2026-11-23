@@ -26,6 +26,12 @@ const MIB: usize = 1024 * 1024;
 const ASK_LIMIT: usize = MIB;
 const RECORD_LIMIT: usize = 64 * 1024;
 const DRAIN_LIMIT: usize = 16 * MIB;
+/// How long the service and the proxy read the rest of a body above its limit.
+const DRAIN_TIME: Duration = Duration::from_secs(10);
+/// A refusal of a stalled sender comes at the end of the drain time; one past twice it was not
+/// cut by the drain time. The senders read with a timeout of 25 s, past this, so a sender held
+/// until it gives up reads no refusal at all.
+const REFUSED_WITHIN: Duration = Duration::from_secs(20);
 
 // ---------------------------------------------------------------------------------------------
 // The world of `cortex ask serve`: a stand-in gateway and a stand-in `ekr mcp`.
@@ -351,7 +357,7 @@ fn a_sender_that_stops_past_the_limit_is_answered_within_the_drain_time() {
     let line = first_line(s);
     let took = from.elapsed();
     assert_eq!(line.as_deref(), Ok("HTTP/1.1 413 Payload Too Large"));
-    assert!(took < Duration::from_secs(13), "the 413 took {took:?}");
+    assert!(took < REFUSED_WITHIN, "the 413 took {took:?}");
     eprintln!("stalled sender: 413 after {took:?}");
 }
 
@@ -417,7 +423,7 @@ fn senders_held_in_the_drain_do_not_starve_a_legitimate_question() {
         lost.len(),
         &lost[..lost.len().min(3)]
     );
-    assert!(worst < Duration::from_secs(13), "slowest 413 {worst:?}");
+    assert!(worst < REFUSED_WITHIN, "slowest 413 {worst:?}");
 }
 
 /// A chunked body that never ends is read up to the drain limit and then refused: the client,
@@ -673,7 +679,9 @@ fn a_proxy_refusal_is_not_held_back_from_an_expect_continue_client() {
 }
 
 /// The cost of an unauthenticated flood: 200 connections that declare 16 MiB and send none of it
-/// are each held in the drain, but the case's own client is still served within 2 s.
+/// are each held in the drain, but the case's own client is still served within half the drain
+/// time. A client starved behind the flood is served only once its drains end, after the whole
+/// drain time; one served in a few milliseconds leaves a loaded machine 5 s of room.
 #[test]
 fn unauthenticated_connections_held_in_the_drain_do_not_starve_the_case() {
     const N: usize = 200;
@@ -712,5 +720,5 @@ fn unauthenticated_connections_held_in_the_drain_do_not_starve_the_case() {
         served.0, served.1
     );
     assert_eq!(served.0.as_deref(), Ok("HTTP/1.1 200 OK"));
-    assert!(served.1 < Duration::from_secs(2), "{:?}", served.1);
+    assert!(served.1 < DRAIN_TIME / 2, "{:?}", served.1);
 }

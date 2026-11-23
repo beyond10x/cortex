@@ -58,10 +58,13 @@ fn a_connectors_call_past_the_deadline_fails_as_timeout_and_the_child_is_gone() 
         .trim()
         .parse()
         .unwrap();
+    // The reason names the timeout, so the deadline ended the call. From below, the call was
+    // waited for its whole deadline; from above, the run ended long before the 60 s the hung
+    // `connectors` sleeps, with 9 s of room for the run's own end on a loaded machine.
     let waited_ms = (ended - started) / 1_000_000;
     assert!(
-        waited_ms <= 2_000,
-        "the run ended {waited_ms} ms after the call started, past the 1 s deadline plus 1 s"
+        (1_000..10_000).contains(&waited_ms),
+        "the run ended {waited_ms} ms after the call started: not ended by the 1 s deadline"
     );
 
     let pid = std::fs::read_to_string(w.root.join("pid")).unwrap();

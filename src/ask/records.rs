@@ -636,16 +636,18 @@ pub fn outcome_name(o: ma::AnswerOutcome) -> &'static str {
         ma::AnswerOutcome::Limited => "limited",
         ma::AnswerOutcome::ClientClosed => "client-closed",
         ma::AnswerOutcome::CutOff => "cut-off",
+        ma::AnswerOutcome::Refused => "refused",
     }
 }
 
 /// Every answer outcome, in the order the specification declares them.
-pub const OUTCOMES: [ma::AnswerOutcome; 5] = [
+pub const OUTCOMES: [ma::AnswerOutcome; 6] = [
     ma::AnswerOutcome::Answered,
     ma::AnswerOutcome::Failed,
     ma::AnswerOutcome::Limited,
     ma::AnswerOutcome::ClientClosed,
     ma::AnswerOutcome::CutOff,
+    ma::AnswerOutcome::Refused,
 ];
 
 /// The answer outcome `name` names, as [`outcome_name`] writes it.
@@ -913,6 +915,7 @@ impl Keeper {
             answer: String::new(),
             nodes: vec![],
             evidence: vec![],
+            unsupported: vec![],
             input_tokens: 0,
             output_tokens: 0,
             cached_tokens: 0,
@@ -934,20 +937,53 @@ impl Keeper {
             ma::AskOutcome::Answered { answered } => {
                 (ma::AnswerOutcome::Answered, answered.done.clone(), None)
             }
-            ma::AskOutcome::LimitReached { error } => (
+            ma::AskOutcome::LimitReached { error: e } => (
                 ma::AnswerOutcome::Limited,
-                zero.clone(),
-                Some(error.limit.clone()),
+                spent(
+                    e.steps,
+                    e.input_tokens,
+                    e.output_tokens,
+                    e.cached_tokens,
+                    e.context_tokens,
+                ),
+                Some(e.limit.clone()),
             ),
-            ma::AskOutcome::ModelFailed { .. } => (
+            ma::AskOutcome::ModelFailed { error: e } => (
                 ma::AnswerOutcome::Failed,
-                zero.clone(),
+                spent(
+                    e.steps,
+                    e.input_tokens,
+                    e.output_tokens,
+                    e.cached_tokens,
+                    e.context_tokens,
+                ),
                 Some("model-failed".into()),
             ),
-            ma::AskOutcome::ReaderFailed { .. } => (
+            ma::AskOutcome::ReaderFailed { error: e } => (
                 ma::AnswerOutcome::Failed,
-                zero.clone(),
+                spent(
+                    e.steps,
+                    e.input_tokens,
+                    e.output_tokens,
+                    e.cached_tokens,
+                    e.context_tokens,
+                ),
                 Some("reader-failed".into()),
+            ),
+            // The refusal text is kept as the record's answer; the outcome says it is none.
+            ma::AskOutcome::Refused { error: e } => (
+                ma::AnswerOutcome::Refused,
+                ma::AskDone {
+                    answer: e.refusal.clone(),
+                    ..spent(
+                        e.steps,
+                        e.input_tokens,
+                        e.output_tokens,
+                        e.cached_tokens,
+                        e.context_tokens,
+                    )
+                },
+                Some("refused".into()),
             ),
             ma::AskOutcome::ClientClosed { error: e } => (
                 ma::AnswerOutcome::ClientClosed,
@@ -981,7 +1017,11 @@ impl Keeper {
             instance_name: m::InstanceName(self.instance.clone()),
             identity: asked.identity,
             question: masked(&asked.question),
-            answer: (kind == ma::AnswerOutcome::Answered).then(|| masked(&done.answer)),
+            answer: matches!(
+                kind,
+                ma::AnswerOutcome::Answered | ma::AnswerOutcome::Refused
+            )
+            .then(|| masked(&done.answer)),
             reason,
             outcome: kind,
             // A tool's arguments are the model's, and can repeat what the question carried.
@@ -1242,7 +1282,14 @@ mod tests {
                 at_ms,
             };
             let failed = ma::AskOutcome::ModelFailed {
-                error: ma::ModelFailed { reason: "x".into() },
+                error: ma::ModelFailed {
+                    reason: "x".into(),
+                    steps: 0,
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    cached_tokens: 0,
+                    context_tokens: 0,
+                },
             };
             keeper.record(asked, &failed).unwrap();
             keeper.vote(id, "b", ma::VoteValue::Down, None).unwrap();

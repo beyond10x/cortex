@@ -72,6 +72,11 @@ stand; [Status](./status.mdx) lists what is planned.
   `(see https://host/x).`; a citation such as `[1]` after the punctuation that ends it stays
   outside. A bracket inside a bracket ends the link. A bare host
   with no path, such as `example.org`, is not taken.
+- **An address cut at the end of a text.** `Email` also takes an address a provider cut before
+  its top-level domain, at the very end of a text (`jane.doe@exam`), when what is left of its
+  domain holds no digit. A name followed by `@` and a commit id or a version there
+  (`group/repo@3f2a9c1`, `tool@1.4.2`) is kept; a commit id of letters only (`repo@abcdefa`) is
+  taken as a cut address.
 - **Rare names are a guess.** `RareName` takes as a name a word that starts with a capital letter,
   has a lower-case letter in it, and appears at most `rare_limit` times (default 1) in the batch's
   document texts. Only text the model is shown counts: a word inside an address, a link, a known
@@ -80,7 +85,9 @@ stand; [Status](./status.mdx) lists what is planned.
   not its thread context, key or title, which repeat other records' text and the file's name. A
   known entity name the batch's documents do not hold counts as seen 0 times, so a
   person the store already knows is hidden in the prompt's known entities too. Common sentence
-  openers (`The`, `This`, `We` and the like) are never taken. A rare product or place name, and
+  openers (`The`, `This`, `We` and the like) are never taken, and neither are the names of the
+  store's ontology (node types, properties, value kinds, relations), so a person whose name is
+  also a type name is not hidden by `RareName`. A rare product or place name, and
   a capitalised word such as `Thanks` or `Subject`, is hidden from the model too, and restored; a
   person named often in the batch and not listed in `known_names` is not hidden. A word with
   hyphens, such as `Jean-Luc` or `Co-Authored-By`, is one word: it is hidden whole or kept
@@ -128,9 +135,11 @@ stand; [Status](./status.mdx) lists what is planned.
   `expand` walks it. EKR does not backfill: relations a store took under EKR 0.0.30 or earlier stay
   assertions without an edge, and graph reads do not walk them.
 - **Change detection is a content hash.** `ContentHash` is the only `change` value. A document
-  whose text changed is extracted again only after `refresh_after_days`; cortex retracts nothing
-  it applied from the earlier text. A record read from a file, and a `structured` change whose
-  links to tags alone changed, are applied again on the next run.
+  whose text changed (for a web page also its title, description or date) is extracted again
+  only after `refresh_after_days`; cortex retracts nothing
+  it applied from the earlier text. A record read from a file, a `structured` change whose
+  links to tags alone changed, and a `structured` record whose mapping changed are applied again
+  on the next run.
 - **A structured record meets nodes of another type only with `store_lookup: AnyType`.** By
   default EKR resolves a record's aliases, its alias templates included, within the mapping's
   `node_type` only, so a store node of another type holding the same alias gets a second node
@@ -149,8 +158,6 @@ stand; [Status](./status.mdx) lists what is planned.
 
 - **The seed is fixed.** An instance's seed cannot change after creation; create a new instance
   instead.
-- **`cortex update` only adds sources.** A source dropped from the spec keeps its registry entry
-  and its timer.
 - **`cortex remove` keeps the data.** The instance directory and its store stay on disk, and the
   name stays taken in the registry.
 

@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 8fc1fa1334160fc5eedc948dcba9fb351db04fd7a002b80a9b8471a75a724dcc
-// contract digest 2b797601e89158bb5830c5917c9520ff3700b3ab235069ad63ab79f946ad66e6
+// model digest 1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea
+// contract digest edb08f72285adea731056f77a39b2f4b42617ddf03746589b9ce338333a0e3ad
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! The typed refusal of an unmet obligation, and the conversion seams owed between contexts.

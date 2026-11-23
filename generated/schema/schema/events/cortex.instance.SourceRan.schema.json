@@ -14,6 +14,12 @@
     "documents_applied": {
       "type": "integer"
     },
+    "documents_left": {
+      "type": "integer"
+    },
+    "stopped": {
+      "type": "string"
+    },
     "facts_reapplied": {
       "type": "integer"
     },
@@ -60,6 +66,7 @@
     "source_id",
     "documents_new",
     "documents_applied",
+    "documents_left",
     "facts_reapplied",
     "cost_counted",
     "daily_ceiling_reached",
@@ -71,8 +78,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "8fc1fa1334160fc5eedc948dcba9fb351db04fd7a002b80a9b8471a75a724dcc",
-    "contract_digest": "slice-sha256/2:56bfeadb868bff03d0ebdf0d83e55c90bc1dd35c4086d7aad9808723a2a92b5c",
+    "source_digest": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
+    "contract_digest": "slice-sha256/2:e3f95ef878d5dbaaacc5a60c90d8d7878a56a5abb7d1966e481a164e39079bbf",
     "regenerate": "ess generate"
   },
   "$defs": {

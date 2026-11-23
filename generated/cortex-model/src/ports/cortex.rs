@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 8fc1fa1334160fc5eedc948dcba9fb351db04fd7a002b80a9b8471a75a724dcc
-// contract digest 2b797601e89158bb5830c5917c9520ff3700b3ab235069ad63ab79f946ad66e6
+// model digest 1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea
+// contract digest edb08f72285adea731056f77a39b2f4b42617ddf03746589b9ce338333a0e3ad
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -113,6 +113,9 @@ where
     pub fn add_source(&mut self, input: crate::instance::AddSource) -> Result<crate::instance::AddSourceOutcome, crate::obligation::UnmetObligation> {
         let outcome = self.behaviors.add_source(input)?;
         match &outcome {
+            crate::instance::AddSourceOutcome::SourceExists { .. } => {}
+            crate::instance::AddSourceOutcome::NoSuchInstance { .. } => {}
+            crate::instance::AddSourceOutcome::NotActive { .. } => {}
             crate::instance::AddSourceOutcome::Added { source_added, .. } => {
                 self.outbox.push(PublishedEvent::SourceAdded(source_added.clone()));
             }
@@ -208,6 +211,7 @@ where
     pub fn enable_source(&mut self, input: crate::instance::EnableSource) -> Result<crate::instance::EnableSourceOutcome, crate::obligation::UnmetObligation> {
         let outcome = self.behaviors.enable_source(input)?;
         match &outcome {
+            crate::instance::EnableSourceOutcome::Busy { .. } => {}
             crate::instance::EnableSourceOutcome::Enabled { source_enabled, .. } => {
                 self.outbox.push(PublishedEvent::SourceEnabled(source_enabled.clone()));
             }
@@ -306,9 +310,11 @@ where
     pub fn remove_instance(&mut self, input: crate::instance::RemoveInstance) -> Result<crate::instance::RemoveInstanceOutcome, crate::obligation::UnmetObligation> {
         let outcome = self.behaviors.remove_instance(input)?;
         match &outcome {
+            crate::instance::RemoveInstanceOutcome::Busy { .. } => {}
             crate::instance::RemoveInstanceOutcome::Removed { instance_removed, .. } => {
                 self.outbox.push(PublishedEvent::InstanceRemoved(instance_removed.clone()));
             }
+            crate::instance::RemoveInstanceOutcome::StopFailed { .. } => {}
             crate::instance::RemoveInstanceOutcome::WrongState { .. } => {}
             crate::instance::RemoveInstanceOutcome::NoSuchInstance { .. } => {}
         }
@@ -391,6 +397,7 @@ where
         match &outcome {
             crate::instance::UpdateInstanceOutcome::SeedChangeRefused { .. } => {}
             crate::instance::UpdateInstanceOutcome::NotActive { .. } => {}
+            crate::instance::UpdateInstanceOutcome::Busy { .. } => {}
             crate::instance::UpdateInstanceOutcome::RekeyRefused { .. } => {}
             crate::instance::UpdateInstanceOutcome::Updated { instance_updated, .. } => {
                 self.outbox.push(PublishedEvent::InstanceUpdated(instance_updated.clone()));

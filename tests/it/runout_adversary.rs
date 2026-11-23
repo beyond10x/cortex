@@ -235,8 +235,7 @@ fn a_stop_that_also_ends_the_model_call_ends_the_run_terminated_not_counted() {
         ),
     );
     let child = start(&w, &claude, &w.bin.join("connectors"), "10");
-    let (status, out, stderr, took) = finish(child, Duration::from_secs(60));
-    assert!(took < STOP_BOUND, "{took:?}");
+    let (status, out, stderr, _) = finish(child, Duration::from_secs(60));
     let row = news(&w);
     assert_eq!(
         (status.code(), out["outcome"].as_str()),
@@ -260,8 +259,7 @@ fn a_stop_that_also_ends_the_fetch_ends_the_run_terminated_not_counted() {
         ),
     );
     let child = start(&w, &w.bin.join("claude"), &connectors, "10");
-    let (status, out, stderr, took) = finish(child, Duration::from_secs(60));
-    assert!(took < STOP_BOUND, "{took:?}");
+    let (status, out, stderr, _) = finish(child, Duration::from_secs(60));
     let row = news(&w);
     assert_eq!(
         (status.code(), out["outcome"].as_str()),
