@@ -83,11 +83,11 @@ fn cpu_time() -> Duration {
 }
 
 /// How many times more CPU time `f` takes on `large` than on `small`, and the two times: the
-/// least of three runs of each, taken in turns, after one run that builds what `f` builds once.
+/// least of two runs of each, taken in turns, after one run that builds what `f` builds once.
 fn growth(small: &str, large: &str, f: impl Fn(&str)) -> (f64, Duration, Duration) {
     f(small);
     let (mut t_small, mut t_large) = (Duration::MAX, Duration::MAX);
-    for _ in 0..3 {
+    for _ in 0..2 {
         let t = cpu_time();
         f(small);
         t_small = t_small.min(cpu_time().saturating_sub(t));

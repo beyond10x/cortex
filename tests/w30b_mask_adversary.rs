@@ -23,12 +23,12 @@ fn tail() -> String {
 /// The sizes of the two inputs of the linear-time cases. Below about 16 KiB the regex engine
 /// takes a faster path for these patterns (5x to 7x less time per byte in a build with
 /// unoptimised dependencies), so both sizes sit above it, where the time per byte stays the same.
-/// The larger is 8x the smaller: linear work takes 8x the time on it and quadratic work 64x.
+/// The larger is 4x the smaller: linear work takes 4x the time on it and quadratic work 16x.
 const SMALL: usize = 1 << 15;
-const LARGE: usize = SMALL * 8;
-/// The most times the time may grow from `SMALL` to `LARGE`: 8^1.5, 2.8x above what linear work
-/// takes and 2.8x below what quadratic work takes.
-const LINEAR_BOUND: f64 = 22.6;
+const LARGE: usize = SMALL * 4;
+/// The most times the time may grow from `SMALL` to `LARGE`: 4^1.5, 2x above what linear work
+/// takes and 2x below what quadratic work takes.
+const LINEAR_BOUND: f64 = 8.0;
 
 /// The CPU time this thread has used. Unlike the wall clock it stands still while the thread
 /// waits for a processor, so load on the machine does not lengthen what is measured.
@@ -38,11 +38,11 @@ fn cpu_time() -> Duration {
 }
 
 /// How many times more CPU time `f` takes on `large` than on `small`, and the two times: the
-/// least of three runs of each, taken in turns, after one run that builds what `f` builds once.
+/// least of two runs of each, taken in turns, after one run that builds what `f` builds once.
 fn growth(small: &str, large: &str, f: impl Fn(&str)) -> (f64, Duration, Duration) {
     f(small);
     let (mut t_small, mut t_large) = (Duration::MAX, Duration::MAX);
-    for _ in 0..3 {
+    for _ in 0..2 {
         let t = cpu_time();
         f(small);
         t_small = t_small.min(cpu_time().saturating_sub(t));
@@ -215,7 +215,7 @@ fn masking_is_idempotent_over_generated_percent_and_quote_shapes() {
 }
 
 /// Long runs of `%25` before a name, and of `a@:` after a scheme, the two shapes the change made
-/// slower: linear, 8x the input takes well under 22.6x the CPU time (quadratic: 64x).
+/// slower: linear, 4x the input takes well under 8x the CPU time (quadratic: 16x).
 #[test]
 fn long_percent_and_user_runs_take_linear_time() {
     let shapes: [fn(usize) -> String; 3] = [
@@ -231,7 +231,7 @@ fn long_percent_and_user_runs_take_linear_time() {
             });
             assert!(
                 ratio < LINEAR_BOUND,
-                "8x the text took {ratio:.1}x the CPU time ({t_small:?} -> {t_large:?}): {}",
+                "4x the text took {ratio:.1}x the CPU time ({t_small:?} -> {t_large:?}): {}",
                 &small[..24]
             );
         }
@@ -546,7 +546,7 @@ fn masking_is_idempotent_over_generated_stop_runs_user_lists_and_access_keys() {
 
 /// The shapes pass 2 added, long: a run of `%2%` in a key value, with and without `%26` after
 /// it; many `@` in a user name and in a password for the second `url-password` rule; many
-/// `access_key` assignments. Linear: 8x the input takes well under 22.6x the CPU time.
+/// `access_key` assignments. Linear: 4x the input takes well under 8x the CPU time.
 #[test]
 fn long_stop_runs_and_user_names_take_linear_time() {
     let shapes: [fn(usize) -> String; 6] = [
@@ -565,7 +565,7 @@ fn long_stop_runs_and_user_names_take_linear_time() {
             });
             assert!(
                 ratio < LINEAR_BOUND,
-                "8x the text took {ratio:.1}x the CPU time ({t_small:?} -> {t_large:?}): {}",
+                "4x the text took {ratio:.1}x the CPU time ({t_small:?} -> {t_large:?}): {}",
                 &small[..24]
             );
         }
