@@ -7,6 +7,15 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Fixed
 
+- A `web` source reports what the provider did not read. Each URL in a `websearch.fetch` or
+  `websearch.crawl` answer's `failed` list, and an answer that says `complete: false`, is named in
+  fetch-only's `unread` and in the run's `stopped`, with the provider's reason or truncation
+  causes. A search short of `max_results` alone is not named. 0.8.0 ignored both and reported a
+  run whose only URL failed as a plain `ran` (review of 0.7.2, finding 7).
+- A web page's description is cut, with its title, to what the 16,384-byte evidence payload
+  holds, leaving the page's text its own length or 8,192 bytes. The prompt, the evidence and the
+  stored `WebPage` `description` hold the same text. 0.8.0 showed the model and stored a long
+  description whose tail its evidence did not hold (review of 0.7.2, finding 10).
 - A `structured` record whose mapping changed is applied again at the next run, at once and
   whatever `refresh_after_days`, its text changed or not. 0.8.0 answered `cortex update` with
   `updated` and left every unchanged record on the old mapping, so a property added to the mapping
