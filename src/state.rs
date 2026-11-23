@@ -63,12 +63,28 @@ pub struct SeenState {
     /// before reads as one whose listing was never ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended_listing: Option<String>,
+    /// Records of a structured source the store refused on their last try (a part EKR rejected,
+    /// a reference it found ambiguous, a `store_lookup` refusal), by key. Such a record is not
+    /// seen, so every run wants it again; [`SeenState::select`] takes it after every other wanted
+    /// document, the one refused longest ago first, so a record refused on every run does not
+    /// hold back the others under `max_documents_per_run`. Applying or retiring the record drops
+    /// its entry; absent while none is refused.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub refused: BTreeMap<String, Refused>,
     /// This run's, never written: by key, the hash of the text without its links of each change
     /// record of a structured source's link ([`crate::structured::Source::link`]). A change whose
     /// text differs from the one last applied only in its links is wanted at once and never held,
     /// whatever `refresh_after_days`, and [`SeenState::record`] remembers it.
     #[serde(skip)]
     pub unlinked: BTreeMap<String, String>,
+}
+
+/// The last refusal of a record ([`SeenState::refused`]): the hash of the text refused and the
+/// start of the run that tried it, in milliseconds since the Unix epoch.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Refused {
+    pub hash: String,
+    pub at: i64,
 }
 
 pub fn text_hash(text: &str) -> String {
@@ -107,6 +123,7 @@ impl SeenState {
                 let clean = |k: &String| crate::mask::mask_key(k).1 == 0;
                 state.documents.retain(|k, _| clean(k));
                 state.child_failures.retain(|k, _| clean(k));
+                state.refused.retain(|k, _| clean(k));
                 Ok(state)
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self {
@@ -117,6 +134,7 @@ impl SeenState {
                 pending_since: None,
                 child_failures: BTreeMap::new(),
                 ended_listing: None,
+                refused: BTreeMap::new(),
                 unlinked: BTreeMap::new(),
             }),
             Err(e) => Err(format!("cannot read {}: {e}", path.display())),
@@ -171,7 +189,9 @@ impl SeenState {
     }
 
     /// The documents a run should extract: new keys, and changed text past the refresh window (or
-    /// at once, for a record read from a file), at most `max` of them, in fetch order.
+    /// at once, for a record read from a file), at most `max` of them, in fetch order; a record
+    /// the store refused with the text it has now ([`SeenState::refused`]) after all the others,
+    /// the one refused longest ago first.
     pub fn select(
         &self,
         docs: Vec<Document>,
@@ -179,10 +199,47 @@ impl SeenState {
         refresh_after_days: i64,
         max: usize,
     ) -> Vec<Document> {
-        docs.into_iter()
+        let (mut retried, fresh): (Vec<_>, Vec<_>) = docs
+            .into_iter()
             .filter(|d| self.wants(d, now_ms, refresh_after_days))
-            .take(max)
-            .collect()
+            .partition(|d| self.refused_at(d).is_some());
+        retried.sort_by_key(|d| self.refused_at(d));
+        fresh.into_iter().chain(retried).take(max).collect()
+    }
+
+    /// When the store last refused `doc` with the text it has now, if it did.
+    fn refused_at(&self, doc: &Document) -> Option<i64> {
+        self.refused
+            .get(&doc.key)
+            .filter(|r| r.hash == doc_hash(doc))
+            .map(|r| r.at)
+    }
+
+    /// Remembers that the store refused `doc`, tried by the run that started at `at`: it stays
+    /// unseen, and is selected after the other wanted documents ([`SeenState::select`]).
+    pub fn refuse(&mut self, doc: &Document, at: i64) {
+        self.refused.insert(
+            doc.key.clone(),
+            Refused {
+                hash: doc_hash(doc),
+                at,
+            },
+        );
+    }
+
+    /// Retires the records a whole listing no longer lists (`dropped: Supersede`, once their
+    /// values were ended): every key not in `listed` whose identity starts with none of `kept`
+    /// (the records of a child call the run did not read) is forgotten, its saved fingerprint
+    /// and refusal with it. A retired record that is listed again is new, so its values, which
+    /// the end retracted, are applied again (finding 3 of the 0.7.2 review). Answers how many
+    /// were retired.
+    pub fn retire_unlisted(&mut self, listed: &BTreeSet<&str>, kept: &[&str]) -> usize {
+        let gone =
+            |k: &String| !listed.contains(k.as_str()) && !kept.iter().any(|p| k.starts_with(p));
+        let before = self.documents.len();
+        self.documents.retain(|k, _| !gone(k));
+        self.refused.retain(|k, _| !gone(k));
+        before - self.documents.len()
     }
 
     /// Whether a run should extract `doc`: its key is new, or its text changed past the refresh
@@ -276,6 +333,7 @@ impl SeenState {
             .get(&doc.key)
             .filter(|unlinked| **unlinked != hash)
             .cloned();
+        self.refused.remove(&doc.key);
         self.documents.insert(
             doc.key.clone(),
             Seen {
@@ -744,6 +802,45 @@ mod tests {
             .map(|d| d.key)
             .collect();
         assert_eq!(held, ["c"]);
+    }
+
+    /// Finding 6 of the 0.7.2 review: a refused record is selected after the other wanted ones,
+    /// the one refused longest ago first; its changed text, or its application, ends that.
+    #[test]
+    fn a_refused_record_is_selected_after_the_others_and_the_oldest_refusal_first() {
+        let keys = |docs: Vec<Document>| docs.into_iter().map(|d| d.key).collect::<Vec<_>>();
+        let docs = || vec![doc("a", "1"), doc("b", "2"), doc("c", "3"), doc("d", "4")];
+        let mut state = SeenState::default();
+        state.refuse(&doc("a", "1"), 20);
+        state.refuse(&doc("b", "2"), 10);
+        assert_eq!(keys(state.select(docs(), 0, 0, 10)), ["c", "d", "b", "a"]);
+        assert_eq!(keys(state.select(docs(), 0, 0, 1)), ["c"]);
+        // A refusal of another text is no refusal of this one.
+        state.refuse(&doc("c", "old"), 5);
+        assert_eq!(keys(state.select(docs(), 0, 0, 1)), ["c"]);
+        state.record(&doc("c", "3"), 1);
+        state.record(&doc("d", "4"), 1);
+        assert_eq!(keys(state.select(docs(), 0, 0, 1)), ["b"]);
+        assert!(!state.refused.contains_key("c"));
+    }
+
+    /// Finding 3 of the 0.7.2 review: a whole listing retires the records it no longer lists, but
+    /// those under a kept prefix, so a retired record listed again is new.
+    #[test]
+    fn retiring_forgets_the_unlisted_records_but_the_kept_ones() {
+        let mut state = SeenState::default();
+        for key in ["s:A", "s:B", "s/c:P:x"] {
+            state.record(&doc(key, "t"), 1);
+        }
+        state.refuse(&doc("s:B", "u"), 2);
+        let listed = BTreeSet::from(["s:A"]);
+        assert_eq!(state.retire_unlisted(&listed, &["s/c:P:"]), 1);
+        assert_eq!(
+            state.documents.keys().collect::<Vec<_>>(),
+            ["s/c:P:x", "s:A"]
+        );
+        assert!(state.refused.is_empty());
+        assert!(state.wants(&doc("s:B", "t"), 0, 0));
     }
 
     /// A change record of a link whose text differs from the one last applied only in its links

@@ -1539,7 +1539,8 @@ fn refusal_of(f: run::Failure) -> Refusal {
         | run::Failure::ConnectionUnavailable(e)
         | run::Failure::BatchTooLarge(e)
         | run::Failure::Terminated(e)
-        | run::Failure::ModelUnavailable(_, e) => Refusal::ApplyFailed(e),
+        | run::Failure::ModelUnavailable(_, e)
+        | run::Failure::PathRefused(e) => Refusal::ApplyFailed(e),
     }
 }
 

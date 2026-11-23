@@ -57,8 +57,13 @@ directory, so the instance keeps working when the originals move.
 
 | field | meaning |
 |---|---|
-| `version` | the pinned EKR version |
+| `version` | the pinned EKR version, which the instance records as its engine |
 | `bin` | optional path to the `ekr` binary; `~/` is expanded. Without it, cortex uses `~/.cache/cortex/bin/<version>/bin/ekr`, where `cortex setup` installs it |
+
+`cortex create` and `cortex adopt` run `<bin> --version` first and refuse a binary that reports
+another version than `version`, before any store exists: `create` answers `seed-refused` and
+`adopt` exits 2, each naming the version the binary reported. `cortex setup` refuses a binary of
+another version in the cache the same way; remove it and run `cortex setup` again.
 
 ## `seed`
 
@@ -441,7 +446,11 @@ next page, token, key or link), `max_pages` and `stop_older_than_since` (optiona
 its value is the next `param`, whatever the style, except `NextLink`. Without it, a `PageNumber`
 walk asks for the page after the current one (the input's `param`, or 1 when absent), and a
 `Token`, `Keyset` or `NextLink` walk reads one page. A walk stops at an empty page, at a missing
-`next`, at a page or token it has already asked for, or after `max_pages` pages.
+`next`, at a page or token it has already asked for, or after `max_pages` pages. An answer that
+names a page or token the walk already asked for is a paging cycle: the pages after it were never
+answered, so the walk leaves records unread and says
+`<adapter>.<operation>: the answer named a page it already returned (a paging cycle)` in `unread`
+(fetch-only) and `stopped` (a run).
 
 A `NextLink` walk reads a URL at `next`, relative or absolute, and asks next for the
 percent-decoded value of its query parameter named by the last segment of `param`:
@@ -593,6 +602,17 @@ A record whose text changed is extracted again on the next run, whatever `refres
 the window holds back only whole files and the other kinds of source. Its thread context is part
 of its text, so a record whose nearer thread records changed is extracted again too.
 
+**A directory per run.** `cortex run <instance>/<source> --path <dir>` reads the source from
+`<dir>` in place of `paths`, for that run only; `glob`, `records` and `lookup` stay as the spec
+says, and `lookup` is still read against the spec file's directory. A document's key is then the
+file's path relative to `<dir>`: `<relative path>#<id>` for a record, `<relative path>` for a whole
+file, cited as `file:<key>`. A caller that writes each run's files to a new directory, such as
+`run-17/work/slices/chat.jsonl` and then `run-18/work/slices/chat.jsonl`, passes
+`--path run-17/work` and then `--path run-18/work`: both runs key the record
+`slices/chat.jsonl#<id>`, so an unchanged record is not extracted again (`documents_new` 0) and a
+changed one is. Keys with and without `--path` differ, so run a source one way only. Masking
+applies to the relative key as to any key.
+
 ### `kind: structured`
 
 Records turned into entities, properties and relations by a fixed `mapping`, with no model call:
@@ -700,6 +720,17 @@ node, and no `Repository` node:
   refused alike, naming the type, the property and both kinds;
 - no match, or matches of its own type only: written as with `OwnType`.
 
+**Refused records.** A record EKR applies nothing of is refused too: one with a part EKR rejects,
+and one whose entity, or a node one of its facts names, `ekr apply-extraction` reports
+`ambiguous` (its aliases match more than one store node of its type), though EKR rejects no part
+of it. The run names it in `rejected` (`ambiguous: its aliases match 2 store nodes of type
+Project, so EKR applied none of its facts`), does not count it in `documents_applied` and does not
+mark it seen, so the run is not successful, its window does not move past it, and the next run
+tries it again. A refused record (rejected, ambiguous, or refused by the store lookup above) is
+tried after every other record the run wants, the one refused longest ago first: under
+`max_documents_per_run` it does not hold back the records behind it. A changed text is selected in
+its place as any changed record is.
+
 **Values.** Each mapped property is declared and written in one value kind: the `value_kind` its
 mapping names (`String`, `Integer`, `Decimal`, `Boolean` or `Timestamp`), else the kind the
 store's ontology already declares for that property of the node type (`ekr ontology`), else
@@ -749,11 +780,26 @@ every child of a parent the source no longer lists, has its values ended, its re
 parent among them.
 
 The run reports `superseded` and `retracted` when it ended any. Nothing is ended when the fetch
-left records unread (a `max_pages` reached, an empty page that named a next one), or when the
-source lists no record at all: an empty list is read as a list that failed, so a source cannot
-drop its last record. A record whose current text the run did not apply (held back by
-`refresh_after_days`, beyond `max_documents_per_run`, rejected, or over the evidence bound) keeps
-its values. Values are ended at most 1,000 to a transaction; when a later transaction of a run
+left records unread (a `max_pages` reached, an empty page that named a next one, a paging cycle),
+or when the source lists no record at all: an empty list is read as a list that failed, so a
+source cannot drop its last record. A record whose current text the run did not apply (held back
+by `refresh_after_days`, beyond `max_documents_per_run`, rejected, or over the evidence bound)
+keeps its values.
+
+A record's values are retracted only on evidence that it is gone: a whole listing that no longer
+lists it. A Connectors operation asked about the run's window (an input names `{since}`,
+`{until}`, `{since_epoch}`, `{until_epoch}` or `{since_minutes_ago}`), or walked with
+`stop_older_than_since`, lists what changed in the window, not every record: its run supersedes
+the changed values of the records it lists, and keeps every value of a record it does not list
+(and of that record's children). Such a source never retracts a record that left the provider; to
+end those, read the whole listing (an operation asked without the window) or use `dropped: Keep`.
+
+A record a whole listing no longer lists is retired once its values were ended: its seen entry is
+dropped, so when the source lists it again, with the same text or another, it is new and its
+values are applied again (fetch-only counts it in `new`). Records of a child call the run did not
+read are not retired.
+
+Values are ended at most 1,000 to a transaction; when a later transaction of a run
 fails, the edges of relations an earlier one retracted stay, and later runs do not remove them.
 
 Values another source asserted are never ended. A `kind: connectors` source cites its records as

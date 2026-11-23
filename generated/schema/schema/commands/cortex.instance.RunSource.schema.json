@@ -10,6 +10,12 @@
     },
     "fetch_only": {
       "type": "boolean"
+    },
+    "no_wait": {
+      "type": "boolean"
+    },
+    "path": {
+      "type": "string"
     }
   },
   "required": [
@@ -19,8 +25,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "dcaf5d869726e02028722cccc253df1c24885fd90c66f75e12d0c15f6e23de80",
-    "contract_digest": "slice-sha256/2:6d6d99285e81ce21a9744c008d2ba42ad5b539301d61ecc3c4467aef82644c3b",
+    "source_digest": "bbff72fdf900b1993ba797c3c116b8627873447cfe6db020eb0e539995aa8356",
+    "contract_digest": "slice-sha256/2:159da55faf7927d0683dee5a11e3051f0659cf6418e558a357a47f0ca48b09d9",
     "regenerate": "ess generate"
   },
   "$defs": {

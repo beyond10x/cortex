@@ -135,6 +135,14 @@ enum Command {
         /// Fetch the source and count what a run would extract, with no model call and no write.
         #[arg(long)]
         fetch_only: bool,
+        /// Do not wait for the home's lock: while another cortex command holds it, answer `busy`
+        /// at once (exit 9) and run nothing, so an external scheduler can skip the collection.
+        #[arg(long)]
+        no_wait: bool,
+        /// Read a `files` source from this directory instead of its spec's `paths`, for this run
+        /// only; each document is keyed by its path relative to the directory.
+        #[arg(long, value_name = "DIR")]
+        path: Option<PathBuf>,
     },
     /// Put an instance's store back to a snapshot a run took before it applied anything
     /// (`cortex.instance.RestoreSnapshot`).
@@ -398,10 +406,10 @@ fn main() -> ExitCode {
             }
         },
         command => {
-            // `restore` does not wait for the lock: while another command holds it, it answers
-            // `busy` and writes nothing.
+            // `restore` and `run --no-wait` do not wait for the lock: while another command holds
+            // it, they answer `busy` and write nothing.
             let lock = match &command {
-                Command::Restore { .. } => home.try_lock(),
+                Command::Restore { .. } | Command::Run { no_wait: true, .. } => home.try_lock(),
                 _ => home.lock().map(Some),
             };
             let lock = match lock {
@@ -455,7 +463,8 @@ struct Ctx<'a> {
     home: &'a Home,
     shared: SharedRef,
     tools: run::Tools,
-    /// Whether this command took the home's lock; only `restore` runs without it.
+    /// Whether this command took the home's lock; only `restore` and `run --no-wait` run without
+    /// it, and only to answer `busy`.
     locked: bool,
     /// The home's lock while this command holds it. `quality` lets it go once its sample is drawn.
     lock: RefCell<Option<std::fs::File>>,
@@ -554,7 +563,17 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             source_id,
             record_failure,
             fetch_only,
-        } => run_source(app, ctx, &source_id, record_failure, fetch_only),
+            no_wait,
+            path,
+        } => run_source(
+            app,
+            ctx,
+            &source_id,
+            record_failure,
+            fetch_only,
+            no_wait,
+            path,
+        ),
         Command::Source { command } => match command {
             SourceCommand::Add {
                 instance_name,
@@ -733,6 +752,8 @@ fn seed_instance(
             spec.ekr.version
         ));
     }
+    // The instance records `ekr.version` as its pin: the binary that creates the store must be it.
+    ekr::check_version(&bin, &spec.ekr.version)?;
     let host = ekr::Binary(bin).host_json(&spec.name.0)?;
     home::write_atomic(&layout.host(), host.as_bytes())?;
     let store = layout.store_handle(spec);
@@ -1318,6 +1339,8 @@ fn adopt_into(
             spec.ekr.version
         )));
     }
+    // The instance records `ekr.version` as its pin: the binary that runs the store must be it.
+    ekr::check_version(&bin, &spec.ekr.version).map_err(failed)?;
     let host = match a.host {
         Some(path) => std::fs::read_to_string(path)
             .map_err(|e| failed(format!("cannot read --host {}: {e}", path.display())))?,
@@ -2708,6 +2731,10 @@ fn split(source_id: &str) -> (&str, &str) {
 /// scheduler tells "switched off" from "broken".
 const EXIT_DISABLED: u8 = 3;
 
+/// The exit status of a `run --no-wait` while another cortex command holds the home's lock:
+/// nothing ran and nothing was recorded, so a scheduler skips this collection and counts nothing.
+const EXIT_BUSY: u8 = 9;
+
 /// The exit status of a `run` that ended because EKR could not say whether a store write took
 /// effect (a stage verb, `apply-extraction` or a transaction's commit; a gated `sqlite` run that
 /// kept a snapshot is undone from it first): distinct from a failed run's 1, so a scheduler tells
@@ -2756,11 +2783,13 @@ fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
         m::RunSourceOutcome::BatchTooLarge { .. } => EXIT_BATCH_TOO_LARGE,
         m::RunSourceOutcome::Terminated { .. } => EXIT_TERMINATED,
         m::RunSourceOutcome::ModelUnavailable { .. } => EXIT_MODEL_UNAVAILABLE,
+        m::RunSourceOutcome::Busy { .. } => EXIT_BUSY,
         m::RunSourceOutcome::FetchOnlyFailed { .. }
         | m::RunSourceOutcome::FetchFailed { .. }
         | m::RunSourceOutcome::ExtractionFailed { .. }
         | m::RunSourceOutcome::ApplyRefused { .. }
-        | m::RunSourceOutcome::NoSuchSource { .. } => 1,
+        | m::RunSourceOutcome::NoSuchSource { .. }
+        | m::RunSourceOutcome::PathRefused { .. } => 1,
     }
 }
 
@@ -2770,10 +2799,33 @@ fn run_source(
     source_id: &str,
     record: bool,
     fetch_only: bool,
+    no_wait: bool,
+    path: Option<PathBuf>,
 ) -> ExitCode {
+    // `--path` is read against the caller's working directory, not the spec's.
+    let path = match path.map(|p| std::path::absolute(&p).map(PathBuf::into_os_string)) {
+        None => None,
+        Some(Ok(p)) => match p.into_string() {
+            Ok(p) => Some(p),
+            Err(p) => return fail(format!("--path {}: not UTF-8", p.to_string_lossy())),
+        },
+        Some(Err(e)) => return fail(format!("--path: {e}")),
+    };
+    // `--no-wait` took no lock because another command holds it: the run answers `busy`.
+    let busy = !ctx.locked;
+    if busy {
+        let mut shared = ctx.shared.borrow_mut();
+        shared
+            .external
+            .insert(("cortex.instance.RunSource", "busy"), true);
+        shared.strings.push_back(format!(
+            "another cortex command holds the lock of {}",
+            ctx.home.root.display()
+        ));
+    }
     // A run that is sent SIGTERM stops at its next safe point and answers `terminated`; a
     // fetch-only run, which writes nothing, keeps the default and ends at once.
-    if !fetch_only {
+    if !fetch_only && !busy {
         if let Err(e) = cortex_cli::terminate::install() {
             return fail(e);
         }
@@ -2781,6 +2833,8 @@ fn run_source(
     let outcome = match app.run_source(m::RunSource {
         source_id: m::SourceId(source_id.to_string()),
         fetch_only: fetch_only.then_some(true),
+        no_wait: no_wait.then_some(true),
+        path,
     }) {
         Ok(o) => o,
         Err(e) => return fail(e),
@@ -2991,6 +3045,15 @@ fn run_source(
             },
             None,
         ),
+        // Not a failure of the source: nothing ran. No `RecordFailure`, no status, metric or hook.
+        m::RunSourceOutcome::Busy { error } => (
+            Done {
+                outcome: "busy",
+                ok: false,
+                detail: json!({"reason": error.reason}),
+            },
+            None,
+        ),
         m::RunSourceOutcome::Disabled { run_skipped } => (
             Done {
                 outcome: "disabled",
@@ -3007,7 +3070,17 @@ fn run_source(
             },
             None,
         ),
+        // A refusal of the input: nothing ran, so nothing is recorded or reported.
+        m::RunSourceOutcome::PathRefused { error } => (
+            Done {
+                outcome: "path-refused",
+                ok: false,
+                detail: json!({"source_id": error.source_id.0, "reason": error.reason}),
+            },
+            None,
+        ),
     };
+    let refused = matches!(done.outcome, "path-refused");
     // A run that applied a batch and then failed left its report: its documents and tokens are
     // counted as a run's that ended `ran` are.
     if figures.is_none() {
@@ -3019,8 +3092,9 @@ fn run_source(
         (true, Some(reason)) => record_failure(app, ctx, source_id, reason).1,
         _ => false,
     };
-    // A fetch-only run reports nothing: no status file, no metric, no hook.
-    if !fetch_only {
+    // A fetch-only run reports nothing: no status file, no metric, no hook. Nor does a busy one,
+    // which holds no lock to write them under, or one whose `--path` was refused.
+    if !fetch_only && !busy && !refused {
         report_run(ctx, source_id, disabled, figures);
     }
     ExitCode::from(status)

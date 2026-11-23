@@ -69,10 +69,52 @@ pub fn expand(path: &str) -> PathBuf {
     }
 }
 
-/// Installs `ekr` at `version` with `cargo install`, as its release tag.
+/// The version `bin --version` reports (`ekr 0.0.34`): its last word, without a leading `v`.
+pub fn reported_version(bin: &Path) -> Result<String, String> {
+    let mut cmd = Command::new(bin);
+    cmd.arg("--version").stdin(Stdio::null());
+    // It opens no store, but nothing this process inherited as `EKR_*` reaches it either.
+    remove_inherited_ekr(&mut cmd, std::env::vars_os().map(|(key, _)| key));
+    let out = cmd
+        .output()
+        .map_err(|e| format!("cannot run {} --version: {e}", bin.display()))?;
+    if !out.status.success() {
+        return Err(format!(
+            "{} --version failed: {}",
+            bin.display(),
+            said(&out.stderr)
+        ));
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    text.split_whitespace()
+        .last()
+        .map(|v| v.trim_start_matches('v').to_string())
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| format!("{} --version printed no version", bin.display()))
+}
+
+/// Refuses `bin` unless it reports `version`, the pin a spec or `cortex setup` names: the pin an
+/// instance records is the engine that creates its store.
+pub fn check_version(bin: &Path, version: &str) -> Result<(), String> {
+    let reported = reported_version(bin)?;
+    let pinned = version.trim_start_matches('v');
+    if reported == pinned {
+        Ok(())
+    } else {
+        Err(format!(
+            "ekr at {} reports version {reported}, not the pinned {pinned}: point `ekr.bin` at \
+             ekr {pinned}, or remove it and run `cortex setup --ekr-version {pinned}`",
+            bin.display()
+        ))
+    }
+}
+
+/// Installs `ekr` at `version` with `cargo install`, as its release tag. A binary already in the
+/// cache is kept only when it reports `version`.
 pub fn install(version: &str) -> Result<PathBuf, String> {
     let bin = default_bin(version);
     if bin.is_file() {
+        check_version(&bin, version)?;
         return Ok(bin);
     }
     let root = bin
@@ -91,6 +133,7 @@ pub fn install(version: &str) -> Result<PathBuf, String> {
     if !status.success() || !bin.is_file() {
         return Err(format!("installing ekr {version} failed"));
     }
+    check_version(&bin, version)?;
     Ok(bin)
 }
 
