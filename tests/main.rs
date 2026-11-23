@@ -85,6 +85,9 @@ mod it {
     mod rekey_adversary_pass2;
     mod review_connection_pagination;
     mod review_ekr_pin_and_busy;
+    mod review_extraction_coverage;
+    mod review_run_path;
+    mod review_structured_reconcile;
     mod run_gate;
     mod run_metrics;
     mod run_status;

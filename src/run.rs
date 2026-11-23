@@ -2,7 +2,7 @@
 //! fetch, keep what is new or changed, extract in batches within the run's budget, apply.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use cortex_model::instance as m;
 use serde_json::json;
@@ -50,6 +50,9 @@ pub enum Failure {
     /// The model could not be reached ([`extract::unavailable`]): not a fault of the source, so it
     /// is not counted. The batches before it stay applied.
     ModelUnavailable(extract::Unavailable, String),
+    /// The run was given a directory (`cortex run --path`) for a source that is not a `files`
+    /// source: refused before anything was fetched or written.
+    PathRefused(String),
 }
 
 #[derive(Debug)]
@@ -402,10 +405,20 @@ impl Planned {
     }
 
     /// Fetches the source over the window. A structured source's links order and match records
-    /// by the identities the run gives them, which the redaction policy takes part in.
-    fn fetch(&self, tools: &Tools) -> Result<sources::Fetched, Failure> {
+    /// by the identities the run gives them, which the redaction policy takes part in. With `path`
+    /// (`cortex run --path`), a `files` source is read from that directory in place of its
+    /// `paths`, its documents keyed by their paths relative to it ([`sources::fetch_files_in`]).
+    fn fetch(&self, tools: &Tools, path: Option<&Path>) -> Result<sources::Fetched, Failure> {
         let source = self.source();
         let redactor = redact::compile(self.spec.redaction.as_ref()).map_err(Failure::Extract)?;
+        if let Some(dir) = path {
+            let m::SourceSettings::Files(f) = &source.settings else {
+                return Err(self.refuse_path(dir));
+            };
+            let max_context = source.policy.max_chars_per_document.max(0) as usize;
+            return sources::fetch_files_in(f, &self.spec_dir, dir, max_context)
+                .map_err(fetch_failure);
+        }
         sources::fetch(
             &source.settings,
             &tools.connectors,
@@ -417,15 +430,40 @@ impl Planned {
         )
         .map_err(fetch_failure)
     }
+
+    /// Refuses `path` (`cortex run --path`) unless the source is a `files` source, before the run
+    /// fetches or writes anything.
+    fn admits(&self, path: Option<&Path>) -> Result<(), Failure> {
+        match (path, &self.source().settings) {
+            (Some(dir), settings) if !matches!(settings, m::SourceSettings::Files(_)) => {
+                Err(self.refuse_path(dir))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn refuse_path(&self, dir: &Path) -> Failure {
+        Failure::PathRefused(format!(
+            "--path {}: source {:?} is not a files source",
+            dir.display(),
+            self.source().name
+        ))
+    }
 }
 
 /// `cortex run --fetch-only`: fetches the source as [`run`] does, masks and scrubs what it
 /// fetched and counts it against the seen state, then stops. It asks no model and writes nothing:
 /// not the store, the seen state (a failed fetch records no `pending_since`), `runs/`, a
-/// snapshot, an EKR stage or `cortex.log`.
-pub fn count(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<Counts, Failure> {
+/// snapshot, an EKR stage or `cortex.log`. `path` is `--path`, as [`run`] takes it.
+pub fn count(
+    layout: &Layout,
+    tools: &Tools,
+    source: &m::SourceData,
+    path: Option<&Path>,
+) -> Result<Counts, Failure> {
     let planned = Planned::of(layout, source)?;
-    let fetched = planned.fetch(tools)?;
+    planned.admits(path)?;
+    let fetched = planned.fetch(tools, path)?;
     let mut counts = Counts {
         since_ms: planned.window.since_ms,
         until_ms: planned.window.until_ms,
@@ -453,18 +491,23 @@ pub fn count(layout: &Layout, tools: &Tools, source: &m::SourceData) -> Result<C
 /// `partial` is left holding the run's report as it stood when the run failed: the documents it
 /// read and applied and the tokens it spent before it ended ([`Report::default`] when it failed
 /// before it processed anything).
+///
+/// `path` is `cortex run --path`: a `files` source is read from that directory, for this run
+/// only.
 pub fn run(
     layout: &Layout,
     tools: &Tools,
     source: &m::SourceData,
+    path: Option<&Path>,
     partial: &mut Report,
 ) -> Result<Report, Failure> {
     let planned = Planned::of(layout, source)?;
+    planned.admits(path)?;
     let (window, seen_path) = (planned.window, planned.seen_path.clone());
     // A stop of the whole unit (`systemctl stop`, a pod's deadline) ends the `connectors` child
     // too: a fetch that failed after SIGTERM is the stop, not a failure of the source.
     // A fetch the run ended itself says so ([`FetchError::Terminated`]).
-    let fetched = planned.fetch(tools).or_else(|failure| {
+    let fetched = planned.fetch(tools, path).or_else(|failure| {
         if !matches!(failure, Failure::Terminated(_)) {
             stop_point("while it fetched")?;
         }
@@ -1037,9 +1080,15 @@ fn process_in(
                 structured_source.map(|st| ended_listing(st, source, listed, &seen, &held));
             // Remembered once every end committed, so the next run with the same listing reads
             // nothing; forgotten when one did not.
-            seen.ended_listing = end_dropped(&records, listed, &seen, report, before)?
-                .then_some(compared)
-                .flatten();
+            let ended = end_dropped(&records, listed, &seen, report, before)?;
+            seen.ended_listing = ended.then_some(compared).flatten();
+            // A whole listing whose ends all committed retires the records it no longer lists:
+            // their values were retracted, so one that is listed again is applied again.
+            if ended && !listed.is_empty() && !source.windowed {
+                let keys: BTreeSet<&str> = listed.iter().map(|d| d.key.as_str()).collect();
+                let kept: Vec<&str> = held.iter().map(|h| h.prefix.as_str()).collect();
+                seen.retire_unlisted(&keys, &kept);
+            }
         }
         unread(report, &fetched.unread, redactor.as_ref());
         if undoable {
@@ -1435,6 +1484,12 @@ fn process_in(
             report.stopped = Some(why);
             break;
         }
+        // A value of a single-valued property replaces the stored one, so a value a later batch
+        // or run reads leaves one current, not two ([`extract::mark_single_valued`]).
+        if held_ontology.is_none() {
+            held_ontology = Some(session.ontology().map_err(store_failure)?);
+        }
+        extract::mark_single_valued(&mut restored, held_ontology.as_ref().expect("read above"));
         let (doc, refused) = extract::merge(&restored, &batch);
         report.facts_refused += refused;
         let path = dir.join("extraction.yaml");
@@ -1854,6 +1909,7 @@ impl Failure {
             Failure::BatchTooLarge(m) => Failure::BatchTooLarge(format!("{m}; {more}")),
             Failure::Terminated(m) => Failure::Terminated(format!("{m}; {more}")),
             Failure::ModelUnavailable(c, m) => Failure::ModelUnavailable(c, format!("{m}; {more}")),
+            Failure::PathRefused(m) => Failure::PathRefused(format!("{m}; {more}")),
         }
     }
 
@@ -1867,7 +1923,8 @@ impl Failure {
             | Failure::ConnectionUnavailable(m)
             | Failure::BatchTooLarge(m)
             | Failure::Terminated(m)
-            | Failure::ModelUnavailable(_, m) => m,
+            | Failure::ModelUnavailable(_, m)
+            | Failure::PathRefused(m) => m,
         }
     }
 }
@@ -2368,7 +2425,11 @@ struct Records<'a> {
 /// fails the run when nothing was applied yet and stops it otherwise, as on the model path. A
 /// record with a part EKR rejected is counted in `parts_rejected`, named in `rejected` with EKR's
 /// refusal, and neither applied nor marked seen, so the run is not successful and the record is
-/// read and tried again. Each record's evidence leads with its mapped values
+/// read and tried again; so is a record whose entity, or a reference one of its facts names, EKR
+/// reports `ambiguous` (its aliases meet more than one store node of its type), which EKR applies
+/// nothing of though it rejects no part. A refused record is remembered
+/// ([`SeenState::refuse`]), so later runs try it after the other wanted records and it does not
+/// hold them back under `max_documents_per_run`. Each record's evidence leads with its mapped values
 /// ([`structured::Source::lead`]) before the cut at [`evidence::PAYLOAD_MAX_BYTES`]; a record whose
 /// mapped values alone are over that bound is not applied, but named in `skipped` and recorded as
 /// seen, as its next run would refuse it again. A record with a mapped value that does not convert
@@ -2444,6 +2505,7 @@ fn apply_records(
             report
                 .rejected
                 .push(Rejected::new(&issued.doc.key, &[why.to_string()]));
+            seen.refuse(&issued.doc, r.started);
         }
         if batch.is_empty() {
             continue;
@@ -2478,6 +2540,7 @@ fn apply_records(
                 report
                     .rejected
                     .push(Rejected::new(&issued.doc.key, refusals));
+                seen.refuse(&issued.doc, r.started);
                 continue;
             }
             report.documents_applied += 1;

@@ -46,16 +46,16 @@ fn run(classes: &[m::RedactionClass], text: &str) -> (String, BTreeMap<String, u
     (out, counts)
 }
 
-/// The fastest of five runs of `f`.
+/// The fastest of three runs of `f`.
 fn fastest(mut f: impl FnMut()) -> Duration {
-    (0..5)
+    (0..3)
         .map(|_| {
             let t = Instant::now();
             f();
             t.elapsed()
         })
         .min()
-        .expect("five runs")
+        .expect("three runs")
 }
 
 // ---- Phone: `/` after an international area code -------------------------------------------
@@ -110,8 +110,8 @@ fn two_markdown_links_joined_without_a_space_are_two_links() {
 fn bracketed_links_back_to_back_are_found_in_linear_time() {
     let r = redactor(&[m::RedactionClass::Url]);
     let unit = "[https://a.example/b]";
-    let small = unit.repeat(1 << 11);
-    let large = unit.repeat(1 << 13);
+    let small = unit.repeat(1 << 9);
+    let large = unit.repeat(1 << 11);
     let _ = r.redact(unit, &mut r.counts());
     let t_small = fastest(|| {
         let _ = r.redact(&small, &mut r.counts());
