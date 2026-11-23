@@ -4,12 +4,12 @@
 //! placeholder is restored under `quality/<stamp>/batch-<n>/`. The judge is a stand-in; the facts
 //! are invented products.
 
-mod common;
+use crate::common;
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use common::{executable, World};
+use crate::common::{executable, World};
 use serde_json::{json, Value};
 
 /// An extraction stand-in: `n` products, each with its own `version`, all citing the first
