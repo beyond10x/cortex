@@ -117,15 +117,15 @@ fn two_markdown_links_joined_without_a_space_are_two_links() {
 }
 
 /// Links written in brackets, back to back with no space, are found in time linear in the
-/// text: each match now runs to the end of the run of non-space text and `link` cuts it at `]`,
-/// so every link scans the rest of the text again. Before the change a match ended at `[`.
-/// 16x the links: linear work takes 16x the time, the rescan 256x.
+/// text. Each match was checked against every match found before it, so 4x the links took 14x
+/// the time. 16x the links: linear work takes 16x the time, that check 256x; 1,024 links and
+/// more, so that the check outweighs what each link costs once.
 #[test]
 fn bracketed_links_back_to_back_are_found_in_linear_time() {
     let r = redactor(&[m::RedactionClass::Url]);
     let unit = "[https://a.example/b]";
-    let small = unit.repeat(1 << 8);
-    let large = unit.repeat((1 << 8) * GROWTH);
+    let small = unit.repeat(1 << 10);
+    let large = unit.repeat((1 << 10) * GROWTH);
     let (ratio, t_small, t_large) = growth(&small, &large, |text| {
         let _ = r.redact(text, &mut r.counts());
     });

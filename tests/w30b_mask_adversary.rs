@@ -19,31 +19,16 @@ fn tail() -> String {
     format!("Rt7{}", "wZ4".repeat(3))
 }
 
-/// The sizes of the two inputs of the linear-time cases: the larger is 16x the smaller, so
-/// linear work takes 16x the time on it and quadratic work 256x.
-const SMALL: usize = 1 << 13;
-const LARGE: usize = 1 << 17;
-/// The most times the time may grow from `SMALL` to `LARGE`: 4x what linear work takes and 4x
-/// below what quadratic work takes, so neither noise nor a constant term reaches it from either
-/// side.
-const LINEAR_BOUND: f64 = 64.0;
-
-/// How many times longer `f` takes on `large` than on `small`, and the two times: the fastest of
-/// seven runs of each, taken in turns, so that load that slows a run of one size slows the runs
-/// of the other size beside it too, and the fastest of each is a run load did not slow.
-fn growth(small: &str, large: &str, f: impl Fn(&str)) -> (f64, Duration, Duration) {
-    f(small);
-    let (mut t_small, mut t_large) = (Duration::MAX, Duration::MAX);
-    for _ in 0..7 {
-        let t = Instant::now();
-        f(small);
-        t_small = t_small.min(t.elapsed());
-        let t = Instant::now();
-        f(large);
-        t_large = t_large.min(t.elapsed());
-    }
-    let ratio = t_large.as_secs_f64() / t_small.as_secs_f64().max(1e-9);
-    (ratio, t_small, t_large)
+/// The fastest of three runs of `f`.
+fn fastest(mut f: impl FnMut()) -> Duration {
+    (0..3)
+        .map(|_| {
+            let t = Instant::now();
+            f();
+            t.elapsed()
+        })
+        .min()
+        .expect("three runs")
 }
 
 /// A raw `%` and one hex digit in front of another `%` (`%2%41`, `%a%41`, `%2%x`, `%252%41`) is
@@ -205,7 +190,7 @@ fn masking_is_idempotent_over_generated_percent_and_quote_shapes() {
 }
 
 /// Long runs of `%25` before a name, and of `a@:` after a scheme, the two shapes the change made
-/// slower: linear, 16x the input takes well under 64x the time.
+/// slower: linear, 4x the input takes well under 8x the time.
 #[test]
 fn long_percent_and_user_runs_take_linear_time() {
     let shapes: [fn(usize) -> String; 3] = [
@@ -214,14 +199,18 @@ fn long_percent_and_user_runs_take_linear_time() {
         |n| format!("password=abcdefgh{}", "%%".repeat(n / 2)),
     ];
     for shape in shapes {
-        let (small, large) = (shape(SMALL), shape(LARGE));
+        let (small, large) = (shape(1 << 16), shape(1 << 18));
         for f in [mask_key as fn(&str) -> (String, usize), mask] {
-            let (ratio, t_small, t_large) = growth(&small, &large, |text| {
-                f(text);
+            let t_small = fastest(|| {
+                f(&small);
+            });
+            let t_large = fastest(|| {
+                f(&large);
             });
             assert!(
-                ratio < LINEAR_BOUND,
-                "16x the text took {ratio:.1}x the time ({t_small:?} -> {t_large:?}): {}",
+                t_large < t_small * 8,
+                "4x the text took {:.1}x the time ({t_small:?} -> {t_large:?}): {}",
+                t_large.as_secs_f64() / t_small.as_secs_f64(),
                 &small[..24]
             );
         }
@@ -536,7 +525,7 @@ fn masking_is_idempotent_over_generated_stop_runs_user_lists_and_access_keys() {
 
 /// The shapes pass 2 added, long: a run of `%2%` in a key value, with and without `%26` after
 /// it; many `@` in a user name and in a password for the second `url-password` rule; many
-/// `access_key` assignments. Linear: 16x the input takes well under 64x the time.
+/// `access_key` assignments. Linear: 4x the input takes well under 8x the time.
 #[test]
 fn long_stop_runs_and_user_names_take_linear_time() {
     let shapes: [fn(usize) -> String; 6] = [
@@ -548,14 +537,18 @@ fn long_stop_runs_and_user_names_take_linear_time() {
         |n| "access_key=abcdefgh ".repeat(n / 20),
     ];
     for shape in shapes {
-        let (small, large) = (shape(SMALL), shape(LARGE));
+        let (small, large) = (shape(1 << 16), shape(1 << 18));
         for f in [mask_key as fn(&str) -> (String, usize), mask] {
-            let (ratio, t_small, t_large) = growth(&small, &large, |text| {
-                f(text);
+            let t_small = fastest(|| {
+                f(&small);
+            });
+            let t_large = fastest(|| {
+                f(&large);
             });
             assert!(
-                ratio < LINEAR_BOUND,
-                "16x the text took {ratio:.1}x the time ({t_small:?} -> {t_large:?}): {}",
+                t_large < t_small * 8,
+                "4x the text took {:.1}x the time ({t_small:?} -> {t_large:?}): {}",
+                t_large.as_secs_f64() / t_small.as_secs_f64(),
                 &small[..24]
             );
         }
