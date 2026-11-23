@@ -126,6 +126,15 @@ jobs:
           "$CORTEX_TEST_EKR" --version
           task check
 
+      - name: Keep the test report
+        if: always() && steps.scope.outputs.scope == 'run'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nextest-junit
+          path: target/nextest/*/junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Planning or prose only
         if: steps.scope.outputs.scope == 'skip'
         run: echo "every changed path is planning or prose (.github/scripts/scope.sh); build and tests skipped"
