@@ -281,7 +281,7 @@ fn try_serve(gateway: &Gateway, setup: Setup<'_>) -> Result<Service, (Option<i32
             r#"format: cortex.instance/1
 name: asker
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model:
   model: test-model

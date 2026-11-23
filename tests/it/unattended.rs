@@ -235,7 +235,7 @@ fn a_files_source_created_from_a_bare_spec_file_name_reads_its_files_from_the_un
             r#"format: cortex.instance/1
 name: t
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

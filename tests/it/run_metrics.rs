@@ -450,7 +450,7 @@ fn pg_ekr(w: &World) -> PathBuf {
     let body = r#"R="@R@"; EKR="@EKR@"; DB="$R/pg-as-sqlite.sqlite"
 if [ "$1" = postgres-schema ]; then echo '{"format":"ekr.postgres-schema/1","ready":true}'; exit 0; fi
 if [ "$EKR_BACKEND" = postgres ]; then
-  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "the lineage has no seed" >&2; exit 1; fi
+  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "ekr: ekr.views.NotSeeded: the lineage has no seed" >&2; exit 2; fi
   EKR_BACKEND=sqlite; EKR_STORE="$DB"; export EKR_BACKEND EKR_STORE
 fi
 exec "$EKR" "$@"
@@ -511,7 +511,7 @@ fn a_staged_run_sent_sigterm_abandons_its_stage() {
             r#"format: cortex.instance/1
 name: pg
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{bin}"}}
+ekr: {{version: "0.0.43", bin: "{bin}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60, batch_chars: 1000}}
 sources:

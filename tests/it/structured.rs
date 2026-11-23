@@ -79,7 +79,7 @@ fn create_from(w: &World, name: &str, input: &str, extra: &str) {
             r#"format: cortex.instance/1
 name: {name}
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:
@@ -459,7 +459,7 @@ exit 1
                 r#"format: cortex.instance/1
 name: {name}
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

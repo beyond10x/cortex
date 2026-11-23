@@ -202,10 +202,9 @@ this repository and published by the organisation's reusable workflow.
 
 | fact | where | effect here |
 |---|---|---|
-| `ekr apply-extraction` admits only `!HumanStatement` evidence (`extraction-evidence-kind-unsupported`) | EKR 0.0.30 `crates/ekr-integrate/src/extraction.rs:61`, `crates/ekr-kernel/src/validate/provenance.rs:129` | a web page is evidence `!HumanStatement {identity: <url>}` instead of `!Url` |
 | EKR's ESS spec models `ExtractedFact` as a `kind`-tagged union, its YAML reader wants `!Property` tags, and `ekr schema` writes `"!Property"` keys | EKR 0.0.30 `systems/ekr/domains/integrate.yaml:203`, `ekr schema ekr.extraction-document/1` | the model answers in `ekr schema`'s form; `src/extract.rs` turns `"!X"` keys into YAML tags |
 | `ekr apply-extraction` takes an evidence payload of at most 16,384 bytes: it reads the payload as a YAML sequence of one element per byte and rejects every fact citing a longer one (`transaction document limit: sequence_elements (at most 16384)`) | EKR 0.0.30 `ekr` help on `payload`; measured on 2026-10-06 (`tests/evidence_bound.rs`: 16,384 bytes apply) | `src/evidence.rs` cuts each payload at a character boundary to `PAYLOAD_MAX_BYTES`, and a run cuts the text it shows the model to what the payload holds. The cut keeps whole characters, not grapheme clusters (a letter can lose a following combining mark); the model text is cut at the same byte, so a citation still matches its evidence. A structured record's evidence leads with its mapped values; a record whose mapped values alone exceed the bound is skipped |
-| `ekr session` serves `ontology`, `snapshot`, `schema`, `head`, `mint`, `propose`, `validate`, `commit` and `quality`, one request per line, and refuses `apply-extraction` and the `ekr stage` verbs (`session-verb-refused`) | EKR 0.0.34 `docs/cli.md`, `ekr session` | a run holds one session for its reads and runs `ekr apply-extraction` as a process of its own (`src/ekr.rs` `Session::apply`) |
+| `ekr session` serves `ontology`, `snapshot`, `schema`, `head`, `mint`, `propose`, `validate`, `commit` and `quality`, one request per line, and refuses `apply-extraction` and the `ekr stage` verbs (`session-verb-refused`) | EKR 0.0.43 `docs/cli.md`, `ekr session` | a run holds one session for its reads and runs `ekr apply-extraction` as a process of its own (`src/ekr.rs` `Session::apply`) |
 | Claude's `--json-schema` refuses a schema that names draft 2020-12 in `$schema` | `claude` 2.1.289 | the `$schema` key is removed before the call |
 | A schema transaction cites no evidence: EKR holds `transaction.evidence` to the evidence its assertions cite, and a schema change travels alone, so a non-empty set is `evidence-set-mismatch` | EKR 0.0.31 `docs/cli.md` ("Evolve the schema"); measured on 2026-10-06 | `cortex schema` records each change's facts and evidence in `schema/<stamp>/proposals.jsonl` beside its transaction |
 | `ess generate --kind docs` titles the domain page with the domain's display name (`Instances`), which equals a view's name, and Docusaurus then moves that view's anchor | ESS 0.59.0 through 0.77.0 (`generated/docs/docs/domains/cortex-instance.md` heads `# Instances` and holds the view heading `Instances`), `spec/domains/instance.yaml` `naming.display` | `cortex-docs` drops the page's level-one heading; the front-matter title heads the page |
@@ -258,12 +257,12 @@ this repository and published by the organisation's reusable workflow.
   `worktree finish --discard-cache --archive <tree>`, so its build cache goes with it. Check
   `df -h /` first; do not start a build with less than 10 GB free. Before a test run counts as
   evidence for a tree, check that the test names it printed exist there (`cargo test -- --list`).
-- The end-to-end tests run a real `ekr` (`CORTEX_TEST_EKR`, default the 0.0.34 binary under
-  `~/.cache/cortex/bin/0.0.34/bin/ekr`, where `cortex setup` puts it) with stand-in
+- The end-to-end tests run a real `ekr` (`CORTEX_TEST_EKR`, default the 0.0.43 binary under
+  `~/.cache/cortex/bin/0.0.43/bin/ekr`, where `cortex setup` puts it) with stand-in
   `connectors`, `claude` and `systemctl`. A missing `ekr` fails them; it never skips them. When that file is missing, build
   `ekr` as CI does into the tree,
-  `cargo install --locked --git https://github.com/beyond10x/epistemic-knowledge-runtime --tag 0.0.34 --bin ekr --root target/ekr-0.0.34 ekr`,
-  and set `CORTEX_TEST_EKR` to the absolute path of `target/ekr-0.0.34/bin/ekr`.
+  `cargo install --locked --git https://github.com/beyond10x/epistemic-knowledge-runtime --tag 0.0.43 --bin ekr --root target/ekr-0.0.43 ekr`,
+  and set `CORTEX_TEST_EKR` to the absolute path of `target/ekr-0.0.43/bin/ekr`.
 - After a site change, `task website` must build; it fails on a broken link or anchor.
 
 ## Cutting a release

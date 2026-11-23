@@ -87,6 +87,7 @@ mod it {
     mod review_apply_out_of_order;
     mod review_change_detection;
     mod review_connection_pagination;
+    mod review_ekr_pin;
     mod review_ekr_pin_and_busy;
     mod review_extract_then_apply;
     mod review_extraction_coverage;

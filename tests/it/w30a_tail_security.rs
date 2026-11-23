@@ -363,7 +363,7 @@ fn lookup_world(lookup: &str) -> World {
     std::fs::write(
         &spec,
         format!(
-            "format: cortex.instance/1\nname: l\ndescription: Test brain.\nekr: {{version: \"0.0.34\", bin: \"{ekr}\"}}\nseed: {{documents: []}}\nmodel: {{model: claude-haiku-4-5-20251001, budget_usd: \"1\", timeout_s: 60}}\nsources:\n  - name: chat\n    schedule: daily\n    settings:\n      kind: files\n      value:\n        paths: [chat]\n        glob: \"*.jsonl\"\n        records: {{format: JsonLines, id: id, author: user, text: [\"{{text}}\"], lookup: {lookup}, filters: []}}\n    policy: {{refresh_after_days: 0, change: ContentHash, max_documents_per_run: 10, max_chars_per_document: 5000}}\nserve: {{view_port: 18993}}\n",
+            "format: cortex.instance/1\nname: l\ndescription: Test brain.\nekr: {{version: \"0.0.43\", bin: \"{ekr}\"}}\nseed: {{documents: []}}\nmodel: {{model: claude-haiku-4-5-20251001, budget_usd: \"1\", timeout_s: 60}}\nsources:\n  - name: chat\n    schedule: daily\n    settings:\n      kind: files\n      value:\n        paths: [chat]\n        glob: \"*.jsonl\"\n        records: {{format: JsonLines, id: id, author: user, text: [\"{{text}}\"], lookup: {lookup}, filters: []}}\n    policy: {{refresh_after_days: 0, change: ContentHash, max_documents_per_run: 10, max_chars_per_document: 5000}}\nserve: {{view_port: 18993}}\n",
             ekr = ekr().display()
         ),
     )

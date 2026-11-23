@@ -30,7 +30,7 @@ fn spec(w: &World) -> PathBuf {
             r#"format: cortex.instance/1
 name: records
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:
@@ -295,7 +295,7 @@ echo "=== end of prompt ===" >> "$R/prompt.log"
         std::fs::write(
         &spec,
         format!(
-            "format: cortex.instance/1\nname: adv\ndescription: Test brain.\nekr: {{version: \"0.0.34\", bin: \"{ekr}\"}}\nseed: {{documents: []}}\nmodel: {{model: claude-haiku-4-5-20251001, budget_usd: \"1\", timeout_s: 60}}\nsources:\n{sources}serve: {{view_port: 18992}}\n{extra}",
+            "format: cortex.instance/1\nname: adv\ndescription: Test brain.\nekr: {{version: \"0.0.43\", bin: \"{ekr}\"}}\nseed: {{documents: []}}\nmodel: {{model: claude-haiku-4-5-20251001, budget_usd: \"1\", timeout_s: 60}}\nsources:\n{sources}serve: {{view_port: 18992}}\n{extra}",
             ekr = ekr().display()
         ),
     )

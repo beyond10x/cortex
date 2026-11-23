@@ -79,7 +79,7 @@ fn seeded(name: &str, keep: &str, answer: &str) -> World {
         &path,
         format!(
             "format: cortex.instance/1\nname: {name}\ndescription: Test brain.\n\
-             ekr: {{version: \"0.0.34\", bin: \"{ekr}\"}}\nseed: {{documents: []}}\n\
+             ekr: {{version: \"0.0.43\", bin: \"{ekr}\"}}\nseed: {{documents: []}}\n\
              model: {{model: claude-haiku-4-5-20251001, budget_usd: \"1\", timeout_s: 60}}\n\
              sources:\n{source}serve: {{view_port: 18993}}\n\
              redaction:\n  classes: [RareName]\n  rules: []\n  refuse_if_left: [RareName]\n{keep}",

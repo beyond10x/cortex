@@ -15,8 +15,7 @@ your questions need. Every instance is served to agents through `ekr mcp`, with 
 [Connectors](https://github.com/beyond10x/connectors) catalog (v0.56.0) provide for it today.
 
 :::note[What an instance cannot do yet]
-A web page is cited as a statement naming its URL, not as URL evidence, and the Codex model
-backend does not extract. See [Limits](./limits.md).
+The Codex model backend does not extract. See [Limits](./limits.md).
 :::
 
 ## 1. Dependency and vendor watch for an engineering team
@@ -99,5 +98,5 @@ Every fact carries the file or record it came from.
 **Question.** Any "where is X decided" or "what does Y mean here" question, answered with a
 citation.
 
-**Ready:** yes. With the pinned EKR 0.0.34, extracted relations are graph edges, so `search`
+**Ready:** yes. With the pinned EKR 0.0.43, extracted relations are graph edges, so `search`
 counts them in a node's degree and `expand` walks them.

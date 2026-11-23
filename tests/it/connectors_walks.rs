@@ -177,7 +177,7 @@ fn create_source(
             r#"format: cortex.instance/1
 name: {name}
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:
@@ -241,7 +241,7 @@ fn spec(w: &World, name: &str, refresh_after_days: i64, max_documents: i64) -> P
             r#"format: cortex.instance/1
 name: {name}
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:
@@ -1656,7 +1656,7 @@ fn parsed_key(inputs: &str, key: &str) -> Result<(), String> {
         r#"format: cortex.instance/1
 name: keyed
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

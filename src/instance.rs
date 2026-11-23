@@ -410,15 +410,21 @@ pub fn evidence_identities(
     }
     let snapshot: serde_json::Value = serde_json::from_slice(&out.stdout)
         .map_err(|e| format!("ekr snapshot printed no JSON: {e}"))?;
-    Ok(snapshot["graph"]["graph"]["evidence"]
+    Ok(identities_of(&snapshot))
+}
+
+/// The identity of every evidence item `snapshot` holds: a `HumanStatement`'s `identity`, or a
+/// `Url`'s URL (`{"Url": "<url>"}` in an `ekr snapshot`).
+fn identities_of(snapshot: &serde_json::Value) -> std::collections::BTreeSet<String> {
+    snapshot["graph"]["graph"]["evidence"]
         .as_object()
         .into_iter()
         .flat_map(|items| items.values())
         .filter_map(|item| item["source"].as_object())
         .flat_map(|source| source.values())
-        .filter_map(|kind| kind["identity"].as_str())
+        .filter_map(|kind| kind["identity"].as_str().or(kind.as_str()))
         .map(str::to_string)
-        .collect())
+        .collect()
 }
 
 /// Whether the store holds evidence of the seen document `key`: an identity cortex gives a
@@ -786,6 +792,31 @@ mod tests {
             assert!(has_evidence(key, &ids), "{key}");
         }
         assert!(!has_evidence("/docs/c.md", &ids));
+    }
+
+    /// `story:ekr-pin-0-0-43`: a web page's `Url` evidence counts as evidence of its URL, as a
+    /// statement whose identity is the URL did before.
+    #[test]
+    fn a_url_source_and_a_statement_each_name_their_identity() {
+        let snapshot = serde_json::json!({"graph": {"graph": {"evidence": {
+            "e-1": {"source": {"Url": "https://example.org/a"}},
+            "e-2": {"source": {"HumanStatement": {"identity": "https://example.org/b"}}},
+            "e-3": {"source": {"HumanStatement": {"identity": "record:t:op:7"}}},
+        }}}});
+        let ids = identities_of(&snapshot);
+        assert_eq!(
+            ids,
+            [
+                "https://example.org/a",
+                "https://example.org/b",
+                "record:t:op:7"
+            ]
+            .map(String::from)
+            .into()
+        );
+        for key in ["https://example.org/a", "https://example.org/b", "t:op:7"] {
+            assert!(has_evidence(key, &ids), "{key}");
+        }
     }
 
     #[test]

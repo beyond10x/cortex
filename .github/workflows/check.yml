@@ -16,7 +16,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_TARGET_DIR: ${{ github.workspace }}/target
-  EKR_VERSION: "0.0.34"
+  EKR_VERSION: "0.0.43"
 
 jobs:
   check:

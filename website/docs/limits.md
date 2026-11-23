@@ -130,10 +130,6 @@ stand; [Status](./status.mdx) lists what is planned.
 - **Some numbers that are not personal data are hidden from the model, but kept in the store.**
   Four-part version numbers and long digit ids that look like an IP address or a card number are
   replaced by a placeholder in the prompt.
-- **A web page is cited as a statement, not as a URL.** EKR 0.0.34 admits only `HumanStatement`
-  evidence in an extraction document (`extraction-evidence-kind-unsupported` for any other), so
-  cortex files a page as a `HumanStatement` whose identity is its URL. URL evidence waits on an EKR
-  release that admits it in an extraction document.
 - **Relations in a store extracted before EKR 0.0.31 are not graph edges.** Since EKR 0.0.31 an
   extracted relation is also written as an edge, so `search` counts it in a node's `degree` and
   `expand` walks it. EKR does not backfill: relations a store took under EKR 0.0.30 or earlier stay

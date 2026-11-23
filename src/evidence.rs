@@ -21,14 +21,32 @@ pub struct Issued {
     pub item: Yaml,
 }
 
-/// The identity EKR records for a document. EKR 0.0.30 admits only `!HumanStatement` evidence
-/// (`extraction-evidence-kind-unsupported`), so a URL, a file or a record is named here.
+/// The identity EKR records for a document: a web page's URL, `file:<key>` for a file and
+/// `record:<key>` for a record.
 pub fn identity(doc: &Document) -> String {
     match doc.origin {
         Origin::Url => doc.key.clone(),
         Origin::File | Origin::FileRecord => format!("file:{}", doc.key),
         Origin::Record => format!("record:{}", doc.key),
     }
+}
+
+/// The `source` of a document's evidence: `!Url <url>` for a web page, which EKR admits from
+/// 0.0.43 (`docs/cli.md`, "Evidence after the seed"); `!HumanStatement {identity: <identity>}`
+/// for a file or a record, the other kind EKR admits.
+fn source(doc: &Document) -> Yaml {
+    let (tag, value) = match doc.origin {
+        Origin::Url => ("Url", Yaml::String(identity(doc))),
+        Origin::File | Origin::FileRecord | Origin::Record => {
+            let mut statement = Mapping::new();
+            statement.insert(key("identity"), Yaml::String(identity(doc)));
+            ("HumanStatement", Yaml::Mapping(statement))
+        }
+    };
+    Yaml::Tagged(Box::new(TaggedValue {
+        tag: Tag::new(tag),
+        value,
+    }))
 }
 
 /// The most bytes EKR 0.0.30 takes in one evidence payload. It reads a payload as a YAML sequence
@@ -270,17 +288,9 @@ pub fn issue_led(doc: Document, lead: &str, operator: &str, run_start_ms: i64) -
     let observed_at_ms = observed_at(&doc, run_start_ms);
     let id = uuid::Uuid::now_v7().to_string();
     let bytes = payload_led(&doc, lead);
-    let mut source = Mapping::new();
-    source.insert(key("identity"), Yaml::String(identity(&doc)));
     let mut evidence = Mapping::new();
     evidence.insert(key("id"), Yaml::String(id.clone()));
-    evidence.insert(
-        key("source"),
-        Yaml::Tagged(Box::new(TaggedValue {
-            tag: Tag::new("HumanStatement"),
-            value: Yaml::Mapping(source),
-        })),
-    );
+    evidence.insert(key("source"), source(&doc));
     evidence.insert(key("content_hash"), Yaml::String(content_hash(&bytes)));
     evidence.insert(key("extracted_by"), Yaml::String(operator.to_string()));
     evidence.insert(key("observed_at"), Yaml::Number(observed_at_ms.into()));
@@ -483,6 +493,31 @@ mod tests {
         assert_eq!(
             super::content_hash(bytes),
             "879fb030db2857eeb8a4421c6ed5a446b63615826e305d81ab0ea12ddd88719d"
+        );
+    }
+
+    /// `story:ekr-pin-0-0-43`: a web page's evidence is `!Url <url>`; a file's and a record's stay
+    /// `!HumanStatement` with their identity.
+    #[test]
+    fn a_web_page_is_url_evidence_and_a_file_or_record_a_statement() {
+        let source = |origin: Origin, key: &str| {
+            let mut d = doc("d", "t");
+            d.origin = origin;
+            d.key = key.into();
+            let issued = issue(d, "op", 1);
+            serde_yaml_ng::to_string(&issued.item["evidence"]["source"]).unwrap()
+        };
+        assert_eq!(
+            source(Origin::Url, "https://example.org/a"),
+            "!Url https://example.org/a\n"
+        );
+        assert_eq!(
+            source(Origin::File, "docs/a.md"),
+            "!HumanStatement\nidentity: file:docs/a.md\n"
+        );
+        assert_eq!(
+            source(Origin::Record, "dir:people.list:P-1"),
+            "!HumanStatement\nidentity: record:dir:people.list:P-1\n"
         );
     }
 }

@@ -59560,7 +59560,7 @@
             },
             "ekr_version": {
               "kind": "literal",
-              "value": "0.0.34"
+              "value": "0.0.43"
             },
             "model": {
               "kind": "literal",
@@ -59589,7 +59589,7 @@
                 },
                 "description": "What the support desk learned from its tickets.",
                 "ekr": {
-                  "version": "0.0.34"
+                  "version": "0.0.43"
                 },
                 "format": "cortex.instance/1",
                 "model": {
@@ -59956,7 +59956,7 @@
             },
             "ekr_version": {
               "kind": "literal",
-              "value": "0.0.34"
+              "value": "0.0.43"
             },
             "model": {
               "kind": "literal",
@@ -59975,7 +59975,7 @@
               "value": {
                 "description": "Release notes of the tools the team runs.",
                 "ekr": {
-                  "version": "0.0.34"
+                  "version": "0.0.43"
                 },
                 "format": "cortex.instance/1",
                 "model": {
@@ -60346,7 +60346,7 @@
             },
             "ekr_version": {
               "kind": "literal",
-              "value": "0.0.34"
+              "value": "0.0.43"
             },
             "model": {
               "kind": "literal",
@@ -60365,7 +60365,7 @@
               "value": {
                 "description": "Open-source vector databases.",
                 "ekr": {
-                  "version": "0.0.34"
+                  "version": "0.0.43"
                 },
                 "format": "cortex.instance/1",
                 "model": {
@@ -60420,7 +60420,7 @@
               "value": {
                 "description": "Open-source vector databases and the companies behind them.",
                 "ekr": {
-                  "version": "0.0.34"
+                  "version": "0.0.43"
                 },
                 "format": "cortex.instance/1",
                 "model": {

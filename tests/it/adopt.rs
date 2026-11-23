@@ -129,7 +129,7 @@ fn spec(w: &World, name: &str, schema: &str) -> PathBuf {
             r#"format: cortex.instance/1
 name: {name}
 description: Adopted brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{schema: {name}-schema.yaml, documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:
@@ -740,7 +740,7 @@ fn a_postgres_lineage_another_instance_already_uses_is_not_adopted_again() {
     common::executable(
         &fake,
         r#"case "$1" in
-  --version) echo 'ekr 0.0.34' ;;
+  --version) echo 'ekr 0.0.43' ;;
   ontology) echo '{"revision": 7, "node_types": [{"name": "Organization"}, {"name": "Product"}], "edge_types": []}' ;;
   head) echo '{"revision": 7, "root": {}}' ;;
   *) exit 1 ;;
@@ -810,7 +810,7 @@ fn chat_spec(w: &World, name: &str, extra: &str) -> PathBuf {
             r#"format: cortex.instance/1
 name: {name}
 description: Adopted brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{schema: {name}-schema.yaml, documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

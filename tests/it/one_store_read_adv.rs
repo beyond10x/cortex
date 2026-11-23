@@ -2,7 +2,7 @@
 //! ([`known::Index`]) is grown from each applied document by [`known::Index::applied`], which says
 //! it reads the named things "as the verb resolves them". The story's safety condition is that the
 //! grown index gives batch k+1 the same `Store` hits a fresh `ekr snapshot` would. Each case
-//! applies one document with the real `ekr` 0.0.34 to a store seeded with an `ekr-seed/2` file,
+//! applies one document with the real `ekr` 0.0.43 to a store seeded with an `ekr-seed/2` file,
 //! grows an index built before the apply, and compares its hits with an index of a fresh snapshot.
 //!
 //! A case marked `#[ignore = "adversary: ..."]` fails on the unit's head and names the finding.
@@ -99,7 +99,7 @@ fn world() -> World {
         &spec,
         format!(
             "format: cortex.instance/1\nname: k\ndescription: Test brain.\n\
-             ekr: {{version: \"0.0.34\", bin: \"{bin}\"}}\n\
+             ekr: {{version: \"0.0.43\", bin: \"{bin}\"}}\n\
              seed: {{ekr_seed: seed.yaml, documents: []}}\n\
              model: {{model: claude-haiku-4-5-20251001, budget_usd: \"1\", timeout_s: 60}}\n\
              sources: []\nserve: {{view_port: 18996}}\n",

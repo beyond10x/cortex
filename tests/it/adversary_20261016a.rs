@@ -12,7 +12,9 @@ use std::process::Command;
 use crate::common::{ekr, World};
 use serde_json::Value;
 
-const UNKNOWN: &str = "ekr: publication outcome is unknown; resolve the exact retained occurrence";
+/// What EKR 0.0.43 prints for `StoreError::UnknownCommit`, with exit 3 (`docs/cli.md`, exit codes).
+const UNKNOWN: &str =
+    "ekr: publication-outcome-unknown: publication outcome is unknown; resolve the exact retained occurrence";
 
 /// The stand-in. Hooks are files under `<root>`:
 /// - `unknown-begin`, `fail-begin`: on every `stage begin` while they exist, as in
@@ -28,7 +30,7 @@ fn unknown_ekr(w: &World) -> PathBuf {
 printf '%s|%s\n' "${EKR_STAGE:--}" "$*" >> "$R/ekr-argv.log"
 if [ "$1" = postgres-schema ]; then echo '{"format":"ekr.postgres-schema/1","ready":true}'; exit 0; fi
 if [ "$EKR_BACKEND" = postgres ]; then
-  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "the lineage has no seed" >&2; exit 1; fi
+  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "ekr: ekr.views.NotSeeded: the lineage has no seed" >&2; exit 2; fi
   EKR_BACKEND=sqlite; EKR_STORE="$DB"; export EKR_BACKEND EKR_STORE
 fi
 if [ "$1" = apply-extraction ] && [ -n "$EKR_STAGE" ] && [ -e "$R/kill-after-apply" ]; then
@@ -37,11 +39,11 @@ fi
 case "$1 $2" in
   "stage begin")
     if [ -e "$R/fail-begin" ]; then echo "ekr: the store is unavailable: injected" >&2; exit 1; fi
-    if [ -e "$R/unknown-begin" ]; then "$EKR" "$@" > /dev/null; echo "$UNKNOWN" >&2; exit 1; fi ;;
+    if [ -e "$R/unknown-begin" ]; then "$EKR" "$@" > /dev/null; echo "$UNKNOWN" >&2; exit 3; fi ;;
   "stage publish")
-    if [ -e "$R/unknown-publish" ]; then echo "$UNKNOWN" >&2; exit 1; fi ;;
+    if [ -e "$R/unknown-publish" ]; then echo "$UNKNOWN" >&2; exit 3; fi ;;
   "stage abandon")
-    if [ -e "$R/unknown-after-abandon" ]; then rm "$R/unknown-after-abandon"; "$EKR" "$@" > /dev/null; echo "$UNKNOWN" >&2; exit 1; fi ;;
+    if [ -e "$R/unknown-after-abandon" ]; then rm "$R/unknown-after-abandon"; "$EKR" "$@" > /dev/null; echo "$UNKNOWN" >&2; exit 3; fi ;;
 esac
 exec "$EKR" "$@"
 "#
@@ -87,7 +89,7 @@ fn spec(w: &World, bin: &Path, hook: &Path) -> PathBuf {
         r#"format: cortex.instance/1
 name: pg
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{bin}"}}
+ekr: {{version: "0.0.43", bin: "{bin}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

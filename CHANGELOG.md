@@ -29,6 +29,15 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Changed
 
+- **cortex pins EKR 0.0.43** (was 0.0.34): `cortex setup` installs it by default, and the
+  examples and the CI name it. Run `cortex setup` and point an instance's `ekr.version` at
+  `0.0.43`; cortex no longer reads an EKR 0.0.34 store outcome (story `ekr-pin-0-0-43`).
+- cortex reads a store outcome by EKR's exit status and refusal name, not by its English text: a
+  write EKR cannot say took effect is exit 3 `publication-outcome-unknown` (a run still fails as
+  `store-outcome-unknown`, exit 4), and a store with no seed is exit 2 `ekr.views.NotSeeded`.
+- A fetched web page's evidence is `!Url <its URL>`, which EKR 0.0.43 admits, instead of a
+  `!HumanStatement` whose identity is the URL. Pages applied before keep their statement; both
+  count as evidence of the page when a store is adopted.
 - Development only, no change to the binary: the PostgreSQL tests share one PostgreSQL server per
   test run, each in a database of its own, instead of starting and removing a container each, and
   the test step of `task check` fails over 120 s by default (`TEST_BUDGET=enforce`).

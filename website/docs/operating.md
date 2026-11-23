@@ -141,7 +141,7 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 1 | `path-refused` | `--path` named a directory for a source that is not a `files` source, or for `<instance>/seed`; nothing ran or was recorded, and `--record-failure` counts nothing |
 | 2 | none | an error before any outcome, on stderr as `cortex: <message>` (an unreadable registry, a home that cannot be locked) |
 | 3 | `disabled` | the source is disabled after two failed runs in a row; nothing ran. `cortex source enable` switches it back on |
-| 4 | `store-outcome-unknown` | EKR could not say whether a store write of the run took effect (`publication outcome is unknown` from a stage verb, `apply-extraction` or a transaction's commit); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage or extracts the batch again, and a gated `sqlite` run that had kept its snapshot is undone from it (see [Undoing a run](#undoing-a-run)) |
+| 4 | `store-outcome-unknown` | EKR could not say whether a store write of the run took effect (`publication-outcome-unknown`, exit 3, from a stage verb, `apply-extraction` or a transaction's commit); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage or extracts the batch again, and a gated `sqlite` run that had kept its snapshot is undone from it (see [Undoing a run](#undoing-a-run)) |
 | 5 | `connection-unavailable` | Connectors answered a retryable failure to every attempt of `connections revalidate` (or of the `connections list` read before it) before the run fetched anything; not a failure of the source, so `--record-failure` counts nothing, and the next scheduled run starts as usual (see [Failures](#failures)) |
 | 6 | `batch-too-large` | a part of several documents of an extraction batch was still too long for the model's window, or its answer still cut off, after the batch was split 3 deep; the reason names that part's documents and the batch size used. Not a failure of the source, so `--record-failure` counts nothing; the batches before it stay applied, and a later run extracts the rest. A part of one document does not end the run: it is left out alone, named in `too_large` and marked seen (see [The batch size](./spec-file.md#the-batch-size)) |
 | 7 | `model-unavailable` | the model could not be reached: `detail.cause` is `refused` (`claude` could not be started, or the connection was refused), `not-loaded` (the server behind the gateway has not loaded the model) or `gateway-down` (HTTP 502, 503, 504 or 529 overloaded). Not a failure of the source, so `--record-failure` counts nothing, however long the model is down; the batches before it stay applied, and a later run extracts the rest (see [When the model cannot be reached](#when-the-model-cannot-be-reached)) |
@@ -204,16 +204,17 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    again, since the mapping it was applied with is unknown and applying a record calls no model.
    A run that leaves wanted documents beyond `max_documents_per_run` reports
    `stopped: document-cap` and counts them in `documents_left`; the next run wants them again.
-4. **Issue evidence.** cortex mints one evidence item per document; the model never does. The
-   item is observed when the document says it was written: a web page's published time or a
-   record's `time`, read as RFC 3339, as a date alone (00:00 UTC) or as epoch seconds with an
-   optional fraction (9 to 11 digits before it, as in a chat export's `ts`). A time that is none
-   of these, or lies before 1970 or after the run's start, and a document with no time, are
-   observed at the run's start. EKR dates each fact from the earliest observed time of the
-   evidence it cites, so a fact is valid from when its source said it. Which documents a run
-   keeps, and its window, still go by the run's own times, except that a run that leaves wanted
-   documents unapplied moves its window to the earliest of their record times (see
-   [the spec file](./spec-file.md#kind-connectors)).
+4. **Issue evidence.** cortex mints one evidence item per document; the model never does. A web
+   page's item cites the page as `!Url <its URL>`; a file's or a record's cites a
+   `!HumanStatement` naming `file:<path>` or `record:<id>`. The item is observed when the
+   document says it was written: a web page's published time or a record's `time`, read as RFC
+   3339, as a date alone (00:00 UTC) or as epoch seconds with an optional fraction (9 to 11 digits
+   before it, as in a chat export's `ts`). A time that is none of these, or lies before 1970 or
+   after the run's start, and a document with no time, are observed at the run's start. EKR dates
+   each fact from the earliest observed time of the evidence it cites, so a fact is valid from
+   when its source said it. Which documents a run keeps, and its window, still go by the run's own
+   times, except that a run that leaves wanted documents unapplied moves its window to the
+   earliest of their record times (see [the spec file](./spec-file.md#kind-connectors)).
 5. **Extract** in batches of up to `model.batch_chars` characters (UTF-8 bytes), 60,000 unless the spec gives a
    size or a gateway's window sets one (see [The batch size](./spec-file.md#the-batch-size)); a
    batch too long for the model's window is split and asked again. Each batch is one `claude -p` call that
@@ -449,13 +450,12 @@ count. `cortex source enable <instance>/<source>` switches it back on.
 
 A run that ends because EKR cannot say whether one of its store writes took effect (`ekr stage
 begin`, `ekr stage publish`, `ekr apply-extraction` or the commit of a transaction answering
-`publication outcome is unknown; resolve the exact retained occurrence`) fails as
-`store-outcome-unknown` and exits 4. The store failed, not the source: `--record-failure` counts
-nothing, so `consecutive_failures` does not move and the source is never disabled by it. Its
-status, metric and hook report it as any failed run's do. The next run settles the stage, as it
-settles the stage of a run that was killed (see [Undoing a run](#undoing-a-run)). A run in no
-stage and under no gate marks no document of the batch whose apply was unknown as seen, nor of any
-later batch, so the next run extracts that batch again. A `sqlite` run held to a `gate` that had
+`publication-outcome-unknown` with exit 3) fails as `store-outcome-unknown` and exits 4. The
+store failed, not the source: `--record-failure` counts nothing, so `consecutive_failures` does
+not move and the source is never disabled by it. Its status, metric and hook report it as any
+failed run's do. The next run settles the stage, as it settles the stage of a run that was killed
+(see [Undoing a run](#undoing-a-run)). A run in no stage and under no gate marks no document of
+the batch whose apply was unknown as seen, nor of any later batch, so the next run extracts that batch again. A `sqlite` run held to a `gate` that had
 already kept its snapshot is undone instead, as a run its gate refuses is: the snapshot is
 restored, `state/` is put back, and the `cortex.log` line says so; the run still fails as
 `store-outcome-unknown`, exits 4 and counts nothing. Nothing is lost; a batch that did land is written a
@@ -762,7 +762,7 @@ seed belongs to the store's earlier life. The spec's sources are added, and the 
   `store-held`, naming that instance, and `create` refuses it as `seed-refused`. cortex records
   each `postgres` instance's lineage in `instances/<name>/meta.json`.
 - **The host.** EKR opens a store only under the tenant and the authority (its agents and
-  validation profile) it was seeded with; under another host it answers "the lineage has no seed"
+  validation profile) it was seeded with; under another host it answers `ekr.views.NotSeeded`
   or `bootstrap-authority-mismatch`, and adopting answers `store-unreadable`. `--host <file>` names
   the `ekr.cli-host/1` document the store was seeded under, which is copied as
   `instances/<name>/host.json`. Without it, cortex writes its own host for tenant `<name>`, which

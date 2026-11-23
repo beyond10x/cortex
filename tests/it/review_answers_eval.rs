@@ -163,7 +163,7 @@ impl World {
                 r#"format: cortex.instance/1
 name: {NAME}
 description: Local fixture.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model:
   model: test-model
@@ -267,7 +267,7 @@ fn stand_in_ekr(root: &Path) {
         &format!(
             r#"R="{root}"
 case "$1" in
-  --version) echo 'ekr 0.0.34' ;;
+  --version) echo 'ekr 0.0.43' ;;
   example) echo '{{}}' ;;
   seed) [ -n "$EKR_STORE" ] && : > "$EKR_STORE"; echo '{{"committed_at":1}}' ;;
   head) echo '{{"revision":1}}' ;;

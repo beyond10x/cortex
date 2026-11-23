@@ -25,7 +25,7 @@ fn spec_text(name: &str, store: &str) -> String {
         r#"format: cortex.instance/1
 name: {name}
 description: Test brain.
-ekr: {{version: "0.0.34", bin: "{ekr}"}}
+ekr: {{version: "0.0.43", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:
@@ -1357,7 +1357,7 @@ fn a_refused_postgres_seed_leaves_no_lineage_and_a_corrected_create_succeeds() {
     assert!(!w.home.join("instances/pgbad").exists());
     assert_eq!(
         tenant_head(&w.root, "pgbad", &pg.app),
-        Err("ekr: the lineage has no seed".to_string()),
+        Err("ekr: ekr.views.NotSeeded: the lineage has no seed".to_string()),
         "the refused seed left a PostgreSQL lineage"
     );
 
@@ -1680,7 +1680,7 @@ fn sqlite_backed_ekr(w: &World) -> PathBuf {
 printf '%s|%s\n' "$EKR_BACKEND" "$*" >> "$R/ekr-argv.log"
 if [ "$1" = postgres-schema ]; then echo '{{"format":"ekr.postgres-schema/1","ready":true}}'; exit 0; fi
 if [ "$EKR_BACKEND" = postgres ]; then
-  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "the lineage has no seed" >&2; exit 1; fi
+  if [ "$1" = head ] && [ ! -e "$DB" ]; then echo "ekr: ekr.views.NotSeeded: the lineage has no seed" >&2; exit 2; fi
   EKR_BACKEND=sqlite; EKR_STORE="$DB"; export EKR_BACKEND EKR_STORE
 fi
 exec "$EKR" "$@"
