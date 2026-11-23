@@ -90,6 +90,7 @@ mod it {
     mod review_ekr_pin_and_busy;
     mod review_extraction_coverage;
     mod review_instance_update;
+    mod review_placeholder_restore;
     mod review_run_path;
     mod review_run_report_cap;
     mod review_runbook_probe;
