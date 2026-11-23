@@ -1,6 +1,6 @@
 # generated from cortex v1
-# model digest b77e573a24f45c33d239857ef5217a99252c69722f75361972dcf01ec51cdf99
-# contract digest 29811d0b9b56977962a25600ad4de755d79ace9f3422eb0c1d7f15fd2f1ad8be
+# model digest 2895c30bb48baea3101d05b9af9ed31adfb6761f7bf17c72829b6b2d0565f3c1
+# contract digest 5f9b4ef28633cc2f413823c6a6b41bcc5f1bb05a952e8989056cf06b6f2d831a
 # do not edit: regenerate with `ess synthesize --layout crate`
 
 [package]

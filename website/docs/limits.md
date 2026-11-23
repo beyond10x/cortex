@@ -135,9 +135,11 @@ stand; [Status](./status.mdx) lists what is planned.
   `expand` walks it. EKR does not backfill: relations a store took under EKR 0.0.30 or earlier stay
   assertions without an edge, and graph reads do not walk them.
 - **Change detection is a content hash.** `ContentHash` is the only `change` value. A document
-  whose text changed is extracted again only after `refresh_after_days`; cortex retracts nothing
-  it applied from the earlier text. A record read from a file, and a `structured` change whose
-  links to tags alone changed, are applied again on the next run.
+  whose text changed (for a web page also its title, description or date) is extracted again
+  only after `refresh_after_days`; cortex retracts nothing
+  it applied from the earlier text. A record read from a file, a `structured` change whose
+  links to tags alone changed, and a `structured` record whose mapping changed are applied again
+  on the next run.
 - **A structured record meets nodes of another type only with `store_lookup: AnyType`.** By
   default EKR resolves a record's aliases, its alias templates included, within the mapping's
   `node_type` only, so a store node of another type holding the same alias gets a second node

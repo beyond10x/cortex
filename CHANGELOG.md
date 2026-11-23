@@ -16,6 +16,40 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   It also read a document key such as `group/repo@3f2a9c1` there, and the model was shown
   `[Email-1]` for it. What is left of a cut address's domain now holds no digit, so a commit id
   or a version (`tool@1.4.2`) after `@` is kept.
+- A `web` source reports what the provider did not read. Each URL in a `websearch.fetch` or
+  `websearch.crawl` answer's `failed` list, and an answer that says `complete: false`, is named in
+  fetch-only's `unread` and in the run's `stopped`, with the provider's reason or truncation
+  causes. A search short of `max_results` alone is not named. 0.8.0 ignored both and reported a
+  run whose only URL failed as a plain `ran` (review of 0.7.2, finding 7).
+- A web page's description is cut, with its title, to what the 16,384-byte evidence payload
+  holds, leaving the page's text its own length or 8,192 bytes. The prompt, the evidence and the
+  stored `WebPage` `description` hold the same text. 0.8.0 showed the model and stored a long
+  description whose tail its evidence did not hold (review of 0.7.2, finding 10).
+- A `structured` record whose mapping changed is applied again at the next run, at once and
+  whatever `refresh_after_days`, its text changed or not. 0.8.0 answered `cortex update` with
+  `updated` and left every unchanged record on the old mapping, so a property added to the mapping
+  reached the store only for records that changed later. The state file remembers each record's
+  mapping (`fields_hash`); a record applied by 0.8.0 has none and is applied again once, with no
+  model call.
+- A web page whose title, description or publication date changed while its URL and body stayed
+  the same is a changed document, extracted again once `refresh_after_days` have passed, so its
+  `WebPage` node gets the new values. 0.8.0 counted it unchanged. A page applied by 0.8.0 takes
+  the fields of its next fetch as applied and is not extracted again for them.
+- `cortex run --fetch-only` names in the new `skipped` list each document a run would leave out
+  after it failed alone on 3 consecutive runs, and counts it neither `new` nor `changed`.
+  0.8.0 forecast it as model work that the run then skipped.
+- `create`, `update` and `adopt` read every field the published JSON Schema types `integer` as
+  that schema does: a number with no fractional part in any spelling (`timeout_s: 1.0`, `1e3`) is
+  that whole number, where 0.8.0 refused `1.0` as not a whole number. A fraction (`1.5`) is still
+  refused, naming the field (review of 0.7.2, finding 25).
+- The conformance suite reads the spec document each create, adopt and update step supplies
+  through the command line's own loader (`load_given`) and gives the behaviour the spec it
+  loaded, where it gave every step one fixed spec; a document the loader refuses fails its
+  scenario. Three authored scenarios (`spec/scenarios/`) create, adopt and update from
+  `cortex.instance/1` documents the loader accepts. The 88 steps whose document is ESS 0.77.0's
+  synthesized witness (`format: spec.format`) are counted and must be refused at their format;
+  ESS gives a struct input a document of its own only from `ess/33` (ESS 0.78.0) (review of
+  0.7.2, finding 26).
 
 ## 0.8.0 — 2026-11-23
 

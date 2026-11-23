@@ -248,6 +248,7 @@ fn keys_that_hold_no_credential_keep_their_stored_form() {
                 hash: None,
                 applied_at: 1,
                 unlinked_hash: None,
+                fields_hash: None,
             },
         );
     }

@@ -1,0 +1,48 @@
+# The command line reads `--spec` through its loader (`src/spec.rs`) and passes the document it
+# loaded, and the values it reads from it, to `CreateInstance`. This document is one the loader
+# accepts: a model behind a gateway, bounded in tokens, and one web source.
+type: ess-scenario/5
+domain: cortex.instance
+scenario: create-from-a-loaded-spec
+summary: An operator creates an instance from a cortex.instance/1 spec the loader accepts.
+
+timeline:
+  - at: 2026-11-23T09:00:00Z
+    command: cortex.instance.CreateInstance
+    actor: cortex.instance.Operator
+    input:
+      name: release-notes
+      description: Release notes of the tools the team runs.
+      model: claude-haiku-4-5
+      ekr_version: 0.0.34
+      seed_digest: 2ff1b8f4636e011835284dfa1480606c60c4af8965e03ba527623dd8c83ae843
+      spec:
+        format: cortex.instance/1
+        name: release-notes
+        description: Release notes of the tools the team runs.
+        ekr: {version: 0.0.34}
+        seed: {documents: []}
+        model:
+          model: claude-haiku-4-5
+          gateway: {base_url: "https://gateway.example", token_env: GATEWAY_TOKEN}
+          budget_tokens: 100000
+          timeout_s: 300
+        sources:
+          - name: news
+            schedule: daily
+            settings:
+              kind: web
+              value:
+                connection: conn_news
+                input:
+                  input: search
+                  value:
+                    queries: [release notes]
+                    policy: {topic: news, max_results: 3, include_domains: [], exclude_domains: []}
+            policy: {refresh_after_days: 7, change: ContentHash, max_documents_per_run: 10, max_chars_per_document: 5000}
+        serve: {view_port: 0}
+        snapshots: {keep: 3}
+    outcome: created
+    events:
+      - event: cortex.instance.InstanceCreated
+        payload: {name: release-notes}

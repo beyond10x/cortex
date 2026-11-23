@@ -262,6 +262,7 @@ fn a_stored_key_holding_the_rest_of_a_credential_is_dropped_on_load() {
                 hash: None,
                 applied_at: 1,
                 unlinked_hash: None,
+                fields_hash: None,
             },
         );
         state.child_failures.insert(k.clone(), 2);
