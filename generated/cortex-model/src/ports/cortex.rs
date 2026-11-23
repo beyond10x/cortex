@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 2b4c97d0b48bef360a506d832f098e346fd275e38cbe5d10f71d010956a32f90
-// contract digest d0905ae9337f935c533b8699e7264b78195c287399773c8f62412310f1bd4fbd
+// model digest 5b6d0954157f8538f16161f373bbca9773e37173af7f9ff6c541b6006579fbb7
+// contract digest 29668cbe9b622ba76965efcd5e3ee2dca6f10d45cfe1f9feefff6afa6173f870
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -208,6 +208,7 @@ where
     pub fn enable_source(&mut self, input: crate::instance::EnableSource) -> Result<crate::instance::EnableSourceOutcome, crate::obligation::UnmetObligation> {
         let outcome = self.behaviors.enable_source(input)?;
         match &outcome {
+            crate::instance::EnableSourceOutcome::Busy { .. } => {}
             crate::instance::EnableSourceOutcome::Enabled { source_enabled, .. } => {
                 self.outbox.push(PublishedEvent::SourceEnabled(source_enabled.clone()));
             }
@@ -306,6 +307,7 @@ where
     pub fn remove_instance(&mut self, input: crate::instance::RemoveInstance) -> Result<crate::instance::RemoveInstanceOutcome, crate::obligation::UnmetObligation> {
         let outcome = self.behaviors.remove_instance(input)?;
         match &outcome {
+            crate::instance::RemoveInstanceOutcome::Busy { .. } => {}
             crate::instance::RemoveInstanceOutcome::Removed { instance_removed, .. } => {
                 self.outbox.push(PublishedEvent::InstanceRemoved(instance_removed.clone()));
             }
@@ -390,6 +392,7 @@ where
         match &outcome {
             crate::instance::UpdateInstanceOutcome::SeedChangeRefused { .. } => {}
             crate::instance::UpdateInstanceOutcome::NotActive { .. } => {}
+            crate::instance::UpdateInstanceOutcome::Busy { .. } => {}
             crate::instance::UpdateInstanceOutcome::RekeyRefused { .. } => {}
             crate::instance::UpdateInstanceOutcome::Updated { instance_updated, .. } => {
                 self.outbox.push(PublishedEvent::InstanceUpdated(instance_updated.clone()));

@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 2b4c97d0b48bef360a506d832f098e346fd275e38cbe5d10f71d010956a32f90
-contract digest slice-sha256/2:7474aa2c0d83210bf86d413a8f1f3e3139b0d120f6f0cb43bc49db869ba66964
+model digest 5b6d0954157f8538f16161f373bbca9773e37173af7f9ff6c541b6006579fbb7
+contract digest slice-sha256/2:70676605d0df39de6bc6d3dca54639e77d5f42f74f0afbb797079a0433e5040a
 do not edit: regenerate with `ess generate`
 -->
 
@@ -1080,8 +1080,11 @@ It has five outcomes.
 It takes:
 
 - `source_id` — `cortex.instance.SourceId`
+- `no_wait` — `Optional<Boolean>`, which may be absent
 
-It has three outcomes.
+It has four outcomes.
+
+**`busy`** — Nothing changed; the source stays disabled and its timer as it was. Eligible when (defined(no_wait) and no_wait == true); externally decided: Another cortex command holds the home's lock. No entity in this specification changes. It reports `cortex.instance.InstanceBusy`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`enabled`** — The failure count is reset and the timer is enabled again. The default branch, taken when no other outcome's condition matched. It moves a `cortex.instance.Source` from `Disabled` to `Enabled`, along the declared move `enable`. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceEnabled`. It sets `consecutive_failures` from `"0"`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -1183,8 +1186,11 @@ It has four outcomes.
 It takes:
 
 - `name` — `cortex.instance.InstanceName`
+- `no_wait` — `Optional<Boolean>`, which may be absent
 
-It has three outcomes.
+It has four outcomes.
+
+**`busy`** — Nothing changed; the timers and the viewer are as they were. Eligible when (defined(no_wait) and no_wait == true); externally decided: Another cortex command holds the home's lock. No entity in this specification changes. It reports `cortex.instance.InstanceBusy`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`removed`** — The timers and the viewer are gone; the directory and the store stay. The default branch, taken when no other outcome's condition matched. It moves a `cortex.instance.Instance` from `Active` to `Removed`, along the declared move `remove`. The instance is the one named by the input field `name`. It emits `cortex.instance.InstanceRemoved`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -1285,12 +1291,15 @@ It takes:
 - `model` — `String`
 - `spec` — `cortex.instance.InstanceSpec`
 - `seed_digest` — `String`
+- `no_wait` — `Optional<Boolean>`, which may be absent
 
-It has five outcomes.
+It has six outcomes.
 
 **`seed-change-refused`** — Nothing changed. Taken when the existing subject's stored fields satisfy `seed_digest != input.seed_digest`. No entity in this specification changes. It reports `cortex.instance.SeedChangeRefused`, carrying `name`. It emits nothing. A test establishes and independently observes the subject enum fact before selecting this branch.
 
 **`not-active`** — The instance is removed; nothing changed. Taken when the existing subject's stored fields satisfy `state == Removed`. No entity in this specification changes. It reports `cortex.instance.InstanceNotActive`, carrying `state`. It emits nothing. A test establishes and independently observes the subject enum fact before selecting this branch.
+
+**`busy`** — Nothing changed: the frozen spec, the sources and the units are as they were, so an orchestrator can try the update again between runs. Eligible when (defined(no_wait) and no_wait == true); externally decided: Another cortex command holds the home's lock. No entity in this specification changes. It reports `cortex.instance.InstanceBusy`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`rekey-refused`** — Nothing changed; the frozen spec and every source's seen state are as they were. Decided outside the input: A source the frozen spec and the new one both name, whose `state/<source>.json` holds a seen document, changes a field its documents are keyed by: its `kind`; a `connectors` source's `adapter`, `operation` or `id`; a `files` source's `records` format (no `records` and `WholeFile` are one), with a per-record format their `records.id`, or a root of its `paths` that reaches a seen file under another spelling (`docs` and `./docs`; adding, removing or reordering roots is not one); a `structured` source's `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths` or `glob` as written, or its `mapping.id`. A record path is compared as it is read (`key` and `$.key` are one path). No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.RekeyRefused`, carrying `name`, `source` and `field`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
@@ -1731,15 +1740,21 @@ Reported by `cortex.instance.RunSource` on its `fetch-only-failed` and `fetch-fa
 
 ### `InstanceBusy`
 
-Another cortex command holds the home's lock, or, for a restore, another connection held the store's write lock for 5 seconds; nothing was restored or run. A reader that holds the store open does not.
+Another cortex command holds the home's lock, or, for a restore, another connection held the store's write lock for 5 seconds; nothing was restored, run, updated, removed or enabled. A reader that holds the store open does not.
 
 It carries:
 
 - `reason` — `String`
 
+Reported by `cortex.instance.EnableSource` on its `busy` outcome.
+
+Reported by `cortex.instance.RemoveInstance` on its `busy` outcome.
+
 Reported by `cortex.instance.RestoreSnapshot` on its `busy` outcome.
 
 Reported by `cortex.instance.RunSource` on its `busy` outcome.
+
+Reported by `cortex.instance.UpdateInstance` on its `busy` outcome.
 
 ### `InstanceNotActive`
 
@@ -2052,4 +2067,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `2b4c97d0b48bef360a506d832f098e346fd275e38cbe5d10f71d010956a32f90` · contract digest `slice-sha256/2:7474aa2c0d83210bf86d413a8f1f3e3139b0d120f6f0cb43bc49db869ba66964`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `5b6d0954157f8538f16161f373bbca9773e37173af7f9ff6c541b6006579fbb7` · contract digest `slice-sha256/2:70676605d0df39de6bc6d3dca54639e77d5f42f74f0afbb797079a0433e5040a`. Do not edit this file; change the specification and regenerate it with `ess generate`.

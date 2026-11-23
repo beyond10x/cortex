@@ -42,6 +42,11 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   `busy` at once with exit status 9 and runs and records nothing, so an external scheduler can
   skip a collection that is still busy. Without the flag a run waits for the lock, as before
   (review of 0.7.2, finding 18).
+- `cortex update`, `cortex remove` and `cortex source enable` take `--no-wait` too: while another
+  cortex command holds the home's lock they answer `busy` at once with exit status 9 and change
+  nothing (an update leaves the frozen spec as it was), so an orchestrator that changes an
+  instance's spec while a run may be in flight gets an answer at once instead of waiting minutes.
+  Without the flag they wait for the lock, as before (story `update-no-wait`).
 
 ### Fixed
 

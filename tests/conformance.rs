@@ -702,6 +702,7 @@ impl Scenario {
                     model: s("model"),
                     spec: placeholder_spec(),
                     seed_digest: s("seed_digest"),
+                    no_wait: input.get("no_wait").and_then(Value::as_bool),
                 })
                 .unwrap()
             {
@@ -710,6 +711,10 @@ impl Scenario {
                     Some(("SeedChangeRefused", json!({"name": error.name.0}))),
                 ),
                 m::UpdateInstanceOutcome::Updated { .. } => ("updated", None),
+                m::UpdateInstanceOutcome::Busy { error } => (
+                    "busy",
+                    Some(("InstanceBusy", json!({"reason": error.reason}))),
+                ),
                 m::UpdateInstanceOutcome::RekeyRefused { error } => (
                     "rekey-refused",
                     Some((
@@ -732,10 +737,15 @@ impl Scenario {
             "cortex.instance.RemoveInstance" => match app
                 .remove_instance(m::RemoveInstance {
                     name: m::InstanceName(s("name")),
+                    no_wait: input.get("no_wait").and_then(Value::as_bool),
                 })
                 .unwrap()
             {
                 m::RemoveInstanceOutcome::Removed { .. } => ("removed", None),
+                m::RemoveInstanceOutcome::Busy { error } => (
+                    "busy",
+                    Some(("InstanceBusy", json!({"reason": error.reason}))),
+                ),
                 m::RemoveInstanceOutcome::WrongState { error } => (
                     "wrong-state",
                     Some((
@@ -871,10 +881,15 @@ impl Scenario {
             "cortex.instance.EnableSource" => match app
                 .enable_source(m::EnableSource {
                     source_id: m::SourceId(s("source_id")),
+                    no_wait: input.get("no_wait").and_then(Value::as_bool),
                 })
                 .unwrap()
             {
                 m::EnableSourceOutcome::Enabled { .. } => ("enabled", None),
+                m::EnableSourceOutcome::Busy { error } => (
+                    "busy",
+                    Some(("InstanceBusy", json!({"reason": error.reason}))),
+                ),
                 m::EnableSourceOutcome::WrongState { error } => (
                     "wrong-state",
                     Some((
@@ -1692,7 +1707,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     if std::env::var_os(SUITE_ENV).is_none() {
         assert_eq!(
             scenarios.len(),
-            125,
+            128,
             "the suite's scenario count moved; update this floor"
         );
     }
