@@ -19,6 +19,12 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Fixed
 
+- A batch that holds several replacing values of one entity and property with nothing stored to
+  replace orders them by the earliest document each fact cites, the time EKR stores the fact
+  from. 0.8.0 ordered a fact citing an early and a late document by the late one, applied it
+  after a value it is older than, and EKR refused it with `invalid-supersession`, naming every
+  document it cited in `rejected`. A replacement applied again that EKR still refuses that way
+  is kept as history, as one of the batch's first apply is (`facts_history`).
 - A `web` source reports what the provider did not read. Each URL in a `websearch.fetch` or
   `websearch.crawl` answer's `failed` list, and an answer that says `complete: false`, is named in
   fetch-only's `unread` and in the run's `stopped`, with the provider's reason or truncation

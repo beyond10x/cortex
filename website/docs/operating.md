@@ -230,8 +230,9 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    (`replacement-without-active-assertion`); cortex then applies that fact again in the same batch
    without `replaces`, so its value is stored as a plain assertion, and counts it in the run's
    `facts_reapplied` instead of `rejected`. When the batch holds several such facts for one entity
-   and property, the earliest (by its document's time) is stored that way and each later one is
-   applied after it, still replacing, so one value stays current here too. When the batch also
+   and property, the earliest is stored that way and each later one is applied after it, still
+   replacing, so one value stays current here too. A fact's time is that of the earliest document
+   it cites, the time EKR stores it from. When the batch also
    states a plain value of that entity and property, which EKR stored, that value takes its place
    in the same time order: a rejected replacement older than it is not applied again (the batch's
    newer value stays current, and the replacement is listed in `rejected`), and the newer ones are
@@ -243,7 +244,8 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    fact again without `replaces`, so the value is stored from its own document's time, and
    supersedes it by the current value from the current value's start, so it ends there
    (`history.yaml` and `history-ends.yaml` in the batch's directory). The newer value stays
-   current, nothing is listed in `rejected`, and the run counts the fact in `facts_history`. Two
+   current, nothing is listed in `rejected`, and the run counts the fact in `facts_history`. A
+   replacement applied again as above that EKR rejects the same way is kept as history too. Two
    older values of one entity and property in one batch end one where the next begins. If a step
    of this fails in the store, the run stops after the batch and the documents it carried are not
    marked seen, so a later run extracts them again.
