@@ -57,8 +57,13 @@ directory, so the instance keeps working when the originals move.
 
 | field | meaning |
 |---|---|
-| `version` | the pinned EKR version |
+| `version` | the pinned EKR version, which the instance records as its engine |
 | `bin` | optional path to the `ekr` binary; `~/` is expanded. Without it, cortex uses `~/.cache/cortex/bin/<version>/bin/ekr`, where `cortex setup` installs it |
+
+`cortex create` and `cortex adopt` run `<bin> --version` first and refuse a binary that reports
+another version than `version`, before any store exists: `create` answers `seed-refused` and
+`adopt` exits 2, each naming the version the binary reported. `cortex setup` refuses a binary of
+another version in the cache the same way; remove it and run `cortex setup` again.
 
 ## `seed`
 

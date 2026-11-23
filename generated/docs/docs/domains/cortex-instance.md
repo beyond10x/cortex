@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 37a5c9c7902bf753546e91cac2e2cdfa93819d7b3efc21c30615b90c15f60700
-contract digest slice-sha256/2:be565c2d69067a23a22046324eff8b8f94016d1334789893e5b91d4c7f158640
+model digest 2b4c97d0b48bef360a506d832f098e346fd275e38cbe5d10f71d010956a32f90
+contract digest slice-sha256/2:7474aa2c0d83210bf86d413a8f1f3e3139b0d120f6f0cb43bc49db869ba66964
 do not edit: regenerate with `ess generate`
 -->
 
@@ -1071,7 +1071,7 @@ It has five outcomes.
 
 **`partial`** — As `created`, but some seed documents were not extracted. They are not recorded as seen, so `cortex run <name>/seed` extracts them. Decided outside the input: The seed extraction stops before every seed document is extracted: the budget is spent, or a model call or an apply fails. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It creates a `cortex.instance.Instance`, which starts in `Active`. The new instance's identity is published as `name` on `cortex.instance.InstanceCreated`. It emits `cortex.instance.InstanceCreated`. It sets `description` from `input.description`, `model` from `input.model`, `ekr_version` from `input.ekr_version` and `seed_digest` from `input.seed_digest`. A test reaches it by injecting the declared fault, because no input can.
 
-**`created`** — The store is seeded, the seed schema applied and the seed documents extracted into it. The viewer runs on its port, unless the instance was created without units, which starts no viewer and names no address. The sources are added by AddSource, one per source in the spec. The default branch, taken when no other outcome's condition matched. It creates a `cortex.instance.Instance`, which starts in `Active`. The new instance's identity is published as `name` on `cortex.instance.InstanceCreated`. It emits `cortex.instance.InstanceCreated`. It sets `description` from `input.description`, `model` from `input.model`, `ekr_version` from `input.ekr_version` and `seed_digest` from `input.seed_digest`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+**`created`** — The store is seeded, the seed schema applied and the seed documents extracted into it. The viewer runs on its port. The sources are added by AddSource, one per source in the spec. The default branch, taken when no other outcome's condition matched. It creates a `cortex.instance.Instance`, which starts in `Active`. The new instance's identity is published as `name` on `cortex.instance.InstanceCreated`. It emits `cortex.instance.InstanceCreated`. It sets `description` from `input.description`, `model` from `input.model`, `ekr_version` from `input.ekr_version` and `seed_digest` from `input.seed_digest`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
 ### `EnableSource`
 
@@ -1242,10 +1242,13 @@ It takes:
 
 - `source_id` — `cortex.instance.SourceId`
 - `fetch_only` — `Optional<Boolean>`, which may be absent
+- `no_wait` — `Optional<Boolean>`, which may be absent
 
-It has 13 outcomes.
+It has 14 outcomes.
 
 **`disabled`** — The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome. Taken when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)` holds of the input. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.RunSkipped`. It sets `last_outcome` from `"disabled"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test establishes the declared subject state and constructs input selecting this branch in that state.
+
+**`busy`** — Nothing ran: the source was not read, nothing was counted, and the source's status, metrics and hook are untouched, so an external scheduler can skip this collection. Eligible when (defined(no_wait) and no_wait == true); externally decided: Another cortex command holds the home's lock. No entity in this specification changes. It reports `cortex.instance.InstanceBusy`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`fetch-only-failed`** — Nothing was written: not the source's status, its seen documents or its window, and no failure is counted. The command line prints it as `fetch-failed`. Eligible when (defined(fetch_only) and fetch_only == true); externally decided: Connectors or the filesystem fails to deliver the source's documents in a fetch-only run. No entity in this specification changes. It reports `cortex.instance.FetchFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
@@ -1728,13 +1731,15 @@ Reported by `cortex.instance.RunSource` on its `fetch-only-failed` and `fetch-fa
 
 ### `InstanceBusy`
 
-Another cortex command holds the home's lock, or another connection held the store's write lock for 5 seconds; nothing was restored. A reader that holds the store open does not.
+Another cortex command holds the home's lock, or, for a restore, another connection held the store's write lock for 5 seconds; nothing was restored or run. A reader that holds the store open does not.
 
 It carries:
 
 - `reason` — `String`
 
 Reported by `cortex.instance.RestoreSnapshot` on its `busy` outcome.
+
+Reported by `cortex.instance.RunSource` on its `busy` outcome.
 
 ### `InstanceNotActive`
 
@@ -2047,4 +2052,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `37a5c9c7902bf753546e91cac2e2cdfa93819d7b3efc21c30615b90c15f60700` · contract digest `slice-sha256/2:be565c2d69067a23a22046324eff8b8f94016d1334789893e5b91d4c7f158640`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `2b4c97d0b48bef360a506d832f098e346fd275e38cbe5d10f71d010956a32f90` · contract digest `slice-sha256/2:7474aa2c0d83210bf86d413a8f1f3e3139b0d120f6f0cb43bc49db869ba66964`. Do not edit this file; change the specification and regenerate it with `ess generate`.
