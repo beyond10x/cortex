@@ -74,6 +74,11 @@ stand; [Status](./status.mdx) lists what is planned.
   `(see https://host/x).`; a citation such as `[1]` after the punctuation that ends it stays
   outside. A bracket inside a bracket ends the link. A bare host
   with no path, such as `example.org`, is not taken.
+- **An address cut at the end of a text.** `Email` also takes an address a provider cut before
+  its top-level domain, at the very end of a text (`jane.doe@exam`), when what is left of its
+  domain holds no digit. A name followed by `@` and a commit id or a version there
+  (`group/repo@3f2a9c1`, `tool@1.4.2`) is kept; a commit id of letters only (`repo@abcdefa`) is
+  taken as a cut address.
 - **Rare names are a guess.** `RareName` takes as a name a word that starts with a capital letter,
   has a lower-case letter in it, and appears at most `rare_limit` times (default 1) in the batch's
   document texts. Only text the model is shown counts: a word inside an address, a link, a known

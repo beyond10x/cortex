@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 77b40f4f3441dcc19a4d5fbfc56d13afcd80b03b06fe2e8969b06d2c71511d85
-// contract digest 984a06ae5487642c68800955902529ad4815f478240ce717e522e1b65a5696d8
+// model digest 1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea
+// contract digest edb08f72285adea731056f77a39b2f4b42617ddf03746589b9ce338333a0e3ad
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Answers — `cortex.ask`.
@@ -26,6 +26,8 @@ pub enum AnswerOutcome {
     ClientClosed,
     /// `cut-off`.
     CutOff,
+    /// `refused`.
+    Refused,
 }
 
 /// The states of `cortex.ask.AnswerRecord`, as runtime values.
@@ -63,6 +65,8 @@ pub struct AskDone {
     pub nodes: Vec<String>,
     /// `evidence` — `List<String>`.
     pub evidence: Vec<String>,
+    /// `unsupported` — `List<String>`.
+    pub unsupported: Vec<String>,
     /// `input_tokens` — `Integer`.
     pub input_tokens: i64,
     /// `output_tokens` — `Integer`.
@@ -886,6 +890,13 @@ pub enum AskOutcome {
         /// Why it was refused: `cortex.ask.ReaderFailed`.
         error: ReaderFailed,
     },
+    /// `refused` — externally decided (The model declines to answer, with a Chat Completions refusal).
+    ///
+    /// The stream ends with an `error` event whose `reason` is `refused` and whose `message` is the refusal, and no `done`.
+    Refused {
+        /// Why it was refused: `cortex.ask.Refused`.
+        error: Refused,
+    },
     /// `cut-off` — externally decided (The model's reply ends because of its token limit or a content filter).
     ///
     /// The stream ends with an `error` event whose `reason` is `cut-off`, and no `done`.
@@ -1301,20 +1312,40 @@ pub struct FigureTooLarge {
 
 /// The declared error `cortex.ask.LimitReached`.
 ///
-/// The answer reached the spec's step or time limit before the model answered.
+/// The answer reached the spec's step or time limit before the model answered. `steps` and the token counts are those of the model calls made, as for `cortex.ask.ClientClosed`; 0 when the limit came before the first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LimitReached {
     /// `limit` — `String`.
     pub limit: String,
+    /// `steps` — `Integer`.
+    pub steps: i64,
+    /// `input_tokens` — `Integer`.
+    pub input_tokens: i64,
+    /// `output_tokens` — `Integer`.
+    pub output_tokens: i64,
+    /// `cached_tokens` — `Integer`.
+    pub cached_tokens: i64,
+    /// `context_tokens` — `Integer`.
+    pub context_tokens: i64,
 }
 
 /// The declared error `cortex.ask.ModelFailed`.
 ///
-/// The model gateway could not be reached or answered an error or no message.
+/// The model gateway could not be reached or answered an error or no message. `steps` and the token counts are those of the model calls that answered before it, as for `cortex.ask.ClientClosed`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelFailed {
     /// `reason` — `String`.
     pub reason: String,
+    /// `steps` — `Integer`.
+    pub steps: i64,
+    /// `input_tokens` — `Integer`.
+    pub input_tokens: i64,
+    /// `output_tokens` — `Integer`.
+    pub output_tokens: i64,
+    /// `cached_tokens` — `Integer`.
+    pub cached_tokens: i64,
+    /// `context_tokens` — `Integer`.
+    pub context_tokens: i64,
 }
 
 /// The declared error `cortex.ask.RateLimited`.
@@ -1330,11 +1361,40 @@ pub struct RateLimited {
 
 /// The declared error `cortex.ask.ReaderFailed`.
 ///
-/// The EKR MCP reader could not be started or stopped answering.
+/// The EKR MCP reader could not be started or stopped answering. `steps` and the token counts are those of the model calls made before it, as for `cortex.ask.ClientClosed`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReaderFailed {
     /// `reason` — `String`.
     pub reason: String,
+    /// `steps` — `Integer`.
+    pub steps: i64,
+    /// `input_tokens` — `Integer`.
+    pub input_tokens: i64,
+    /// `output_tokens` — `Integer`.
+    pub output_tokens: i64,
+    /// `cached_tokens` — `Integer`.
+    pub cached_tokens: i64,
+    /// `context_tokens` — `Integer`.
+    pub context_tokens: i64,
+}
+
+/// The declared error `cortex.ask.Refused`.
+///
+/// The model declined to answer: the gateway's chat completion carried a non-empty `message.refusal` (the Chat Completions refusal, `AssistantRefusal` in llm-chat). Its text is no answer: no `delta` is streamed and no tool call it asked for is made. `refusal` is that text, restored under a `redaction` policy; `steps` and the token counts are those of the model calls made, this one included, as for `cortex.ask.ClientClosed`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Refused {
+    /// `refusal` — `String`.
+    pub refusal: String,
+    /// `steps` — `Integer`.
+    pub steps: i64,
+    /// `input_tokens` — `Integer`.
+    pub input_tokens: i64,
+    /// `output_tokens` — `Integer`.
+    pub output_tokens: i64,
+    /// `cached_tokens` — `Integer`.
+    pub cached_tokens: i64,
+    /// `context_tokens` — `Integer`.
+    pub context_tokens: i64,
 }
 
 /// The declared error `cortex.ask.ReviewExists`.

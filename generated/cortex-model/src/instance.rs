@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 77b40f4f3441dcc19a4d5fbfc56d13afcd80b03b06fe2e8969b06d2c71511d85
-// contract digest 984a06ae5487642c68800955902529ad4815f478240ce717e522e1b65a5696d8
+// model digest 1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea
+// contract digest edb08f72285adea731056f77a39b2f4b42617ddf03746589b9ce338333a0e3ad
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -210,6 +210,8 @@ pub struct EvalResult {
     pub missing_facts: Vec<String>,
     /// `missing_nodes` — `List<String>`.
     pub missing_nodes: Vec<String>,
+    /// `outcome` — `Optional<String>`.
+    pub outcome: Option<String>,
 }
 
 /// The states of `cortex.instance.EvalRun`, as runtime values.
@@ -3262,7 +3264,7 @@ pub struct EvalReviewOpen {
 
 /// The declared error `cortex.instance.EvalRunnerFailed`.
 ///
-/// The runner could not answer a case: the model call failed, timed out, answered no valid answer or found the budget or the instance's daily ceiling spent; no `cortex ask serve` answered; or the run `replay` names holds no recorded answer for a case. `results.jsonl` keeps the results of the cases answered before; no `summary.json` was written.
+/// The runner could not answer a case: the model call failed, timed out, answered no valid answer or found the budget or the instance's daily ceiling spent; no `cortex ask serve` answered at the address the spec's `ask.listen` names, the spec has no `ask` section, or the service answered `model-failed`, `reader-failed` or a refusal of the request itself (`unidentified`, `bad-request`, or `rate-limit` and `busy` still after its retries); or the run `replay` names holds no recorded answer for a case. `results.jsonl` keeps the results of the cases answered before; no `summary.json` was written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EvalRunnerFailed {
     /// `reason` — `String`.

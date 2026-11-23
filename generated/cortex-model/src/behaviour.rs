@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 77b40f4f3441dcc19a4d5fbfc56d13afcd80b03b06fe2e8969b06d2c71511d85
-// contract digest 984a06ae5487642c68800955902529ad4815f478240ce717e522e1b65a5696d8
+// model digest 1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea
+// contract digest edb08f72285adea731056f77a39b2f4b42617ddf03746589b9ce338333a0e3ad
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -296,15 +296,19 @@ where
         }
         // `limit-reached`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "limit-reached")? {
-            return Ok(crate::ask::AskOutcome::LimitReached { error: crate::ask::LimitReached { limit: self.ports.try_generate_string()? } });
+            return Ok(crate::ask::AskOutcome::LimitReached { error: crate::ask::LimitReached { limit: self.ports.try_generate_string()?, steps: self.ports.try_generate_integer()?, input_tokens: self.ports.try_generate_integer()?, output_tokens: self.ports.try_generate_integer()?, cached_tokens: self.ports.try_generate_integer()?, context_tokens: self.ports.try_generate_integer()? } });
         }
         // `model-failed`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "model-failed")? {
-            return Ok(crate::ask::AskOutcome::ModelFailed { error: crate::ask::ModelFailed { reason: self.ports.try_generate_string()? } });
+            return Ok(crate::ask::AskOutcome::ModelFailed { error: crate::ask::ModelFailed { reason: self.ports.try_generate_string()?, steps: self.ports.try_generate_integer()?, input_tokens: self.ports.try_generate_integer()?, output_tokens: self.ports.try_generate_integer()?, cached_tokens: self.ports.try_generate_integer()?, context_tokens: self.ports.try_generate_integer()? } });
         }
         // `reader-failed`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "reader-failed")? {
-            return Ok(crate::ask::AskOutcome::ReaderFailed { error: crate::ask::ReaderFailed { reason: self.ports.try_generate_string()? } });
+            return Ok(crate::ask::AskOutcome::ReaderFailed { error: crate::ask::ReaderFailed { reason: self.ports.try_generate_string()?, steps: self.ports.try_generate_integer()?, input_tokens: self.ports.try_generate_integer()?, output_tokens: self.ports.try_generate_integer()?, cached_tokens: self.ports.try_generate_integer()?, context_tokens: self.ports.try_generate_integer()? } });
+        }
+        // `refused`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "refused")? {
+            return Ok(crate::ask::AskOutcome::Refused { error: crate::ask::Refused { refusal: self.ports.try_generate_string()?, steps: self.ports.try_generate_integer()?, input_tokens: self.ports.try_generate_integer()?, output_tokens: self.ports.try_generate_integer()?, cached_tokens: self.ports.try_generate_integer()?, context_tokens: self.ports.try_generate_integer()? } });
         }
         // `cut-off`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexAskAsk(&input), "cut-off")? {

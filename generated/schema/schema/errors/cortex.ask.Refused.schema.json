@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Refused payload",
+  "description": "The model declined to answer: the gateway's chat completion carried a non-empty `message.refusal` (the Chat Completions refusal, `AssistantRefusal` in llm-chat). Its text is no answer: no `delta` is streamed and no tool call it asked for is made. `refusal` is that text, restored under a `redaction` policy; `steps` and the token counts are those of the model calls made, this one included, as for `cortex.ask.ClientClosed`.",
+  "x-ess-name": "cortex.ask.Refused",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "refusal": {
+      "type": "string"
+    },
+    "steps": {
+      "type": "integer"
+    },
+    "input_tokens": {
+      "type": "integer"
+    },
+    "output_tokens": {
+      "type": "integer"
+    },
+    "cached_tokens": {
+      "type": "integer"
+    },
+    "context_tokens": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "refusal",
+    "steps",
+    "input_tokens",
+    "output_tokens",
+    "cached_tokens",
+    "context_tokens"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
+    "contract_digest": "slice-sha256/2:d7c1cac1b10155a7b89b6b6c5e1cdf6701e891045583e71c145d9054464e0303",
+    "regenerate": "ess generate"
+  }
+}

@@ -1,24 +1,44 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "LimitReached payload",
-  "description": "The answer reached the spec's step or time limit before the model answered.",
+  "description": "The answer reached the spec's step or time limit before the model answered. `steps` and the token counts are those of the model calls made, as for `cortex.ask.ClientClosed`; 0 when the limit came before the first.",
   "x-ess-name": "cortex.ask.LimitReached",
   "x-ess-kind": "error-payload",
   "type": "object",
   "properties": {
     "limit": {
       "type": "string"
+    },
+    "steps": {
+      "type": "integer"
+    },
+    "input_tokens": {
+      "type": "integer"
+    },
+    "output_tokens": {
+      "type": "integer"
+    },
+    "cached_tokens": {
+      "type": "integer"
+    },
+    "context_tokens": {
+      "type": "integer"
     }
   },
   "required": [
-    "limit"
+    "limit",
+    "steps",
+    "input_tokens",
+    "output_tokens",
+    "cached_tokens",
+    "context_tokens"
   ],
   "additionalProperties": false,
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "77b40f4f3441dcc19a4d5fbfc56d13afcd80b03b06fe2e8969b06d2c71511d85",
-    "contract_digest": "slice-sha256/2:e1c8e3a63ef4e3d47e3489c2cc18008b0c9ce7e2ea0be33b497704f428f28ede",
+    "source_digest": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
+    "contract_digest": "slice-sha256/2:9e1a781e2f8d986a90d45fa7c32988ef3de46e8ee5c9c626fc0643fad697c25f",
     "regenerate": "ess generate"
   }
 }

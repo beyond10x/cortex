@@ -117,8 +117,8 @@ came from and is not scored.
 | runner | answers with |
 |---|---|
 | `mcp` | the instance's model (the `claude` backend), with the store's MCP reader, `ekr mcp` as `cortex mcp-line` starts it, as its only tools (`--allowedTools mcp__ekr`, every built-in tool off). It answers `answer` and `cited_nodes`, and spends at most the spec's `model.budget_usd` and what its `model.daily_ceiling_usd` leaves of the UTC day, held to its token limits, as `cortex quality` is |
-| `ask` | a running `cortex ask serve`. This release has none, so the runner answers `runner-failed` |
-| `replay` | the answers the eval run `--from <stamp>` (a directory under `eval/`) recorded, by case id and question: a case whose id the run recorded under another question, or a run with no `summary.json` (a failed run), is `runner-failed`. It asks no model; two replays of one run write the same `results.jsonl`, byte for byte |
+| `ask` | the instance's running `cortex ask serve`: each question is posted to `POST /ask` at the address the spec's `ask.listen` names (a wildcard host, `0.0.0.0` or `[::]`, is asked on loopback), with the identity `cortex-eval` in the spec's `identity_header`. A `done` event is the answer, its `nodes` the cited ids, its `steps` and token counts the run's `model_calls` and tokens; `cost_usd` is null, as the service spends its own budget. An `error` event of `refused`, `step-limit`, `time-limit` or `cut-off` makes the case a failed non-answer (`outcome` in `results.jsonl`); `rate-limit` and `busy` are asked again after their wait, at most 3 times; any other error, a spec with no `ask` section, a `listen` port of 0 or no service answering is `runner-failed` |
+| `replay` | the answers the eval run `--from <stamp>` (a directory under `eval/`) recorded, by case id and question: a case whose id the run recorded under another question, or a run with no `summary.json` (a failed run), is `runner-failed`. A recorded non-answer (a line with an `outcome`, or a line of an earlier cortex whose `answer` starts with `refused: `) stays a failed non-answer, whatever its text holds. It asks no model; two replays of one run write the same `results.jsonl`, byte for byte |
 
 :::note[Redaction under the `mcp` runner]
 With a `redaction` policy in the spec, the `mcp` runner's model reads the store through a
@@ -129,7 +129,7 @@ line. The server stops when the case ends, whatever connections are open. Each c
 every tool result are redacted as the [ask service](./ask-service.md#redaction) redacts them, a
 result in which a `refuse_if_left` class is still detected reaches the model as a tool error saying
 it was withheld by policy, a question that still holds such a class is recorded as a failed case
-with the refusal as its answer and no model is asked, and the answer is restored before it is scored and written. Without a
+with the refusal as its answer and the `outcome` `refused`, and no model is asked, and the answer is restored before it is scored and written. Without a
 policy the model reads `ekr mcp` as before.
 :::
 
@@ -137,7 +137,7 @@ It writes two files under `eval/<UTC stamp>/` in the instance directory:
 
 | file | holds |
 |---|---|
-| `results.jsonl` | one `cortex.eval-result/1` object per case, in the set's order: `id`, `question`, `answer`, `cited_nodes`, `passed`, `missing_facts` (the expected fact strings the answer does not contain) and `missing_nodes` (the expected node ids it does not cite). A line holds no time or cost |
+| `results.jsonl` | one `cortex.eval-result/1` object per case, in the set's order: `id`, `question`, `answer`, `cited_nodes`, `passed`, `missing_facts` (the expected fact strings the answer does not contain) and `missing_nodes` (the expected node ids it does not cite), and `outcome` for a case the runner gave no answer for: `refused` (the redaction policy refused the question, or the model declined) or the ask service's `step-limit`, `time-limit` or `cut-off`. Such a case's `answer` is the reason or the refusal text; it cites nothing, misses every expectation and never passes. A line holds no time or cost |
 | `summary.json` | written last, by a temporary file renamed into place, so it exists only when every result is on disk. `cortex.eval-run/1`: `stamp`, `instance_name`, `runner`, `cases`, `passed`, `facts_expected`, `facts_found`, `nodes_expected`, `nodes_found`, `model_calls`, `input_tokens`, `output_tokens`, `cost_usd`, and `from` for a replay |
 
 An `evaluated` line's detail carries the counts of `summary.json`, `name` and `dir`;

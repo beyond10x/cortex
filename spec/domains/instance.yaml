@@ -914,8 +914,9 @@ types:
       - {name: reason, type: String}
 
   # How `cortex eval run` answers a case's question: `mcp` asks the instance's model with the
-  # store's MCP reader (`ekr mcp`) as its only tools; `ask` asks a running `cortex ask serve`;
-  # `replay` takes the answers an earlier eval run recorded and asks no model.
+  # store's MCP reader (`ekr mcp`) as its only tools; `ask` asks the instance's running
+  # `cortex ask serve` at the address its spec's `ask.listen` names; `replay` takes the answers an
+  # earlier eval run recorded and asks no model.
   - name: cortex.instance.EvalRunner
     kind: enum
     variants: [mcp, ask, replay]
@@ -950,6 +951,12 @@ types:
   # the case, the answer and the node ids it cites as the runner gave them, whether it passed, and
   # the expected fact strings it does not contain and expected node ids it does not cite. A line
   # holds nothing of the run's time or cost, so two replays of one run write the same bytes.
+  # `outcome` is absent when the runner gave an answer. A case the runner gave no answer for has
+  # it: `refused` (the redaction policy refused the question, or the model declined), or the ask
+  # service's `error` reason (`step-limit`, `time-limit`, `cut-off`); its `answer` is the reason
+  # or the refusal text, it cites nothing, misses every expectation and never passes. `replay`
+  # keeps a recorded line's `outcome` and scores it so again; a line of an earlier cortex with no
+  # `outcome` whose `answer` starts with `refused: ` is a refused case.
   - name: cortex.instance.EvalResult
     kind: struct
     fields:
@@ -961,6 +968,7 @@ types:
       - {name: passed, type: Boolean}
       - {name: missing_facts, type: List<String>}
       - {name: missing_nodes, type: List<String>}
+      - {name: outcome, type: Optional<String>}
 
   # The value kinds a schema proposal may give a property: those an extraction document writes as
   # a scalar. `NodeRef`, `Float` and `Duration` are not proposed.
@@ -1505,7 +1513,10 @@ errors:
     summary: >-
       The runner could not answer a case: the model call failed, timed out, answered no valid
       answer or found the budget or the instance's daily ceiling spent; no `cortex ask serve`
-      answered; or the run `replay` names holds no recorded answer for a case. `results.jsonl`
+      answered at the address the spec's `ask.listen` names, the spec has no `ask` section, or the
+      service answered `model-failed`, `reader-failed` or a refusal of the request itself
+      (`unidentified`, `bad-request`, or `rate-limit` and `busy` still after its retries); or the
+      run `replay` names holds no recorded answer for a case. `results.jsonl`
       keeps the results of the cases answered before; no `summary.json` was written.
     fields:
       - {name: reason, type: String}
@@ -2666,7 +2677,10 @@ commands:
     # `ekr sample` draws `sample` of the store's active facts at its head, each with the evidence it
     # cites, seeded with the measurement's start in Unix milliseconds. Each batch of 20 goes to the
     # instance's model with no tools and the judge's own system prompt, shown as the redaction
-    # policy shows a run's documents; the model answers a `cortex.instance.QualityVerdict` per fact.
+    # policy shows a run's documents, each fact with the validity interval of its assertion
+    # (`Valid: <from> to <to>`, RFC 3339 UTC, an end the assertion leaves open written `open`), so
+    # the judge asks whether the evidence supports the fact for that time; the model answers a
+    # `cortex.instance.QualityVerdict` per fact.
     # `ekr fact-quality` turns the verdicts into a pass rate with its Wilson interval at 95 %. The
     # measurement writes `quality/<UTC stamp>/verdicts.jsonl` and `quality/<UTC stamp>/
     # fact-quality.json` (the `ekr.fact-quality/1` document, as EKR printed it) under the instance
@@ -2740,7 +2754,12 @@ commands:
     # prints it) as its only tools, and spends at most the spec's `model.budget_usd` and what is
     # left of its `model.daily_ceiling_usd` for the UTC day, held to `model.budget_tokens` and
     # `model.daily_ceiling_tokens` as MeasureQuality is; it answers a JSON object with `answer`
-    # and `cited_nodes`. `ask` asks a running `cortex ask serve`. `replay` reads the answers of
+    # and `cited_nodes`. `ask` posts each question to the instance's running `cortex ask serve`
+    # (`POST /ask` at the address the spec's `ask.listen` names, a wildcard host asked on
+    # loopback, with the identity `cortex-eval` in `ask.identity_header`): a `done` event is the
+    # answer and its `nodes` the cited ids, its `steps` and token counts the run's; a `rate-limit`
+    # or `busy` refusal is asked again after its wait, at most 3 times. The service spends its own
+    # budget, so the run's `cost_usd` is absent. `replay` reads the answers of
     # the earlier eval run `from` names (its stamp under `eval/`) by case id, and asks no model.
     # The run writes `eval/<UTC stamp>/results.jsonl` (a `cortex.instance.EvalResult` per case)
     # and `eval/<UTC stamp>/summary.json` (the `cortex.instance.EvalRun`, with the per-check

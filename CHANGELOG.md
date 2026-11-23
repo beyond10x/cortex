@@ -35,6 +35,15 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   number of turns and the last validation message of claude's `errors` list in the run's reason
   and in `claude/error.txt`, masked and cut as other error text. 0.8.0 wrote an empty
   `error.txt`.
+- **Redaction takes time linear in the matches.** Each match a redaction class found was checked
+  against every match found before it, so a text of many matches, such as links in brackets
+  back to back, took time quadratic in their number (4x the links, 14x the time). The check is a
+  binary search now; what is replaced is unchanged.
+- **A commit or a version after `@` at the end of a text is no email address.** `Email` reads an
+  address a provider cut before its top-level domain at the very end of a text (`jane.doe@exam`).
+  It also read a document key such as `group/repo@3f2a9c1` there, and the model was shown
+  `[Email-1]` for it. What is left of a cut address's domain now holds no digit, so a commit id
+  or a version (`tool@1.4.2`) after `@` is kept.
 - A batch that holds several replacing values of one entity and property with nothing stored to
   replace orders them by the earliest document each fact cites, the time EKR stores the fact
   from. 0.8.0 ordered a fact citing an early and a late document by the late one, applied it
@@ -93,6 +102,28 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   instance active, so `cortex remove` can be run again. Before, it answered `removed`, deleted the
   unit files and refused a second remove as `wrong-state`. A unit file that is not there is no
   longer stopped, and `daemon-reload` runs only once a file was deleted.
+
+### Fixed: answers and evaluations (review of 0.7.2, findings 19 to 24)
+
+- `cortex eval run --runner ask` asks the instance's running `cortex ask serve` at the address its
+  spec's `ask.listen` names, instead of answering `runner-failed` "no service".
+- A Chat Completions refusal (no content, a non-empty `message.refusal`) ends the answer with an
+  `error` event whose reason is `refused` and whose message is the refusal text, streams no text,
+  and is recorded with the outcome `refused`, the text as its `answer` and a `failed` review item.
+  It was a `done` event with an empty answer, recorded as `answered`. Breaking: a new
+  `cortex.ask.AnswerOutcome` variant and `cortex.ask.Ask` outcome.
+- A citation marker naming an id no tool result of the answer held is written
+  `[unsupported node:<id>]`, never linked, and listed in the new `done.unsupported`, not in
+  `done.nodes` or `done.evidence`. Breaking: `cortex.ask.AskDone` has the field `unsupported`.
+- `replay` keeps a recorded non-answer (a refused case) failed, whatever its text holds; each
+  `results.jsonl` line of a case with no answer names it in `outcome`, and its scores count every
+  expectation missed.
+- The quality judge is shown each fact's validity interval (`Valid: <from> to <to>`), so one fact
+  valid in January and in February is judged at its own time.
+- An answer ended by the step or time limit, a model failure or a reader failure after a model
+  call keeps the steps and tokens of the calls made, in its error and in its record; they were 0.
+  Breaking: `cortex.ask.LimitReached`, `ModelFailed` and `ReaderFailed` carry `steps` and the
+  token counts.
 
 ## 0.8.0 — 2026-11-23
 

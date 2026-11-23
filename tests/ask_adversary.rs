@@ -12,6 +12,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -25,23 +26,39 @@ const TOKEN: &str = "adversary-gateway-token-7f3a";
 const HEADER: &str = "x-asker";
 
 /// A stand-in gateway: each request on its own thread, answered after `delay` with the next
-/// scripted reply (the last one again once the script is spent); each body is recorded.
+/// scripted reply (the last one again once the script is spent); each body is recorded. A held
+/// gateway ([`Gateway::held`]) answers nothing until it is released.
 struct Gateway {
     url: String,
     requests: Arc<Mutex<Vec<Value>>>,
+    held: Arc<AtomicBool>,
 }
 
 impl Gateway {
     fn start(script: Vec<Value>, delay: Duration) -> Self {
+        Self::serve(script, delay, false)
+    }
+
+    /// A gateway that holds every request until [`Gateway::release`].
+    fn held(script: Vec<Value>) -> Self {
+        Self::serve(script, Duration::ZERO, true)
+    }
+
+    fn release(&self) {
+        self.held.store(false, Ordering::SeqCst);
+    }
+
+    fn serve(script: Vec<Value>, delay: Duration, held: bool) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let requests = Arc::new(Mutex::new(Vec::new()));
-        let seen = requests.clone();
+        let held = Arc::new(AtomicBool::new(held));
+        let (seen, hold) = (requests.clone(), held.clone());
         let script = Arc::new(script);
         std::thread::spawn(move || {
             for stream in listener.incoming() {
                 let Ok(mut stream) = stream else { return };
-                let (seen, script) = (seen.clone(), script.clone());
+                let (seen, script, hold) = (seen.clone(), script.clone(), hold.clone());
                 std::thread::spawn(move || {
                     let body = read_body(&stream);
                     let n = {
@@ -50,6 +67,9 @@ impl Gateway {
                         seen.len()
                     };
                     std::thread::sleep(delay);
+                    while hold.load(Ordering::SeqCst) {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
                     let reply = script[(n - 1).min(script.len() - 1)].to_string();
                     let _ = write!(
                         stream,
@@ -59,7 +79,11 @@ impl Gateway {
                 });
             }
         });
-        Self { url, requests }
+        Self {
+            url,
+            requests,
+            held,
+        }
     }
 
     fn asked(&self) -> usize {
@@ -1049,10 +1073,12 @@ fn a_client_still_sending_an_over_limit_body_reads_the_refusal_on_every_route() 
 
 /// With `ask.max_in_flight: 2`, a third question while two answers are in flight is refused at
 /// once with 429 `busy`, asks no model and spends no question of the minute; once an answer
-/// ends, a question is admitted again (R1-03).
+/// ends, a question is admitted again (R1-03). The gateway holds both answers until the third
+/// question is answered, so a service that made the third wait for a slot never answers it
+/// while they are held: "at once" is that order, not a time.
 #[test]
 fn a_question_past_max_in_flight_is_refused_busy_at_once() {
-    let gateway = Gateway::start(vec![text_reply("Yes [node:n-1].")], Duration::from_secs(2));
+    let gateway = Gateway::held(vec![text_reply("Yes [node:n-1].")]);
     let service = Arc::new(serve(
         &gateway,
         Setup {
@@ -1080,16 +1106,21 @@ fn a_question_past_max_in_flight_is_refused_busy_at_once() {
         );
         std::thread::sleep(Duration::from_millis(20));
     }
-    let asked = Instant::now();
-    let third = ask(&service, "cid", "Me too?");
-    assert!(
-        asked.elapsed() < Duration::from_millis(1500),
-        "the refusal waited {:?}",
-        asked.elapsed()
-    );
+    let third = post(
+        &service,
+        Some("cid"),
+        json!({"question": "Me too?"}).to_string().into_bytes(),
+        Duration::from_secs(20),
+    )
+    .expect("the third question is answered while both answers are held, not made to wait");
     assert_eq!(third.status, 429, "{:?}", third.events);
     assert_eq!(third.terminal().1["reason"], "busy", "{:?}", third.events);
     assert_eq!(gateway.asked(), 2, "a busy question asked the model");
+    assert!(
+        running.iter().all(|h| !h.is_finished()),
+        "an answer in flight ended before the refusal"
+    );
+    gateway.release();
     for handle in running {
         let (status, (name, _)) = handle.join().unwrap();
         assert_eq!((status, name.as_str()), (200, "done"));

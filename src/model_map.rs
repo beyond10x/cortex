@@ -297,6 +297,7 @@ pub fn ask_event(event: &ma::AskEvent) -> s::CortexAskAskEvent {
                 output_tokens: n(d.output_tokens),
                 steps: n(d.steps),
                 unrestored: n(d.unrestored),
+                unsupported: d.unsupported.clone(),
             }),
         }),
         ma::AskEvent::Error(e) => s::CortexAskAskEvent::V3(s::CortexAskAskEventVariant3 {

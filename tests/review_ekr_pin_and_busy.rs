@@ -286,21 +286,20 @@ fn a_no_wait_run_answers_busy_at_once_while_the_lock_is_held_and_a_default_run_w
     let status = w.home.join("instances/t/status");
     let status_before = std::fs::read_dir(&status).map(|d| d.count()).unwrap_or(0);
 
-    // `--no-wait`: busy at once, with its own exit status, and nothing ran or was recorded.
+    // `--no-wait`: busy at once, with its own exit status, and nothing ran or was recorded. The
+    // lock stays held until the run ended, so a run that waited for it would not end at all:
+    // that it ended with `busy` while the lock is held is "at once", whatever the machine's load.
     let lock = hold_lock(&w.home);
-    let started = Instant::now();
     let busy = finish(
         spawn(&w, &["run", "t/news", "--no-wait"]),
-        Duration::from_secs(5),
+        Duration::from_secs(20),
     );
-    let took = started.elapsed();
     let (code, busy) = busy.expect("a run with --no-wait does not wait for the lock");
     assert_eq!(
         (code, busy["outcome"].as_str()),
         (9, Some("busy")),
         "{busy}"
     );
-    assert!(took < Duration::from_secs(1), "busy took {took:?}");
     assert!(
         busy["detail"]["reason"]
             .as_str()

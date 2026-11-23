@@ -403,6 +403,7 @@ fn ask_event(e: AskPublished) -> (String, Value) {
                     "answer": e.done.answer,
                     "nodes": e.done.nodes,
                     "evidence": e.done.evidence,
+                    "unsupported": e.done.unsupported,
                     "input_tokens": e.done.input_tokens,
                     "output_tokens": e.done.output_tokens,
                     "cached_tokens": e.done.cached_tokens,
@@ -1318,15 +1319,59 @@ impl Scenario {
                 ),
                 ma::AskOutcome::LimitReached { error } => (
                     "limit-reached",
-                    Some(("cortex.ask.LimitReached", json!({"limit": error.limit}))),
+                    Some((
+                        "cortex.ask.LimitReached",
+                        json!({
+                            "limit": error.limit,
+                            "steps": error.steps,
+                            "input_tokens": error.input_tokens,
+                            "output_tokens": error.output_tokens,
+                            "cached_tokens": error.cached_tokens,
+                            "context_tokens": error.context_tokens,
+                        }),
+                    )),
                 ),
                 ma::AskOutcome::ModelFailed { error } => (
                     "model-failed",
-                    Some(("cortex.ask.ModelFailed", json!({"reason": error.reason}))),
+                    Some((
+                        "cortex.ask.ModelFailed",
+                        json!({
+                            "reason": error.reason,
+                            "steps": error.steps,
+                            "input_tokens": error.input_tokens,
+                            "output_tokens": error.output_tokens,
+                            "cached_tokens": error.cached_tokens,
+                            "context_tokens": error.context_tokens,
+                        }),
+                    )),
                 ),
                 ma::AskOutcome::ReaderFailed { error } => (
                     "reader-failed",
-                    Some(("cortex.ask.ReaderFailed", json!({"reason": error.reason}))),
+                    Some((
+                        "cortex.ask.ReaderFailed",
+                        json!({
+                            "reason": error.reason,
+                            "steps": error.steps,
+                            "input_tokens": error.input_tokens,
+                            "output_tokens": error.output_tokens,
+                            "cached_tokens": error.cached_tokens,
+                            "context_tokens": error.context_tokens,
+                        }),
+                    )),
+                ),
+                ma::AskOutcome::Refused { error } => (
+                    "refused",
+                    Some((
+                        "cortex.ask.Refused",
+                        json!({
+                            "refusal": error.refusal,
+                            "steps": error.steps,
+                            "input_tokens": error.input_tokens,
+                            "output_tokens": error.output_tokens,
+                            "cached_tokens": error.cached_tokens,
+                            "context_tokens": error.context_tokens,
+                        }),
+                    )),
                 ),
                 ma::AskOutcome::Busy { error } => (
                     "busy",
@@ -1860,7 +1905,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     if std::env::var_os(SUITE_ENV).is_none() {
         assert_eq!(
             scenarios.len(),
-            136,
+            137,
             "the suite's scenario count moved; update this floor"
         );
     }
