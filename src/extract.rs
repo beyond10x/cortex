@@ -937,6 +937,81 @@ pub fn bare_tag(document: &Value) -> Option<String> {
     }
 }
 
+/// Calls `f` with every node type, property and relation name of `document`, the model's answer,
+/// and what it names (`node type`, `property`, `relation`): the ontology's node type names,
+/// parents and property names, its edge type names, source and target types and property names,
+/// each entity's `node_type`, and in each fact its subject's and object's `node_type`, its
+/// `property` and its `relation`. A name that is not a string is skipped.
+pub fn type_names(document: &mut Value, f: &mut dyn FnMut(&'static str, &mut String)) {
+    fn one(
+        v: Option<&mut Value>,
+        what: &'static str,
+        f: &mut dyn FnMut(&'static str, &mut String),
+    ) {
+        if let Some(Value::String(s)) = v {
+            f(what, s);
+        }
+    }
+    fn each(
+        v: Option<&mut Value>,
+        what: &'static str,
+        f: &mut dyn FnMut(&'static str, &mut String),
+    ) {
+        if let Some(Value::Array(items)) = v {
+            for item in items {
+                one(Some(item), what, f);
+            }
+        }
+    }
+    fn properties(v: Option<&mut Value>, f: &mut dyn FnMut(&'static str, &mut String)) {
+        if let Some(Value::Array(items)) = v {
+            for p in items {
+                one(p.get_mut("name"), "property", f);
+            }
+        }
+    }
+    if let Some(ontology) = document.get_mut("ontology") {
+        if let Some(Value::Array(types)) = ontology.get_mut("node_types") {
+            for t in types {
+                one(t.get_mut("name"), "node type", f);
+                each(t.get_mut("parents"), "node type", f);
+                properties(t.get_mut("properties"), f);
+            }
+        }
+        if let Some(Value::Array(types)) = ontology.get_mut("edge_types") {
+            for t in types {
+                one(t.get_mut("name"), "relation", f);
+                each(t.get_mut("source_types"), "node type", f);
+                each(t.get_mut("target_types"), "node type", f);
+                properties(t.get_mut("properties"), f);
+            }
+        }
+    }
+    if let Some(Value::Array(entities)) = document.get_mut("entities") {
+        for e in entities {
+            one(e.get_mut("node_type"), "node type", f);
+        }
+    }
+    if let Some(Value::Array(facts)) = document.get_mut("facts") {
+        for fact in facts {
+            let Value::Object(tagged) = fact else {
+                continue;
+            };
+            for body in tagged.values_mut() {
+                for end in ["subject", "object"] {
+                    one(
+                        body.get_mut(end).and_then(|r| r.get_mut("node_type")),
+                        "node type",
+                        f,
+                    );
+                }
+                one(body.get_mut("property"), "property", f);
+                one(body.get_mut("relation"), "relation", f);
+            }
+        }
+    }
+}
+
 /// `at`, a path below a value, as it continues the value's own path.
 fn dotted(at: &str) -> String {
     if at.is_empty() || at.starts_with('[') {
@@ -1759,6 +1834,53 @@ mod tests {
         assert!(text.contains("!Relation"), "{text}");
         assert!(!text.contains("'!Relation'"), "{text}");
         assert!(text.contains("n: 3"), "{text}");
+    }
+
+    #[test]
+    fn every_type_property_and_relation_name_of_an_answer_is_visited_and_nothing_else() {
+        let mut v = json!({
+            "ontology": {
+                "node_types": [{"name": "T1", "parents": ["T2"],
+                    "properties": [{"name": "p1", "value": {"value_kind": "String"}}]}],
+                "edge_types": [{"name": "R1", "source_types": ["T3"], "target_types": ["T4"],
+                    "properties": [{"name": "p2"}]}],
+            },
+            "entities": [{"node_type": "T5", "aliases": ["alias"]}],
+            "facts": [
+                {"!Property": {"subject": {"node_type": "T6", "aliases": ["a"]},
+                    "property": "p3", "value": {"value_kind": "String", "value": "v"},
+                    "evidence": ["e"]}},
+                {"!Relation": {"subject": {"node_type": "T7", "aliases": ["b"]},
+                    "relation": "R2", "object": {"node_type": "T8", "aliases": ["c"]},
+                    "evidence": ["e"]}},
+            ],
+        });
+        let mut seen = Vec::new();
+        type_names(&mut v, &mut |what, name| {
+            seen.push(format!("{what}:{name}"));
+            name.push('!');
+        });
+        assert_eq!(
+            seen,
+            [
+                "node type:T1",
+                "node type:T2",
+                "property:p1",
+                "relation:R1",
+                "node type:T3",
+                "node type:T4",
+                "property:p2",
+                "node type:T5",
+                "node type:T6",
+                "property:p3",
+                "node type:T7",
+                "node type:T8",
+                "relation:R2",
+            ]
+        );
+        assert_eq!(v["entities"][0]["node_type"], "T5!");
+        assert_eq!(v["entities"][0]["aliases"][0], "alias");
+        assert_eq!(v["facts"][0]["!Property"]["value"]["value"], "v");
     }
 
     #[test]

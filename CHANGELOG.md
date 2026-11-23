@@ -43,6 +43,19 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   a read. Before, an id on the second page was reported missing, and two timer runs then disabled
   the source. A list that names a cursor a second time, or runs past 1000 pages, ends the read
   with a reason naming the cursor instead of a loop.
+- `RareName` no longer replaces the store's ontology names (node types, properties, value kinds,
+  relations) in the prompt or in a document, and does not count them. A model writes back the
+  type names it is shown; a replaced one made EKR refuse every entity
+  (`extraction-type-undeclared: Name-32`) and the run was undone. `known_names` and `rules` still
+  replace a type name they match.
+- A placeholder the model writes where a node type, property or relation name goes is restored
+  before the answer is applied, also without its brackets (`Name-3`); one that stands for no value
+  fails the batch, naming it and where it stood.
+- A batch directory under `runs/` keeps the prompt as sent (`prompt.txt`) and the model's raw
+  answer (`answer.json`, formerly `model.json`) under a `redaction` policy too. Both hold
+  placeholders, not originals; the mapping is never written.
+- `cortex create --no-units` and `cortex adopt --no-units` print `view: null` instead of an address
+  no viewer serves, and `cortex list` prints `view: null` for an instance with no viewer unit.
 
 ## 0.7.2 — 2026-10-30
 

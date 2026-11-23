@@ -80,7 +80,9 @@ stand; [Status](./status.mdx) lists what is planned.
   not its thread context, key or title, which repeat other records' text and the file's name. A
   known entity name the batch's documents do not hold counts as seen 0 times, so a
   person the store already knows is hidden in the prompt's known entities too. Common sentence
-  openers (`The`, `This`, `We` and the like) are never taken. A rare product or place name, and
+  openers (`The`, `This`, `We` and the like) are never taken, and neither are the names of the
+  store's ontology (node types, properties, value kinds, relations), so a person whose name is
+  also a type name is not hidden by `RareName`. A rare product or place name, and
   a capitalised word such as `Thanks` or `Subject`, is hidden from the model too, and restored; a
   person named often in the batch and not listed in `known_names` is not hidden. A word with
   hyphens, such as `Jean-Luc` or `Co-Authored-By`, is one word: it is hidden whole or kept

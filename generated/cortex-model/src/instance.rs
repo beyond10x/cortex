@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7
-// contract digest 857182a81f324b2743cfc95ae1fab53d1e8a5a7f0c41dbd9fcda27ed70b7ed9d
+// model digest 37a5c9c7902bf753546e91cac2e2cdfa93819d7b3efc21c30615b90c15f60700
+// contract digest 76c02a54a9220bcadae5fc0cb0a45641bbaa6daab25a052e0281bb4dd744a26c
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -2231,7 +2231,7 @@ pub enum CreateInstanceOutcome {
     },
     /// `created` — otherwise.
     ///
-    /// The store is seeded, the seed schema applied and the seed documents extracted into it. The viewer runs on its port. The sources are added by AddSource, one per source in the spec.
+    /// The store is seeded, the seed schema applied and the seed documents extracted into it. The viewer runs on its port, unless the instance was created without units, which starts no viewer and names no address. The sources are added by AddSource, one per source in the spec.
     Created {
         /// The `cortex.instance.InstanceCreated` this outcome publishes.
         instance_created: InstanceCreated,

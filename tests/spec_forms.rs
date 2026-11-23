@@ -562,10 +562,13 @@ fn the_largest_accepted_numbers_run_without_overflow() {
         (0, Some("created")),
         "{created}"
     );
-    assert_eq!(
-        created["detail"]["view"], "http://127.0.0.1:65535/",
-        "{created}"
-    );
+    // `--no-units` starts no viewer and names no address; the port is recorded all the same.
+    assert_eq!(created["detail"]["view"], Value::Null, "{created}");
+    let meta: Value = serde_json::from_str(
+        &std::fs::read_to_string(w.home.join("instances/b/meta.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(meta["view_port"], 65535, "{meta}");
     // The second run holds every seen document to the 36500-day window.
     for _ in 0..2 {
         let (code, ran) = w.cortex(&["run", "b/news"]);
