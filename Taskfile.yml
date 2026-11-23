@@ -4,6 +4,7 @@ vars:
   CARGO: 'env CARGO_BUILD_JOBS=4 RUST_TEST_THREADS=4 nice -n 19 cargo'
   ESS: ess
   TEST_BUDGET: report
+  TEST_THREADS: '8'
 
 tasks:
   generate:
@@ -72,7 +73,7 @@ tasks:
         rm -f "$junit"
         start=$(date +%s)
         status=0
-        {{.CARGO}} nextest run --locked --workspace --no-tests=fail --profile "$profile" || status=$?
+        {{.CARGO}} nextest run --locked --workspace --no-tests=fail --profile "$profile" --test-threads {{.TEST_THREADS}} || status=$?
         elapsed=$(( $(date +%s) - start ))
         echo "ten slowest tests (seconds):"
         if [ -f "$junit" ]; then

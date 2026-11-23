@@ -220,16 +220,18 @@ fn a_value_of_a_withheld_result_is_never_restored() {
 /// `story:eval-proxy-bounds`, R1-07: each connection the server accepts is kept in its open list
 /// so the end of the case can shut it down, and must leave that list when it is answered. Today
 /// none leaves until the case ends, so a client making many short requests holds one descriptor
-/// per request, and at the descriptor limit `accept` fails and the server only sleeps.
+/// per request, and at the descriptor limit `accept` fails and the server only sleeps. 250
+/// connections show it as 2,000 did: one that stays in the list is counted below. The server
+/// polls `accept` every 10 ms, so each sequential connection costs about 10 ms (2,000: 20 s on CI).
 #[test]
-fn two_thousand_sequential_connections_leave_the_open_list_bounded() {
+fn sequential_connections_leave_the_open_list_bounded() {
     let tmp = scratch();
     let reader = stand_in_reader(tmp.path());
     let r = email_and_name();
     let deadline = Instant::now() + Duration::from_secs(120);
     let served = proxy::serve(&r, &reader, "ekr", "q", deadline, |_, config| {
         let (addr, path) = url_of(config);
-        for i in 0..2_000 {
+        for i in 0..250 {
             let mut s = TcpStream::connect(&addr).expect("connect");
             s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
             write!(s, "GET {path} HTTP/1.1\r\nhost: {addr}\r\n\r\n").unwrap();
@@ -248,7 +250,7 @@ fn two_thousand_sequential_connections_leave_the_open_list_bounded() {
     assert_eq!(
         served.open_connections(),
         0,
-        "{} connections were still in the open list after 2,000 answered ones",
+        "{} connections were still in the open list after 250 answered ones",
         served.open_connections()
     );
 }

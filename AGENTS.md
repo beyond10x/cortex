@@ -232,7 +232,10 @@ this repository and published by the organisation's reusable workflow.
   5 s is named with its time in the change's report.
 - Test builds carry no debug info: `.cargo/config.toml` sets `debug = false` for the `dev` and
   `test` profiles (a cargo config file wins over the manifest and over a user-wide
-  `line-tables-only`). `readelf -S` on the test binary shows no `.debug_*` section.
+  `line-tables-only`). `readelf -S` on the test binary shows no `.debug_*` section. The same
+  file builds every dependency at `opt-level = 2` (cortex-cli itself stays at 0): the masking and
+  HTTP tests spend their time in regex and hyper. `task test` runs 8 tests at once
+  (`TEST_THREADS`), as most tests wait on child processes, timeouts and containers.
 - `rust-toolchain.toml` pins rustc (1.99.0, with rustfmt and clippy) for the local gate and every
   workflow; each workflow installs it with `rustup toolchain install`. Change the pin there only.
 - **Planning-only pull requests skip the build.** `.github/workflows/check.yml` keeps its required
