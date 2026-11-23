@@ -2271,7 +2271,7 @@ commands:
       # no run. `<instance>/seed` and a structured source, which calls no model, answer
       # `extract-only-failed`. `cortex.instance.ApplyExtraction` applies a kept extraction. ESS has
       # no construct for a file a run keeps or for the seen state per document
-      # (beyond10x/ess#459); tests/review_extract_then_apply.rs holds it.
+      # (beyond10x/ess#459); tests/it/review_extract_then_apply.rs holds it.
       - name: extract-only-failed
         external: The fetch or the model fails before an extract-only run kept a batch
         when: {all: ["defined(extract_only)", extract_only == true]}
@@ -2780,7 +2780,7 @@ commands:
     # `extraction-stale`, `apply-refused` and `no-such-instance` 1; `store-outcome-unknown` 4;
     # `terminated` 8. It writes a `cortex.log` line, not the source's status, `metrics.prom` or
     # the hook. ESS has no construct for a file a run keeps or for the seen state per document
-    # (beyond10x/ess#459); tests/review_extract_then_apply.rs holds it.
+    # (beyond10x/ess#459); tests/it/review_extract_then_apply.rs holds it.
     input:
       - {name: name, type: cortex.instance.InstanceName}
       - {name: run, type: String}
