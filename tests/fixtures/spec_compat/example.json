@@ -8,7 +8,7 @@
         "example/news",
         "example/project-docs"
       ],
-      "view": "http://127.0.0.1:<port>/"
+      "view": null
     },
     "outcome": "created"
   },

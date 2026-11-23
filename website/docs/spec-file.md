@@ -977,6 +977,24 @@ redaction:
 | `rare_limit` | optional; for `RareName`, the most times a capitalised word may appear in a batch to be taken as a name. Default 1 |
 | `refuse_if_left` | optional classes that fail the run, before any model call, when they are still found in what the model would be shown |
 
+The prompt shows the store's ontology: its node type names with their property names and value
+kinds, and its relation names with their source and target types. `RareName` never takes these
+names, in the ontology lines or in a document, and does not count them: the model sees
+`Runbook(owner: String)` as the store holds it, and writes it back as the type of what it
+extracts. `known_names` and `rules` still replace a type name they match. A placeholder the model
+writes where a node type, property or relation name goes is restored before the answer is
+applied, also when it dropped the brackets (`Name-3` for `[Name-3]`); one that stands for no value
+of the batch fails the batch, naming the placeholder and where it stood, and nothing of that
+batch is applied.
+
+Each batch directory under `runs/` keeps the prompt as sent (`prompt.txt`) and the model's raw
+answer (`answer.json`) beside the extraction document applied
+([Operating](./operating.md#where-things-live)). With a policy, both hold placeholders, not the
+values they stand for: the model was sent only placeholders, and its answer is kept as it came,
+before restoring. `extraction.yaml` holds the restored values, as the store does. The mapping
+from placeholder to value is never written. They are removed with the run directory after
+[`runs.keep_days`](#runs).
+
 ## `snapshots`
 
 Optional. How many snapshots of a `sqlite` store the instance keeps; see

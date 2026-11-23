@@ -735,6 +735,14 @@ impl Systemd {
         self.systemctl(&["enable", "--now", &format!("{unit}.service")])
     }
 
+    /// Whether this home wrote a viewer unit of `instance`: none was written for an instance
+    /// created or adopted with `--no-units`, and `remove` deletes it.
+    pub fn has_view(&self, instance: &str) -> bool {
+        let name = format!("{}.service", view_unit(instance));
+        std::fs::read_to_string(self.unit_dir.join(name))
+            .is_ok_and(|text| home_of(&text).is_none_or(|home| same_home(&home, &self.home_root)))
+    }
+
     /// The connection id this home's viewer unit of `instance` launches through, as
     /// [`Systemd::install_view`] wrote it: the id a profile resolved to then. `None` when there is
     /// no such unit, another home wrote it, or it launches through no connection.

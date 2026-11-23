@@ -31,7 +31,7 @@ run of the source writes it again, with its counts starting from zero.
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
 | `instances/<name>/state/entities.json` | entity names from earlier runs, offered to the model so it reuses them |
 | `instances/<name>/failures/<source>.json` | documents whose extraction failed (`cortex.failures/1`): each key's text hash, its consecutive runs failed with the document alone (`runs`, `0` when none), the failed batches of several it was in (`batches`, absent when none) and the last reason; outside `state/`, so undoing a run keeps it (see [What one run does](#what-one-run-does)) |
-| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report, or claude's error text (`claude/error.txt`); kept until a run removes it after the spec's [`runs.keep_days`](./spec-file.md#runs), and forever without one. `runs/` belongs to cortex: with `keep_days`, any directory in it named like a run directory (`<digits>-<lowercase letters, digits and dashes>`) is removed once that name is older than `keep_days`, whoever put it there |
+| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt as sent (`prompt.txt`), the model's raw answer (`answer.json`), the extraction document applied (`extraction.yaml`) and EKR's report (`report.json`), or claude's error text (`claude/error.txt`). Under a [`redaction`](./spec-file.md#redaction) policy `prompt.txt` and `answer.json` hold placeholders, not the values they stand for, `extraction.yaml` holds the restored values, and EKR's reports are not kept; the placeholder mapping is never written. Kept until a run removes it after the spec's [`runs.keep_days`](./spec-file.md#runs), and forever without one. `runs/` belongs to cortex: with `keep_days`, any directory in it named like a run directory (`<digits>-<lowercase letters, digits and dashes>`) is removed once that name is older than `keep_days`, whoever put it there |
 | `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
 | `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
@@ -799,7 +799,9 @@ binary as the consumer `cortex-records` in the Connectors configuration, with no
 
 ## Serving a store
 
-`cortex list` prints each instance's viewer address, `http://127.0.0.1:<port>/`.
+`cortex list` prints each instance's viewer address, `http://127.0.0.1:<port>/`, and `null` for
+an instance with no viewer unit of this home (created or adopted with `--no-units`, or removed);
+`create` and `adopt` with `--no-units` print `view: null` too.
 `cortex mcp-line <name>` prints a `claude mcp add --transport stdio cortex-<name> -- … ekr mcp`
 line with the instance's host document and store, which registers the store as an MCP server.
 For a `postgres` store that names a `connection`, the line, like the viewer unit, starts
