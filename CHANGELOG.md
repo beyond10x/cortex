@@ -36,6 +36,13 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Added
+
+- `cortex run --no-wait`: while another cortex command holds the home's lock, the run answers
+  `busy` at once with exit status 9 and runs and records nothing, so an external scheduler can
+  skip a collection that is still busy. Without the flag a run waits for the lock, as before
+  (review of 0.7.2, finding 18).
+
 ### Fixed
 
 - A structured source with `dropped: Supersede` retracts a record's values only when a whole
@@ -56,6 +63,11 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A refused structured record (rejected, ambiguous or refused by `store_lookup`) is tried after
   every other record the run wants, the one refused longest ago first, so under
   `max_documents_per_run` it no longer blocks the records behind it on every run.
+- The EKR pin an instance records is the engine that creates its store. `cortex create` and
+  `cortex adopt` ask the `ekr` binary for its version (`ekr --version`) and refuse one that
+  reports another version than the spec's `ekr.version`, whether `ekr.bin` names it or it sits in
+  the cache; `cortex setup` refuses a cached binary of another version instead of keeping it
+  (review of 0.7.2, finding 17).
 - A connection named by id is found on any page of `connectors connections list`: cortex follows
   `next_cursor` when `cortex create` checks the id and when it revalidates the connection before
   a read. Before, an id on the second page was reported missing, and two timer runs then disabled

@@ -608,6 +608,16 @@ impl RunSourceBehavior for Ports {
         // them. Every outcome that names a source records itself on it.
         const RUN: &str = "cortex.instance.RunSource";
         self.shared.borrow_mut().run_at_ms = None;
+        // Unlike the generated order, `busy` comes first: with `no_wait` and another command
+        // holding the home's lock the source is not read, so a disabled one answers `busy` too;
+        // recording `disabled` would write without the lock (`spec/`, UNMAPPED beside `busy`).
+        if input.no_wait == Some(true) && self.decided(RUN, "busy") {
+            return Ok(m::RunSourceOutcome::Busy {
+                error: m::InstanceBusy {
+                    reason: self.generate_string(),
+                },
+            });
+        }
         if input.fetch_only == Some(true) {
             return Ok(self.fetch_only(input.source_id));
         }

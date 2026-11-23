@@ -58,7 +58,7 @@ fn world_with(
     std::fs::write(
         &spec,
         format!(
-            "format: cortex.instance/1\nname: adv\ndescription: Test brain.\nekr: {{version: \"0.0.30\", bin: \"{ekr}\"}}\nseed: {{documents: []}}\nmodel: {{model: claude-haiku-4-5-20251001, budget_usd: \"1\", timeout_s: 60}}\nsources:\n{sources}serve: {{view_port: 18991}}\n{extra}",
+            "format: cortex.instance/1\nname: adv\ndescription: Test brain.\nekr: {{version: \"0.0.34\", bin: \"{ekr}\"}}\nseed: {{documents: []}}\nmodel: {{model: claude-haiku-4-5-20251001, budget_usd: \"1\", timeout_s: 60}}\nsources:\n{sources}serve: {{view_port: 18991}}\n{extra}",
             ekr = ekr().display(),
             sources = sources(&w.root),
         ),
