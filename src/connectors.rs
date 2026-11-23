@@ -108,6 +108,59 @@ pub fn pick(adapter: &str, profile: &str, listed: &Value) -> Result<String, Stri
     }
 }
 
+/// The most pages of one `connections list` cortex reads looking for a connection: 1000 pages of
+/// Connectors' default 100 entries.
+const LIST_PAGES: usize = 1000;
+
+/// The arguments of one page of `connections list --adapter <adapter>`: the first for `None`, else
+/// the page `--cursor` names.
+fn list_args<'a>(adapter: &'a str, cursor: Option<&'a str>) -> Vec<&'a str> {
+    let mut args = vec!["connections", "list", "--adapter", adapter];
+    if let Some(cursor) = cursor {
+        args.extend(["--cursor", cursor]);
+    }
+    args
+}
+
+/// The `connections list` entry of `connection`, read page by page: `page` answers one page, the
+/// first for `None`, the next for the cursor the page before named (`next_cursor`). The walk stops
+/// at the first page that lists the connection, and answers `None` once a page names no further
+/// cursor. A cursor that comes back a second time, or a list longer than [`LIST_PAGES`] pages,
+/// ends the walk as [`InvokeError::Failed`] naming it.
+fn listed_entry(
+    adapter: &str,
+    connection: &str,
+    mut page: impl FnMut(Option<&str>) -> Result<Value, InvokeError>,
+) -> Result<Option<Value>, InvokeError> {
+    let mut asked = std::collections::BTreeSet::new();
+    let mut cursor: Option<String> = None;
+    for read in 1..=LIST_PAGES {
+        let listed = page(cursor.as_deref())?;
+        let found = listed["connections"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|c| c["connection"].as_str() == Some(connection));
+        if let Some(found) = found {
+            return Ok(Some(found.clone()));
+        }
+        let Some(next) = listed["next_cursor"].as_str().filter(|c| !c.is_empty()) else {
+            return Ok(None);
+        };
+        if !asked.insert(next.to_string()) {
+            return Err(InvokeError::Failed(format!(
+                "connections list --adapter {adapter}: page {read} named the cursor {next} a \
+                 second time; cortex stopped reading the list without finding {connection}"
+            )));
+        }
+        cursor = Some(next.to_string());
+    }
+    Err(InvokeError::Failed(format!(
+        "connections list --adapter {adapter}: {connection} is not on the first {LIST_PAGES} \
+         pages and the list names a further page; cortex stopped reading it"
+    )))
+}
+
 /// Why an invocation answered nothing.
 #[derive(Debug)]
 pub enum InvokeError {
@@ -310,22 +363,17 @@ impl Connectors {
         Ok(id)
     }
 
-    /// The state of `connection` among `adapter`'s connections, or `None` when it is not listed.
+    /// The state of `connection` among `adapter`'s connections, on any page of the list
+    /// ([`listed_entry`]), or `None` when no page lists it.
     pub fn connection_state(
         &self,
         adapter: &str,
         connection: &str,
     ) -> Result<Option<String>, InvokeError> {
-        let listed = self.json(
-            &["connections", "list", "--adapter", adapter],
-            "connections list",
-        )?;
-        Ok(listed["connections"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|c| c["connection"].as_str() == Some(connection))
-            .map(|c| c["state"].as_str().unwrap_or("unknown").to_string()))
+        let found = listed_entry(adapter, connection, |cursor| {
+            self.json(&list_args(adapter, cursor), "connections list")
+        })?;
+        Ok(found.map(|c| c["state"].as_str().unwrap_or("unknown").to_string()))
     }
 
     /// Renews a connection whose validation evidence lapsed (`pending`), so a read is admitted.
@@ -389,21 +437,15 @@ impl Connectors {
         connection: &str,
         force: bool,
     ) -> Result<Value, InvokeError> {
-        let listed = self.json_or_unavailable(
-            &["connections", "list", "--adapter", adapter],
-            "connections list",
-        )?;
-        let Some(found) = listed["connections"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|c| c["connection"].as_str() == Some(connection))
-        else {
+        // A retryable failure of any page tries the whole attempt again, from the first page.
+        let found = listed_entry(adapter, connection, |cursor| {
+            self.json_or_unavailable(&list_args(adapter, cursor), "connections list")
+        })?;
+        let Some(found) = found else {
             return Err(InvokeError::Missing(format!(
                 "{adapter}: no connection {connection}"
             )));
         };
-        let found = found.clone();
         if !force && found["state"].as_str() == Some("ready") {
             return Ok(found);
         }
@@ -880,5 +922,91 @@ mod tests {
             );
         }
         assert!(!retryable(&json!({"ok": true, "result": {}})));
+    }
+
+    /// `story:review-connection-pagination`: a connection id is looked for on every page, through
+    /// `next_cursor`, and the walk stops at the page that lists it.
+    #[test]
+    fn an_id_is_found_on_a_later_page_through_the_cursor() {
+        let mut asked = Vec::new();
+        let found = listed_entry("tavily", "conn_B", |cursor| {
+            asked.push(cursor.map(str::to_owned));
+            Ok(match cursor {
+                None => json!({"connections": [entry("tavily", "conn_A", "p", "ready")],
+                               "next_cursor": "c1"}),
+                Some("c1") => json!({"connections": [entry("tavily", "conn_B", "p", "pending")],
+                                     "next_cursor": "c2"}),
+                Some(other) => panic!("an unknown cursor {other}"),
+            })
+        })
+        .unwrap();
+        assert_eq!(found.unwrap()["state"], "pending");
+        assert_eq!(asked, [None, Some("c1".to_string())]);
+    }
+
+    #[test]
+    fn an_id_on_no_page_is_none_after_the_last_page() {
+        let mut pages = 0;
+        let found = listed_entry("tavily", "conn_Z", |cursor| {
+            pages += 1;
+            Ok(match cursor {
+                None => json!({"connections": [], "next_cursor": "c1"}),
+                _ => json!({"connections": [entry("tavily", "conn_A", "p", "ready")],
+                            "next_cursor": null}),
+            })
+        })
+        .unwrap();
+        assert!(found.is_none());
+        assert_eq!(pages, 2);
+    }
+
+    /// A list that names a cursor it named before ends the walk with a reason, not a loop.
+    #[test]
+    fn a_repeated_cursor_ends_the_walk_naming_it() {
+        let mut pages = 0;
+        let error = listed_entry("tavily", "conn_Z", |cursor| {
+            pages += 1;
+            Ok(match cursor {
+                None => json!({"connections": [], "next_cursor": "c1"}),
+                _ => json!({"connections": [], "next_cursor": "c1"}),
+            })
+        })
+        .unwrap_err();
+        assert_eq!(pages, 2);
+        let InvokeError::Failed(why) = error else {
+            panic!("{error:?}")
+        };
+        for part in ["tavily", "cursor c1", "second time", "conn_Z"] {
+            assert!(why.contains(part), "{part:?} in {why}");
+        }
+    }
+
+    /// A list that never ends is read at most `LIST_PAGES` pages.
+    #[test]
+    fn an_endless_list_is_read_at_most_list_pages_pages() {
+        let mut pages = 0;
+        let error = listed_entry("tavily", "conn_Z", |_| {
+            pages += 1;
+            Ok(json!({"connections": [], "next_cursor": format!("c{pages}")}))
+        })
+        .unwrap_err();
+        assert_eq!(pages, LIST_PAGES);
+        assert!(
+            matches!(error, InvokeError::Failed(ref why) if why.contains("1000")),
+            "{error}"
+        );
+    }
+
+    /// A page that fails ends the walk with its own error.
+    #[test]
+    fn a_failing_page_ends_the_walk_with_its_error() {
+        let error = listed_entry("tavily", "conn_Z", |cursor| match cursor {
+            None => Ok(json!({"connections": [], "next_cursor": "c1"})),
+            _ => Err(InvokeError::Unavailable(
+                "connections list: unavailable".into(),
+            )),
+        })
+        .unwrap_err();
+        assert!(matches!(error, InvokeError::Unavailable(_)), "{error}");
     }
 }

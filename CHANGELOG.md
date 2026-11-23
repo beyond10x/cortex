@@ -36,6 +36,14 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Fixed
+
+- A connection named by id is found on any page of `connectors connections list`: cortex follows
+  `next_cursor` when `cortex create` checks the id and when it revalidates the connection before
+  a read. Before, an id on the second page was reported missing, and two timer runs then disabled
+  the source. A list that names a cursor a second time, or runs past 1000 pages, ends the read
+  with a reason naming the cursor instead of a loop.
+
 ## 0.7.2 — 2026-10-30
 
 ### Fixed
