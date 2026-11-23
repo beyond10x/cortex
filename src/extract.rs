@@ -433,6 +433,32 @@ pub fn error_text(text: &str) -> String {
     format!("{}…", &masked[..end])
 }
 
+/// What an error answer of claude says, before [`error_text`] masks and cuts it: its `result`
+/// text, or, when it has none and its subtype names an error (`error_max_structured_output_retries`,
+/// `error_max_turns`), its subtype, its number of turns and the last message of its `errors`
+/// list, such as the last structured-output validation failure.
+fn error_said(answer: &Value) -> String {
+    let result = answer["result"].as_str().unwrap_or_default().trim();
+    let subtype = answer["subtype"].as_str().unwrap_or_default();
+    if !result.is_empty() || !subtype.starts_with("error") {
+        return result.to_string();
+    }
+    let mut said = subtype.to_string();
+    if let Some(turns) = answer["num_turns"].as_i64() {
+        said.push_str(&format!(" after {turns} turns"));
+    }
+    let last = answer["errors"]
+        .as_array()
+        .and_then(|errors| errors.iter().rev().find_map(Value::as_str))
+        .map(str::trim)
+        .filter(|e| !e.is_empty());
+    if let Some(last) = last {
+        said.push_str(": ");
+        said.push_str(last);
+    }
+    said
+}
+
 /// Why a `Codex` backend does not extract yet.
 pub const CODEX_PENDING: &str =
     "the Codex model backend does not extract yet (story:codex-model-backend)";
@@ -852,7 +878,7 @@ impl Model {
                 .is_none()
                 .then(|| unavailable(answer["result"].as_str().unwrap_or_default()))
                 .flatten();
-            let said = error_text(answer["result"].as_str().unwrap_or_default());
+            let said = error_text(&error_said(&answer));
             let _ = std::fs::write(dir.join("error.txt"), &said);
             let mut message = format!(
                 "claude answered an error ({}), {}",

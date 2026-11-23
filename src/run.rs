@@ -1210,7 +1210,7 @@ fn process_in(
                 .for_batch(&session, ontology, batch, &entities)
                 .map_err(store_failure)?;
             let known = Known::from_ontology(ontology, known);
-            let (shown, known) = pseudonymise(&mut p, batch, &uncut, &known);
+            let (shown, known) = pseudonymise(&mut p, batch, &uncut, &known, lookup.head_names());
             if let Some(why) = refused(&p, &shown, &known) {
                 return Err(Failure::Extract(why));
             }
@@ -1311,7 +1311,8 @@ fn process_in(
             }
             Some(r) => {
                 let mut p = r.batch();
-                let (shown, known) = pseudonymise(&mut p, &batch, &uncut, &known);
+                let (shown, known) =
+                    pseudonymise(&mut p, &batch, &uncut, &known, lookup.head_names());
                 // Checked again: the known entity names grow with each batch applied.
                 if let Some(why) = refused(&p, &shown, &known) {
                     if report.documents_applied == 0 {
@@ -3143,11 +3144,14 @@ fn known_names(known: &Known) -> impl Iterator<Item = &String> {
 /// document key (the `Source:` line), title, description and text. The text is the kept part of
 /// the text before the cut (`uncut`), so a value the cut splits is replaced too. What the
 /// irreversible rules replaced before storage is counted in `p` here, as the document is sent.
+/// A word of `store`, the node names and aliases the store held at the run's start, is no rare
+/// name: the store already knows it, and a customer named once and hidden lost its facts.
 fn pseudonymise(
     p: &mut redact::Batch<'_>,
     batch: &[evidence::Issued],
     uncut: &HashMap<String, Vec<Uncut>>,
     known: &Known,
+    store: &[String],
 ) -> (Vec<evidence::Issued>, Known) {
     let find = |doc: &sources::Document| -> Option<&Uncut> {
         uncut
@@ -3194,8 +3198,14 @@ fn pseudonymise(
     for name in known_names(known) {
         p.reserve_name(name);
     }
-    // The ontology's names are the types the model writes back; `RareName` never takes them.
-    for line in known.node_types.iter().chain(&known.edge_types) {
+    // The ontology's names are the types the model writes back, and the store's node names are
+    // known to it already; `RareName` never takes them.
+    for line in known
+        .node_types
+        .iter()
+        .chain(&known.edge_types)
+        .chain(store)
+    {
         p.keep_names(line);
     }
     let shown = batch

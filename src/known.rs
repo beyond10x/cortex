@@ -293,9 +293,18 @@ impl Index {
 #[derive(Debug, Default)]
 pub struct Lookup {
     index: Option<Index>,
+    /// Every canonical name and alias of the nodes the store held when the index was read, before
+    /// the run applied anything.
+    head: Vec<String>,
 }
 
 impl Lookup {
+    /// The canonical names and aliases of every node the store held when the run read it, once
+    /// [`Lookup::for_batch`] has read it; empty before. What the run applies is not among them.
+    pub fn head_names(&self) -> &[String] {
+        &self.head
+    }
+
     /// The known entities of `batch`: the index's hits of its [`terms`], [`masked`], then
     /// [`merge`]d with the run's own names `run`. The first call with a term reads the store
     /// through the run's `session`.
@@ -311,7 +320,14 @@ impl Lookup {
             Vec::new()
         } else {
             if self.index.is_none() {
-                self.index = Some(Index::of(&session.snapshot()?, ontology));
+                let index = Index::of(&session.snapshot()?, ontology);
+                self.head = index
+                    .nodes
+                    .iter()
+                    .flat_map(|e| std::iter::once(&e.name).chain(&e.aliases))
+                    .cloned()
+                    .collect();
+                self.index = Some(index);
             }
             self.index.as_ref().expect("built above").hits(&terms)
         };

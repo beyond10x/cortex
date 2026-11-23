@@ -57,8 +57,10 @@ stand; [Status](./status.mdx) lists what is planned.
   tool result of the [ask service](./ask-service.md#redaction) and of the eval `mcp` runner. Before the answer is
   applied or returned, each placeholder is put
   back. The store and its evidence therefore hold the personal data and stay searchable for it;
-  only the model does not see it. A placeholder the model changed or invented stays as written
-  and is counted as `unrestored` in the run's log. Detection is by pattern: a person's name is
+  only the model does not see it. A placeholder the model wrote back without its brackets
+  (`Name-3` for `[Name-3]`) is put back too, in a value, an alias or a type name. A placeholder the
+  model changed otherwise or invented stays as written and is counted as `unrestored` in the run's
+  log. Detection is by pattern: a person's name is
   found only when `known_names` lists it or it is rare in the batch, and a spec without a
   `redaction` policy sends text unchanged. Neither masking nor redaction is a guarantee.
 - **Links are found by their shape.** `Url` takes a link that starts with a scheme
@@ -78,8 +80,12 @@ stand; [Status](./status.mdx) lists what is planned.
   name or a credential another class hides is not counted, and neither are the known entity
   names. For a record of a `files` source read as records, only the record's own text counts,
   not its thread context, key or title, which repeat other records' text and the file's name. A
-  known entity name the batch's documents do not hold counts as seen 0 times, so a
-  person the store already knows is hidden in the prompt's known entities too. Common sentence
+  word of a node name or alias the store holds when the run starts is never taken: a customer
+  named once in a batch was hidden and the facts about it were lost. So a person the store
+  already knows is shown to the model by name, in the documents and in the known entities; list
+  a name in `known_names` to keep it hidden. A name the run itself added is not in the store at
+  its start, and a known entity name the batch's documents do not hold counts as seen 0 times,
+  so such a name is hidden in the prompt's known entities. Common sentence
   openers (`The`, `This`, `We` and the like) are never taken, and neither are the names of the
   store's ontology (node types, properties, value kinds, relations), so a person whose name is
   also a type name is not hidden by `RareName`. A rare product or place name, and
