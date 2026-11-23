@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest c1cc8b9b9466992541f3b9ee58e192fe0acf3efdcfa61eb84d496d57da5c6dc8
-// contract digest 81ef54a1cc0b20fe0001264828691872bf5c3f0b82964539fd5b81eb5fc47621
+// model digest 4d696c5e1aca27b4d9e6d3faaf3bc2b55b9215801b5aee7ac47b47e28bc8e13f
+// contract digest 1788d15a326626c332896ec48b946f55a5bb886a430361d0c2ba2a8525140ea8
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! cortex — the `cortex` component of `cortex` v1.
@@ -22,6 +22,8 @@ pub enum PublishedEvent {
     EvalCaseAdded(crate::instance::EvalCaseAdded),
     /// `cortex.instance.EvalRan`.
     EvalRan(crate::instance::EvalRan),
+    /// `cortex.instance.ExtractionApplied`.
+    ExtractionApplied(crate::instance::ExtractionApplied),
     /// `cortex.instance.InstanceAdopted`.
     InstanceAdopted(crate::instance::InstanceAdopted),
     /// `cortex.instance.InstanceCreated`.
@@ -82,7 +84,7 @@ impl<B> Cortex<B> {
 
 impl<B> Cortex<B>
 where
-    B: crate::instance::obligations::AddEvalCaseBehavior + crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunEvalBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
+    B: crate::instance::obligations::AddEvalCaseBehavior + crate::instance::obligations::AddSourceBehavior + crate::instance::obligations::AdoptInstanceBehavior + crate::instance::obligations::ApplyExtractionBehavior + crate::instance::obligations::ApplySchemaProposalsBehavior + crate::instance::obligations::ApproveSchemaProposalsBehavior + crate::instance::obligations::CreateInstanceBehavior + crate::instance::obligations::EnableSourceBehavior + crate::instance::obligations::MeasureQualityBehavior + crate::instance::obligations::ProposeSchemaChangesBehavior + crate::instance::obligations::RecordFailureBehavior + crate::instance::obligations::RejectSchemaProposalsBehavior + crate::instance::obligations::RemoveInstanceBehavior + crate::instance::obligations::RestoreSnapshotBehavior + crate::instance::obligations::RunEvalBehavior + crate::instance::obligations::RunSourceBehavior + crate::instance::obligations::UpdateInstanceBehavior + crate::instance::obligations::InstancesQuery + crate::instance::obligations::SourcesQuery,
 {
     /// Accepts `cortex.instance.AddEvalCase`: runs the behaviour obligation, then publishes the declared events
     /// the outcome carries.
@@ -139,6 +141,28 @@ where
             crate::instance::AdoptInstanceOutcome::Adopted { instance_adopted, .. } => {
                 self.outbox.push(PublishedEvent::InstanceAdopted(instance_adopted.clone()));
             }
+        }
+        Ok(outcome)
+    }
+
+    /// Accepts `cortex.instance.ApplyExtraction`: runs the behaviour obligation, then publishes the declared events
+    /// the outcome carries.
+    ///
+    /// `Err` is the typed refusal of an unmet obligation — never a domain outcome, which always
+    /// arrives as a variant of the outcome type, refusals included.
+    pub fn apply_extraction(&mut self, input: crate::instance::ApplyExtraction) -> Result<crate::instance::ApplyExtractionOutcome, crate::obligation::UnmetObligation> {
+        let outcome = self.behaviors.apply_extraction(input)?;
+        match &outcome {
+            crate::instance::ApplyExtractionOutcome::NoSuchRun { .. } => {}
+            crate::instance::ApplyExtractionOutcome::AlreadyApplied { .. } => {}
+            crate::instance::ApplyExtractionOutcome::ExtractionStale { .. } => {}
+            crate::instance::ApplyExtractionOutcome::ApplyRefused { .. } => {}
+            crate::instance::ApplyExtractionOutcome::StoreOutcomeUnknown { .. } => {}
+            crate::instance::ApplyExtractionOutcome::Terminated { .. } => {}
+            crate::instance::ApplyExtractionOutcome::Applied { extraction_applied, .. } => {
+                self.outbox.push(PublishedEvent::ExtractionApplied(extraction_applied.clone()));
+            }
+            crate::instance::ApplyExtractionOutcome::NoSuchInstance { .. } => {}
         }
         Ok(outcome)
     }
@@ -371,6 +395,8 @@ where
             crate::instance::RunSourceOutcome::PathRefused { .. } => {}
             crate::instance::RunSourceOutcome::FetchOnlyFailed { .. } => {}
             crate::instance::RunSourceOutcome::Fetched { .. } => {}
+            crate::instance::RunSourceOutcome::ExtractOnlyFailed { .. } => {}
+            crate::instance::RunSourceOutcome::Extracted { .. } => {}
             crate::instance::RunSourceOutcome::FetchFailed { .. } => {}
             crate::instance::RunSourceOutcome::ExtractionFailed { .. } => {}
             crate::instance::RunSourceOutcome::ApplyRefused { .. } => {}

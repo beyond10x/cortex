@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest c1cc8b9b9466992541f3b9ee58e192fe0acf3efdcfa61eb84d496d57da5c6dc8
-// contract digest 81ef54a1cc0b20fe0001264828691872bf5c3f0b82964539fd5b81eb5fc47621
+// model digest 4d696c5e1aca27b4d9e6d3faaf3bc2b55b9215801b5aee7ac47b47e28bc8e13f
+// contract digest 1788d15a326626c332896ec48b946f55a5bb886a430361d0c2ba2a8525140ea8
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -113,6 +113,8 @@ pub enum ExternalCommand<'a> {
     CortexInstanceAddEvalCase(&'a crate::instance::AddEvalCase),
     /// The executing `cortex.instance.AdoptInstance` input.
     CortexInstanceAdoptInstance(&'a crate::instance::AdoptInstance),
+    /// The executing `cortex.instance.ApplyExtraction` input.
+    CortexInstanceApplyExtraction(&'a crate::instance::ApplyExtraction),
     /// The executing `cortex.instance.ApplySchemaProposals` input.
     CortexInstanceApplySchemaProposals(&'a crate::instance::ApplySchemaProposals),
     /// The executing `cortex.instance.ApproveSchemaProposals` input.
@@ -146,6 +148,7 @@ impl ExternalCommand<'_> {
             Self::CortexAskCloseReview(_) => "cortex.ask.CloseReview",
             Self::CortexInstanceAddEvalCase(_) => "cortex.instance.AddEvalCase",
             Self::CortexInstanceAdoptInstance(_) => "cortex.instance.AdoptInstance",
+            Self::CortexInstanceApplyExtraction(_) => "cortex.instance.ApplyExtraction",
             Self::CortexInstanceApplySchemaProposals(_) => "cortex.instance.ApplySchemaProposals",
             Self::CortexInstanceApproveSchemaProposals(_) => "cortex.instance.ApproveSchemaProposals",
             Self::CortexInstanceCreateInstance(_) => "cortex.instance.CreateInstance",
@@ -611,6 +614,49 @@ where
         };
         let answer = crate::instance::AdoptInstanceOutcome::Adopted { instance_adopted: crate::instance::InstanceAdopted { name: identity.clone(), revision: self.ports.try_generate_integer()?, view_port: self.ports.try_generate_integer()? } };
         InstanceStorage::put(&mut self.ports, crate::instance::AnyInstance::Active(crate::instance::Instance::new(data)).snapshot());
+        return Ok(answer);
+    }
+}
+
+/// `cortex.instance.ApplyExtraction`, generated: every outcome is one the specification fully determines.
+impl<P> crate::instance::obligations::ApplyExtractionBehavior for Generated<P>
+where
+    P: TryContext + InstanceStorage,
+{
+    fn apply_extraction(&mut self, input: crate::instance::ApplyExtraction) -> Result<crate::instance::ApplyExtractionOutcome, UnmetObligation> {
+        let _ = &input;
+        // `no-such-run`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceApplyExtraction(&input), "no-such-run")? {
+            return Ok(crate::instance::ApplyExtractionOutcome::NoSuchRun { error: crate::instance::KeptExtractionNotFound { run: input.run.clone() } });
+        }
+        // `already-applied`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceApplyExtraction(&input), "already-applied")? {
+            return Ok(crate::instance::ApplyExtractionOutcome::AlreadyApplied { error: crate::instance::ExtractionAlreadyApplied { run: input.run.clone() } });
+        }
+        // `extraction-stale`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceApplyExtraction(&input), "extraction-stale")? {
+            return Ok(crate::instance::ApplyExtractionOutcome::ExtractionStale { error: crate::instance::ExtractionStale { run: input.run.clone(), reason: self.ports.try_generate_string()? } });
+        }
+        // `apply-refused`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceApplyExtraction(&input), "apply-refused")? {
+            return Ok(crate::instance::ApplyExtractionOutcome::ApplyRefused { error: crate::instance::ApplyRefused { reason: self.ports.try_generate_string()? } });
+        }
+        // `store-outcome-unknown`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceApplyExtraction(&input), "store-outcome-unknown")? {
+            return Ok(crate::instance::ApplyExtractionOutcome::StoreOutcomeUnknown { error: crate::instance::StoreOutcomeUnknown { reason: self.ports.try_generate_string()? } });
+        }
+        // `terminated`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceApplyExtraction(&input), "terminated")? {
+            return Ok(crate::instance::ApplyExtractionOutcome::Terminated { error: crate::instance::RunTerminated { reason: self.ports.try_generate_string()? } });
+        }
+        // `applied`: the default.
+        let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
+            return Ok(crate::instance::ApplyExtractionOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        };
+        let _ = &held;
+        let next = held;
+        let answer = crate::instance::ApplyExtractionOutcome::Applied { extraction_applied: crate::instance::ExtractionApplied { name: input.name.clone(), run: input.run.clone(), documents_applied: self.ports.try_generate_integer()?, documents_left: self.ports.try_generate_integer()? } };
+        InstanceStorage::put(&mut self.ports, next);
         return Ok(answer);
     }
 }

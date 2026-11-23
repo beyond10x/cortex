@@ -17,6 +17,7 @@ components:
         - cortex.instance.RecordFailure
         - cortex.instance.EnableSource
         - cortex.instance.RestoreSnapshot
+        - cortex.instance.ApplyExtraction
         - cortex.instance.MeasureQuality
         - cortex.instance.RunEval
         - cortex.instance.AddEvalCase
@@ -36,6 +37,7 @@ components:
         - cortex.instance.SourceDisabled
         - cortex.instance.SourceEnabled
         - cortex.instance.SnapshotRestored
+        - cortex.instance.ExtractionApplied
         - cortex.instance.QualityMeasured
         - cortex.instance.EvalRan
         - cortex.instance.EvalCaseAdded
@@ -52,6 +54,7 @@ components:
         - cortex.instance.RemoveInstance
         - cortex.instance.RunSource
         - cortex.instance.RestoreSnapshot
+        - cortex.instance.ApplyExtraction
         - cortex.instance.MeasureQuality
         - cortex.instance.ProposeSchemaChanges
       groups:

@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use cortex_model::instance as m;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::connectors::Connectors;
@@ -18,7 +19,7 @@ use crate::schedule::Systemd;
 use crate::snapshot::{self, BeforeApply, RestoreError};
 use crate::sources::{self, FetchError, Window};
 use crate::spend;
-use crate::state::{text_hash, Backlog, Failures, SeenState};
+use crate::state::{text_hash, Backlog, Failures, Seen, SeenState};
 use crate::structured;
 
 pub struct Tools {
@@ -145,6 +146,14 @@ pub struct Report {
     /// model's window, by key (masked); each is marked seen, so it is not asked again until its
     /// text changes.
     pub too_large: Vec<String>,
+    /// An extract-only run (`cortex run --extract-only`, [`keep`]): the documents its kept batches
+    /// hold, unapplied.
+    pub documents_kept: i64,
+    /// An extract-only run: the batches it kept.
+    pub batches_kept: usize,
+    /// An extract-only run: its run directory under `runs/`, which `cortex apply` takes; `None`
+    /// when it kept nothing.
+    pub kept: Option<String>,
 }
 
 /// An applied document a part EKR rejected belongs to: its key and EKR's refusals, joined.
@@ -227,11 +236,20 @@ impl Default for Report {
             batch_chars: BATCH_CHARS,
             splits: 0,
             too_large: Vec::new(),
+            documents_kept: 0,
+            batches_kept: 0,
+            kept: None,
         }
     }
 }
 
 impl Report {
+    /// Whether the run applied a document, or, extracting only ([`keep`]), kept one: a failure
+    /// after that stops the run instead of failing it.
+    fn progressed(&self) -> bool {
+        self.documents_applied > 0 || self.documents_kept > 0
+    }
+
     /// Counts the model calls of one batch and their tokens, its request's fixed part `fixed`
     /// bytes long and its documents `documents` bytes.
     pub fn add_calls(&mut self, calls: i64, usage: extract::Usage, fixed: usize, documents: usize) {
@@ -496,6 +514,7 @@ pub fn count(
         &mut Undo::new(BeforeApply::none()),
         &mut Report::default(),
         Some(&mut counts),
+        false,
     )?;
     Ok(counts)
 }
@@ -553,6 +572,409 @@ pub fn run(
         }
     }
     ran
+}
+
+/// The file an extract-only run keeps in its run directory, beside its batch directories.
+pub const KEPT_FILE: &str = "kept.json";
+
+/// The file `cortex apply` writes into a kept run's directory before its first write: a kept
+/// extraction is applied once.
+pub const APPLIED_FILE: &str = "applied.json";
+
+/// The format of [`KEPT_FILE`].
+pub const KEPT_FORMAT: &str = "cortex.kept-extraction/1";
+
+/// What an extract-only run ([`keep`]) keeps in `runs/<start ms>-<source>/kept.json`: each batch's
+/// directory and the documents it holds, what a run would then have recorded of its window, and
+/// the run's figures, so that [`apply_kept`] applies the batches and leaves the source's state as
+/// the run would have.
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct Kept {
+    format: String,
+    source: String,
+    started: i64,
+    /// The window the fetch asked about, `[since, until]` in Unix milliseconds.
+    window: Option<[i64; 2]>,
+    /// Whether the run's batches were shown to the model under a redaction policy: the apply then
+    /// keeps no EKR report in a batch directory, as the run would not have.
+    pseudonymised: bool,
+    batches: Vec<KeptBatch>,
+    /// Documents left out alone as too large for the model's window, which a run marks seen.
+    too_large: Vec<KeptDocument>,
+    /// The seen record of every document above as the state file held it when the run started
+    /// (`None`: not seen). The apply refuses the extraction when one differs now.
+    before: BTreeMap<String, Option<Seen>>,
+    wanted: usize,
+    held_since: Option<i64>,
+    child_failures: BTreeMap<String, u32>,
+    /// Known entity names the kept batches added, by type, for the run's entities file.
+    entities: Vec<(String, String)>,
+    figures: KeptFigures,
+}
+
+/// A kept batch: its directory under the run directory (`batch-<n>`), which holds the merged
+/// `extraction.yaml`, and its documents.
+#[derive(Debug, Serialize, Deserialize)]
+struct KeptBatch {
+    dir: String,
+    documents: Vec<KeptDocument>,
+}
+
+/// A document of a kept batch: its evidence id, its key (masked) and what the apply records for
+/// it once applied ([`SeenState::entry`]).
+#[derive(Debug, Serialize, Deserialize)]
+struct KeptDocument {
+    id: String,
+    key: String,
+    seen: Seen,
+}
+
+/// The figures of the extract-only run that the run's gate reads and its report carries
+/// ([`gate::evaluate`]): the apply starts its report from them.
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct KeptFigures {
+    documents_new: i64,
+    facts_refused: usize,
+    masked: usize,
+    truncated: usize,
+    unrestored: usize,
+    cost_usd: Option<f64>,
+    cost_counted: bool,
+    batch_chars: usize,
+    redacted: Option<BTreeMap<String, usize>>,
+    skipped: Vec<String>,
+    too_large: Vec<String>,
+    stopped: Option<String>,
+    backlog: Backlog,
+}
+
+impl KeptFigures {
+    fn of(report: &Report) -> Self {
+        Self {
+            documents_new: report.documents_new,
+            facts_refused: report.facts_refused,
+            masked: report.masked,
+            truncated: report.truncated,
+            unrestored: report.unrestored,
+            cost_usd: report.cost_usd,
+            cost_counted: report.cost_counted,
+            batch_chars: report.batch_chars,
+            redacted: report.redacted.clone(),
+            skipped: report.skipped.clone(),
+            too_large: report.too_large.clone(),
+            stopped: report.stopped.clone(),
+            backlog: report.backlog.clone(),
+        }
+    }
+
+    /// The report an apply starts from: the run's figures, and no model call of its own.
+    fn report(&self) -> Report {
+        Report {
+            documents_new: self.documents_new,
+            facts_refused: self.facts_refused,
+            masked: self.masked,
+            truncated: self.truncated,
+            unrestored: self.unrestored,
+            cost_usd: self.cost_usd,
+            cost_counted: self.cost_counted,
+            batch_chars: self.batch_chars,
+            redacted: self.redacted.clone(),
+            skipped: self.skipped.clone(),
+            too_large: self.too_large.clone(),
+            stopped: self.stopped.clone(),
+            backlog: self.backlog.clone(),
+            ..Report::default()
+        }
+    }
+}
+
+/// `cortex run --extract-only`: fetches, selects and extracts the source as [`run`] does, and
+/// keeps each batch's merged extraction document unapplied in the run's directory with
+/// [`KEPT_FILE`]. It writes nothing else: not the store, the seen state, the window, the failure
+/// counts, the entities file or `cortex.log`, and takes no snapshot or stage. A structured
+/// source calls no model and is refused. The report's `kept` names the run directory, `None`
+/// when no batch was kept. `path` is `--path`, as [`run`] takes it.
+pub fn keep(
+    layout: &Layout,
+    tools: &Tools,
+    source: &m::SourceData,
+    path: Option<&Path>,
+) -> Result<Report, Failure> {
+    let planned = Planned::of(layout, source)?;
+    planned.admits(path)?;
+    if planned.structured().is_some() {
+        return Err(Failure::Extract(format!(
+            "source {:?} is a structured source, which calls no model: --extract-only keeps no \
+             extraction for it",
+            source.name
+        )));
+    }
+    let fetched = planned.fetch(tools, path).or_else(|failure| {
+        if !matches!(failure, Failure::Terminated(_)) {
+            stop_point("while it fetched")?;
+        }
+        Err(failure)
+    })?;
+    stop_point("before it used the documents it fetched")?;
+    let begun = now_ms();
+    let kept = process_in(
+        layout,
+        tools,
+        &planned.spec,
+        layout.store_handle(&planned.spec),
+        &source.name,
+        fetched,
+        &planned.source().policy,
+        Some(planned.window),
+        None,
+        false,
+        &mut Undo::new(BeforeApply::none()),
+        &mut Report::default(),
+        None,
+        true,
+    );
+    prune_runs(layout, &planned.spec, begun);
+    kept
+}
+
+/// Why `cortex apply` applied nothing of a kept extraction, each a declared outcome of
+/// `cortex.instance.ApplyExtraction`.
+#[derive(Debug)]
+pub enum KeptRefusal {
+    /// `no-such-run`: no kept extraction by that name.
+    NotFound,
+    /// `already-applied`: an apply of it began before.
+    Applied,
+    /// `extraction-stale`: a document of it is seen otherwise than when it was extracted, or the
+    /// spec no longer has its source.
+    Stale(String),
+}
+
+/// The answer of [`apply_kept`] that is not a report.
+#[derive(Debug)]
+pub enum ApplyError {
+    Refused(KeptRefusal),
+    /// The apply failed as a run fails: `apply-refused`, `store-outcome-unknown` or `terminated`.
+    Failed(Failure),
+}
+
+/// `cortex apply <instance> <run>`: applies the kept extraction of the run directory `run` once,
+/// batch by batch in order, through [`apply_batch`] as a run applies, held to the spec's gate in
+/// the run's snapshot or stage ([`settle`]), then marks seen what it applied with the seen records
+/// the extraction carried and records the source's window as the run would have. Refused before
+/// anything is written when there is no such kept extraction, when an apply of it began before,
+/// and when a document of it is seen otherwise than when it was extracted. The caller holds the
+/// home's lock.
+pub fn apply_kept(layout: &Layout, run: &str) -> Result<Report, ApplyError> {
+    let refused = |r| Err(ApplyError::Refused(r));
+    let failed = |e: String| ApplyError::Failed(Failure::Apply(e));
+    if run_started(run).is_none() {
+        return refused(KeptRefusal::NotFound);
+    }
+    let dir = layout.runs().join(run);
+    let Ok(text) = std::fs::read_to_string(dir.join(KEPT_FILE)) else {
+        return refused(KeptRefusal::NotFound);
+    };
+    let kept: Kept =
+        serde_json::from_str(&text).map_err(|e| failed(format!("{run}/{KEPT_FILE}: {e}")))?;
+    if kept.format != KEPT_FORMAT {
+        return Err(failed(format!(
+            "{run}/{KEPT_FILE}: format {:?}, not {KEPT_FORMAT}",
+            kept.format
+        )));
+    }
+    if dir.join(APPLIED_FILE).exists() {
+        return refused(KeptRefusal::Applied);
+    }
+    let spec = layout.load_spec().map_err(failed)?;
+    let Some(source) = spec.sources.iter().find(|s| s.name == kept.source) else {
+        return refused(KeptRefusal::Stale(format!(
+            "the instance's spec has no source {:?}",
+            kept.source
+        )));
+    };
+    let cap = source.policy.max_documents_per_run;
+    let redactor = redact::compile(spec.redaction.as_ref()).map_err(failed)?;
+    let seen_path = layout.seen(&kept.source);
+    let seen = SeenState::load(&seen_path).map_err(failed)?;
+    let moved: Vec<String> = kept
+        .before
+        .iter()
+        .filter(|(key, was)| seen.documents.get(*key) != was.as_ref())
+        .map(|(key, _)| masked_key(redactor.as_ref(), key))
+        .collect();
+    if !moved.is_empty() {
+        return refused(KeptRefusal::Stale(format!(
+            "{} of its documents are seen otherwise than when it was extracted (a run applied \
+             them since, or a restore put back another state): {}",
+            moved.len(),
+            moved.join(", ")
+        )));
+    }
+    let started = now_ms();
+    crate::home::write_atomic(
+        &dir.join(APPLIED_FILE),
+        serde_json::to_string_pretty(&json!({"started": started}))
+            .expect("JSON")
+            .as_bytes(),
+    )
+    .map_err(failed)?;
+    let label = kept.source.clone();
+    let store = layout.store_handle(&spec);
+    Staged::recover(layout, &store).map_err(ApplyError::Failed)?;
+    let mut before = Undo::new(BeforeApply::none());
+    let mut report = kept.figures.report();
+    let ran = apply_kept_in(
+        layout,
+        &spec,
+        store,
+        run,
+        &dir,
+        &kept,
+        seen,
+        cap,
+        redactor.as_ref(),
+        &mut before,
+        &mut report,
+        started,
+    );
+    let settled = settle(layout, &spec, &label, ran, &mut before);
+    settled.map_err(ApplyError::Failed)
+}
+
+/// [`apply_kept`] once the kept extraction is admitted: the run's snapshot or stage, its batches,
+/// its gate and the state it leaves.
+#[allow(clippy::too_many_arguments)]
+fn apply_kept_in(
+    layout: &Layout,
+    spec: &m::InstanceSpec,
+    store: crate::ekr::Store,
+    run: &str,
+    dir: &Path,
+    kept: &Kept,
+    mut seen: SeenState,
+    cap: i64,
+    redactor: Option<&Redactor>,
+    before: &mut Undo,
+    report: &mut Report,
+    started: i64,
+) -> Result<Report, Failure> {
+    let label = kept.source.as_str();
+    let seen_path = layout.seen(label);
+    let mut store = store;
+    *before = Undo::new(BeforeApply::new(
+        layout,
+        &store,
+        label,
+        started,
+        snapshot::keep(spec),
+    ));
+    if gated(spec) {
+        before.staged = Staged::begin(layout, &mut store)?;
+    }
+    let session = store.session().map_err(Failure::Apply)?;
+    let host = std::fs::read_to_string(layout.host()).map_err(|e| Failure::Apply(e.to_string()))?;
+    let operator = crate::ekr::operator(&host).map_err(Failure::Apply)?;
+    let failures_path = crate::state::failures_path(&layout.dir, label);
+    let mut failures = Failures::load(&failures_path).map_err(Failure::Apply)?;
+    for d in &kept.too_large {
+        seen.put(&d.key, d.seen.clone());
+    }
+    let mut lookup = crate::known::Lookup::default();
+    for (n, batch) in kept.batches.iter().enumerate() {
+        stop_point(&format!("before batch {n}"))?;
+        if !batch.dir.starts_with("batch-") || batch.dir.contains(['/', '\\']) {
+            return Err(Failure::Apply(format!(
+                "{run}/{KEPT_FILE}: {:?} is not a batch directory",
+                batch.dir
+            )));
+        }
+        let bdir = dir.join(&batch.dir);
+        let path = bdir.join("extraction.yaml");
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| Failure::Apply(format!("{run}/{}/extraction.yaml: {e}", batch.dir)))?;
+        let doc: serde_yaml_ng::Value = serde_yaml_ng::from_str(&text)
+            .map_err(|e| Failure::Apply(format!("{run}/{}/extraction.yaml: {e}", batch.dir)))?;
+        let mask = redactor.filter(|_| kept.pseudonymised).map(Redactor::batch);
+        let done = match apply_batch(
+            &store,
+            &session,
+            &operator,
+            &bdir,
+            doc,
+            kept.pseudonymised,
+            mask,
+            before,
+            report,
+            &mut lookup,
+        )? {
+            BatchApplied::Refused(e) if !report.progressed() => return Err(Failure::Apply(e)),
+            BatchApplied::Refused(e) => {
+                report.stopped = Some(e);
+                break;
+            }
+            BatchApplied::Done(done) => done,
+        };
+        let mut recovered = false;
+        for d in &batch.documents {
+            if let Some(refusal) = done.isolated.get(&d.id) {
+                report
+                    .rejected
+                    .push(Rejected::new(&d.key, &[masked_key(redactor, refusal)]));
+                continue;
+            }
+            if let Some(refusals) = done.rejected.get(&d.id) {
+                report.rejected.push(Rejected::new(&d.key, refusals));
+            }
+            if done.unstored.contains(&d.id) {
+                continue;
+            }
+            seen.put(&d.key, d.seen.clone());
+            recovered |= failures.applied(&d.key);
+            report.documents_applied += 1;
+        }
+        if recovered {
+            failures.save(&failures_path).map_err(Failure::Apply)?;
+        }
+        seen.save(&seen_path).map_err(Failure::Apply)?;
+        if let Some(why) = done.stop_after {
+            report.stopped = Some(why);
+            break;
+        }
+    }
+    if report.documents_applied > 0 {
+        let mut entities = load_entities(layout);
+        for (ty, name) in &kept.entities {
+            let names = entities.entry(ty.clone()).or_default();
+            if !names.contains(name) && names.len() < KNOWN_PER_TYPE {
+                names.push(name.clone());
+            }
+        }
+        let _ = crate::home::write_atomic(
+            &layout.entities(),
+            serde_json::to_string_pretty(&entities)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
+    }
+    left_for_next(report, &seen, cap);
+    held_to_gate(layout, spec, &session, label, report, None, before, started)?;
+    let window = kept
+        .window
+        .map(|[since_ms, until_ms]| Window { since_ms, until_ms });
+    finish(
+        &mut seen,
+        &seen_path,
+        report,
+        kept.wanted,
+        kept.held_since,
+        window,
+        kept.child_failures.clone(),
+    )?;
+    let mut line = log_line(label, report, started);
+    line["applied"] = json!(run);
+    layout.log_line(&line);
+    Ok(std::mem::take(report))
 }
 
 /// The seed documents of a new instance: every file under the spec's `seed.documents`, through
@@ -666,6 +1088,7 @@ fn process(
         &mut before,
         partial,
         None,
+        false,
     );
     let settled = settle(layout, spec, label, ran, &mut before);
     // The tokens the run spent stay counted; the documents of an undone run are not in the store.
@@ -736,7 +1159,10 @@ fn process_in(
     before: &mut Undo,
     partial: &mut Report,
     counts: Option<&mut Counts>,
+    keep: bool,
 ) -> Result<Report, Failure> {
+    // An extract-only run ([`keep`]): what it keeps of each batch instead of applying it.
+    let mut kept: Option<Kept> = keep.then(Kept::default);
     let started = now_ms();
     let applied_at = window.map_or(started, |w| w.until_ms);
     let redactor = redact::compile(spec.redaction.as_ref()).map_err(Failure::Extract)?;
@@ -927,6 +1353,9 @@ fn process_in(
         .unwrap_or_default();
     let seen_path = layout.seen(label);
     let mut seen = SeenState::load(&seen_path).map_err(Failure::Fetch)?;
+    // An extract-only run: the seen state as it is on disk, against which the apply compares it
+    // ([`apply_kept`]), before this run adjusts it in memory.
+    let on_disk = kept.as_ref().map(|_| seen.documents.clone());
     seen.unlinked = unlinked;
     // What cortex stores from each document beside its text: a Web page's title, description and
     // date, a structured record's mapping. A change of them is a change of the document.
@@ -1006,7 +1435,7 @@ fn process_in(
     }
     // A run that read the source's whole listing (no window, nothing unread) drops the counts of
     // documents the source no longer lists.
-    if window.is_none() && fetched.unread.is_empty() {
+    if window.is_none() && fetched.unread.is_empty() && kept.is_none() {
         let keys: BTreeSet<&str> = docs.iter().map(|d| d.key.as_str()).collect();
         if failures.listed_only(&keys) {
             failures.save(&failures_path).map_err(Failure::Apply)?;
@@ -1053,6 +1482,11 @@ fn process_in(
         _ => false,
     };
     if selected.is_empty() && (listed.is_none() || unchanged()) {
+        // An extract-only run with nothing new keeps nothing and writes nothing.
+        if kept.is_some() {
+            unread(report, &fetched.unread, redactor.as_ref());
+            return Ok(std::mem::take(report));
+        }
         left_for_next(report, &seen, policy.max_documents_per_run);
         unread(report, &fetched.unread, redactor.as_ref());
         let failures = fetched.child_failures.clone();
@@ -1066,7 +1500,7 @@ fn process_in(
     // longer says the store holds none it dropped. Forgotten on disk before the first write, so a
     // run that fails, is stopped or reads part of the source leaves none; [`end_dropped`] sets it
     // again once every end committed.
-    if seen.ended_listing.take().is_some() {
+    if kept.is_none() && seen.ended_listing.take().is_some() {
         seen.save(&seen_path).map_err(Failure::Apply)?;
     }
 
@@ -1199,7 +1633,7 @@ fn process_in(
     let mut held_ontology: Option<serde_json::Value> = None;
     // `redaction.keep_store_types`: the names and aliases of the store's nodes of those types, read
     // once from the store's head before the run applies anything, never a rare name in this run.
-    let kept = match redactor.as_ref().map(Redactor::keep_store_types) {
+    let store_names = match redactor.as_ref().map(Redactor::keep_store_types) {
         Some(types) if !types.is_empty() => {
             let ontology = &*held_ontology.insert(session.ontology().map_err(store_failure)?);
             lookup
@@ -1224,7 +1658,7 @@ fn process_in(
                 .for_batch(&session, ontology, batch, &entities)
                 .map_err(store_failure)?;
             let known = Known::from_ontology(ontology, known);
-            let (shown, known) = pseudonymise(&mut p, batch, &uncut, &known, &kept);
+            let (shown, known) = pseudonymise(&mut p, batch, &uncut, &known, &store_names);
             if let Some(why) = refused(&p, &shown, &known) {
                 return Err(Failure::Extract(why));
             }
@@ -1325,10 +1759,10 @@ fn process_in(
             }
             Some(r) => {
                 let mut p = r.batch();
-                let (shown, known) = pseudonymise(&mut p, &batch, &uncut, &known, &kept);
+                let (shown, known) = pseudonymise(&mut p, &batch, &uncut, &known, &store_names);
                 // Checked again: the known entity names grow with each batch applied.
                 if let Some(why) = refused(&p, &shown, &known) {
-                    if report.documents_applied == 0 {
+                    if !report.progressed() {
                         return Err(Failure::Extract(why));
                     }
                     report.stopped = Some(why);
@@ -1410,6 +1844,15 @@ fn process_in(
                     report
                         .too_large
                         .push(masked_key(redactor.as_ref(), &issued.doc.key));
+                    // An extract-only run leaves it for the apply to mark seen.
+                    if let Some(kept) = kept.as_mut() {
+                        kept.too_large.push(KeptDocument {
+                            id: issued.id.clone(),
+                            key: issued.doc.key.clone(),
+                            seen: seen.entry(&issued.doc, applied_at),
+                        });
+                        continue;
+                    }
                     seen.record(&issued.doc, applied_at);
                     seen.save(&seen_path).map_err(Failure::Apply)?;
                     continue;
@@ -1465,12 +1908,14 @@ fn process_in(
                 for issued in &batch {
                     alone |= failures.failed_in_batch(&issued.doc, &reason);
                 }
-                failures.save(&failures_path).map_err(Failure::Apply)?;
+                if kept.is_none() {
+                    failures.save(&failures_path).map_err(Failure::Apply)?;
+                }
                 if alone {
                     queue.push_front((batch, depth));
                     continue;
                 }
-                if report.documents_applied == 0 {
+                if !report.progressed() {
                     return Err(Failure::Extract(refused.message));
                 }
                 report.stopped = Some(refused.message);
@@ -1483,7 +1928,9 @@ fn process_in(
                 let doc = &batch[0].doc;
                 let reason = masked_key(redactor.as_ref(), &refused.message);
                 let runs = failures.failed(doc, &reason);
-                failures.save(&failures_path).map_err(Failure::Apply)?;
+                if kept.is_none() {
+                    failures.save(&failures_path).map_err(Failure::Apply)?;
+                }
                 if runs >= sources::DOCUMENT_FAILURE_LIMIT {
                     report.skipped.push(masked_key(
                         redactor.as_ref(),
@@ -1502,15 +1949,13 @@ fn process_in(
                         sources::DOCUMENT_FAILURE_LIMIT
                     ),
                 );
-                if report.documents_applied == 0 {
+                if !report.progressed() {
                     return Err(Failure::Extract(why));
                 }
                 report.stopped = Some(why);
                 break;
             }
-            Err(refused) if report.documents_applied == 0 => {
-                return Err(Failure::Extract(refused.message))
-            }
+            Err(refused) if !report.progressed() => return Err(Failure::Extract(refused.message)),
             Err(refused) => {
                 report.stopped = Some(refused.message);
                 break;
@@ -1545,7 +1990,7 @@ fn process_in(
         // EKR's refusals name the restored values; the batch directory keeps them under the
         // batch's placeholders. A copy of the mapping, so its counts are the prompt's alone; it
         // ends with the batch, as the mapping does.
-        let mut refusal_mask = pseudonyms.clone();
+        let refusal_mask = pseudonyms.clone();
         drop(pseudonyms);
         if !unnamed.is_empty() {
             let why = format!(
@@ -1554,7 +1999,7 @@ fn process_in(
                 unnamed.join(", "),
                 n - 1
             );
-            if report.documents_applied == 0 {
+            if !report.progressed() {
                 return Err(Failure::Extract(why));
             }
             report.stopped = Some(why);
@@ -1571,7 +2016,7 @@ fn process_in(
             let why = format!(
                 "the model's document holds an object key \"!\", a tag with no name, at {at}"
             );
-            if report.documents_applied == 0 {
+            if !report.progressed() {
                 return Err(Failure::Extract(why));
             }
             report.stopped = Some(why);
@@ -1583,194 +2028,63 @@ fn process_in(
             held_ontology = Some(session.ontology().map_err(store_failure)?);
         }
         extract::mark_single_valued(&mut restored, held_ontology.as_ref().expect("read above"));
-        let (mut doc, refused) = extract::merge(&restored, &batch);
+        let (doc, refused) = extract::merge(&restored, &batch);
         report.facts_refused += refused;
         let path = dir.join("extraction.yaml");
         let text = serde_yaml_ng::to_string(&doc).expect("YAML");
         std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
-        before.take()?;
-        // A refusal of the whole document that names a type one record's facts redeclared
-        // (`extraction-type-conflict`) costs those records, not the batch: they are taken out,
-        // refused and not marked seen, so a later run asks them again, and the rest is applied
-        // ([`extract::isolate`]). Each refusal takes out one declaration, so this ends.
-        let mut isolated: BTreeMap<String, String> = BTreeMap::new();
-        let attempt = loop {
-            match store.apply(&path) {
-                Err(e) if !crate::ekr::outcome_unknown(&e) => match extract::isolate(&doc, &e) {
-                    Some(rest) => {
-                        isolated.extend(rest.refused);
-                        doc = rest.doc;
-                        let text = serde_yaml_ng::to_string(&doc).expect("YAML");
-                        std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
-                    }
-                    None => break Err(e),
-                },
-                other => break other,
+        // An extract-only run keeps the document unapplied, with what the apply needs to mark its
+        // documents seen ([`keep`], [`apply_kept`]); it grows its known names in memory only.
+        if let Some(kept) = kept.as_mut() {
+            drop(refusal_mask);
+            kept.batches.push(KeptBatch {
+                dir: format!("batch-{}", n - 1),
+                documents: batch
+                    .iter()
+                    .map(|i| KeptDocument {
+                        id: i.id.clone(),
+                        key: i.doc.key.clone(),
+                        seen: seen.entry(&i.doc, applied_at),
+                    })
+                    .collect(),
+            });
+            report.documents_kept += batch.len() as i64;
+            report.batches_kept += 1;
+            for (ty, name) in extract::entity_names(&restored) {
+                let names = entities.entry(ty.clone()).or_default();
+                if !names.contains(&name) && names.len() < KNOWN_PER_TYPE {
+                    names.push(name.clone());
+                    kept.entities.push((ty, name));
+                }
             }
-        };
-        let applied = match attempt {
-            Ok(r) => r,
-            Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown_write(e, before)),
-            Err(e) if report.documents_applied == 0 => return Err(Failure::Apply(e)),
-            Err(e) => {
+            continue;
+        }
+        let done = match apply_batch(
+            &store,
+            &session,
+            &operator,
+            &dir,
+            doc,
+            pseudonymised,
+            refusal_mask,
+            before,
+            report,
+            &mut lookup,
+        )? {
+            BatchApplied::Refused(e) if !report.progressed() => return Err(Failure::Apply(e)),
+            BatchApplied::Refused(e) => {
                 report.stopped = Some(e);
                 break;
             }
+            BatchApplied::Done(done) => done,
         };
-        before.committed();
-        // The next batch sees what this one applied without reading the store again.
-        lookup.applied(&doc, &applied);
         held_ontology = None;
-        if !pseudonymised {
-            let _ = std::fs::write(
-                dir.join("report.json"),
-                serde_json::to_string_pretty(&applied).unwrap_or_default(),
-            );
-        }
-        // A replacement with nothing active to replace is applied again in the same batch, so its
-        // value is stored instead of lost: per subject and property the earliest as a plain
-        // assertion, each later one in a round of its own, still replacing, so EKR supersedes the
-        // value before it and one stays current ([`extract::reapply_rounds`]). A round EKR fails
-        // as a whole stops the run after this batch, and the documents whose values it and the
-        // rounds after it carried are not marked seen, so a later run extracts them again.
-        let mut applied = applied;
-        let mut stop_after: Option<String> = None;
-        let mut rejected_again: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        // Each part EKR refused, with the file applied: kept in the batch directory.
-        let mut refusals: Vec<(String, extract::PartRefusal)> = Vec::new();
-        let mut unstored: BTreeSet<String> = BTreeSet::new();
-        // The history documents of the rounds below ([`extract::history`]).
-        let mut later_history: Vec<extract::Round> = Vec::new();
-        if let Some(reapply) = extract::reapply_rounds(&doc, &applied) {
-            applied = reapply.rest;
-            for (k, round) in reapply.rounds.iter().enumerate() {
-                if stop_after.is_some() {
-                    unstored.extend(round.cited.iter().cloned());
-                    continue;
-                }
-                let name = match k {
-                    0 => "reapply".to_string(),
-                    k => format!("reapply-{k}"),
-                };
-                let again_path = dir.join(format!("{name}.yaml"));
-                let text = serde_yaml_ng::to_string(&round.doc).expect("YAML");
-                std::fs::write(&again_path, text).map_err(|e| Failure::Apply(e.to_string()))?;
-                let reapplied = store.apply(&again_path);
-                // The batch directory keeps only `extraction.yaml` under a redaction policy.
-                if pseudonymised {
-                    let _ = std::fs::remove_file(&again_path);
-                }
-                match reapplied {
-                    Ok(second) => {
-                        before.committed();
-                        // A node only a re-applied fact names is created by this round.
-                        lookup.applied(&round.doc, &second);
-                        if !pseudonymised {
-                            let _ = std::fs::write(
-                                dir.join(format!("{name}-report.json")),
-                                serde_json::to_string_pretty(&second).unwrap_or_default(),
-                            );
-                        }
-                        let refused = crate::ekr::applied(&second).rejected;
-                        report.facts_reapplied += round.facts.saturating_sub(refused);
-                        // A replacement of this round older than the value it would replace
-                        // (`invalid-supersession`) is kept as history with the batch's own, below.
-                        let second = match extract::history(&round.doc, &second) {
-                            Some((older, rest)) => {
-                                later_history.push(older);
-                                rest
-                            }
-                            None => second,
-                        };
-                        refusals.extend(
-                            extract::part_refusals(&second)
-                                .into_iter()
-                                .map(|r| (format!("{name}.yaml"), r)),
-                        );
-                        report.parts_rejected += crate::ekr::applied(&second).rejected;
-                        for (id, refusals) in extract::cited_by_rejected(&round.doc, &second) {
-                            rejected_again.entry(id).or_default().extend(refusals);
-                        }
-                    }
-                    Err(e) if crate::ekr::outcome_unknown(&e) => {
-                        return Err(unknown_write(e, before))
-                    }
-                    Err(e) => {
-                        stop_after = Some(format!(
-                            "{e}; the documents whose values it was to store are not marked \
-                             seen, so a later run extracts them again"
-                        ));
-                        unstored.extend(round.cited.iter().cloned());
-                    }
-                }
-            }
-        }
-        // A replacement older than the active value it would replace (`invalid-supersession`: its
-        // document was read after a newer one) becomes that value's history instead of being lost:
-        // applied without `replaces`, then superseded by the value from that value's start
-        // ([`extract::history`], [`extract::closings`]). A step that fails stops the run after this
-        // batch, as a failed round above does, and its documents are not marked seen. A
-        // replacement a round above applied again that EKR refused the same way is kept in the
-        // same apply.
-        let mut held = later_history;
-        if let Some((older, rest)) = extract::history(&doc, &applied) {
-            applied = rest;
-            held.insert(0, older);
-        }
-        if let Some(older) = extract::joined_history(&doc, held) {
-            if stop_after.is_some() {
-                unstored.extend(older.cited.iter().cloned());
-            } else {
-                match keep_history(&store, &session, &operator, &dir, &older, pseudonymised) {
-                    Ok((second, kept)) => {
-                        before.committed();
-                        lookup.applied(&older.doc, &second);
-                        report.facts_history += kept;
-                        refusals.extend(
-                            extract::part_refusals(&second)
-                                .into_iter()
-                                .map(|r| ("history.yaml".to_string(), r)),
-                        );
-                        report.parts_rejected += crate::ekr::applied(&second).rejected;
-                        for (id, refusals) in extract::cited_by_rejected(&older.doc, &second) {
-                            rejected_again.entry(id).or_default().extend(refusals);
-                        }
-                    }
-                    Err((e, committed)) => {
-                        if committed {
-                            before.committed();
-                        }
-                        if crate::ekr::outcome_unknown(&e) {
-                            return Err(unknown_write(e, before));
-                        }
-                        // The session the run's SIGTERM ended stops the run, undone when gated.
-                        if crate::ekr::is_terminated(&e) {
-                            return Err(Failure::Terminated(e));
-                        }
-                        stop_after = Some(format!(
-                            "{e}; the documents whose older values it was to keep as history are \
-                             not marked seen, so a later run extracts them again"
-                        ));
-                        unstored.extend(older.cited.iter().cloned());
-                    }
-                }
-            }
-        }
-        let mut rows: Vec<_> = extract::part_refusals(&applied)
-            .into_iter()
-            .map(|r| ("extraction.yaml".to_string(), r))
-            .collect();
-        rows.append(&mut refusals);
-        write_refusals(&dir, &rows, refusal_mask.as_mut());
-        drop(refusal_mask);
-        report.parts_rejected += crate::ekr::applied(&applied).rejected;
-        // A document a rejected fact cites is seen all the same: EKR would reject the fact again
-        // on the same text, and a retry would cost a model call and a slot of the run on every
-        // run. The report names it with EKR's refusal.
-        let mut rejected = extract::cited_by_rejected(&doc, &applied);
-        for (id, refusals) in rejected_again {
-            rejected.entry(id).or_default().extend(refusals);
-        }
+        let BatchDone {
+            isolated,
+            rejected,
+            unstored,
+            stop_after,
+        } = done;
         // An applied document's failure count, if it had one, ends.
         let mut recovered = false;
         for issued in &batch {
@@ -1815,16 +2129,47 @@ fn process_in(
         }
     }
     if let Some(why) = &too_large {
-        if report.documents_applied == 0 {
+        if !report.progressed() {
             return Err(Failure::BatchTooLarge(why.clone()));
         }
         report.stopped = Some(why.clone());
     }
     if let Some((cause, why)) = &unreachable {
-        if report.documents_applied == 0 {
+        if !report.progressed() {
             return Err(Failure::ModelUnavailable(*cause, why.clone()));
         }
         report.stopped = Some(why.clone());
+    }
+    // An extract-only run that kept a batch writes `kept.json` beside its batch directories and
+    // nothing else; one that kept none keeps no run.
+    if let Some(mut kept) = kept {
+        unread(report, &fetched.unread, redactor.as_ref());
+        if report.batches_kept == 0 {
+            return Ok(std::mem::take(report));
+        }
+        let on_disk = on_disk.unwrap_or_default();
+        kept.before = kept
+            .batches
+            .iter()
+            .flat_map(|b| &b.documents)
+            .chain(&kept.too_large)
+            .map(|d| (d.key.clone(), on_disk.get(&d.key).cloned()))
+            .collect();
+        kept.format = KEPT_FORMAT.to_string();
+        kept.source = label.to_string();
+        kept.started = started;
+        kept.window = window.map(|w| [w.since_ms, w.until_ms]);
+        kept.pseudonymised = redactor.is_some();
+        kept.wanted = wanted;
+        kept.held_since = held_since;
+        kept.child_failures = fetched.child_failures.clone();
+        kept.figures = KeptFigures::of(report);
+        let name = format!("{started}-{label}");
+        let text = serde_json::to_string_pretty(&kept).expect("JSON");
+        crate::home::write_atomic(&run_dir.join(KEPT_FILE), text.as_bytes())
+            .map_err(|e| Failure::Extract(format!("{name}/{KEPT_FILE}: {e}")))?;
+        report.kept = Some(name);
+        return Ok(std::mem::take(report));
     }
     left_for_next(report, &seen, policy.max_documents_per_run);
     unread(report, &fetched.unread, redactor.as_ref());
@@ -1889,6 +2234,230 @@ fn keep_history(
             .map_err(|e| (e, true))?;
     }
     Ok((applied, ends.len()))
+}
+
+/// What [`apply_batch`] made of one batch's extraction document.
+enum BatchApplied {
+    /// EKR refused the document as a whole, with nothing of it applied: the run fails when it
+    /// applied nothing before, and otherwise stops at the batch.
+    Refused(String),
+    Done(BatchDone),
+}
+
+/// A batch's document applied: the evidence ids of the documents it took out
+/// ([`extract::isolate`]) with their refusal, the evidence ids a rejected part cites with EKR's
+/// refusals, the evidence ids whose values a failed round did not store, and why the run stops
+/// after the batch, when it does.
+struct BatchDone {
+    isolated: BTreeMap<String, String>,
+    rejected: BTreeMap<String, Vec<String>>,
+    unstored: BTreeSet<String>,
+    stop_after: Option<String>,
+}
+
+/// Applies one batch's merged extraction document `doc`, written to `dir`/`extraction.yaml`, with
+/// every reconcile rule of a run: the snapshot before the run's first apply, the type conflicts
+/// isolated, the replacements with nothing to replace applied again, the older values kept as
+/// history, and the parts EKR refused written to `refusals.json` (through `refusal_mask` under a
+/// redaction policy). A run ([`process_in`]) and the apply of a kept extraction ([`apply_kept`])
+/// both apply through it, so both hold to the same rules. The caller marks the batch's documents
+/// seen from what it answers.
+#[allow(clippy::too_many_arguments)]
+fn apply_batch(
+    store: &crate::ekr::Store,
+    session: &crate::ekr::Session,
+    operator: &str,
+    dir: &Path,
+    mut doc: serde_yaml_ng::Value,
+    pseudonymised: bool,
+    mut refusal_mask: Option<redact::Batch<'_>>,
+    before: &mut Undo,
+    report: &mut Report,
+    lookup: &mut crate::known::Lookup,
+) -> Result<BatchApplied, Failure> {
+    let path = dir.join("extraction.yaml");
+    before.take()?;
+    // A refusal of the whole document that names a type one record's facts redeclared
+    // (`extraction-type-conflict`) costs those records, not the batch: they are taken out,
+    // refused and not marked seen, so a later run asks them again, and the rest is applied
+    // ([`extract::isolate`]). Each refusal takes out one declaration, so this ends.
+    let mut isolated: BTreeMap<String, String> = BTreeMap::new();
+    let attempt = loop {
+        match store.apply(&path) {
+            Err(e) if !crate::ekr::outcome_unknown(&e) => match extract::isolate(&doc, &e) {
+                Some(rest) => {
+                    isolated.extend(rest.refused);
+                    doc = rest.doc;
+                    let text = serde_yaml_ng::to_string(&doc).expect("YAML");
+                    std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
+                }
+                None => break Err(e),
+            },
+            other => break other,
+        }
+    };
+    let applied = match attempt {
+        Ok(r) => r,
+        Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown_write(e, before)),
+        Err(e) => return Ok(BatchApplied::Refused(e)),
+    };
+    before.committed();
+    // The next batch sees what this one applied without reading the store again.
+    lookup.applied(&doc, &applied);
+    if !pseudonymised {
+        let _ = std::fs::write(
+            dir.join("report.json"),
+            serde_json::to_string_pretty(&applied).unwrap_or_default(),
+        );
+    }
+    // A replacement with nothing active to replace is applied again in the same batch, so its
+    // value is stored instead of lost: per subject and property the earliest as a plain
+    // assertion, each later one in a round of its own, still replacing, so EKR supersedes the
+    // value before it and one stays current ([`extract::reapply_rounds`]). A round EKR fails
+    // as a whole stops the run after this batch, and the documents whose values it and the
+    // rounds after it carried are not marked seen, so a later run extracts them again.
+    let mut applied = applied;
+    let mut stop_after: Option<String> = None;
+    let mut rejected_again: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    // Each part EKR refused, with the file applied: kept in the batch directory.
+    let mut refusals: Vec<(String, extract::PartRefusal)> = Vec::new();
+    let mut unstored: BTreeSet<String> = BTreeSet::new();
+    // The history documents of the rounds below ([`extract::history`]).
+    let mut later_history: Vec<extract::Round> = Vec::new();
+    if let Some(reapply) = extract::reapply_rounds(&doc, &applied) {
+        applied = reapply.rest;
+        for (k, round) in reapply.rounds.iter().enumerate() {
+            if stop_after.is_some() {
+                unstored.extend(round.cited.iter().cloned());
+                continue;
+            }
+            let name = match k {
+                0 => "reapply".to_string(),
+                k => format!("reapply-{k}"),
+            };
+            let again_path = dir.join(format!("{name}.yaml"));
+            let text = serde_yaml_ng::to_string(&round.doc).expect("YAML");
+            std::fs::write(&again_path, text).map_err(|e| Failure::Apply(e.to_string()))?;
+            let reapplied = store.apply(&again_path);
+            // The batch directory keeps only `extraction.yaml` under a redaction policy.
+            if pseudonymised {
+                let _ = std::fs::remove_file(&again_path);
+            }
+            match reapplied {
+                Ok(second) => {
+                    before.committed();
+                    // A node only a re-applied fact names is created by this round.
+                    lookup.applied(&round.doc, &second);
+                    if !pseudonymised {
+                        let _ = std::fs::write(
+                            dir.join(format!("{name}-report.json")),
+                            serde_json::to_string_pretty(&second).unwrap_or_default(),
+                        );
+                    }
+                    let refused = crate::ekr::applied(&second).rejected;
+                    report.facts_reapplied += round.facts.saturating_sub(refused);
+                    // A replacement of this round older than the value it would replace
+                    // (`invalid-supersession`) is kept as history with the batch's own, below.
+                    let second = match extract::history(&round.doc, &second) {
+                        Some((older, rest)) => {
+                            later_history.push(older);
+                            rest
+                        }
+                        None => second,
+                    };
+                    refusals.extend(
+                        extract::part_refusals(&second)
+                            .into_iter()
+                            .map(|r| (format!("{name}.yaml"), r)),
+                    );
+                    report.parts_rejected += crate::ekr::applied(&second).rejected;
+                    for (id, refusals) in extract::cited_by_rejected(&round.doc, &second) {
+                        rejected_again.entry(id).or_default().extend(refusals);
+                    }
+                }
+                Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown_write(e, before)),
+                Err(e) => {
+                    stop_after = Some(format!(
+                        "{e}; the documents whose values it was to store are not marked \
+                         seen, so a later run extracts them again"
+                    ));
+                    unstored.extend(round.cited.iter().cloned());
+                }
+            }
+        }
+    }
+    // A replacement older than the active value it would replace (`invalid-supersession`: its
+    // document was read after a newer one) becomes that value's history instead of being lost:
+    // applied without `replaces`, then superseded by the value from that value's start
+    // ([`extract::history`], [`extract::closings`]). A step that fails stops the run after this
+    // batch, as a failed round above does, and its documents are not marked seen. A
+    // replacement a round above applied again that EKR refused the same way is kept in the
+    // same apply.
+    let mut held = later_history;
+    if let Some((older, rest)) = extract::history(&doc, &applied) {
+        applied = rest;
+        held.insert(0, older);
+    }
+    if let Some(older) = extract::joined_history(&doc, held) {
+        if stop_after.is_some() {
+            unstored.extend(older.cited.iter().cloned());
+        } else {
+            match keep_history(store, session, operator, dir, &older, pseudonymised) {
+                Ok((second, kept)) => {
+                    before.committed();
+                    lookup.applied(&older.doc, &second);
+                    report.facts_history += kept;
+                    refusals.extend(
+                        extract::part_refusals(&second)
+                            .into_iter()
+                            .map(|r| ("history.yaml".to_string(), r)),
+                    );
+                    report.parts_rejected += crate::ekr::applied(&second).rejected;
+                    for (id, refusals) in extract::cited_by_rejected(&older.doc, &second) {
+                        rejected_again.entry(id).or_default().extend(refusals);
+                    }
+                }
+                Err((e, committed)) => {
+                    if committed {
+                        before.committed();
+                    }
+                    if crate::ekr::outcome_unknown(&e) {
+                        return Err(unknown_write(e, before));
+                    }
+                    // The session the run's SIGTERM ended stops the run, undone when gated.
+                    if crate::ekr::is_terminated(&e) {
+                        return Err(Failure::Terminated(e));
+                    }
+                    stop_after = Some(format!(
+                        "{e}; the documents whose older values it was to keep as history are \
+                         not marked seen, so a later run extracts them again"
+                    ));
+                    unstored.extend(older.cited.iter().cloned());
+                }
+            }
+        }
+    }
+    let mut rows: Vec<_> = extract::part_refusals(&applied)
+        .into_iter()
+        .map(|r| ("extraction.yaml".to_string(), r))
+        .collect();
+    rows.append(&mut refusals);
+    write_refusals(dir, &rows, refusal_mask.as_mut());
+    drop(refusal_mask);
+    report.parts_rejected += crate::ekr::applied(&applied).rejected;
+    // A document a rejected fact cites is seen all the same: EKR would reject the fact again
+    // on the same text, and a retry would cost a model call and a slot of the run on every
+    // run. The report names it with EKR's refusal.
+    let mut rejected = extract::cited_by_rejected(&doc, &applied);
+    for (id, refusals) in rejected_again {
+        rejected.entry(id).or_default().extend(refusals);
+    }
+    Ok(BatchApplied::Done(BatchDone {
+        isolated,
+        rejected,
+        unstored,
+        stop_after,
+    }))
 }
 
 /// The run's snapshot ([`BeforeApply`]), the name it was kept under, and whether an apply
@@ -2140,7 +2709,7 @@ impl Failure {
     }
 
     /// The failure's reason, whatever its outcome.
-    fn reason(&self) -> &str {
+    pub fn reason(&self) -> &str {
         match self {
             Failure::Fetch(m)
             | Failure::Extract(m)

@@ -1270,6 +1270,7 @@ actors:
       - cortex.instance.AddSource
       - cortex.instance.EnableSource
       - cortex.instance.RestoreSnapshot
+      - cortex.instance.ApplyExtraction
       - cortex.instance.MeasureQuality
       - cortex.instance.RunEval
       - cortex.instance.AddEvalCase
@@ -1423,6 +1424,41 @@ errors:
     summary: The instance directory holds no snapshot by this name.
     fields:
       - {name: snapshot, type: String}
+
+  - name: cortex.instance.ExtractOnlyFailed
+    summary: >-
+      An extract-only run failed before it kept a batch. `outcome` names the outcome a run would
+      have taken (`fetch-failed`, `extraction-failed`, `model-unavailable`, `batch-too-large`,
+      `connection-unavailable`, `terminated`, `path-refused`), `reason` says why. Nothing was kept
+      or written.
+    fields:
+      - {name: outcome, type: String}
+      - {name: reason, type: String}
+
+  - name: cortex.instance.KeptExtractionNotFound
+    summary: >-
+      The instance's `runs/` directory holds no kept extraction by this name: no
+      `cortex run --extract-only` kept one there, or `runs.keep_days` pruned it. Nothing was
+      applied.
+    fields:
+      - {name: run, type: String}
+
+  - name: cortex.instance.ExtractionAlreadyApplied
+    summary: >-
+      `cortex apply` already applied this kept extraction, or began to: a kept extraction is
+      applied once. Nothing was applied; a run extracts again what the first apply left.
+    fields:
+      - {name: run, type: String}
+
+  - name: cortex.instance.ExtractionStale
+    summary: >-
+      The store moved past the kept extraction: a run applied, or a restore put back, a document
+      it holds after it was extracted, so its seen state is not the one the extraction was made
+      against; or the instance's spec no longer has its source. `reason` names the documents.
+      Nothing was applied; run `cortex run --extract-only` again.
+    fields:
+      - {name: run, type: String}
+      - {name: reason, type: String}
 
   - name: cortex.instance.FetchFailed
     summary: >-
@@ -2007,6 +2043,7 @@ commands:
       - {name: fetch_only, type: Optional<Boolean>}
       - {name: no_wait, type: Optional<Boolean>}
       - {name: path, type: Optional<String>}
+      - {name: extract_only, type: Optional<Boolean>}
     outcomes:
       # UNMAPPED: the exit status of each outcome, which an external scheduler reads instead of
       # the printed line: `ran` 0; `fetch-failed`, `extraction-failed`, `apply-refused` and
@@ -2224,6 +2261,57 @@ commands:
           consecutive runs, which are counted neither `new` nor `changed`; `unchanged` the
           rest. No model was asked, and nothing was written: not the store, the seen documents,
           the source's status or `cortex.log`; no snapshot or stage was taken and no run counted.
+
+      # UNMAPPED: with `extract_only` (`cortex run --extract-only`), a run fetches, selects and
+      # extracts as a run does, with the same batches, prompts, redaction, budget and refusal
+      # rules, and keeps each batch's `extraction.yaml` in its run directory
+      # `runs/<start ms>-<source>/` with `kept.json`, the documents each batch holds and the seen
+      # state each had when it was extracted. It writes nothing else: not the store, the seen
+      # documents, the window (`pending_since`), the failure counts, the known entity names, the
+      # source's status, `metrics.prom` or `cortex.log`; it calls no hook and takes no snapshot or
+      # stage. The day's spend counts its model calls. `extracted` exits 0; `extract-only-failed`
+      # exits 1 and names, beside its reason, the outcome the run would have taken (`fetch-failed`,
+      # `extraction-failed`, `model-unavailable`, ...). A run that kept a batch and then stopped
+      # (a budget, a failed batch, a model that could not be reached) answers `extracted` with
+      # `stopped`, and keeps the batches before it. A run with nothing new keeps nothing and names
+      # no run. `<instance>/seed` and a structured source, which calls no model, answer
+      # `extract-only-failed`. `cortex.instance.ApplyExtraction` applies a kept extraction. ESS has
+      # no construct for a file a run keeps or for the seen state per document
+      # (beyond10x/ess#459); tests/it/review_extract_then_apply.rs holds it.
+      - name: extract-only-failed
+        external: The fetch or the model fails before an extract-only run kept a batch
+        when: {all: ["defined(extract_only)", extract_only == true]}
+        error: cortex.instance.ExtractOnlyFailed
+        payload:
+          cortex.instance.ExtractOnlyFailed:
+            outcome: {generated: true}
+            reason: {generated: true}
+        summary: >-
+          Nothing was kept and nothing was written: not the store, the seen documents, the
+          window or the source's status, and no failure is counted. The model calls it made count
+          in the day's spend.
+
+      - name: extracted
+        when: {all: ["defined(extract_only)", extract_only == true]}
+        updates: cortex.instance.Source
+        instance: source_id
+        emits:
+          - cortex.instance.SourceExtracted
+        payload:
+          cortex.instance.SourceExtracted:
+            source_id: input.source_id
+            run: {generated: true}
+            documents_new: {generated: true}
+            documents_kept: {generated: true}
+            batches: {generated: true}
+            stopped: {generated: true}
+            model_calls: {generated: true}
+            cost_usd: {generated: true}
+        summary: >-
+          An extract-only run: the new or changed documents a run would extract were extracted
+          and kept in the run directory `run`, unapplied. The store, the seen documents, the
+          window and the source's status are as they were, so a run before `cortex apply` still
+          sees the documents as new.
 
       # UNMAPPED: the bound of a `connectors` call. Every call a run makes through the `connectors`
       # binary is waited for at most `CORTEX_CONNECTORS_TIMEOUT_S` seconds (120, at least 1); past
@@ -2678,6 +2766,111 @@ commands:
           cortex.instance.InstanceNotFound:
             name: input.name
         summary: Nothing was restored.
+
+  - name: cortex.instance.ApplyExtraction
+    naming:
+      wire: apply
+      display: Apply a kept extraction
+    # UNMAPPED: `run` names a run directory under `runs/` that `cortex run --extract-only` kept
+    # (`<start ms>-<source>`, `cortex.instance.RunSource`). The apply writes the batches' kept
+    # `extraction.yaml` in order with the reconcile and refusal rules of a run: the type-conflict
+    # isolation, the replacements applied again, the older values kept as history, the parts EKR
+    # rejected, the snapshot or stage of a run and its `gate`. It then marks seen the documents
+    # each batch applied, with the seen state each had when it was extracted, and records the
+    # source's window as a run would have, so the documents and the window advance then. It
+    # writes `applied.json` into the run directory before its first write, so a second apply of
+    # the run, or one after a failed apply, is refused. Before it, every document of the
+    # extraction is compared with the source's seen state: one whose seen record differs from the
+    # one the extraction was made against (a run applied it since, or a restore put back another)
+    # makes the extraction stale. Exit statuses: `applied` 0; `no-such-run`, `already-applied`,
+    # `extraction-stale`, `apply-refused` and `no-such-instance` 1; `store-outcome-unknown` 4;
+    # `terminated` 8. It writes a `cortex.log` line, not the source's status, `metrics.prom` or
+    # the hook. ESS has no construct for a file a run keeps or for the seen state per document
+    # (beyond10x/ess#459); tests/it/review_extract_then_apply.rs holds it.
+    input:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: run, type: String}
+    outcomes:
+      - name: no-such-run
+        external: The instance's `runs/` holds no kept extraction by this name
+        error: cortex.instance.KeptExtractionNotFound
+        payload:
+          cortex.instance.KeptExtractionNotFound:
+            run: input.run
+        summary: Nothing was applied.
+
+      - name: already-applied
+        external: The kept extraction was applied before, or an apply of it began
+        error: cortex.instance.ExtractionAlreadyApplied
+        payload:
+          cortex.instance.ExtractionAlreadyApplied:
+            run: input.run
+        summary: Nothing was applied a second time.
+
+      - name: extraction-stale
+        external: >-
+          A document of the kept extraction is seen otherwise than when it was extracted, or the
+          instance's spec no longer has its source
+        error: cortex.instance.ExtractionStale
+        payload:
+          cortex.instance.ExtractionStale:
+            run: input.run
+            reason: {generated: true}
+        summary: Nothing was applied, and the kept extraction stays as it was.
+
+      - name: apply-refused
+        external: EKR refuses the first kept batch, or the run's gate refuses the apply
+        error: cortex.instance.ApplyRefused
+        payload:
+          cortex.instance.ApplyRefused:
+            reason: {generated: true}
+        summary: >-
+          Nothing stays applied: the store and the seen documents are as before, a gated apply
+          undone from its snapshot or stage as a gated run is.
+
+      - name: store-outcome-unknown
+        external: EKR answers that the publication outcome of a store write of the apply is unknown
+        error: cortex.instance.StoreOutcomeUnknown
+        payload:
+          cortex.instance.StoreOutcomeUnknown:
+            reason: {generated: true}
+        summary: >-
+          As for a run: the batch is not marked seen, so a later run extracts it again; a gated
+          apply that kept a snapshot is undone from it, and a stage is settled by the next run.
+
+      - name: terminated
+        external: The apply is sent SIGTERM before it ends
+        error: cortex.instance.RunTerminated
+        payload:
+          cortex.instance.RunTerminated:
+            reason: {generated: true}
+        summary: >-
+          The apply stopped before its next batch; a gated apply is undone, an ungated one keeps
+          the batches it applied, each marked seen.
+
+      - name: applied
+        updates: cortex.instance.Instance
+        instance: name
+        emits:
+          - cortex.instance.ExtractionApplied
+        payload:
+          cortex.instance.ExtractionApplied:
+            name: input.name
+            run: input.run
+            documents_applied: {generated: true}
+            documents_left: {generated: true}
+        summary: >-
+          The kept batches were applied in order and their documents marked seen; a batch EKR
+          refused after an earlier one applied stops the apply there, as it stops a run, and its
+          documents are left for a later run. The source's window advanced as the run's would have.
+
+      - name: no-such-instance
+        unknown_instance: true
+        error: cortex.instance.InstanceNotFound
+        payload:
+          cortex.instance.InstanceNotFound:
+            name: input.name
+        summary: Nothing was applied.
 
   - name: cortex.instance.MeasureQuality
     naming:
@@ -3392,6 +3585,30 @@ events:
       - {name: unchanged, type: Integer}
       - {name: unread, type: List<String>}
       - {name: skipped, type: List<String>}
+
+  # An extract-only run of a source (`cortex run --extract-only`): `run` names its run directory
+  # under `runs/`, which `cortex apply` takes, absent when it kept nothing; `documents_new` counts
+  # the new or changed documents it selected, `documents_kept` those its kept batches hold, and
+  # `batches` the batches kept. `stopped`, `model_calls` and `cost_usd` are as in `SourceRan`.
+  - name: cortex.instance.SourceExtracted
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+      - {name: run, type: Optional<String>}
+      - {name: documents_new, type: Integer}
+      - {name: documents_kept, type: Integer}
+      - {name: batches, type: Integer}
+      - {name: stopped, type: Optional<String>}
+      - {name: model_calls, type: Integer}
+      - {name: cost_usd, type: Optional<Decimal>}
+
+  # A kept extraction applied (`cortex apply`): `documents_applied` counts the documents marked
+  # seen, `documents_left` the documents the extraction wanted that are still not seen.
+  - name: cortex.instance.ExtractionApplied
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: run, type: String}
+      - {name: documents_applied, type: Integer}
+      - {name: documents_left, type: Integer}
 
   - name: cortex.instance.RunFailed
     fields:
