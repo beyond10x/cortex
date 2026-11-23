@@ -2388,7 +2388,7 @@ fn apply_batch(
         if stop_after.is_some() {
             unstored.extend(older.cited.iter().cloned());
         } else {
-            match keep_history(&store, &session, &operator, &dir, &older, pseudonymised) {
+            match keep_history(store, session, operator, dir, &older, pseudonymised) {
                 Ok((second, kept)) => {
                     before.committed();
                     lookup.applied(&older.doc, &second);
