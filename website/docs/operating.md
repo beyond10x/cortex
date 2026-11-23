@@ -228,15 +228,21 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    fails in the store, the run stops after the batch and the documents whose values it carried
    are not marked seen, so a later run extracts them again. EKR also rejects it when the current value is dated
    later than the replacement (`invalid-supersession`), as when an older document is read after a
-   newer one, and the newer value then stays current; that rejection is listed in the run's
-   `rejected` and the rest of the document applies.
+   newer one. cortex then keeps the older value as the current value's history: it applies the
+   fact again without `replaces`, so the value is stored from its own document's time, and
+   supersedes it by the current value from the current value's start, so it ends there
+   (`history.yaml` and `history-ends.yaml` in the batch's directory). The newer value stays
+   current, nothing is listed in `rejected`, and the run counts the fact in `facts_history`. Two
+   older values of one entity and property in one batch end one where the next begins. If a step
+   of this fails in the store, the run stops after the batch and the documents it carried are not
+   marked seen, so a later run extracts them again.
    A property that holds one value (`cardinality: One` in the store's ontology or, for one the
    store does not declare yet, in the model's document, where `One` is EKR's default) gets
    `replaces: true` from cortex on every fact, whatever the model marked: EKR adds an unmarked
    fact as one more active value whatever the cardinality, so a value read in a later batch or
    run, or the same value read from a second record, would leave two current. With the mark, the
    rules above leave one value current, the newest by its document's time; a value older than
-   the stored one is listed in `rejected` as `invalid-supersession`, and a first value with
+   the stored one is kept as its history, as above (`facts_history`), and a first value with
    nothing stored to replace is counted in `facts_reapplied`. A `Many` property is left as the
    model marked it.
    The prompt asks the model to go through every document and extract what its own text states:
@@ -249,6 +255,12 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    A document a part EKR rejected belongs to is seen too, since EKR would reject that part again
    on the same text; the run names it in `rejected`, with EKR's refusal or the codes of the issues
    validation raised.
+   When EKR refuses the whole document because it redeclares a type the store holds with other
+   parents, abstractness or cardinality (`extraction-type-conflict`), only the documents whose
+   facts name that type are refused: cortex takes the type's declaration and every fact of those
+   documents out, applies the rest of the batch against the store's own declaration, and names
+   each such document in `rejected` with `extraction-type-conflict: <type>`. Those documents are
+   not marked seen, so a later run asks the model for them again.
    Before the run's first apply, a `sqlite` store and `state/` are copied, and kept as a
    snapshot once that apply commits (see [Undoing a run](#undoing-a-run)); a copy that cannot be
    taken fails the run with nothing applied.

@@ -80,6 +80,10 @@ pub struct Report {
     /// replace ([`extract::NOTHING_TO_REPLACE`]), applied again and stored: the earliest of a
     /// subject and property as a plain assertion, each later one replacing the one before it.
     pub facts_reapplied: usize,
+    /// Facts marked `replaces: true` older than the active value they would replace
+    /// ([`extract::OLDER_THAN_CURRENT`]), stored as that value's history: applied without
+    /// `replaces` and superseded by the value from its start ([`extract::closings`]).
+    pub facts_history: usize,
     pub masked: usize,
     /// Values replaced by a placeholder in the prompts sent, per class or rule of the instance's
     /// `redaction` policy, every one it names counted from `0`; `None` when the policy names
@@ -197,6 +201,7 @@ impl Default for Report {
             facts_refused: 0,
             parts_rejected: 0,
             facts_reapplied: 0,
+            facts_history: 0,
             masked: 0,
             redacted: None,
             unrestored: 0,
@@ -1525,13 +1530,32 @@ fn process_in(
             held_ontology = Some(session.ontology().map_err(store_failure)?);
         }
         extract::mark_single_valued(&mut restored, held_ontology.as_ref().expect("read above"));
-        let (doc, refused) = extract::merge(&restored, &batch);
+        let (mut doc, refused) = extract::merge(&restored, &batch);
         report.facts_refused += refused;
         let path = dir.join("extraction.yaml");
         let text = serde_yaml_ng::to_string(&doc).expect("YAML");
         std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
         before.take()?;
-        let applied = match store.apply(&path) {
+        // A refusal of the whole document that names a type one record's facts redeclared
+        // (`extraction-type-conflict`) costs those records, not the batch: they are taken out,
+        // refused and not marked seen, so a later run asks them again, and the rest is applied
+        // ([`extract::isolate`]). Each refusal takes out one declaration, so this ends.
+        let mut isolated: BTreeMap<String, String> = BTreeMap::new();
+        let attempt = loop {
+            match store.apply(&path) {
+                Err(e) if !crate::ekr::outcome_unknown(&e) => match extract::isolate(&doc, &e) {
+                    Some(rest) => {
+                        isolated.extend(rest.refused);
+                        doc = rest.doc;
+                        let text = serde_yaml_ng::to_string(&doc).expect("YAML");
+                        std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
+                    }
+                    None => break Err(e),
+                },
+                other => break other,
+            }
+        };
+        let applied = match attempt {
             Ok(r) => r,
             Err(e) if crate::ekr::outcome_unknown(&e) => return Err(unknown_write(e, before)),
             Err(e) if report.documents_applied == 0 => return Err(Failure::Apply(e)),
@@ -1610,6 +1634,46 @@ fn process_in(
                 }
             }
         }
+        // A replacement older than the active value it would replace (`invalid-supersession`: its
+        // document was read after a newer one) becomes that value's history instead of being lost:
+        // applied without `replaces`, then superseded by the value from that value's start
+        // ([`extract::history`], [`extract::closings`]). A step that fails stops the run after this
+        // batch, as a failed round above does, and its documents are not marked seen.
+        if let Some((older, rest)) = extract::history(&doc, &applied) {
+            applied = rest;
+            if stop_after.is_some() {
+                unstored.extend(older.cited.iter().cloned());
+            } else {
+                match keep_history(&store, &session, &operator, &dir, &older, pseudonymised) {
+                    Ok((second, kept)) => {
+                        before.committed();
+                        lookup.applied(&older.doc, &second);
+                        report.facts_history += kept;
+                        report.parts_rejected += crate::ekr::applied(&second).rejected;
+                        for (id, refusals) in extract::cited_by_rejected(&older.doc, &second) {
+                            rejected_again.entry(id).or_default().extend(refusals);
+                        }
+                    }
+                    Err((e, committed)) => {
+                        if committed {
+                            before.committed();
+                        }
+                        if crate::ekr::outcome_unknown(&e) {
+                            return Err(unknown_write(e, before));
+                        }
+                        // The session the run's SIGTERM ended stops the run, undone when gated.
+                        if crate::ekr::is_terminated(&e) {
+                            return Err(Failure::Terminated(e));
+                        }
+                        stop_after = Some(format!(
+                            "{e}; the documents whose older values it was to keep as history are \
+                             not marked seen, so a later run extracts them again"
+                        ));
+                        unstored.extend(older.cited.iter().cloned());
+                    }
+                }
+            }
+        }
         report.parts_rejected += crate::ekr::applied(&applied).rejected;
         // A document a rejected fact cites is seen all the same: EKR would reject the fact again
         // on the same text, and a retry would cost a model call and a slot of the run on every
@@ -1621,6 +1685,13 @@ fn process_in(
         // An applied document's failure count, if it had one, ends.
         let mut recovered = false;
         for issued in &batch {
+            if let Some(refusal) = isolated.get(&issued.id) {
+                report.rejected.push(Rejected::new(
+                    &issued.doc.key,
+                    &[masked_key(redactor.as_ref(), refusal)],
+                ));
+                continue;
+            }
             if let Some(refusals) = rejected.get(&issued.id) {
                 report
                     .rejected
@@ -1691,6 +1762,43 @@ fn process_in(
         (None, Some((cause, why))) => Err(Failure::ModelUnavailable(cause, why)),
         (None, None) => Ok(std::mem::take(report)),
     }
+}
+
+/// Applies `older` (an [`extract::history`] document) as `history.yaml` in the batch directory,
+/// then ends each value it stored where the value after it begins ([`extract::closings`]) in a
+/// transaction of its own (`history-ends.yaml`): the apply's report and how many values became
+/// history. An error says whether the apply committed.
+fn keep_history(
+    store: &crate::ekr::Store,
+    session: &crate::ekr::Session,
+    operator: &str,
+    dir: &std::path::Path,
+    older: &extract::Round,
+    pseudonymised: bool,
+) -> Result<(serde_json::Value, usize), (String, bool)> {
+    let path = dir.join("history.yaml");
+    let text = serde_yaml_ng::to_string(&older.doc).expect("YAML");
+    std::fs::write(&path, text).map_err(|e| (e.to_string(), false))?;
+    let applied = store.apply(&path);
+    // The batch directory keeps only `extraction.yaml` under a redaction policy.
+    if pseudonymised {
+        let _ = std::fs::remove_file(&path);
+    } else if let Ok(applied) = &applied {
+        let _ = std::fs::write(
+            dir.join("history-report.json"),
+            serde_json::to_string_pretty(applied).unwrap_or_default(),
+        );
+    }
+    let applied = applied.map_err(|e| (e, false))?;
+    let snapshot = session.snapshot().map_err(|e| (e, true))?;
+    let ontology = session.ontology().map_err(|e| (e, true))?;
+    let ends = extract::closings(&older.doc, &snapshot, &ontology);
+    if !ends.is_empty() {
+        session
+            .transact(&dir.join("history-ends.yaml"), operator, &ends)
+            .map_err(|e| (e, true))?;
+    }
+    Ok((applied, ends.len()))
 }
 
 /// The run's snapshot ([`BeforeApply`]), the name it was kept under, and whether an apply
@@ -2832,6 +2940,10 @@ fn log_line(label: &str, report: &Report, started: i64) -> serde_json::Value {
     // Present only when a replacement was applied again: other runs log as before.
     if report.facts_reapplied > 0 {
         line["facts_reapplied"] = json!(report.facts_reapplied);
+    }
+    // Present only when an older value was kept as history: other runs log as before.
+    if report.facts_history > 0 {
+        line["facts_history"] = json!(report.facts_history);
     }
     // Present only when a batch was split: a run that split none logs what it did before.
     if report.splits > 0 {
