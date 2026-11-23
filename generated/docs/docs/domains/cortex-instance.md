@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 2895c30bb48baea3101d05b9af9ed31adfb6761f7bf17c72829b6b2d0565f3c1
-contract digest slice-sha256/2:61b19700dd067c760165f51b25b7f33db91f31d145882f6b17abede1dbafeeb5
+model digest 694b8f809382b7da187a2a4c810de8fc740f8f2257ec1eadda9d461bcd4bc9ac
+contract digest slice-sha256/2:8e69514cf11b93180f72582debbd38f22c96cb701b8521350b60893a961ffde2
 do not edit: regenerate with `ess generate`
 -->
 
@@ -1081,8 +1081,11 @@ It has five outcomes.
 It takes:
 
 - `source_id` — `cortex.instance.SourceId`
+- `no_wait` — `Optional<Boolean>`, which may be absent
 
-It has three outcomes.
+It has four outcomes.
+
+**`busy`** — Nothing changed; the source stays disabled and its timer as it was. Eligible when (defined(no_wait) and no_wait == true); externally decided: Another cortex command holds the home's lock. No entity in this specification changes. It reports `cortex.instance.InstanceBusy`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`enabled`** — The failure count is reset and the timer is enabled again. The default branch, taken when no other outcome's condition matched. It moves a `cortex.instance.Source` from `Disabled` to `Enabled`, along the declared move `enable`. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceEnabled`. It sets `consecutive_failures` from `"0"`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -1184,8 +1187,11 @@ It has four outcomes.
 It takes:
 
 - `name` — `cortex.instance.InstanceName`
+- `no_wait` — `Optional<Boolean>`, which may be absent
 
-It has three outcomes.
+It has four outcomes.
+
+**`busy`** — Nothing changed; the timers and the viewer are as they were. Eligible when (defined(no_wait) and no_wait == true); externally decided: Another cortex command holds the home's lock. No entity in this specification changes. It reports `cortex.instance.InstanceBusy`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`removed`** — The timers and the viewer are gone; the directory and the store stay. The default branch, taken when no other outcome's condition matched. It moves a `cortex.instance.Instance` from `Active` to `Removed`, along the declared move `remove`. The instance is the one named by the input field `name`. It emits `cortex.instance.InstanceRemoved`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
@@ -1274,7 +1280,7 @@ It has 15 outcomes.
 
 **`model-unavailable`** — The source's status records the outcome and its reason, and the scheduler sends no RecordFailure: the model, not the source, failed, so the failure is not counted and never disables the source, however often the model is down. The batches before it stay applied; the rest are extracted by a later run. Decided outside the input: The run's model cannot be reached: its process cannot be started, its connection is refused, the server behind the gateway has not loaded the model, or the gateway answers HTTP 502, 503, 504 or 529 (overloaded). No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.ModelUnavailable`, carrying `cause` and `reason`. It emits nothing. It sets `last_outcome` from `"model-unavailable"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
-**`ran`** — Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it. `cost_counted` is false behind a model gateway, where `cost_usd` is as reported and bounded nothing. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceRan`. It sets `runs` from `its previous value plus 1`, `consecutive_failures` from `"0"`, `last_outcome` from `"ran"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test reaches it by constructing an input that satisfies no other outcome's condition.
+**`ran`** — Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. A run that `max_documents_per_run` capped has `stopped` `document-cap` and counts in `documents_left` the wanted documents it left for the next run; a run that applied every wanted document has no `stopped` and `documents_left` 0. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it. `cost_counted` is false behind a model gateway, where `cost_usd` is as reported and bounded nothing. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceRan`. It sets `runs` from `its previous value plus 1`, `consecutive_failures` from `"0"`, `last_outcome` from `"ran"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
 **`no-such-source`** — Nothing ran. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.SourceNotFound`, carrying `source_id`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
@@ -1289,12 +1295,15 @@ It takes:
 - `model` — `String`
 - `spec` — `cortex.instance.InstanceSpec`
 - `seed_digest` — `String`
+- `no_wait` — `Optional<Boolean>`, which may be absent
 
-It has five outcomes.
+It has six outcomes.
 
 **`seed-change-refused`** — Nothing changed. Taken when the existing subject's stored fields satisfy `seed_digest != input.seed_digest`. No entity in this specification changes. It reports `cortex.instance.SeedChangeRefused`, carrying `name`. It emits nothing. A test establishes and independently observes the subject enum fact before selecting this branch.
 
 **`not-active`** — The instance is removed; nothing changed. Taken when the existing subject's stored fields satisfy `state == Removed`. No entity in this specification changes. It reports `cortex.instance.InstanceNotActive`, carrying `state`. It emits nothing. A test establishes and independently observes the subject enum fact before selecting this branch.
+
+**`busy`** — Nothing changed: the frozen spec, the sources and the units are as they were, so an orchestrator can try the update again between runs. Eligible when (defined(no_wait) and no_wait == true); externally decided: Another cortex command holds the home's lock. No entity in this specification changes. It reports `cortex.instance.InstanceBusy`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`rekey-refused`** — Nothing changed; the frozen spec and every source's seen state are as they were. Decided outside the input: A source the frozen spec and the new one both name, whose `state/<source>.json` holds a seen document, changes a field its documents are keyed by: its `kind`; a `connectors` source's `adapter`, `operation` or `id`; a `files` source's `records` format (no `records` and `WholeFile` are one), with a per-record format their `records.id`, or a root of its `paths` that reaches a seen file under another spelling (`docs` and `./docs`; adding, removing or reordering roots is not one); a `structured` source's `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths` or `glob` as written, or its `mapping.id`. A record path is compared as it is read (`key` and `$.key` are one path). No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.RekeyRefused`, carrying `name`, `source` and `field`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
@@ -1581,6 +1590,8 @@ It carries:
 - `source_id` — `cortex.instance.SourceId`
 - `documents_new` — `Integer`
 - `documents_applied` — `Integer`
+- `documents_left` — `Integer`
+- `stopped` — `Optional<String>`, which may be absent
 - `facts_reapplied` — `Integer`
 - `cost_usd` — `Optional<Decimal>`, which may be absent
 - `cost_counted` — `Boolean`
@@ -1736,15 +1747,21 @@ Reported by `cortex.instance.RunSource` on its `fetch-only-failed` and `fetch-fa
 
 ### `InstanceBusy`
 
-Another cortex command holds the home's lock, or, for a restore, another connection held the store's write lock for 5 seconds; nothing was restored or run. A reader that holds the store open does not.
+Another cortex command holds the home's lock, or, for a restore, another connection held the store's write lock for 5 seconds; nothing was restored, run, updated, removed or enabled. A reader that holds the store open does not.
 
 It carries:
 
 - `reason` — `String`
 
+Reported by `cortex.instance.EnableSource` on its `busy` outcome.
+
+Reported by `cortex.instance.RemoveInstance` on its `busy` outcome.
+
 Reported by `cortex.instance.RestoreSnapshot` on its `busy` outcome.
 
 Reported by `cortex.instance.RunSource` on its `busy` outcome.
+
+Reported by `cortex.instance.UpdateInstance` on its `busy` outcome.
 
 ### `InstanceNotActive`
 
@@ -2068,4 +2085,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `2895c30bb48baea3101d05b9af9ed31adfb6761f7bf17c72829b6b2d0565f3c1` · contract digest `slice-sha256/2:61b19700dd067c760165f51b25b7f33db91f31d145882f6b17abede1dbafeeb5`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `694b8f809382b7da187a2a4c810de8fc740f8f2257ec1eadda9d461bcd4bc9ac` · contract digest `slice-sha256/2:8e69514cf11b93180f72582debbd38f22c96cb701b8521350b60893a961ffde2`. Do not edit this file; change the specification and regenerate it with `ess generate`.

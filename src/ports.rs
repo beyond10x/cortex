@@ -353,6 +353,8 @@ fn source_ran(source_id: m::SourceId, report: &Report) -> m::SourceRan {
         source_id,
         documents_new: report.documents_new,
         documents_applied: report.documents_applied,
+        documents_left: report.documents_left as i64,
+        stopped: report.stopped.clone(),
         facts_reapplied: report.facts_reapplied as i64,
         cost_usd: cost_decimal(report.cost_usd),
         cost_counted: report.cost_counted,

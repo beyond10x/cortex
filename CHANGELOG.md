@@ -5,6 +5,26 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+### Added
+
+- `cortex update`, `cortex remove` and `cortex source enable` take `--no-wait` too: while another
+  cortex command holds the home's lock they answer `busy` at once with exit status 9 and change
+  nothing (an update leaves the frozen spec as it was), so an orchestrator that changes an
+  instance's spec while a run may be in flight gets an answer at once instead of waiting minutes.
+  Without the flag they wait for the lock, as before (story `update-no-wait`).
+
+### Changed
+
+- A run that `max_documents_per_run` capped reports `stopped: document-cap` instead of
+  `stopped: null`, and every `ran` report carries `documents_left`, the wanted documents the run
+  neither applied nor marked seen (`0` when it left none; `SourceRan` carries both). Before, a
+  capped run looked like one that read everything, and a caller counted what was left with a
+  second `--fetch-only` call.
+- A batch directory under `runs/` keeps each part EKR refused in `refusals.json`: the part, the
+  outcome EKR named and its reason. Under a `redaction` policy every value the policy finds in it
+  is replaced by a placeholder of the batch, as in `prompt.txt` and `answer.json`. Before, a
+  refusal's reason was in no file of the run directory under a policy.
+
 ### Fixed
 
 - **Redaction takes time linear in the matches.** Each match a redaction class found was checked
@@ -46,7 +66,7 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   through the command line's own loader (`load_given`) and gives the behaviour the spec it
   loaded, where it gave every step one fixed spec; a document the loader refuses fails its
   scenario. Three authored scenarios (`spec/scenarios/`) create, adopt and update from
-  `cortex.instance/1` documents the loader accepts. The 88 steps whose document is ESS 0.77.0's
+  `cortex.instance/1` documents the loader accepts. The 90 steps whose document is ESS 0.77.0's
   synthesized witness (`format: spec.format`) are counted and must be refused at their format;
   ESS gives a struct input a document of its own only from `ess/33` (ESS 0.78.0) (review of
   0.7.2, finding 26).
@@ -84,7 +104,7 @@ feature set after a real instance ran for 7 days with nobody at the keyboard.
   stage it abandons on failure; two failed runs in a row disable a source, and a daily ceiling
   holds model spend. A metric file, a failure hook and `cortex sources` show how each run ended.
   `cortex quality` judges a sample of facts; `cortex schema` proposes schema changes.
-- **Project.** Specified in ESS with 126 conformance scenarios; CI runs `task check` on every pull
+- **Project.** Specified in ESS with 132 conformance scenarios; CI runs `task check` on every pull
   request; each release carries an `x86_64-unknown-linux-gnu` binary checked against `SHA256SUMS`.
 
 Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
