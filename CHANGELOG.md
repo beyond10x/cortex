@@ -35,6 +35,14 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Fixed
 
+- A placeholder the model writes back without its brackets (`Name-3` for `[Name-3]`) is restored
+  in a value or an alias, as in a type name. 0.8.0 left it as written and counted it
+  `unrestored`, so a redaction gate on `unrestored` undid the run. One the batch's mapping does
+  not hold still stays as written and is counted.
+- A batch whose model call ends on `error_max_structured_output_retries` names the subtype, the
+  number of turns and the last validation message of claude's `errors` list in the run's reason
+  and in `claude/error.txt`, masked and cut as other error text. 0.8.0 wrote an empty
+  `error.txt`.
 - **Redaction takes time linear in the matches.** Each match a redaction class found was checked
   against every match found before it, so a text of many matches, such as links in brackets
   back to back, took time quadratic in their number (4x the links, 14x the time). The check is a

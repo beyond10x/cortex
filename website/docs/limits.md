@@ -57,8 +57,10 @@ stand; [Status](./status.mdx) lists what is planned.
   tool result of the [ask service](./ask-service.md#redaction) and of the eval `mcp` runner. Before the answer is
   applied or returned, each placeholder is put
   back. The store and its evidence therefore hold the personal data and stay searchable for it;
-  only the model does not see it. A placeholder the model changed or invented stays as written
-  and is counted as `unrestored` in the run's log. Detection is by pattern: a person's name is
+  only the model does not see it. A placeholder the model wrote back without its brackets
+  (`Name-3` for `[Name-3]`) is put back too, in a value, an alias or a type name. A placeholder the
+  model changed otherwise or invented stays as written and is counted as `unrestored` in the run's
+  log. Detection is by pattern: a person's name is
   found only when `known_names` lists it or it is rare in the batch, and a spec without a
   `redaction` policy sends text unchanged. Neither masking nor redaction is a guarantee.
 - **Links are found by their shape.** `Url` takes a link that starts with a scheme
