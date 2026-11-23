@@ -5,6 +5,15 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+### Added
+
+- `cortex run <instance>/<source> --path <dir>`, also with `--fetch-only`, reads a `files` source
+  from `<dir>` instead of its spec's `paths`, for that run only. Each document is keyed by its
+  path relative to `<dir>` (`<relative path>#<id>`, evidence `file:<key>`), so a record read from
+  a new directory on each run is one document and is not extracted again while it is unchanged.
+  On a source of another kind, or on `<instance>/seed`, it answers the new outcome `path-refused`
+  (exit 1) and writes nothing; a missing `<dir>` fails the fetch, naming it.
+
 ### What 1.0 holds
 
 1.0 is the first release whose interface is stable. It adds no feature over 0.5.0; it is 0.5.0's
@@ -27,7 +36,7 @@ feature set after a real instance ran for 7 days with nobody at the keyboard.
   stage it abandons on failure; two failed runs in a row disable a source, and a daily ceiling
   holds model spend. A metric file, a failure hook and `cortex sources` show how each run ended.
   `cortex quality` judges a sample of facts; `cortex schema` proposes schema changes.
-- **Project.** Specified in ESS with 124 conformance scenarios; CI runs `task check` on every pull
+- **Project.** Specified in ESS with 126 conformance scenarios; CI runs `task check` on every pull
   request; each release carries an `x86_64-unknown-linux-gnu` binary checked against `SHA256SUMS`.
 
 Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
@@ -45,6 +54,24 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 ### Fixed
 
+- A structured source with `dropped: Supersede` retracts a record's values only when a whole
+  listing no longer lists it. A Connectors operation asked about the run's window (`{since}` or
+  another window placeholder in an input, or `stop_older_than_since`) supersedes the changed
+  values of the records it lists and keeps every value of the records it does not list; 0.7.2
+  retracted them.
+- A paged answer that names a page or token the walk already asked for is a paging cycle: the walk
+  leaves the operation's pages unread, fetch-only lists it in `unread`, a run names it in
+  `stopped`, and nothing is ended. 0.7.2 read the cycle as the end of the listing and retracted
+  the records it never reached.
+- A record a whole listing dropped is retired with its values: when the source lists it again,
+  with the same text, it is new and applied again. 0.7.2 called it unchanged and its values stayed
+  retracted.
+- A structured record whose entity EKR reports `ambiguous` (its aliases match two store nodes of
+  its type) is named in `rejected`, not counted in `documents_applied`, not marked seen, and tried
+  again by the next run. 0.7.2 counted it applied and never tried it again.
+- A refused structured record (rejected, ambiguous or refused by `store_lookup`) is tried after
+  every other record the run wants, the one refused longest ago first, so under
+  `max_documents_per_run` it no longer blocks the records behind it on every run.
 - The EKR pin an instance records is the engine that creates its store. `cortex create` and
   `cortex adopt` ask the `ekr` binary for its version (`ekr --version`) and refuse one that
   reports another version than the spec's `ekr.version`, whether `ekr.bin` names it or it sits in
