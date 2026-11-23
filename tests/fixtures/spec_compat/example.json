@@ -79,6 +79,7 @@
       "cost_usd": "0.0100",
       "documents_applied": 2,
       "documents_input_tokens": null,
+      "documents_left": 0,
       "documents_new": 2,
       "facts_history": 0,
       "facts_reapplied": 0,

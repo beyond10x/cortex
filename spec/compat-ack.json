@@ -1,7 +1,7 @@
 {
   "format": "ess-diff-acknowledgements/1",
   "before": "b77e573a24f45c33d239857ef5217a99252c69722f75361972dcf01ec51cdf99",
-  "after": "da4c14ea792dc63c8e245bc5140a7a640cac9d7574d2dce8354aeb2702ad95bc",
+  "after": "b2bd3b81f933ca875fc712914fc104fa82c4abc5541eaca1e28dd3a91b949b24",
   "acknowledged": [
     "entity/cortex.instance.SeenDocument/field-added/fields_hash",
     "command/cortex.instance.RunSource/outcome-response-payload-changed/fetched",
@@ -9,6 +9,9 @@
     "command/cortex.instance.AddSource/outcome-added/no-such-instance",
     "command/cortex.instance.AddSource/outcome-added/not-active",
     "command/cortex.instance.AddSource/outcome-added/source-exists",
-    "command/cortex.instance.RemoveInstance/outcome-added/stop-failed"
+    "command/cortex.instance.RemoveInstance/outcome-added/stop-failed",
+    "command/cortex.instance.RunSource/outcome-response-payload-changed/ran",
+    "event/cortex.instance.SourceRan/field-added/documents_left",
+    "event/cortex.instance.SourceRan/field-added/stopped"
   ]
 }
