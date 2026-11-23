@@ -68,7 +68,7 @@ fn create(w: &World, name: &str, input: &str) {
             r#"format: cortex.instance/1
 name: {name}
 description: Test brain.
-ekr: {{version: "0.0.32", bin: "{ekr}"}}
+ekr: {{version: "0.0.34", bin: "{ekr}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:
@@ -242,7 +242,7 @@ fn a_child_value_applied_under_the_base_prefix_still_ends_when_its_record_is_gon
         r#"format: cortex.instance/1
 name: c
 description: Test brain.
-ekr: {{version: "0.0.32", bin: "ekr"}}
+ekr: {{version: "0.0.34", bin: "ekr"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "1", timeout_s: 60}}
 sources:

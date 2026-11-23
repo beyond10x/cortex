@@ -27,7 +27,7 @@ feature set after a real instance ran for 7 days with nobody at the keyboard.
   stage it abandons on failure; two failed runs in a row disable a source, and a daily ceiling
   holds model spend. A metric file, a failure hook and `cortex sources` show how each run ended.
   `cortex quality` judges a sample of facts; `cortex schema` proposes schema changes.
-- **Project.** Specified in ESS with 128 conformance scenarios; CI runs `task check` on every pull
+- **Project.** Specified in ESS with 129 conformance scenarios; CI runs `task check` on every pull
   request; each release carries an `x86_64-unknown-linux-gnu` binary checked against `SHA256SUMS`.
 
 Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
@@ -36,8 +36,20 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Added
+
+- `cortex run --no-wait`: while another cortex command holds the home's lock, the run answers
+  `busy` at once with exit status 9 and runs and records nothing, so an external scheduler can
+  skip a collection that is still busy. Without the flag a run waits for the lock, as before
+  (review of 0.7.2, finding 18).
+
 ### Fixed
 
+- The EKR pin an instance records is the engine that creates its store. `cortex create` and
+  `cortex adopt` ask the `ekr` binary for its version (`ekr --version`) and refuse one that
+  reports another version than the spec's `ekr.version`, whether `ekr.bin` names it or it sits in
+  the cache; `cortex setup` refuses a cached binary of another version instead of keeping it
+  (review of 0.7.2, finding 17).
 - A connection named by id is found on any page of `connectors connections list`: cortex follows
   `next_cursor` when `cortex create` checks the id and when it revalidates the connection before
   a read. Before, an id on the second page was reported missing, and two timer runs then disabled

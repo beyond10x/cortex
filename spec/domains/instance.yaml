@@ -1355,8 +1355,9 @@ errors:
 
   - name: cortex.instance.InstanceBusy
     summary: >-
-      Another cortex command holds the home's lock, or another connection held the store's write
-      lock for 5 seconds; nothing was restored. A reader that holds the store open does not.
+      Another cortex command holds the home's lock, or, for a restore, another connection held
+      the store's write lock for 5 seconds; nothing was restored or run. A reader that holds the
+      store open does not.
     fields:
       - {name: reason, type: String}
 
@@ -1906,14 +1907,15 @@ commands:
     input:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: fetch_only, type: Optional<Boolean>}
+      - {name: no_wait, type: Optional<Boolean>}
     outcomes:
       # UNMAPPED: the exit status of each outcome, which an external scheduler reads instead of
       # the printed line: `ran` 0; `fetch-failed`, `extraction-failed`, `apply-refused` and
       # `no-such-source` 1; `disabled` 3; `store-outcome-unknown` 4; `connection-unavailable` 5; `batch-too-large` 6;
-      # `model-unavailable` 7; `terminated` 8; and 2 for an error before any outcome. ESS declares no exit status for a
+      # `model-unavailable` 7; `terminated` 8; `busy` 9; and 2 for an error before any outcome. ESS declares no exit status for a
       # command line's outcomes; tests/e2e.rs, tests/run_status.rs, tests/store_outcome_unknown.rs,
-      # tests/connections_revalidate_retry.rs, tests/run_metrics.rs and
-      # tests/model_unavailable.rs hold it.
+      # tests/connections_revalidate_retry.rs, tests/run_metrics.rs,
+      # tests/model_unavailable.rs and tests/review_ekr_pin_and_busy.rs hold it.
       # UNMAPPED: `<instance>/seed`, when the instance is active and has no source named `seed`,
       # names the instance's seed documents: it extracts those no seed extraction applied yet (what
       # a `partial` create left) and answers these outcomes with no Source to update. Like a source
@@ -2036,6 +2038,23 @@ commands:
         summary: >-
           The source is disabled: nothing ran and nothing was counted, and the source's status
           records the outcome.
+
+      # UNMAPPED: without `no_wait` a run waits for the home's lock while another cortex command
+      # holds it, and then runs. With `no_wait` the lock is tried before the source is read, so
+      # `busy` answers for a disabled source too: recording `disabled` would write the source's
+      # status without the lock. ESS has no construct for a lock or a wait, and orders a held
+      # state before every external branch, so `disabled` is declared first;
+      # tests/review_ekr_pin_and_busy.rs holds it.
+      - name: busy
+        external: Another cortex command holds the home's lock
+        when: {all: ["defined(no_wait)", no_wait == true]}
+        error: cortex.instance.InstanceBusy
+        payload:
+          cortex.instance.InstanceBusy:
+            reason: {generated: true}
+        summary: >-
+          Nothing ran: the source was not read, nothing was counted, and the source's status,
+          metrics and hook are untouched, so an external scheduler can skip this collection.
 
       - name: fetch-only-failed
         external: Connectors or the filesystem fails to deliver the source's documents in a fetch-only run

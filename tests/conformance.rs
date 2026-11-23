@@ -791,6 +791,7 @@ impl Scenario {
                 .run_source(m::RunSource {
                     source_id: m::SourceId(s("source_id")),
                     fetch_only: input.get("fetch_only").and_then(Value::as_bool),
+                    no_wait: input.get("no_wait").and_then(Value::as_bool),
                 })
                 .unwrap()
             {
@@ -825,6 +826,10 @@ impl Scenario {
                 m::RunSourceOutcome::ModelUnavailable { error } => (
                     "model-unavailable",
                     Some(("ModelUnavailable", json!({"reason": error.reason}))),
+                ),
+                m::RunSourceOutcome::Busy { error } => (
+                    "busy",
+                    Some(("InstanceBusy", json!({"reason": error.reason}))),
                 ),
                 m::RunSourceOutcome::Ran { .. } => ("ran", None),
                 m::RunSourceOutcome::FetchOnlyFailed { error } => (
@@ -1709,7 +1714,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     if std::env::var_os(SUITE_ENV).is_none() {
         assert_eq!(
             scenarios.len(),
-            128,
+            129,
             "the suite's scenario count moved; update this floor"
         );
     }

@@ -1,11 +1,13 @@
 {
   "format": "ess-diff-acknowledgements/1",
   "before": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
-  "after": "8563cf8fb38412e249a98c64161d5e55432c326a82fb5301711bfd7546d34bca",
+  "after": "94682e063207678f2a3541be198ffa9985b0000b86c5039c7d4fbb840b078d52",
   "acknowledged": [
     "command/cortex.instance.AddSource/outcome-added/no-such-instance",
     "command/cortex.instance.AddSource/outcome-added/not-active",
     "command/cortex.instance.AddSource/outcome-added/source-exists",
-    "command/cortex.instance.RemoveInstance/outcome-added/stop-failed"
+    "command/cortex.instance.RemoveInstance/outcome-added/stop-failed",
+    "command/cortex.instance.RunSource/input-added/no_wait",
+    "command/cortex.instance.RunSource/outcome-added/busy"
   ]
 }

@@ -72,7 +72,7 @@ fn spec(w: &World, bin: &Path, max: &str, budget: &str, max_chars: usize) -> Pat
         r#"format: cortex.instance/1
 name: pg
 description: Test brain.
-ekr: {{version: "0.0.30", bin: "{bin}"}}
+ekr: {{version: "0.0.34", bin: "{bin}"}}
 seed: {{documents: []}}
 model: {{model: claude-haiku-4-5-20251001, budget_usd: "{budget}", timeout_s: 60}}
 sources:
