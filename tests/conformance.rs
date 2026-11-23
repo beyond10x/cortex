@@ -866,6 +866,10 @@ impl Scenario {
                         json!({"name": error.name.0, "reason": error.reason}),
                     )),
                 ),
+                m::RemoveInstanceOutcome::Busy { error } => (
+                    "busy",
+                    Some(("InstanceBusy", json!({"reason": error.reason}))),
+                ),
                 m::RemoveInstanceOutcome::WrongState { error } => (
                     "wrong-state",
                     Some((

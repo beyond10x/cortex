@@ -2107,12 +2107,12 @@ fn remove(app: &mut App, ctx: &Ctx, name: &str, no_wait: bool) -> ExitCode {
     // active, so a second `remove` tries again.
     let active = !busy
         && ctx
-        .shared
-        .borrow()
-        .registry
-        .instances
-        .get(name)
-        .is_some_and(|i| i.state == m::InstanceState::Active);
+            .shared
+            .borrow()
+            .registry
+            .instances
+            .get(name)
+            .is_some_and(|i| i.state == m::InstanceState::Active);
     let mut units = None;
     if active {
         let sources: Vec<String> = ctx
