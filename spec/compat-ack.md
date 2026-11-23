@@ -14,6 +14,8 @@ reset (AGENTS.md, "The specification comes first").
 |---|---|
 | `command/cortex.instance.RunSource/input-added/no_wait` | `cortex run --no-wait`, new in this release. The input is optional; a run without it waits for the home's lock as in 0.7.2. |
 | `command/cortex.instance.RunSource/outcome-added/busy` | `busy`, exit 9, is answered only with `no_wait`, which no caller of 0.7.2 sends; a run without it never answers `busy`. |
+| `command/cortex.instance.RunSource/input-added/path` | An `Optional` input, the flag `cortex run --path <dir>`; a run without it reads the spec's `paths` and keys documents as before. |
+| `command/cortex.instance.RunSource/outcome-added/path-refused` | Answered only to a run given `--path`, which no caller before this release could pass; every run without it answers the outcomes of v0.7.2. |
 | `command/cortex.instance.UpdateInstance/input-added/no_wait` | `cortex update --no-wait`, new in this release. The input is optional; without it the command waits for the home's lock as in 0.7.2. |
 | `command/cortex.instance.UpdateInstance/outcome-added/busy` | `busy`, exit 9, is answered only with `no_wait`, which no caller of 0.7.2 sends; without it the command never answers `busy`. |
 | `command/cortex.instance.RemoveInstance/input-added/no_wait` | `cortex remove --no-wait`, new in this release. The input is optional; without it the command waits for the home's lock as in 0.7.2. |

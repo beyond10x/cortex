@@ -13,6 +13,9 @@
     },
     "no_wait": {
       "type": "boolean"
+    },
+    "path": {
+      "type": "string"
     }
   },
   "required": [
@@ -22,8 +25,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "5b6d0954157f8538f16161f373bbca9773e37173af7f9ff6c541b6006579fbb7",
-    "contract_digest": "slice-sha256/2:90bceb0262af5976374ed75bca506de12e981933cdc712182e945f03a2e11cff",
+    "source_digest": "bee510d287c1dfa93c637e46f7bd0e360af14949191c4fc99301cd3a041cd054",
+    "contract_digest": "slice-sha256/2:ece6a6185d5f5e8a4c40c3b80a367e906d6769ff33fe2f9c5b42a15d5594b06a",
     "regenerate": "ess generate"
   },
   "$defs": {

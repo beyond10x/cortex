@@ -36,6 +36,13 @@ Rules:
   the place of an earlier one — mark that `!Property` fact `replaces: true`, so the earlier value
   stops being current. Leave it out when the value adds to others, or the document does not say
   the value changed.
+- Go through every document to its end, and extract from each one what its own text states.
+  A reply in a thread states facts of its own (a decision, a status, an answer), apart from the
+  message it replies to. A message that lists several items (a status update, a changelog, a list
+  of findings or tasks) states the facts of every item. A fact two documents state cites both.
+- A paragraph that starts with `[context]` is an earlier message of the same thread, shown so the
+  document can be understood. Extract what the document's own text says, read in that context;
+  what the context alone says is not the document's fact.
 - Reuse the existing node types, properties and relations listed in the request wherever they fit.
   Declare a new node type, property or edge type in `ontology` only when nothing existing fits:
   node types in PascalCase, properties in snake_case, relations in UPPER_SNAKE_CASE.
@@ -937,6 +944,81 @@ pub fn bare_tag(document: &Value) -> Option<String> {
     }
 }
 
+/// Calls `f` with every node type, property and relation name of `document`, the model's answer,
+/// and what it names (`node type`, `property`, `relation`): the ontology's node type names,
+/// parents and property names, its edge type names, source and target types and property names,
+/// each entity's `node_type`, and in each fact its subject's and object's `node_type`, its
+/// `property` and its `relation`. A name that is not a string is skipped.
+pub fn type_names(document: &mut Value, f: &mut dyn FnMut(&'static str, &mut String)) {
+    fn one(
+        v: Option<&mut Value>,
+        what: &'static str,
+        f: &mut dyn FnMut(&'static str, &mut String),
+    ) {
+        if let Some(Value::String(s)) = v {
+            f(what, s);
+        }
+    }
+    fn each(
+        v: Option<&mut Value>,
+        what: &'static str,
+        f: &mut dyn FnMut(&'static str, &mut String),
+    ) {
+        if let Some(Value::Array(items)) = v {
+            for item in items {
+                one(Some(item), what, f);
+            }
+        }
+    }
+    fn properties(v: Option<&mut Value>, f: &mut dyn FnMut(&'static str, &mut String)) {
+        if let Some(Value::Array(items)) = v {
+            for p in items {
+                one(p.get_mut("name"), "property", f);
+            }
+        }
+    }
+    if let Some(ontology) = document.get_mut("ontology") {
+        if let Some(Value::Array(types)) = ontology.get_mut("node_types") {
+            for t in types {
+                one(t.get_mut("name"), "node type", f);
+                each(t.get_mut("parents"), "node type", f);
+                properties(t.get_mut("properties"), f);
+            }
+        }
+        if let Some(Value::Array(types)) = ontology.get_mut("edge_types") {
+            for t in types {
+                one(t.get_mut("name"), "relation", f);
+                each(t.get_mut("source_types"), "node type", f);
+                each(t.get_mut("target_types"), "node type", f);
+                properties(t.get_mut("properties"), f);
+            }
+        }
+    }
+    if let Some(Value::Array(entities)) = document.get_mut("entities") {
+        for e in entities {
+            one(e.get_mut("node_type"), "node type", f);
+        }
+    }
+    if let Some(Value::Array(facts)) = document.get_mut("facts") {
+        for fact in facts {
+            let Value::Object(tagged) = fact else {
+                continue;
+            };
+            for body in tagged.values_mut() {
+                for end in ["subject", "object"] {
+                    one(
+                        body.get_mut(end).and_then(|r| r.get_mut("node_type")),
+                        "node type",
+                        f,
+                    );
+                }
+                one(body.get_mut("property"), "property", f);
+                one(body.get_mut("relation"), "relation", f);
+            }
+        }
+    }
+}
+
 /// `at`, a path below a value, as it continues the value's own path.
 fn dotted(at: &str) -> String {
     if at.is_empty() || at.starts_with('[') {
@@ -1015,6 +1097,130 @@ fn web_page_facts(batch: &[Issued]) -> (Vec<Value>, Vec<Value>) {
         }
     }
     (entities, facts)
+}
+
+/// Whether a declaration's `cardinality` is `One`: the string, the `{"!One": null}` form EKR's
+/// schema also takes, or no cardinality at all (EKR's default is `One`).
+fn declared_one(property: &Value) -> bool {
+    match &property["cardinality"] {
+        Value::Null => true,
+        Value::String(c) => c == "One",
+        Value::Object(o) => o.contains_key("!One"),
+        _ => false,
+    }
+}
+
+/// Per node type name: its parents (names) and, per property name, whether it holds one value.
+type Declared = BTreeMap<String, (Vec<String>, BTreeMap<String, bool>)>;
+
+/// The node types `ontology` declares: the store's (`ekr ontology`, whose parents may be type
+/// ids) or a model document's (parents by name).
+fn single_valued(ontology: &Value) -> Declared {
+    let mut types = Declared::new();
+    let declared = ontology["node_types"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice);
+    let names: BTreeMap<&str, &str> = declared
+        .iter()
+        .filter_map(|t| Some((t["id"].as_str()?, t["name"].as_str()?)))
+        .collect();
+    for t in declared {
+        let Some(name) = t["name"].as_str() else {
+            continue;
+        };
+        let entry = types.entry(name.to_string()).or_default();
+        for parent in t["parents"].as_array().into_iter().flatten() {
+            let Some(parent) = parent.as_str() else {
+                continue;
+            };
+            let parent = names.get(parent).copied().unwrap_or(parent).to_string();
+            if !entry.0.contains(&parent) {
+                entry.0.push(parent);
+            }
+        }
+        for p in t["properties"].as_array().into_iter().flatten() {
+            if let Some(property) = p["name"].as_str() {
+                entry
+                    .1
+                    .entry(property.to_string())
+                    .or_insert_with(|| declared_one(p));
+            }
+        }
+    }
+    types
+}
+
+/// Whether `property` of a `node_type` holds one value: declared `One` on the type or on the
+/// nearest ancestor that declares it. `None` when neither declares it.
+fn holds_one(types: &Declared, node_type: &str, property: &str) -> Option<bool> {
+    let mut queue = std::collections::VecDeque::from([node_type.to_string()]);
+    let mut seen = BTreeSet::new();
+    while let Some(name) = queue.pop_front() {
+        if !seen.insert(name.clone()) {
+            continue;
+        }
+        let Some((parents, properties)) = types.get(&name) else {
+            continue;
+        };
+        if let Some(one) = properties.get(property) {
+            return Some(*one);
+        }
+        queue.extend(parents.iter().cloned());
+    }
+    None
+}
+
+/// Marks `replaces: true` on every `!Property` fact of the model's document `model` whose property
+/// holds one value, and returns how many it marked. The store's ontology `store` decides for a
+/// property it declares, on the subject's type or an ancestor; the document's own `ontology` for
+/// one the store does not declare yet (`cardinality: One`, or none: EKR's default is `One`).
+///
+/// EKR adds a `!Property` fact without `replaces` as one more active assertion whatever the
+/// property's cardinality (EKR 0.0.34 `ekr-sdk` `extraction.rs`, `Change::Add`; the kernel's
+/// cardinality validator does not count assertions), so a value a later batch or run reads beside
+/// the stored one would leave both current. Marked, the fact supersedes the stored value from its
+/// own time on; one older than the stored value is rejected (`invalid-supersession`) and the newer
+/// stays current; one with nothing stored to replace is applied again by
+/// [`reapply_rounds`], the earliest of a batch as a plain assertion and each later one replacing
+/// the one before it. Either way one value stays current.
+pub fn mark_single_valued(model: &mut Value, store: &Value) -> usize {
+    let stored = single_valued(store);
+    // The document's types, each one the store also declares with the store's parents and
+    // properties added, so a new type below a stored one finds what its ancestors declare.
+    let mut declared = single_valued(&model["ontology"]);
+    for (name, (parents, properties)) in &stored {
+        let entry = declared.entry(name.clone()).or_default();
+        for parent in parents {
+            if !entry.0.contains(parent) {
+                entry.0.push(parent.clone());
+            }
+        }
+        for (property, one) in properties {
+            entry.1.insert(property.clone(), *one);
+        }
+    }
+    let mut marked = 0;
+    for fact in model["facts"].as_array_mut().into_iter().flatten() {
+        let Some(body) = fact.get_mut("!Property").and_then(Value::as_object_mut) else {
+            continue;
+        };
+        if body.get("replaces").and_then(Value::as_bool) == Some(true) {
+            continue;
+        }
+        let (Some(node_type), Some(property)) = (
+            body.get("subject").and_then(|s| s["node_type"].as_str()),
+            body.get("property").and_then(Value::as_str),
+        ) else {
+            continue;
+        };
+        let one = holds_one(&stored, node_type, property)
+            .or_else(|| holds_one(&declared, node_type, property));
+        if one == Some(true) {
+            body.insert("replaces".into(), Value::Bool(true));
+            marked += 1;
+        }
+    }
+    marked
 }
 
 /// The document `ekr apply-extraction` reads, and how many model facts were refused.
@@ -1617,6 +1823,77 @@ mod tests {
         );
     }
 
+    /// `story:extraction-coverage`: a fact of a property that holds one value is marked
+    /// `replaces`, whether the store declares it (on the subject's type or, by parent id, on an
+    /// ancestor) or only the model's document does (with `One`, or with no cardinality, EKR's
+    /// default, also on a new type below a stored one); a `Many` property, an undeclared one and a
+    /// relation are left as they are.
+    #[test]
+    fn a_fact_of_a_single_valued_property_is_marked_as_replacing() {
+        let store = json!({"node_types": [
+            {"id": "t1", "name": "Change", "parents": [], "properties": [
+                {"id": "p1", "name": "state", "cardinality": "One"},
+                {"id": "p2", "name": "label", "cardinality": "Many"},
+            ]},
+            {"id": "t2", "name": "MergeRequest", "parents": ["t1"], "properties": []},
+        ]});
+        let fact = |property: &str, node_type: &str| {
+            json!({"!Property": {"subject": {"node_type": node_type, "aliases": ["x"]},
+                "property": property, "value": {"value_kind": "String", "value": "v"},
+                "evidence": ["e"]}})
+        };
+        let mut model = json!({
+            "ontology": {"node_types": [
+                {"name": "Ticket", "parents": [], "properties": [
+                    {"name": "priority", "value": {"value_kind": "String"}},
+                    {"name": "watcher", "value": {"value_kind": "String"},
+                        "cardinality": {"!Many": null}},
+                ]},
+                {"name": "MergeRequest", "parents": [], "properties": [
+                    {"name": "label", "value": {"value_kind": "String"}, "cardinality": "One"},
+                ]},
+                {"name": "Hotfix", "parents": ["MergeRequest"], "properties": []},
+            ]},
+            "facts": [
+                fact("state", "MergeRequest"),
+                fact("label", "MergeRequest"),
+                fact("priority", "Ticket"),
+                fact("watcher", "Ticket"),
+                fact("colour", "Ticket"),
+                fact("state", "Hotfix"),
+                {"!Relation": {"subject": {"node_type": "Ticket", "aliases": ["x"]},
+                    "relation": "BLOCKS", "object": {"node_type": "Ticket", "aliases": ["y"]},
+                    "evidence": ["e"]}},
+            ],
+        });
+        assert_eq!(mark_single_valued(&mut model, &store), 3);
+        let marked: Vec<bool> = model["facts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f.as_object().unwrap().values().next().unwrap()["replaces"] == true)
+            .collect();
+        // `label` holds many values: the store's ancestor declares it so, which the model's
+        // declaration on the subject's own type does not change.
+        assert_eq!(marked, [true, false, true, false, false, true, false]);
+        // A fact already replacing is not marked or counted again.
+        assert_eq!(mark_single_valued(&mut model, &store), 0);
+    }
+
+    /// `story:extraction-coverage`: the extraction rules ask for every document's own facts,
+    /// a thread reply's and each listed item's included, and say how to read `[context]`.
+    #[test]
+    fn the_prompt_asks_for_the_facts_of_every_reply_and_every_listed_item() {
+        for rule in [
+            "Go through every document to its end",
+            "A reply in a thread states facts of its own",
+            "states the facts of every item",
+            "A paragraph that starts with `[context]`",
+        ] {
+            assert!(SYSTEM_PROMPT.contains(rule), "{rule:?}: {SYSTEM_PROMPT}");
+        }
+    }
+
     #[test]
     fn the_prompt_has_a_changed_property_value_marked_as_replacing_the_earlier_one() {
         let rule = SYSTEM_PROMPT
@@ -1759,6 +2036,53 @@ mod tests {
         assert!(text.contains("!Relation"), "{text}");
         assert!(!text.contains("'!Relation'"), "{text}");
         assert!(text.contains("n: 3"), "{text}");
+    }
+
+    #[test]
+    fn every_type_property_and_relation_name_of_an_answer_is_visited_and_nothing_else() {
+        let mut v = json!({
+            "ontology": {
+                "node_types": [{"name": "T1", "parents": ["T2"],
+                    "properties": [{"name": "p1", "value": {"value_kind": "String"}}]}],
+                "edge_types": [{"name": "R1", "source_types": ["T3"], "target_types": ["T4"],
+                    "properties": [{"name": "p2"}]}],
+            },
+            "entities": [{"node_type": "T5", "aliases": ["alias"]}],
+            "facts": [
+                {"!Property": {"subject": {"node_type": "T6", "aliases": ["a"]},
+                    "property": "p3", "value": {"value_kind": "String", "value": "v"},
+                    "evidence": ["e"]}},
+                {"!Relation": {"subject": {"node_type": "T7", "aliases": ["b"]},
+                    "relation": "R2", "object": {"node_type": "T8", "aliases": ["c"]},
+                    "evidence": ["e"]}},
+            ],
+        });
+        let mut seen = Vec::new();
+        type_names(&mut v, &mut |what, name| {
+            seen.push(format!("{what}:{name}"));
+            name.push('!');
+        });
+        assert_eq!(
+            seen,
+            [
+                "node type:T1",
+                "node type:T2",
+                "property:p1",
+                "relation:R1",
+                "node type:T3",
+                "node type:T4",
+                "property:p2",
+                "node type:T5",
+                "node type:T6",
+                "property:p3",
+                "node type:T7",
+                "node type:T8",
+                "relation:R2",
+            ]
+        );
+        assert_eq!(v["entities"][0]["node_type"], "T5!");
+        assert_eq!(v["entities"][0]["aliases"][0], "alias");
+        assert_eq!(v["facts"][0]["!Property"]["value"]["value"], "v");
     }
 
     #[test]

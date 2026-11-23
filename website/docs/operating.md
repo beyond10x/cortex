@@ -31,7 +31,7 @@ run of the source writes it again, with its counts starting from zero.
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
 | `instances/<name>/state/entities.json` | entity names from earlier runs, offered to the model so it reuses them |
 | `instances/<name>/failures/<source>.json` | documents whose extraction failed (`cortex.failures/1`): each key's text hash, its consecutive runs failed with the document alone (`runs`, `0` when none), the failed batches of several it was in (`batches`, absent when none) and the last reason; outside `state/`, so undoing a run keeps it (see [What one run does](#what-one-run-does)) |
-| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt, the model's answer, the extraction document applied and EKR's report, or claude's error text (`claude/error.txt`); kept until a run removes it after the spec's [`runs.keep_days`](./spec-file.md#runs), and forever without one. `runs/` belongs to cortex: with `keep_days`, any directory in it named like a run directory (`<digits>-<lowercase letters, digits and dashes>`) is removed once that name is older than `keep_days`, whoever put it there |
+| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt as sent (`prompt.txt`), the model's raw answer (`answer.json`), the extraction document applied (`extraction.yaml`) and EKR's report (`report.json`), or claude's error text (`claude/error.txt`). Under a [`redaction`](./spec-file.md#redaction) policy `prompt.txt` and `answer.json` hold placeholders, not the values they stand for, `extraction.yaml` holds the restored values, and EKR's reports are not kept; the placeholder mapping is never written. Kept until a run removes it after the spec's [`runs.keep_days`](./spec-file.md#runs), and forever without one. `runs/` belongs to cortex: with `keep_days`, any directory in it named like a run directory (`<digits>-<lowercase letters, digits and dashes>`) is removed once that name is older than `keep_days`, whoever put it there |
 | `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
 | `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
@@ -138,6 +138,7 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 0 | `ran` | the source ran; `documents_new` 0 means nothing had changed |
 | 1 | `fetch-failed`, `extraction-failed`, `apply-refused` | the run failed and applied nothing; with `--record-failure` the failure is counted |
 | 1 | `no-such-source` | the home holds no such source |
+| 1 | `path-refused` | `--path` named a directory for a source that is not a `files` source, or for `<instance>/seed`; nothing ran or was recorded, and `--record-failure` counts nothing |
 | 2 | none | an error before any outcome, on stderr as `cortex: <message>` (an unreadable registry, a home that cannot be locked) |
 | 3 | `disabled` | the source is disabled after two failed runs in a row; nothing ran. `cortex source enable` switches it back on |
 | 4 | `store-outcome-unknown` | EKR could not say whether a store write of the run took effect (`publication outcome is unknown` from a stage verb, `apply-extraction` or a transaction's commit); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage or extracts the batch again, and a gated `sqlite` run that had kept its snapshot is undone from it (see [Undoing a run](#undoing-a-run)) |
@@ -225,6 +226,19 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    later than the replacement (`invalid-supersession`), as when an older document is read after a
    newer one, and the newer value then stays current; that rejection is listed in the run's
    `rejected` and the rest of the document applies.
+   A property that holds one value (`cardinality: One` in the store's ontology or, for one the
+   store does not declare yet, in the model's document, where `One` is EKR's default) gets
+   `replaces: true` from cortex on every fact, whatever the model marked: EKR adds an unmarked
+   fact as one more active value whatever the cardinality, so a value read in a later batch or
+   run, or the same value read from a second record, would leave two current. With the mark, the
+   rules above leave one value current, the newest by its document's time; a value older than
+   the stored one is listed in `rejected` as `invalid-supersession`, and a first value with
+   nothing stored to replace is counted in `facts_reapplied`. A `Many` property is left as the
+   model marked it.
+   The prompt asks the model to go through every document and extract what its own text states:
+   a reply in a thread its own facts apart from the message it replies to, a message that lists
+   several items the facts of each item; a `[context]` paragraph (see
+   [the spec file](./spec-file.md#kind-files)) is read as context, not as the document's facts.
 6. **Merge.** A fact citing an evidence id cortex did not issue for that batch is refused; cortex
    adds the evidence items itself and records each web page as a `WebPage` node.
 7. **Apply** the document with `ekr apply-extraction`, then record the batch's documents as seen.
@@ -785,7 +799,9 @@ binary as the consumer `cortex-records` in the Connectors configuration, with no
 
 ## Serving a store
 
-`cortex list` prints each instance's viewer address, `http://127.0.0.1:<port>/`.
+`cortex list` prints each instance's viewer address, `http://127.0.0.1:<port>/`, and `null` for
+an instance with no viewer unit of this home (created or adopted with `--no-units`, or removed);
+`create` and `adopt` with `--no-units` print `view: null` too.
 `cortex mcp-line <name>` prints a `claude mcp add --transport stdio cortex-<name> -- … ekr mcp`
 line with the instance's host document and store, which registers the store as an MCP server.
 For a `postgres` store that names a `connection`, the line, like the viewer unit, starts

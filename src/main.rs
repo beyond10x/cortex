@@ -149,6 +149,10 @@ enum Command {
         /// at once (exit 9) and run nothing, so an external scheduler can skip the collection.
         #[arg(long)]
         no_wait: bool,
+        /// Read a `files` source from this directory instead of its spec's `paths`, for this run
+        /// only; each document is keyed by its path relative to the directory.
+        #[arg(long, value_name = "DIR")]
+        path: Option<PathBuf>,
     },
     /// Put an instance's store back to a snapshot a run took before it applied anything
     /// (`cortex.instance.RestoreSnapshot`).
@@ -590,7 +594,16 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             record_failure,
             fetch_only,
             no_wait,
-        } => run_source(app, ctx, &source_id, record_failure, fetch_only, no_wait),
+            path,
+        } => run_source(
+            app,
+            ctx,
+            &source_id,
+            record_failure,
+            fetch_only,
+            no_wait,
+            path,
+        ),
         Command::Source { command } => match command {
             SourceCommand::Add {
                 instance_name,
@@ -633,9 +646,16 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             Ok(rows) => {
                 // The version of `<home>/bin/cortex`, which every source unit of the home runs.
                 let binary_version = schedule::binary_version(&ctx.home.root);
+                let systemd = Systemd::from_env(&ctx.home.root);
                 for row in rows {
                     let layout = Layout::new(ctx.home.instance_dir(&row.name.0));
-                    let port = layout.load_meta().map(|m| m.view_port).ok();
+                    // An instance with no viewer unit of this home (`--no-units`, or removed)
+                    // has no address to name.
+                    let port = layout
+                        .load_meta()
+                        .map(|m| m.view_port)
+                        .ok()
+                        .filter(|_| systemd.has_view(&row.name.0));
                     println!(
                         "{}",
                         json!({
@@ -1244,6 +1264,9 @@ fn create(
                     install_sources(ctx, &systemd, &name, &spec, replace_binary, &mut detail)
                 });
                 units_detail(&systemd, installed, &mut detail);
+            } else {
+                // No viewer was started, so no address is named.
+                detail["view"] = Value::Null;
             }
             Done {
                 outcome: if partial { "partial" } else { "created" },
@@ -1579,6 +1602,9 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                     install_sources(ctx, &systemd, &name, &spec, replace_binary, &mut detail)
                 });
                 units_detail(&systemd, installed, &mut detail);
+            } else {
+                // No viewer was started, so no address is named.
+                detail["view"] = Value::Null;
             }
             Done {
                 outcome: "adopted",
@@ -2842,7 +2868,8 @@ fn run_status(outcome: &m::RunSourceOutcome) -> u8 {
         | m::RunSourceOutcome::FetchFailed { .. }
         | m::RunSourceOutcome::ExtractionFailed { .. }
         | m::RunSourceOutcome::ApplyRefused { .. }
-        | m::RunSourceOutcome::NoSuchSource { .. } => 1,
+        | m::RunSourceOutcome::NoSuchSource { .. }
+        | m::RunSourceOutcome::PathRefused { .. } => 1,
     }
 }
 
@@ -2853,7 +2880,17 @@ fn run_source(
     record: bool,
     fetch_only: bool,
     no_wait: bool,
+    path: Option<PathBuf>,
 ) -> ExitCode {
+    // `--path` is read against the caller's working directory, not the spec's.
+    let path = match path.map(|p| std::path::absolute(&p).map(PathBuf::into_os_string)) {
+        None => None,
+        Some(Ok(p)) => match p.into_string() {
+            Ok(p) => Some(p),
+            Err(p) => return fail(format!("--path {}: not UTF-8", p.to_string_lossy())),
+        },
+        Some(Err(e)) => return fail(format!("--path: {e}")),
+    };
     // `--no-wait` took no lock because another command holds it: the run answers `busy`.
     let busy = !ctx.locked;
     if busy {
@@ -2877,6 +2914,7 @@ fn run_source(
         source_id: m::SourceId(source_id.to_string()),
         fetch_only: fetch_only.then_some(true),
         no_wait: no_wait.then_some(true),
+        path,
     }) {
         Ok(o) => o,
         Err(e) => return fail(e),
@@ -3111,7 +3149,17 @@ fn run_source(
             },
             None,
         ),
+        // A refusal of the input: nothing ran, so nothing is recorded or reported.
+        m::RunSourceOutcome::PathRefused { error } => (
+            Done {
+                outcome: "path-refused",
+                ok: false,
+                detail: json!({"source_id": error.source_id.0, "reason": error.reason}),
+            },
+            None,
+        ),
     };
+    let refused = matches!(done.outcome, "path-refused");
     // A run that applied a batch and then failed left its report: its documents and tokens are
     // counted as a run's that ended `ran` are.
     if figures.is_none() {
@@ -3124,8 +3172,8 @@ fn run_source(
         _ => false,
     };
     // A fetch-only run reports nothing: no status file, no metric, no hook. Nor does a busy one,
-    // which holds no lock to write them under.
-    if !fetch_only && !busy {
+    // which holds no lock to write them under, or one whose `--path` was refused.
+    if !fetch_only && !busy && !refused {
         report_run(ctx, source_id, disabled, figures);
     }
     ExitCode::from(status)
