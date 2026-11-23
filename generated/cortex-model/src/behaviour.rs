@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest b2bd3b81f933ca875fc712914fc104fa82c4abc5541eaca1e28dd3a91b949b24
-// contract digest 7397e8f8fd664b80f0a2e3af6c969233fb31ceef3c3f17db10b80b932464fce2
+// model digest 77b40f4f3441dcc19a4d5fbfc56d13afcd80b03b06fe2e8969b06d2c71511d85
+// contract digest 984a06ae5487642c68800955902529ad4815f478240ce717e522e1b65a5696d8
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -119,6 +119,8 @@ pub enum ExternalCommand<'a> {
     CortexInstanceApproveSchemaProposals(&'a crate::instance::ApproveSchemaProposals),
     /// The executing `cortex.instance.CreateInstance` input.
     CortexInstanceCreateInstance(&'a crate::instance::CreateInstance),
+    /// The executing `cortex.instance.EnableSource` input.
+    CortexInstanceEnableSource(&'a crate::instance::EnableSource),
     /// The executing `cortex.instance.MeasureQuality` input.
     CortexInstanceMeasureQuality(&'a crate::instance::MeasureQuality),
     /// The executing `cortex.instance.ProposeSchemaChanges` input.
@@ -147,6 +149,7 @@ impl ExternalCommand<'_> {
             Self::CortexInstanceApplySchemaProposals(_) => "cortex.instance.ApplySchemaProposals",
             Self::CortexInstanceApproveSchemaProposals(_) => "cortex.instance.ApproveSchemaProposals",
             Self::CortexInstanceCreateInstance(_) => "cortex.instance.CreateInstance",
+            Self::CortexInstanceEnableSource(_) => "cortex.instance.EnableSource",
             Self::CortexInstanceMeasureQuality(_) => "cortex.instance.MeasureQuality",
             Self::CortexInstanceProposeSchemaChanges(_) => "cortex.instance.ProposeSchemaChanges",
             Self::CortexInstanceRejectSchemaProposals(_) => "cortex.instance.RejectSchemaProposals",
@@ -729,6 +732,10 @@ where
 {
     fn enable_source(&mut self, input: crate::instance::EnableSource) -> Result<crate::instance::EnableSourceOutcome, UnmetObligation> {
         let _ = &input;
+        // `busy`: an external branch, where the context takes it and its input is eligible.
+        if self.ports.try_external(ExternalCommand::CortexInstanceEnableSource(&input), "busy")? && decided(all(&[Some(Some(&input.no_wait).and_then(|value| value.as_ref()).is_some()), equal(Some(&input.no_wait).and_then(|value| value.as_ref()).map(|value| *value), Some(true))]), "cortex.instance.EnableSource")? {
+            return Ok(crate::instance::EnableSourceOutcome::Busy { error: crate::instance::InstanceBusy { reason: self.ports.try_generate_string()? } });
+        }
         // `enabled`: the default.
         let Some(held) = SourceStorage::get(&self.ports, &input.source_id) else {
             return Ok(crate::instance::EnableSourceOutcome::NoSuchSource { error: crate::instance::SourceNotFound { source_id: input.source_id.clone() } });
@@ -870,6 +877,10 @@ where
 {
     fn remove_instance(&mut self, input: crate::instance::RemoveInstance) -> Result<crate::instance::RemoveInstanceOutcome, UnmetObligation> {
         let _ = &input;
+        // `busy`: an external branch, where the context takes it and its input is eligible.
+        if self.ports.try_external(ExternalCommand::CortexInstanceRemoveInstance(&input), "busy")? && decided(all(&[Some(Some(&input.no_wait).and_then(|value| value.as_ref()).is_some()), equal(Some(&input.no_wait).and_then(|value| value.as_ref()).map(|value| *value), Some(true))]), "cortex.instance.RemoveInstance")? {
+            return Ok(crate::instance::RemoveInstanceOutcome::Busy { error: crate::instance::InstanceBusy { reason: self.ports.try_generate_string()? } });
+        }
         // `stop-failed`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceRemoveInstance(&input), "stop-failed")? {
             return Ok(crate::instance::RemoveInstanceOutcome::StopFailed { error: crate::instance::UnitsNotStopped { name: input.name.clone(), reason: self.ports.try_generate_string()? } });
@@ -974,6 +985,10 @@ where
         if decided(equal(Some(&held.state).map(|value| match value { crate::instance::InstanceState::Active => "Active", crate::instance::InstanceState::Removed => "Removed" }.to_owned()), Some("Removed".to_owned())), "cortex.instance.UpdateInstance")? {
             return Ok(crate::instance::UpdateInstanceOutcome::NotActive { error: crate::instance::InstanceNotActive { state: self.ports.try_generate_cortex_instance_instance_state()? } });
         }
+        // `busy`: an external branch, where the context takes it and its input is eligible.
+        if self.ports.try_external(ExternalCommand::CortexInstanceUpdateInstance(&input), "busy")? && decided(all(&[Some(Some(&input.no_wait).and_then(|value| value.as_ref()).is_some()), equal(Some(&input.no_wait).and_then(|value| value.as_ref()).map(|value| *value), Some(true))]), "cortex.instance.UpdateInstance")? {
+            return Ok(crate::instance::UpdateInstanceOutcome::Busy { error: crate::instance::InstanceBusy { reason: self.ports.try_generate_string()? } });
+        }
         // `rekey-refused`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceUpdateInstance(&input), "rekey-refused")? {
             return Ok(crate::instance::UpdateInstanceOutcome::RekeyRefused { error: crate::instance::RekeyRefused { name: input.name.clone(), source: self.ports.try_generate_string()?, field: self.ports.try_generate_string()? } });
@@ -1054,6 +1069,17 @@ fn undeclared(source: &'static str) -> UnmetObligation {
 /// A guard's truth, where it has one: Unknown selects no branch, so the model declares no outcome.
 fn decided(truth: Option<bool>, command: &'static str) -> Result<bool, UnmetObligation> {
     truth.ok_or_else(|| undeclared(command))
+}
+
+/// Three-valued conjunction: false wins, then Unknown.
+fn all(truths: &[Option<bool>]) -> Option<bool> {
+    if truths.contains(&Some(false)) {
+        Some(false)
+    } else if truths.contains(&None) {
+        None
+    } else {
+        Some(true)
+    }
 }
 
 /// Equality of two read values; an unread one is Unknown.

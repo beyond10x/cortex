@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest b2bd3b81f933ca875fc712914fc104fa82c4abc5541eaca1e28dd3a91b949b24
-// contract digest 7397e8f8fd664b80f0a2e3af6c969233fb31ceef3c3f17db10b80b932464fce2
+// model digest 77b40f4f3441dcc19a4d5fbfc56d13afcd80b03b06fe2e8969b06d2c71511d85
+// contract digest 984a06ae5487642c68800955902529ad4815f478240ce717e522e1b65a5696d8
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -2268,6 +2268,8 @@ pub enum CreateInstanceOutcome {
 pub struct EnableSource {
     /// `source_id` — `cortex.instance.SourceId`.
     pub source_id: SourceId,
+    /// `no_wait` — `Optional<Boolean>`.
+    pub no_wait: Option<bool>,
 }
 
 /// Everything `cortex.instance.EnableSource` can result in — one variant per declared outcome.
@@ -2277,6 +2279,13 @@ pub struct EnableSource {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EnableSourceOutcome {
+    /// `busy` — externally decided (Another cortex command holds the home's lock) when eligible ((defined(no_wait) and no_wait == true)).
+    ///
+    /// Nothing changed; the source stays disabled and its timer as it was.
+    Busy {
+        /// Why it was refused: `cortex.instance.InstanceBusy`.
+        error: InstanceBusy,
+    },
     /// `enabled` — otherwise.
     ///
     /// The failure count is reset and the timer is enabled again.
@@ -2530,6 +2539,8 @@ pub enum RejectSchemaProposalsOutcome {
 pub struct RemoveInstance {
     /// `name` — `cortex.instance.InstanceName`.
     pub name: InstanceName,
+    /// `no_wait` — `Optional<Boolean>`.
+    pub no_wait: Option<bool>,
 }
 
 /// Everything `cortex.instance.RemoveInstance` can result in — one variant per declared outcome.
@@ -2539,6 +2550,13 @@ pub struct RemoveInstance {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RemoveInstanceOutcome {
+    /// `busy` — externally decided (Another cortex command holds the home's lock) when eligible ((defined(no_wait) and no_wait == true)).
+    ///
+    /// Nothing changed; the timers and the viewer are as they were.
+    Busy {
+        /// Why it was refused: `cortex.instance.InstanceBusy`.
+        error: InstanceBusy,
+    },
     /// `removed` — otherwise.
     ///
     /// The timers and the viewer are gone; the directory and the store stay.
@@ -2820,6 +2838,8 @@ pub struct UpdateInstance {
     pub spec: InstanceSpec,
     /// `seed_digest` — `String`.
     pub seed_digest: String,
+    /// `no_wait` — `Optional<Boolean>`.
+    pub no_wait: Option<bool>,
 }
 
 /// Everything `cortex.instance.UpdateInstance` can result in — one variant per declared outcome.
@@ -2842,6 +2862,13 @@ pub enum UpdateInstanceOutcome {
     NotActive {
         /// Why it was refused: `cortex.instance.InstanceNotActive`.
         error: InstanceNotActive,
+    },
+    /// `busy` — externally decided (Another cortex command holds the home's lock) when eligible ((defined(no_wait) and no_wait == true)).
+    ///
+    /// Nothing changed: the frozen spec, the sources and the units are as they were, so an orchestrator can try the update again between runs.
+    Busy {
+        /// Why it was refused: `cortex.instance.InstanceBusy`.
+        error: InstanceBusy,
     },
     /// `rekey-refused` — externally decided (A source the frozen spec and the new one both name, whose `state/<source>.json` holds a seen document, changes a field its documents are keyed by: its `kind`; a `connectors` source's `adapter`, `operation` or `id`; a `files` source's `records` format (no `records` and `WholeFile` are one), with a per-record format their `records.id`, or a root of its `paths` that reaches a seen file under another spelling (`docs` and `./docs`; adding, removing or reordering roots is not one); a `structured` source's `input`, its `connectors` input's `adapter` or `operation`, its `files` input's `paths` or `glob` as written, or its `mapping.id`. A record path is compared as it is read (`key` and `$.key` are one path)).
     ///
@@ -3271,7 +3298,7 @@ pub struct FetchFailed {
 
 /// The declared error `cortex.instance.InstanceBusy`.
 ///
-/// Another cortex command holds the home's lock, or, for a restore, another connection held the store's write lock for 5 seconds; nothing was restored or run. A reader that holds the store open does not.
+/// Another cortex command holds the home's lock, or, for a restore, another connection held the store's write lock for 5 seconds; nothing was restored, run, updated, removed or enabled. A reader that holds the store open does not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceBusy {
     /// `reason` — `String`.

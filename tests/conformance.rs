@@ -67,7 +67,7 @@ enum Supplied {
 /// The create, adopt and update steps of `spec/suite.json` whose document is a synthesized
 /// witness the loader refuses ([`Supplied::Witness`]). Every other such step's document goes
 /// through the loader and must load. A ratchet: lower it when the suite carries fewer.
-const WITNESS_STEPS: usize = 98;
+const WITNESS_STEPS: usize = 100;
 
 /// Whether `document` is a synthesized witness: each text ESS's synthesis writes at `format`,
 /// `name`, `description` and `model.model` is that field's path (`spec.format`), with the
@@ -819,6 +819,7 @@ impl Scenario {
                     model: s("model"),
                     spec: spec(),
                     seed_digest: s("seed_digest"),
+                    no_wait: input.get("no_wait").and_then(Value::as_bool),
                 })
                 .unwrap()
             {
@@ -827,6 +828,10 @@ impl Scenario {
                     Some(("SeedChangeRefused", json!({"name": error.name.0}))),
                 ),
                 m::UpdateInstanceOutcome::Updated { .. } => ("updated", None),
+                m::UpdateInstanceOutcome::Busy { error } => (
+                    "busy",
+                    Some(("InstanceBusy", json!({"reason": error.reason}))),
+                ),
                 m::UpdateInstanceOutcome::RekeyRefused { error } => (
                     "rekey-refused",
                     Some((
@@ -849,6 +854,7 @@ impl Scenario {
             "cortex.instance.RemoveInstance" => match app
                 .remove_instance(m::RemoveInstance {
                     name: m::InstanceName(s("name")),
+                    no_wait: input.get("no_wait").and_then(Value::as_bool),
                 })
                 .unwrap()
             {
@@ -1022,10 +1028,15 @@ impl Scenario {
             "cortex.instance.EnableSource" => match app
                 .enable_source(m::EnableSource {
                     source_id: m::SourceId(s("source_id")),
+                    no_wait: input.get("no_wait").and_then(Value::as_bool),
                 })
                 .unwrap()
             {
                 m::EnableSourceOutcome::Enabled { .. } => ("enabled", None),
+                m::EnableSourceOutcome::Busy { error } => (
+                    "busy",
+                    Some(("InstanceBusy", json!({"reason": error.reason}))),
+                ),
                 m::EnableSourceOutcome::WrongState { error } => (
                     "wrong-state",
                     Some((
@@ -1845,7 +1856,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     if std::env::var_os(SUITE_ENV).is_none() {
         assert_eq!(
             scenarios.len(),
-            133,
+            136,
             "the suite's scenario count moved; update this floor"
         );
     }
@@ -1864,7 +1875,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
             .count();
         assert_eq!(
             (supplied, witnesses),
-            (102, WITNESS_STEPS),
+            (104, WITNESS_STEPS),
             "the steps supplying a spec, and the synthesized witnesses among them, moved: {} \
              loaded; update these counts",
             supplied - witnesses

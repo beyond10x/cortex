@@ -1,7 +1,7 @@
 {
   "format": "ess-diff-acknowledgements/1",
   "before": "b77e573a24f45c33d239857ef5217a99252c69722f75361972dcf01ec51cdf99",
-  "after": "b2bd3b81f933ca875fc712914fc104fa82c4abc5541eaca1e28dd3a91b949b24",
+  "after": "77b40f4f3441dcc19a4d5fbfc56d13afcd80b03b06fe2e8969b06d2c71511d85",
   "acknowledged": [
     "entity/cortex.instance.SeenDocument/field-added/fields_hash",
     "command/cortex.instance.RunSource/outcome-response-payload-changed/fetched",
@@ -10,6 +10,12 @@
     "command/cortex.instance.AddSource/outcome-added/not-active",
     "command/cortex.instance.AddSource/outcome-added/source-exists",
     "command/cortex.instance.RemoveInstance/outcome-added/stop-failed",
+    "command/cortex.instance.EnableSource/input-added/no_wait",
+    "command/cortex.instance.EnableSource/outcome-added/busy",
+    "command/cortex.instance.RemoveInstance/input-added/no_wait",
+    "command/cortex.instance.RemoveInstance/outcome-added/busy",
+    "command/cortex.instance.UpdateInstance/input-added/no_wait",
+    "command/cortex.instance.UpdateInstance/outcome-added/busy",
     "command/cortex.instance.RunSource/outcome-response-payload-changed/ran",
     "event/cortex.instance.SourceRan/field-added/documents_left",
     "event/cortex.instance.SourceRan/field-added/stopped"
