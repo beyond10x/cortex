@@ -3,6 +3,8 @@ version: '3'
 vars:
   CARGO: 'env CARGO_BUILD_JOBS=4 RUST_TEST_THREADS=4 nice -n 19 cargo'
   ESS: ess
+  TEST_BUDGET: report
+  TEST_THREADS: '8'
 
 tasks:
   generate:
@@ -51,10 +53,42 @@ tasks:
     cmds:
       - '{{.CARGO}} build --locked --release'
 
-  test:
-    desc: Run every test
+  test-build:
+    desc: Build every test binary, outside the test step's budget
     cmds:
-      - '{{.CARGO}} test --locked --workspace'
+      - '{{.CARGO}} nextest run --locked --workspace --no-run'
+
+  test:
+    desc: Run every test with cargo-nextest; a test over 60 s fails; the step prints its wall time and ten slowest tests, and with TEST_BUDGET=enforce fails over 120 s
+    deps: [test-build]
+    cmds:
+      - |
+        set -u
+        case "{{.TEST_BUDGET}}" in
+          enforce) profile=budget ;;
+          report) profile=default ;;
+          *) echo "TEST_BUDGET is report or enforce, not {{.TEST_BUDGET}}" >&2; exit 2 ;;
+        esac
+        junit=target/nextest/$profile/junit.xml
+        rm -f "$junit"
+        start=$(date +%s)
+        status=0
+        {{.CARGO}} nextest run --locked --workspace --no-tests=fail --profile "$profile" --test-threads {{.TEST_THREADS}} || status=$?
+        elapsed=$(( $(date +%s) - start ))
+        echo "ten slowest tests (seconds):"
+        if [ -f "$junit" ]; then
+          grep -o '<testcase [^>]*>' "$junit" \
+            | sed -n 's/.* name="\([^"]*\)".* time="\([^"]*\)".*/\2 \1/p' \
+            | sort -rn | head -n 10 | sed 's/^/  /'
+        else
+          echo "  no report at $junit"
+        fi
+        echo "test step: $elapsed s of a 120 s budget"
+        [ "$status" -eq 0 ] || exit "$status"
+        if [ "$elapsed" -gt 120 ]; then
+          echo "the test step ran $elapsed s, over its 120 s budget (TEST_BUDGET={{.TEST_BUDGET}})" >&2
+          [ "$profile" = default ] || exit 1
+        fi
 
   check:
     desc: The gate — spec validity, generated-code drift, spec compatibility, fmt, clippy, tests
