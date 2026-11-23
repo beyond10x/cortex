@@ -5,4 +5,7 @@ specification:
   - components.yaml
   - domains/instance.yaml
   - domains/ask.yaml
-scenarios: []
+scenarios:
+  - scenarios/create-from-a-loaded-spec.yaml
+  - scenarios/adopt-from-a-loaded-spec.yaml
+  - scenarios/update-from-a-loaded-spec.yaml
