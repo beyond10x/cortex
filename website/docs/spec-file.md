@@ -348,7 +348,9 @@ Websites with their title, description and content, through a Connectors adapter
 | `policy` | optional crawl policy: `max_depth`, `max_breadth`, `limit`, `select_paths`, `exclude_paths`, `instructions`, `allow_external`. Without it a crawl is limited to 20 pages |
 
 A website with no content keeps its description as its text; one with neither is dropped. A URL
-returned twice in one run counts once.
+returned twice in one run counts once. A URL the provider could not read, and an answer it says
+is incomplete, are named in fetch-only's `unread` and in the run's `stopped`
+([Operating](./operating.md#counting-what-a-run-would-extract)).
 
 ### `kind: connectors`
 

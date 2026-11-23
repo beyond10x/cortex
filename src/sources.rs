@@ -545,7 +545,8 @@ pub struct Fetched {
     pub documents: Vec<Document>,
     /// Why the fetch left records unread, one line each: a paged operation that reached its
     /// `max_pages` with pages left or met an empty page that named a next one, or a child call
-    /// that failed for a parent, which is then left out. Empty when it read everything.
+    /// that failed for a parent, which is then left out; a URL a web answer names as failed, or a
+    /// web answer that says it is incomplete ([`web_unread`]). Empty when it read everything.
     pub unread: Vec<String>,
     /// Parents left out because their child call failed on [`CHILD_FAILURE_LIMIT`] or more
     /// consecutive runs, one line each. They do not hold the window.
@@ -639,7 +640,10 @@ pub fn fetch(
     match settings {
         m::SourceSettings::Web(web) => {
             let connection = resolve(web_adapter(web), &web.connection, &web.profile)?;
-            fetch_web(web, &connection, connectors).map(documents)
+            fetch_web(web, &connection, connectors).map(|(docs, unread)| Fetched {
+                unread,
+                ..documents(docs)
+            })
         }
         m::SourceSettings::Connectors(c) => {
             let connection = resolve(&c.adapter, &c.connection, &c.profile)?;
@@ -1143,13 +1147,52 @@ fn items<'a>(answer: &'a Value, key: &str) -> impl Iterator<Item = &'a Value> {
     body(answer)[key].as_array().into_iter().flatten()
 }
 
+/// Adds to `unread` what one `datasource.websearch/v1alpha1` answer, of the call `what` names,
+/// left unread: each URL in its `failed` list, with the provider's reason, and the answer itself
+/// when it says `complete: false`, with its truncation causes. A search whose causes are all
+/// `provider_limit` (fewer results than `max_results`) or `content_bytes` (clipped content, no
+/// item left out) left nothing the source asked for unread.
+fn web_unread(what: &str, answer: &Value, unread: &mut Vec<String>) {
+    let body = body(answer);
+    for failed in body["failed"].as_array().into_iter().flatten() {
+        let url = s(failed, "url").unwrap_or_else(|| "a URL".into());
+        let reason = s(failed, "reason").unwrap_or_else(|| "no reason given".into());
+        note(unread, format!("{what}: {url} not read ({reason})"));
+    }
+    if body["complete"] != Value::Bool(false) {
+        return;
+    }
+    let causes: Vec<&str> = body["truncation"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let short = what == "websearch.search"
+        && !causes.is_empty()
+        && causes
+            .iter()
+            .all(|c| matches!(*c, "provider_limit" | "content_bytes"));
+    if short {
+        return;
+    }
+    let causes = if causes.is_empty() {
+        "no cause named".to_string()
+    } else {
+        causes.join(", ")
+    };
+    note(unread, format!("{what}: the answer is incomplete ({causes})"));
+}
+
+/// The documents of a `web` source, and what its answers left unread ([`web_unread`]).
 fn fetch_web(
     web: &m::WebSource,
     connection: &str,
     connectors: &Connectors,
-) -> Result<Vec<Document>, FetchError> {
+) -> Result<(Vec<Document>, Vec<String>), FetchError> {
     let adapter = web_adapter(web);
     let mut docs = Vec::new();
+    let mut unread = Vec::new();
     match &web.input {
         m::WebInput::Search(search) => {
             for query in &search.queries {
@@ -1160,6 +1203,7 @@ fn fetch_web(
                     &search_input(query, &search.policy),
                 )?;
                 docs.extend(items(&answer, "results").filter_map(website));
+                web_unread("websearch.search", &answer, &mut unread);
             }
         }
         m::WebInput::Sites(sites) => match sites.mode {
@@ -1167,6 +1211,7 @@ fn fetch_web(
                 let input = json!({"urls": sites.urls});
                 let answer = connectors.invoke(adapter, connection, "websearch.fetch", &input)?;
                 docs.extend(items(&answer, "pages").filter_map(website));
+                web_unread("websearch.fetch", &answer, &mut unread);
             }
             m::WebMode::Crawl => {
                 for url in &sites.urls {
@@ -1174,12 +1219,17 @@ fn fetch_web(
                     let answer =
                         connectors.invoke(adapter, connection, "websearch.crawl", &input)?;
                     docs.extend(items(&answer, "pages").filter_map(website));
+                    web_unread(
+                        &format!("websearch.crawl from {url}"),
+                        &answer,
+                        &mut unread,
+                    );
                 }
             }
         },
     }
     dedupe(&mut docs);
-    Ok(docs)
+    Ok((docs, unread))
 }
 
 fn dedupe(docs: &mut Vec<Document>) {

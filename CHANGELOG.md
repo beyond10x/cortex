@@ -93,6 +93,15 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   through every document to its end, to extract a thread reply's own facts apart from the message
   it answers and every item of a message that lists several, and to read `[context]` paragraphs
   as context (`story:extraction-coverage`).
+- A `web` source reports what the provider did not read. Each URL in a `websearch.fetch` or
+  `websearch.crawl` answer's `failed` list, and an answer that says `complete: false`, is named in
+  fetch-only's `unread` and in the run's `stopped`, with the provider's reason or truncation
+  causes. A search short of `max_results` alone is not named. 0.7.2 ignored both and reported a
+  run whose only URL failed as a plain `ran` (review of 0.7.2, finding 7).
+- A web page's description is cut, with its title, to what the 16,384-byte evidence payload
+  holds, leaving the page's text its own length or 8,192 bytes. The prompt, the evidence and the
+  stored `WebPage` `description` hold the same text. 0.7.2 showed the model and stored a long
+  description whose tail its evidence did not hold (review of 0.7.2, finding 10).
 
 ## 0.7.2 — 2026-10-30
 

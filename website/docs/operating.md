@@ -184,7 +184,11 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
 1. **Fetch** the source's documents (web pages or records through `connectors`, or local files).
 2. **Mask** credential-shaped text in each document, then cut it to `max_chars_per_document`,
    and further, at a character boundary, to what its evidence holds: EKR 0.0.32 takes an
-   evidence payload of at most 16,384 bytes, header included.
+   evidence payload of at most 16,384 bytes, header included. A header (the `Source:` line, a
+   web page's title, published date and description) that would leave the text less room than
+   its own length or 8,192 bytes, whichever is smaller, is cut first: the description, then the
+   title, at a character boundary; then the published date is dropped. The model is shown, and
+   the `WebPage` node is given, the title and description as the evidence holds them.
 3. **Keep** documents whose key was never applied, and documents whose text hash changed once
    their last application is `refresh_after_days` old, at most `max_documents_per_run`. Two
    changes do not wait for that window: a record read from a file, and a change of a `structured`
@@ -344,8 +348,18 @@ as a run does, and compares its content hash with the source's seen state:
 `new` counts documents whose key was never applied, `changed` those a run would extract now,
 `held` those whose change waits for `refresh_after_days`, and `unchanged` the rest; `fetched` is
 their sum. `max_documents_per_run` does not cut the counts. `unread` lists, masked as a run's
-`stopped` is, why the fetch left records unread. Use it to check a new source, connection or
-schedule, and to count the documents a run at your cadence would send to the model, before
+`stopped` is, why the fetch left records unread. A run names the same lines in `stopped`, after
+any other reason it stopped, and still ends as `ran`. For a `web` source, where `<call>` is
+`websearch.search`, `websearch.fetch` or `websearch.crawl from <start url>`, they are:
+
+- `<call>: <url> not read (<reason>)` for each URL in the answer's `failed` list, with the
+  provider's reason;
+- `<call>: the answer is incomplete (<causes>)` when the answer says `complete: false`, with its
+  `truncation` causes. A `websearch.search` answer whose causes are all `provider_limit` (fewer
+  results than `max_results`) or `content_bytes` is not named: it left nothing the source asked
+  for unread. A page whose content the provider clipped is still read.
+
+Use it to check a new source, connection or schedule, and to count the documents a run at your cadence would send to the model, before
 paying for extraction.
 
 Nothing else happens: no model call, no snapshot and no PostgreSQL stage, nothing written to the
