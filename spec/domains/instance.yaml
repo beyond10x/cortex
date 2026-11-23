@@ -791,9 +791,10 @@ types:
       - {name: bin, type: Optional<String>}
 
   # UNMAPPED: `view_port` is a port from 0 to 65535; a spec outside it is refused (exit 2, naming
-  # the field, for `create`, `update` and `adopt`: `spec::load_given`). The port is read only when
-  # an instance is made, so an instance's frozen copy is not held to it. A check on an Integer the
-  # specification has no construct for; `tests/spec_forms.rs` tests it.
+  # the field, for `create`, `update` and `adopt`: `spec::load_given`). The port is read when an
+  # instance is made and when an update names another one, so an instance's frozen copy is not
+  # held to it. A check on an Integer the specification has no construct for;
+  # `tests/spec_forms.rs` tests it.
   - name: cortex.instance.ServeSpec
     kind: struct
     fields:
@@ -1309,6 +1310,21 @@ errors:
     fields:
       - {name: state, type: cortex.instance.Instance.State}
 
+  - name: cortex.instance.SourceExists
+    summary: >-
+      The registry already holds a source with this id; its schedule, counters and state are as
+      they were. `cortex update` changes a source of the spec.
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+
+  - name: cortex.instance.UnitsNotStopped
+    summary: >-
+      `systemctl` did not stop a timer or the viewer the home wrote for the instance. The instance
+      stays active and every unit file stays, so `cortex remove` can be run again.
+    fields:
+      - {name: name, type: cortex.instance.InstanceName}
+      - {name: reason, type: String}
+
   - name: cortex.instance.SourceDisabledError
     summary: The source is disabled after repeated failures; enable it first.
     fields:
@@ -1813,6 +1829,16 @@ commands:
             field: {generated: true}
         summary: Nothing changed; the frozen spec and every source's seen state are as they were.
 
+      # UNMAPPED: `updated` brings the instance's sources in line with the new spec. A source the
+      # spec adds is added (AddSource); a source it keeps takes the spec's `kind` and `schedule`
+      # and keeps its runs, failures, last outcome and state; a source it drops has its timer
+      # stopped and its unit files deleted, and leaves the registry. A dropped source whose timer
+      # `systemctl` does not stop keeps its row and its unit files, and the update names the
+      # failure in `units.failed`, so the next update tries again. A `serve.view_port` other than
+      # the instance's is recorded in `meta.json`, and the viewer unit is written on it and
+      # restarted. One outcome does one thing to one entity, and ESS has no effect over the
+      # records of another entity that one input names; src/main.rs holds it and
+      # tests/review_instance_update.rs tests it.
       - name: updated
         updates: cortex.instance.Instance
         instance: name
@@ -1825,10 +1851,12 @@ commands:
           cortex.instance.InstanceUpdated:
             name: input.name
         summary: >-
-          The frozen spec is replaced; sources, model and serve settings take effect on the next run.
-          The viewer unit holds the connection id resolved at the last create, adopt or update: it is
-          rewritten when the store's connection changed, or when its profile now resolves to
-          another id.
+          The frozen spec is replaced; model settings take effect on the next run. Sources the spec
+          adds are added, sources it keeps take its kind and schedule and keep their counters and
+          state, and sources it drops leave the registry with their timers stopped and deleted. A
+          changed `serve.view_port` moves the viewer to it. The viewer unit holds the connection id
+          resolved at the last create, adopt or update: it is rewritten when the store's
+          connection or the port changed, or when its profile now resolves to another id.
 
       - name: no-such-instance
         unknown_instance: true
@@ -1868,6 +1896,19 @@ commands:
             name: input.name
         summary: The timers and the viewer are gone; the directory and the store stay.
 
+      - name: stop-failed
+        external: >-
+          `systemctl --user disable --now` failed for a timer or the viewer of the instance whose
+          unit file the home wrote
+        error: cortex.instance.UnitsNotStopped
+        payload:
+          cortex.instance.UnitsNotStopped:
+            name: input.name
+            reason: {generated: true}
+        summary: >-
+          Nothing was deleted: the instance stays active and its unit files stay, so a second
+          remove tries again.
+
       - name: wrong-state
         wrong_state: true
         error: cortex.instance.InstanceNotActive
@@ -1895,6 +1936,30 @@ commands:
       - {name: kind, type: cortex.instance.SourceKind}
       - {name: schedule, type: String}
     outcomes:
+      - name: source-exists
+        existing_instance: true
+        error: cortex.instance.SourceExists
+        payload:
+          cortex.instance.SourceExists:
+            source_id: input.source_id
+        summary: Nothing changed; the source keeps its schedule, counters and state.
+
+      - name: no-such-instance
+        when_related: {via: input.instance_name, exists: false}
+        error: cortex.instance.InstanceNotFound
+        payload:
+          cortex.instance.InstanceNotFound:
+            name: input.instance_name
+        summary: Nothing changed.
+
+      - name: not-active
+        when_related: {via: input.instance_name, predicate: state == Removed}
+        error: cortex.instance.InstanceNotActive
+        payload:
+          cortex.instance.InstanceNotActive:
+            state: {generated: true}
+        summary: The instance is removed; nothing changed.
+
       - name: added
         creates: cortex.instance.Source
         instance: source_id

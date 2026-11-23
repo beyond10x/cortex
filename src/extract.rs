@@ -1443,8 +1443,9 @@ fn replaced_key(fact: &TaggedValue) -> String {
 
 /// The facts of `doc` (a merged document) that `report` (its `ekr.integrate.ExtractionReport`)
 /// rejected for [`NOTHING_TO_REPLACE`] alone, as documents to apply again in turn; `None` when
-/// there are none. The facts of one subject and property are ordered by the latest
-/// `observed_at` of the evidence each cites (then by their place in `doc`): the earliest goes in
+/// there are none. The facts of one subject and property are ordered by the earliest
+/// `observed_at` of the evidence each cites, the time EKR stores the fact from (then by their
+/// place in `doc`): the earliest goes in
 /// the first round without `replaces`, so EKR stores it as a plain assertion, and each later one
 /// goes, still marked `replaces: true`, in the round after the one before it, so EKR supersedes
 /// the value before it and one value stays current.
@@ -1474,11 +1475,14 @@ pub fn reapply_rounds(doc: &Yaml, report: &Value) -> Option<Reapply> {
             .map(str::to_string)
             .collect()
     };
+    // EKR stores a fact from the earliest `observed_at` of the evidence it cites (EKR 0.0.34
+    // `ekr-sdk` `extraction.rs`, `story:extraction-valid-time`). Ordered by a later one, a fact
+    // citing an early and a late record would replace a value it is older than.
     let time_of = |fact: &TaggedValue| -> i64 {
         cites(fact)
             .iter()
             .filter_map(|id| observed.get(id.as_str()).copied())
-            .max()
+            .min()
             .unwrap_or(0)
     };
     let fact_at = |part: &Value| -> Option<usize> {
@@ -1673,6 +1677,29 @@ pub fn history(doc: &Yaml, report: &Value) -> Option<(Round, Value)> {
     let mut report = report.clone();
     report["rejected"] = Value::Array(rest);
     Some((round_of(doc, older), report))
+}
+
+/// The [`history`] documents of one batch, `doc` (its merged document) and each round applied
+/// after it, as one document of all their facts and the evidence items of `doc` they cite;
+/// `None` when there is none. One apply and one transaction of [`closings`] then keep them all.
+pub fn joined_history(doc: &Yaml, rounds: Vec<Round>) -> Option<Round> {
+    let facts: Vec<TaggedValue> = rounds
+        .iter()
+        .flat_map(|round| {
+            round.doc["facts"]
+                .as_sequence()
+                .cloned()
+                .unwrap_or_default()
+        })
+        .filter_map(|fact| match fact {
+            Yaml::Tagged(fact) => Some(*fact),
+            _ => None,
+        })
+        .collect();
+    if facts.is_empty() {
+        return None;
+    }
+    Some(round_of(doc, facts))
 }
 
 /// The supersessions that end each value a [`history`] document stored where the value after it
@@ -2186,6 +2213,100 @@ mod tests {
         );
         assert_eq!(rounds[1].cited, BTreeSet::from(["late".to_string()]));
         assert_eq!(rounds[1].doc["evidence"].as_sequence().unwrap().len(), 1);
+    }
+
+    /// `story:supersession-refusals-after-history`: a fact citing an early and a late record is
+    /// ordered by the early one, the time EKR stores it from, so it goes first and the fact of a
+    /// record between the two replaces it. Ordered by its late record it replaced a value it is
+    /// older than, and EKR refused it (`invalid-supersession`).
+    #[test]
+    fn a_fact_citing_several_records_is_ordered_by_the_earliest() {
+        let subject = json!({"node_type": "Product", "aliases": ["W"]});
+        let doc = tagged(&json!({
+            "format": "ekr.extraction-document/1",
+            "facts": [
+                {"!Property": {"subject": subject, "property": "owner", "replaces": true,
+                    "value": "Alice", "evidence": ["late", "early"]}},
+                {"!Property": {"subject": subject, "property": "owner", "replaces": true,
+                    "value": "Bob", "evidence": ["middle"]}},
+            ],
+            "evidence": [
+                {"evidence": {"id": "early", "observed_at": 1000}, "payload": []},
+                {"evidence": {"id": "middle", "observed_at": 2000}, "payload": []},
+                {"evidence": {"id": "late", "observed_at": 3000}, "payload": []},
+            ],
+        }));
+        let refused = |i: usize| {
+            json!({"item": format!("facts[{i}]"),
+                "refusal": format!("replacement-without-active-assertion: facts[{i}]: none")})
+        };
+        let report = json!({"rejected": [refused(0), refused(1)]});
+        let Reapply { rounds, .. } = reapply_rounds(&doc, &report).expect("two to apply");
+        let value = |round: &Round| match &round.doc["facts"][0] {
+            Yaml::Tagged(f) => (
+                f.value["value"].as_str().unwrap().to_string(),
+                f.value.get("replaces").is_some(),
+            ),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(rounds.len(), 2);
+        assert_eq!(value(&rounds[0]), ("Alice".to_string(), false));
+        assert_eq!(value(&rounds[1]), ("Bob".to_string(), true));
+    }
+
+    /// `story:supersession-refusals-after-history`: the history documents of a batch and of a
+    /// round applied after it are one document of all their facts, with the batch's evidence
+    /// items they cite; none is nothing.
+    #[test]
+    fn history_of_the_batch_and_of_a_later_round_is_one_document() {
+        let doc = tagged(&json!({
+            "format": "ekr.extraction-document/1",
+            "ontology": {"node_types": [], "edge_types": []},
+            "entities": [],
+            "facts": [
+                {"!Property": {"property": "p", "replaces": true, "evidence": ["e1"]}},
+                {"!Property": {"property": "q", "replaces": true, "evidence": ["e2"]}},
+            ],
+            "evidence": [
+                {"evidence": {"id": "e1"}, "payload": []},
+                {"evidence": {"id": "e2"}, "payload": []},
+                {"evidence": {"id": "e3"}, "payload": []},
+            ],
+        }));
+        let older = json!({"rejected": [
+            {"item": "facts[0]", "refusal": null, "issues": [{"code": "invalid-supersession"}]},
+        ]});
+        let (first, _) = history(&doc, &older).expect("p");
+        let round = round_of(
+            &doc,
+            vec![match &doc["facts"][1] {
+                Yaml::Tagged(f) => (**f).clone(),
+                other => panic!("{other:?}"),
+            }],
+        );
+        let (second, rest) = history(&round.doc, &older).expect("q");
+        assert!(rest["rejected"].as_array().unwrap().is_empty());
+        let joined = joined_history(&doc, vec![first, second]).expect("both");
+        assert_eq!(joined.facts, 2);
+        assert_eq!(
+            joined.cited,
+            BTreeSet::from(["e1".to_string(), "e2".to_string()])
+        );
+        let props: Vec<&str> = joined.doc["facts"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .map(|f| match f {
+                Yaml::Tagged(f) => {
+                    assert!(f.value.get("replaces").is_none(), "{f:?}");
+                    f.value["property"].as_str().unwrap()
+                }
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(props, ["p", "q"]);
+        assert_eq!(joined.doc["evidence"].as_sequence().unwrap().len(), 2);
+        assert!(joined_history(&doc, Vec::new()).is_none());
     }
 
     /// Adversary pass 2 on `story:replacement-applied-as-assertion`: a plain value of the same

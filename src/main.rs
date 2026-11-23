@@ -618,6 +618,7 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
                     "Structured" => m::SourceKind::Structured,
                     _ => m::SourceKind::Files,
                 };
+                let instance = instance_name.clone();
                 let input = m::AddSource {
                     instance_name: m::InstanceName(instance_name),
                     source_id: m::SourceId(source_id),
@@ -625,17 +626,30 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
                     kind,
                     schedule,
                 };
-                match app.add_source(input) {
-                    Ok(m::AddSourceOutcome::Added { source_added }) => print(
-                        "source add",
-                        &Done {
-                            outcome: "added",
-                            ok: true,
-                            detail: json!({"source_id": source_added.source_id.0}),
-                        },
-                    ),
-                    Err(e) => fail(e),
-                }
+                let done = match app.add_source(input) {
+                    Ok(m::AddSourceOutcome::Added { source_added }) => Done {
+                        outcome: "added",
+                        ok: true,
+                        detail: json!({"source_id": source_added.source_id.0}),
+                    },
+                    Ok(m::AddSourceOutcome::SourceExists { error }) => Done {
+                        outcome: "source-exists",
+                        ok: false,
+                        detail: json!({"source_id": error.source_id.0}),
+                    },
+                    Ok(m::AddSourceOutcome::NoSuchInstance { error }) => Done {
+                        outcome: "no-such-instance",
+                        ok: false,
+                        detail: json!({"name": error.name.0}),
+                    },
+                    Ok(m::AddSourceOutcome::NotActive { .. }) => Done {
+                        outcome: "not-active",
+                        ok: false,
+                        detail: json!({"name": instance}),
+                    },
+                    Err(e) => return fail(e),
+                };
+                print("source add", &done)
             }
             SourceCommand::RecordFailure { source_id, reason } => {
                 record_failure(app, ctx, &source_id, &reason).0
@@ -1005,6 +1019,72 @@ fn units_detail(systemd: &Systemd, installed: Result<(), String>, detail: &mut V
     }
 }
 
+/// Adds `source` of the spec of instance `name` to the registry (`cortex.instance.AddSource`).
+/// Any outcome but `added` is an error that names it.
+fn add_spec_source(
+    app: &mut App,
+    name: &m::InstanceName,
+    source: &m::SourceSpec,
+) -> Result<(), String> {
+    let id = format!("{}/{}", name.0, source.name);
+    let outcome = app
+        .add_source(m::AddSource {
+            instance_name: name.clone(),
+            source_id: m::SourceId(id.clone()),
+            name: source.name.clone(),
+            kind: model_map::kind(&source.settings),
+            schedule: source.schedule.clone(),
+        })
+        .map_err(|e| e.to_string())?;
+    let refused = match outcome {
+        m::AddSourceOutcome::Added { .. } => return Ok(()),
+        m::AddSourceOutcome::SourceExists { .. } => "source-exists",
+        m::AddSourceOutcome::NoSuchInstance { .. } => "no-such-instance",
+        m::AddSourceOutcome::NotActive { .. } => "not-active",
+    };
+    Err(format!("source {id}: {refused}"))
+}
+
+/// What `update` does to the registry rows of instance `name`'s sources ahead of its units: a
+/// source `spec` keeps takes its kind and schedule and keeps its counters and state; a source it
+/// adds is added. Answers the ids added and the names of the sources `spec` drops.
+fn reconcile_sources(
+    app: &mut App,
+    ctx: &Ctx,
+    name: &str,
+    spec: &m::InstanceSpec,
+) -> Result<(Vec<String>, Vec<String>), String> {
+    let mut added = Vec::new();
+    for source in &spec.sources {
+        let id = format!("{name}/{}", source.name);
+        let held = ctx
+            .shared
+            .borrow_mut()
+            .registry
+            .sources
+            .get_mut(&id)
+            .map(|held| {
+                held.data.kind = model_map::kind(&source.settings);
+                held.data.schedule = source.schedule.clone();
+            });
+        if held.is_none() {
+            add_spec_source(app, &spec.name, source)?;
+            added.push(id);
+        }
+    }
+    let dropped = ctx
+        .shared
+        .borrow()
+        .registry
+        .sources
+        .values()
+        .filter(|s| s.data.instance_name.0 == name)
+        .filter(|s| !spec.sources.iter().any(|k| k.name == s.data.name))
+        .map(|s| s.data.name.clone())
+        .collect();
+    Ok((added, dropped))
+}
+
 /// Places this cortex at `<home>/bin/cortex` ([`Systemd::place_binary`]), puts what that did in
 /// `detail["binary"]`, then installs each source's units. A spec with no source installs no unit
 /// that runs cortex, so it leaves the binary alone.
@@ -1205,14 +1285,7 @@ fn create(
                 return unregister(ctx, &name, &layout, e);
             }
             for source in &spec.sources {
-                let input = m::AddSource {
-                    instance_name: spec.name.clone(),
-                    source_id: m::SourceId(format!("{name}/{}", source.name)),
-                    name: source.name.clone(),
-                    kind: model_map::kind(&source.settings),
-                    schedule: source.schedule.clone(),
-                };
-                if let Err(e) = app.add_source(input) {
+                if let Err(e) = add_spec_source(app, &spec.name, source) {
                     return unregister(ctx, &name, &layout, e);
                 }
             }
@@ -1574,14 +1647,7 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                 return unregister(ctx, &name, &layout, e);
             }
             for source in &spec.sources {
-                let input = m::AddSource {
-                    instance_name: spec.name.clone(),
-                    source_id: m::SourceId(format!("{name}/{}", source.name)),
-                    name: source.name.clone(),
-                    kind: model_map::kind(&source.settings),
-                    schedule: source.schedule.clone(),
-                };
-                if let Err(e) = app.add_source(input) {
+                if let Err(e) = add_spec_source(app, &spec.name, source) {
                     return unregister(ctx, &name, &layout, e);
                 }
             }
@@ -1848,12 +1914,20 @@ fn update(
     // `store.value.connection`, or one whose profile now resolves to another id than the one the
     // viewer unit holds (the connection was connected anew). Otherwise the update leaves the
     // viewer alone, and a viewer the operator stopped stays stopped. A frozen spec that cannot be
-    // read writes it.
+    // read writes it. A `serve.view_port` other than the one `meta.json` holds moves the viewer:
+    // the port is recorded and the unit written on it.
+    let moved_to = spec
+        .serve
+        .view_port
+        .and_then(|p| u16::try_from(p).ok())
+        .filter(|p| layout.load_meta().is_ok_and(|meta| meta.view_port != *p));
     let relaunch = !busy
-        && (layout.load_spec().map_or(true, |old| {
-            layout.store_handle(&old).launched_through()
-                != layout.store_handle(&spec).launched_through()
-        }) || viewer_resolves_anew(ctx, name, &layout.store_handle(&spec), units));
+        && (moved_to.is_some()
+            || layout.load_spec().map_or(true, |old| {
+                layout.store_handle(&old).launched_through()
+                    != layout.store_handle(&spec).launched_through()
+            })
+            || viewer_resolves_anew(ctx, name, &layout.store_handle(&spec), units));
     if let Some(reason) = foreign_units(ctx, name, &spec, units, relaunch) {
         return fail(reason);
     }
@@ -1950,40 +2024,70 @@ fn update(
             if let Err(e) = home::write_atomic(&layout.spec(), loaded.text.as_bytes()) {
                 return fail(e);
             }
-            let mut added = Vec::new();
-            for source in &spec.sources {
-                let id = format!("{name}/{}", source.name);
-                if ctx.shared.borrow_mut().registry.sources.contains_key(&id) {
-                    continue;
-                }
-                let input = m::AddSource {
-                    instance_name: spec.name.clone(),
-                    source_id: m::SourceId(id.clone()),
-                    name: source.name.clone(),
-                    kind: model_map::kind(&source.settings),
-                    schedule: source.schedule.clone(),
-                };
-                if let Err(e) = app.add_source(input) {
+            if let Some(port) = moved_to {
+                let moved = layout.load_meta().and_then(|mut meta| {
+                    meta.view_port = port;
+                    layout.save_meta(&meta)
+                });
+                if let Err(e) = moved {
                     return fail(e);
                 }
-                added.push(id);
             }
-            let mut detail = json!({"name": instance_updated.name.0, "added_sources": added});
+            let (added, dropped) = match reconcile_sources(app, ctx, name, &spec) {
+                Ok(sources) => sources,
+                Err(e) => return fail(e),
+            };
+            let systemd = Systemd::from_env(&ctx.home.root);
+            // A dropped source leaves the registry once its own units are stopped and deleted;
+            // one whose timer does not stop keeps its row and its unit files for the next update.
+            let mut removed_sources = Vec::new();
+            let mut kept = Vec::new();
+            let mut failed = Vec::new();
+            if !dropped.is_empty() {
+                match systemd.remove_units(name, &dropped, false) {
+                    Ok(removed) => {
+                        ctx.shared.borrow_mut().registry.sources.retain(|_, s| {
+                            s.data.instance_name.0 != name || !dropped.contains(&s.data.name)
+                        });
+                        removed_sources = dropped.iter().map(|s| format!("{name}/{s}")).collect();
+                        kept = removed.kept;
+                        failed.extend(removed.reload_failed);
+                    }
+                    Err(e) => failed.push(e),
+                }
+            }
+            let mut detail = json!({
+                "name": instance_updated.name.0,
+                "added_sources": added,
+                "removed_sources": removed_sources,
+            });
             if let Units::Install { replace_binary } = units {
-                let systemd = Systemd::from_env(&ctx.home.root);
                 // A rewritten viewer opens the store as the new spec does: through the launch
-                // exactly when it names a `connection`. It keeps the port it runs on.
+                // exactly when it names a `connection`, on the port `meta.json` now holds. It is
+                // restarted, so a running viewer takes the new unit.
                 let viewer = if relaunch {
-                    layout.load_meta().and_then(|meta| {
-                        systemd.install_view(name, &layout.store_handle(&spec), meta.view_port)
-                    })
+                    layout
+                        .load_meta()
+                        .and_then(|meta| {
+                            systemd.install_view(name, &layout.store_handle(&spec), meta.view_port)
+                        })
+                        .and_then(|_| systemd.restart_view_unit(name))
                 } else {
                     Ok(())
                 };
                 let installed = viewer.and_then(|_| {
                     install_sources(ctx, &systemd, name, &spec, replace_binary, &mut detail)
                 });
-                units_detail(&systemd, installed, &mut detail);
+                if let Err(e) = installed {
+                    failed.insert(0, e);
+                }
+                units_detail(&systemd, Ok(()), &mut detail);
+            }
+            if !kept.is_empty() {
+                detail["units"]["kept"] = json!(kept);
+            }
+            if !failed.is_empty() {
+                detail["units"]["failed"] = json!(failed.join("; "));
             }
             Done {
                 outcome: "updated",
@@ -1996,29 +2100,61 @@ fn update(
 }
 
 fn remove(app: &mut App, ctx: &Ctx, name: &str, no_wait: bool) -> ExitCode {
-    busy_unless_locked(ctx, "cortex.instance.RemoveInstance");
+    // `--no-wait` found the lock held: the remove answers `busy` and stops no unit.
+    let busy = busy_unless_locked(ctx, "cortex.instance.RemoveInstance");
+    // An active instance's units are stopped and deleted before the instance is recorded removed.
+    // A unit that does not stop deletes nothing and answers `stop-failed`: the instance stays
+    // active, so a second `remove` tries again.
+    let active = !busy
+        && ctx
+            .shared
+            .borrow()
+            .registry
+            .instances
+            .get(name)
+            .is_some_and(|i| i.state == m::InstanceState::Active);
+    let mut units = None;
+    if active {
+        let sources: Vec<String> = ctx
+            .shared
+            .borrow()
+            .registry
+            .sources
+            .values()
+            .filter(|s| s.data.instance_name.0 == name)
+            .map(|s| s.data.name.clone())
+            .collect();
+        match Systemd::from_env(&ctx.home.root).remove_instance(name, &sources) {
+            Ok(removed) => units = Some(removed),
+            Err(reason) => {
+                let mut shared = ctx.shared.borrow_mut();
+                shared
+                    .external
+                    .insert(("cortex.instance.RemoveInstance", "stop-failed"), true);
+                shared.strings.push_back(reason);
+            }
+        }
+    }
     let done = match app.remove_instance(m::RemoveInstance {
         name: m::InstanceName(name.to_string()),
         no_wait: no_wait.then_some(true),
     }) {
         Err(e) => return fail(e),
         Ok(m::RemoveInstanceOutcome::Busy { error }) => busy_done(error),
+        Ok(m::RemoveInstanceOutcome::StopFailed { error }) => Done {
+            outcome: "stop-failed",
+            ok: false,
+            detail: json!({"name": error.name.0, "reason": error.reason}),
+        },
         Ok(m::RemoveInstanceOutcome::Removed { instance_removed }) => {
-            let sources: Vec<String> = ctx
-                .shared
-                .borrow_mut()
-                .registry
-                .sources
-                .values()
-                .filter(|s| s.data.instance_name.0 == name)
-                .map(|s| s.data.name.clone())
-                .collect();
             let mut detail =
                 json!({"name": instance_removed.name.0, "dir": ctx.home.instance_dir(name)});
-            match Systemd::from_env(&ctx.home.root).remove_instance(name, &sources) {
-                Ok(kept) if !kept.is_empty() => detail["units"] = json!({"kept": kept}),
-                Ok(_) => {}
-                Err(e) => detail["units"] = json!({"failed": e}),
+            let removed = units.unwrap_or_default();
+            if !removed.kept.is_empty() {
+                detail["units"]["kept"] = json!(removed.kept);
+            }
+            if let Some(e) = removed.reload_failed {
+                detail["units"]["failed"] = json!(e);
             }
             Done {
                 outcome: "removed",
