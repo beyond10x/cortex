@@ -120,7 +120,9 @@ types:
   # How a paged operation names its next page. `NextLink` reads a URL, relative or absolute, at the
   # paging's `next` path; the percent-decoded value of its query parameter named by the last
   # segment of `param` is the next `param`. A missing, null or empty link ends the walk; a link
-  # without that parameter ends it and leaves the operation's pages unread.
+  # without that parameter ends it and leaves the operation's pages unread. In every style, an
+  # answer naming a page, token, key or cursor the walk already asked for is a paging cycle: the
+  # walk ends there and leaves the operation's pages unread, so the listing is never read as whole.
   - name: cortex.instance.PageStyle
     kind: enum
     variants: [PageNumber, Token, Keyset, NextLink]
@@ -339,6 +341,15 @@ types:
   # record matching no node, or nodes of its own type only, is written as with `OwnType`. ESS has
   # no construct for a read of the store's graph; `src/structured.rs` holds it and
   # `tests/known_entities_adversary.rs` tests it.
+  # UNMAPPED: a record EKR applies nothing of is refused like one a part of which EKR rejects:
+  # one whose entity, or a reference one of its facts names, `ekr apply-extraction` reports
+  # `ambiguous` (its aliases meet more than one store node of its type) is named with its key in
+  # the run's `rejected`, not counted in `documents_applied` and not marked seen. A refused record
+  # (rejected, ambiguous or refused by `store_lookup`) is tried again on every run, but after every
+  # other record the run wants, the one refused longest ago first, so under
+  # `max_documents_per_run` it does not hold back the others; a changed text is selected in its
+  # place as any changed record is. ESS has no per-element record effect; `src/structured.rs`,
+  # `src/state.rs` and `src/run.rs` hold it and `tests/review_structured_reconcile.rs` tests it.
   - name: cortex.instance.RecordMapping
     kind: struct
     fields:
@@ -453,6 +464,18 @@ types:
   # ended the source's dropped values without a failed commit reads nothing of the store: no
   # `ekr snapshot` and no `ekr stage begin`. ESS has no construct for a read of the store;
   # `src/run.rs` holds it and `tests/idle_supersede.rs` tests it.
+  # UNMAPPED: `Supersede` retracts a record's values only on evidence that the record is gone: a
+  # whole listing that no longer lists it. A listing is whole when its fetch left nothing unread
+  # (no `max_pages` reached, no paging cycle) and its source is not asked about a window: a
+  # `files` input, or a Connectors operation none of whose `inputs` names a window placeholder
+  # (`{since}`, `{until}`, `{since_epoch}`, `{until_epoch}`, `{since_minutes_ago}`) and whose
+  # walk takes no `stop_older_than_since`. A windowed listing ends the values of the records it
+  # lists (a changed value is superseded) and keeps every value of a record it does not list, nor
+  # its parent. A whole listing whose ends all committed retires the records it no longer lists,
+  # but those of a child call it did not read: their seen entries are dropped, so a retired record
+  # listed again, with any text, is new and is applied again. ESS has no construct for a read of
+  # the store; `src/sources.rs`, `src/structured.rs`, `src/state.rs` and `src/run.rs` hold it and
+  # `tests/review_structured_reconcile.rs` tests it.
   - name: cortex.instance.DropPolicy
     kind: enum
     variants: [Keep, Supersede]

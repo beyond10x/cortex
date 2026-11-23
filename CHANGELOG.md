@@ -54,6 +54,24 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 ### Fixed
 
+- A structured source with `dropped: Supersede` retracts a record's values only when a whole
+  listing no longer lists it. A Connectors operation asked about the run's window (`{since}` or
+  another window placeholder in an input, or `stop_older_than_since`) supersedes the changed
+  values of the records it lists and keeps every value of the records it does not list; 0.7.2
+  retracted them.
+- A paged answer that names a page or token the walk already asked for is a paging cycle: the walk
+  leaves the operation's pages unread, fetch-only lists it in `unread`, a run names it in
+  `stopped`, and nothing is ended. 0.7.2 read the cycle as the end of the listing and retracted
+  the records it never reached.
+- A record a whole listing dropped is retired with its values: when the source lists it again,
+  with the same text, it is new and applied again. 0.7.2 called it unchanged and its values stayed
+  retracted.
+- A structured record whose entity EKR reports `ambiguous` (its aliases match two store nodes of
+  its type) is named in `rejected`, not counted in `documents_applied`, not marked seen, and tried
+  again by the next run. 0.7.2 counted it applied and never tried it again.
+- A refused structured record (rejected, ambiguous or refused by `store_lookup`) is tried after
+  every other record the run wants, the one refused longest ago first, so under
+  `max_documents_per_run` it no longer blocks the records behind it on every run.
 - The EKR pin an instance records is the engine that creates its store. `cortex create` and
   `cortex adopt` ask the `ekr` binary for its version (`ekr --version`) and refuse one that
   reports another version than the spec's `ekr.version`, whether `ekr.bin` names it or it sits in
