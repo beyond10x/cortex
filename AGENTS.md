@@ -45,7 +45,7 @@ A change here that moves none of these is a question for the operator, not a tas
 | `task docs-check` | fail when a derived site file is missing, stale or edited by hand |
 | `task website` | build the site (`npm ci`, `npm run build` in `website/`), as CI does |
 | `task build` | release build |
-| `task test` | every test of the workspace with cargo-nextest, after `task test-build` builds the test binaries: a test over 60 s is killed and fails, and the step prints its wall time and its ten slowest tests; `task test TEST_BUDGET=enforce` also ends the run at 120 s and fails it |
+| `task test` | every test of the workspace with cargo-nextest, after `task test-build` builds the test binaries: a test over 60 s is killed and fails, and the step prints its wall time and its ten slowest tests; the default `TEST_BUDGET=enforce` also ends the run at 120 s and fails it (`TEST_BUDGET=report` only prints the over-budget line) |
 | `aep plan artifact validate` | validate the planning store |
 
 ## The specification comes first
@@ -228,15 +228,15 @@ this repository and published by the organisation's reusable workflow.
   60 s is killed and fails (`slow-timeout`), and the task prints the run's wall time and its ten
   slowest tests from nextest's JUnit report (`target/nextest/<profile>/junit.xml` in the tree).
   The 120 s step budget is a switch, `TEST_BUDGET` in `Taskfile.yml`: `enforce` runs the nextest
-  profile `budget` (`global-timeout = "120s"`) and fails the step over 120 s; `report`, the
-  default until the suite fits, prints an over-budget line and passes. Measured 2026-11-23: the
-  1,313 tests that run take 4,623 test-seconds (313 tests over 5 s hold 3,307 of them; each
-  starts real `ekr` processes, and the PostgreSQL tests start one container per test), so the
-  run needs about 585 s at 8 threads on a loaded workstation. Making them fit is a defect with a
-  story of its own; set the default to `enforce` once it lands. Building the test binaries is
+  profile `budget` (`global-timeout = "120s"`) and fails the step over 120 s, and is the default;
+  `report` prints an over-budget line and passes. Building the test binaries is
   `task test-build` and outside the 120 s. An expensive product (a synthesis, a build, a server)
-  is made once, never per test: under nextest a `OnceLock` is per test. Time a new test; one over
-  5 s is named with its time in the change's report.
+  is made once, never per test: under nextest a `OnceLock` is per test. The PostgreSQL tests share
+  one server per run (`tests/common/pg.rs`): the first test that asks for a database starts it in a
+  container under a lock in `<target>/tmp/cortex-test-postgres-v1/`, every later test finds it
+  there and takes a database of its own whose role names end in the database's id; the server
+  ends itself after 15 minutes, and `task test` prints how many servers the step started. Time a
+  new test; one over 5 s is named with its time in the change's report.
 - Test builds carry no debug info: `.cargo/config.toml` sets `debug = false` for the `dev` and
   `test` profiles (a cargo config file wins over the manifest and over a user-wide
   `line-tables-only`). `readelf -S` on the test binary shows no `.debug_*` section. The same

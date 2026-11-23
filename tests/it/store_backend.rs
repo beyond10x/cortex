@@ -1,23 +1,23 @@
 //! An instance's store lives on the backend its spec names: one SQLite file (the default), or
 //! EKR's PostgreSQL provider configured by an `ekr.postgres/1` file.
 //!
-//! The PostgreSQL case starts a disposable PostgreSQL 17 container with TLS, an owner role for
-//! schema management and a DML-only application role, as EKR 0.0.30's provider requires. It skips
-//! with a named reason when no container runtime answers, except on GitHub Actions, where it fails.
-//! The other cases need no database.
+//! Each PostgreSQL case takes a database of its own on the run's one PostgreSQL 17 server with TLS
+//! (`common::pg`), with an owner role for schema management and a DML-only application role, as
+//! EKR 0.0.30's provider requires. It skips with a named reason when no container runtime answers,
+//! except on GitHub Actions, where it fails. The other cases need no database.
 
 use crate::common;
 
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::common::pg::{
+    self, container_runtime, now_s, run, sweep_stale_containers, CREATED, IMAGE, LABEL,
+};
 use crate::common::{ekr, World};
 use cortex_cli::instance::Layout;
 use cortex_cli::schedule::Systemd;
 use serde_json::Value;
-
-const IMAGE: &str = "postgres:17";
 
 /// A spec with one `files` source over `docs/` and `store` written as given.
 fn spec_text(name: &str, store: &str) -> String {
@@ -91,94 +91,23 @@ fn all_text(dir: &Path) -> String {
     out
 }
 
-/// Why a container cannot be started here, or `None` when one can.
-fn no_container_runtime() -> Option<String> {
-    match Command::new("docker")
-        .args(["info", "--format", "{{.ServerVersion}}"])
-        .output()
-    {
-        Ok(out) if out.status.success() => None,
-        Ok(out) => Some(format!(
-            "`docker info` failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        )),
-        Err(e) => Some(format!("cannot run `docker`: {e}")),
-    }
-}
-
-fn run(cmd: &mut Command, what: &str) -> String {
-    let out = cmd
-        .output()
-        .unwrap_or_else(|e| panic!("cannot run {what}: {e}"));
-    assert!(
-        out.status.success(),
-        "{what} failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    String::from_utf8_lossy(&out.stdout).into_owned()
-}
-
-/// The label every container of this file carries, and the one that dates it.
-const LABEL: &str = "cortex.test=store-backend";
-const CREATED: &str = "cortex.test.created";
-/// A labelled container older than this is left over from an interrupted run.
-const STALE_AFTER_S: u64 = 600;
-
-fn now_s() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-}
-
-/// Removes every labelled container older than [`STALE_AFTER_S`]: `Drop` does not run when a
-/// test run is killed, so the next run clears what it left.
-fn sweep_stale_containers() {
-    let listed = run(
-        Command::new("docker").args([
-            "ps",
-            "-a",
-            "--filter",
-            &format!("label={LABEL}"),
-            "--format",
-            &format!("{{{{.ID}}}} {{{{.Label \"{CREATED}\"}}}}"),
-        ]),
-        "docker ps",
-    );
-    for line in listed.lines() {
-        let mut parts = line.split_whitespace();
-        let (Some(id), created) = (parts.next(), parts.next()) else {
-            continue;
-        };
-        let created: u64 = created.and_then(|c| c.parse().ok()).unwrap_or(0);
-        if now_s().saturating_sub(created) > STALE_AFTER_S {
-            let _ = Command::new("docker").args(["rm", "-f", id]).output();
-        }
-    }
-}
-
-/// A disposable PostgreSQL container, removed on drop, and by the next run's sweep when a killed
-/// run never dropped it.
+/// A database of its own on the run's shared PostgreSQL server ([`pg`]): an owner role for schema
+/// management, the schema `ekr` it owns, and a DML-only application role.
 struct Postgres {
-    name: String,
+    db: pg::Database,
     /// The application role's `ekr.postgres/1` file.
     app: PathBuf,
     /// The schema-management role's `ekr.postgres/1` file.
     owner: PathBuf,
     /// The application role's password, which must appear nowhere cortex writes.
     password: String,
-    /// The published port, the CA file and the directory of the configurations.
+    /// The roles' names, which end in the database's id.
+    app_role: String,
+    owner_role: String,
+    /// The server's port, its CA file and the directory of the configurations.
     port: String,
     ca: PathBuf,
     cfg: PathBuf,
-}
-
-impl Drop for Postgres {
-    fn drop(&mut self) {
-        let _ = Command::new("docker")
-            .args(["rm", "-f", &self.name])
-            .output();
-    }
 }
 
 impl Postgres {
@@ -187,187 +116,49 @@ impl Postgres {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let name = format!("cortex-store-backend-{}-{stamp}", std::process::id());
-        let tls = dir.join("tls");
-        let cfg = dir.join("pg");
-        std::fs::create_dir_all(&tls).unwrap();
-        std::fs::create_dir_all(&cfg).unwrap();
-        let openssl = |args: &[&str]| {
-            run(
-                Command::new("openssl").args(args).current_dir(&tls),
-                "openssl",
+        let password = format!("app-secret-{stamp}");
+        let db = pg::Database::create(|id| {
+            format!(
+                "CREATE ROLE ekr_owner_{id} LOGIN PASSWORD 'owner-secret'; \
+                 CREATE ROLE ekr_app_{id} LOGIN PASSWORD '{password}' CONNECTION LIMIT 4; \
+                 CREATE SCHEMA ekr AUTHORIZATION ekr_owner_{id}; \
+                 GRANT USAGE ON SCHEMA ekr TO ekr_app_{id}; \
+                 ALTER DEFAULT PRIVILEGES FOR ROLE ekr_owner_{id} IN SCHEMA ekr \
+                   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ekr_app_{id}; \
+                 ALTER DEFAULT PRIVILEGES FOR ROLE ekr_owner_{id} IN SCHEMA ekr \
+                   GRANT USAGE ON SEQUENCES TO ekr_app_{id};"
             )
-        };
-        openssl(&[
-            "req",
-            "-x509",
-            "-newkey",
-            "rsa:2048",
-            "-nodes",
-            "-days",
-            "1",
-            "-subj",
-            "/CN=cortex-test-ca",
-            "-keyout",
-            "ca.key",
-            "-out",
-            "ca.crt",
-        ]);
-        openssl(&[
-            "req",
-            "-newkey",
-            "rsa:2048",
-            "-nodes",
-            "-subj",
-            "/CN=localhost",
-            "-keyout",
-            "server.key",
-            "-out",
-            "server.csr",
-        ]);
-        std::fs::write(
-            tls.join("ext"),
-            "subjectAltName=DNS:localhost,IP:127.0.0.1\n",
-        )
-        .unwrap();
-        openssl(&[
-            "x509",
-            "-req",
-            "-in",
-            "server.csr",
-            "-CA",
-            "ca.crt",
-            "-CAkey",
-            "ca.key",
-            "-CAcreateserial",
-            "-days",
-            "1",
-            "-extfile",
-            "ext",
-            "-out",
-            "server.crt",
-        ]);
-        for file in ["server.crt", "server.key"] {
-            std::fs::set_permissions(tls.join(file), std::fs::Permissions::from_mode(0o644))
-                .unwrap();
-        }
-        let mount = format!("{}:/tls:ro", tls.display());
-        sweep_stale_containers();
-        let created = format!("{CREATED}={}", now_s());
-        run(
-            Command::new("docker").args([
-                "run",
-                "-d",
-                "--name",
-                &name,
-                "--label",
-                LABEL,
-                "--label",
-                &created,
-                "-e",
-                "POSTGRES_PASSWORD=superuser",
-                "-e",
-                "POSTGRES_DB=ekr",
-                "-p",
-                "127.0.0.1::5432",
-                "-v",
-                &mount,
-                IMAGE,
-                "sh",
-                "-c",
-                "cp /tls/server.crt /tls/server.key /var/lib/postgresql/ \
-                 && chown postgres /var/lib/postgresql/server.* \
-                 && chmod 600 /var/lib/postgresql/server.key \
-                 && exec docker-entrypoint.sh postgres -c ssl=on \
-                 -c ssl_cert_file=/var/lib/postgresql/server.crt \
-                 -c ssl_key_file=/var/lib/postgresql/server.key",
-            ]),
-            "docker run",
-        );
-        let mut pg = Self {
-            name,
+        });
+        let cfg = dir.join("pg");
+        std::fs::create_dir_all(&cfg).unwrap();
+        let pg = Self {
             app: cfg.join("app.json"),
             owner: cfg.join("owner.json"),
-            password: format!("app-secret-{stamp}"),
-            port: String::new(),
-            ca: tls.join("ca.crt"),
-            cfg: cfg.clone(),
+            password,
+            app_role: db.role("ekr_app"),
+            owner_role: db.role("ekr_owner"),
+            port: db.server.port.clone(),
+            ca: db.server.ca.clone(),
+            cfg,
+            db,
         };
-        // The entrypoint's initialisation server listens on no TCP port; a TCP answer is the real one.
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
-        while !Command::new("docker")
-            .args([
-                "exec",
-                &pg.name,
-                "pg_isready",
-                "-h",
-                "127.0.0.1",
-                "-U",
-                "postgres",
-            ])
-            .output()
-            .is_ok_and(|o| o.status.success())
-        {
-            assert!(
-                std::time::Instant::now() < deadline,
-                "PostgreSQL did not start"
-            );
-            std::thread::sleep(std::time::Duration::from_millis(500));
-        }
-        let roles = format!(
-            "CREATE ROLE ekr_owner LOGIN PASSWORD 'owner-secret'; \
-             CREATE ROLE ekr_app LOGIN PASSWORD '{}' CONNECTION LIMIT 4; \
-             CREATE SCHEMA ekr AUTHORIZATION ekr_owner; \
-             GRANT USAGE ON SCHEMA ekr TO ekr_app; \
-             ALTER DEFAULT PRIVILEGES FOR ROLE ekr_owner IN SCHEMA ekr \
-               GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ekr_app; \
-             ALTER DEFAULT PRIVILEGES FOR ROLE ekr_owner IN SCHEMA ekr \
-               GRANT USAGE ON SEQUENCES TO ekr_app;",
-            pg.password
-        );
-        run(
-            Command::new("docker").args([
-                "exec",
-                &pg.name,
-                "psql",
-                "-v",
-                "ON_ERROR_STOP=1",
-                "-h",
-                "127.0.0.1",
-                "-U",
-                "postgres",
-                "-d",
-                "ekr",
-                "-c",
-                &roles,
-            ]),
-            "psql",
-        );
-        let port = run(
-            Command::new("docker").args(["port", &pg.name, "5432/tcp"]),
-            "docker port",
-        );
-        let port = port
-            .lines()
-            .next()
-            .and_then(|l| l.rsplit(':').next())
-            .expect("a published port")
-            .trim()
-            .to_string();
         for (role, password, config) in [
-            ("ekr_app", pg.password.as_str(), &pg.app),
-            ("ekr_owner", "owner-secret", &pg.owner),
+            (&pg.app_role, pg.password.as_str(), &pg.app),
+            (&pg.owner_role, "owner-secret", &pg.owner),
         ] {
             let connection = config.with_extension("connection");
             std::fs::write(
                 &connection,
-                format!("postgres://{role}:{password}@localhost:{port}/ekr\n"),
+                format!(
+                    "postgres://{role}:{password}@localhost:{}/{}\n",
+                    pg.port, pg.db.name
+                ),
             )
             .unwrap();
             let document = serde_json::json!({
                 "format": "ekr.postgres/1",
                 "connection_file": connection.file_name().unwrap().to_str().unwrap(),
-                "ca_file": tls.join("ca.crt"),
+                "ca_file": pg.ca,
                 "schema": "ekr",
                 "database_connections": 100,
                 "replicas": 1,
@@ -375,7 +166,6 @@ impl Postgres {
             });
             std::fs::write(config, document.to_string()).unwrap();
         }
-        pg.port = port;
         pg
     }
 
@@ -387,8 +177,8 @@ impl Postgres {
         std::fs::create_dir_all(state).unwrap();
         let mut out = Vec::new();
         for (role, password, connection) in [
-            ("ekr_app", self.password.as_str(), "app"),
-            ("ekr_owner", "owner-secret", "owner"),
+            (&self.app_role, self.password.as_str(), "app"),
+            (&self.owner_role, "owner-secret", "owner"),
         ] {
             std::fs::write(
                 state.join(format!("{connection}.json")),
@@ -398,7 +188,10 @@ impl Postgres {
             let dsn = self.cfg.join(format!("{connection}-fd3.dsn"));
             std::fs::write(
                 &dsn,
-                format!("postgres://{role}@localhost:{}/ekr\n", self.port),
+                format!(
+                    "postgres://{role}@localhost:{}/{}\n",
+                    self.port, self.db.name
+                ),
             )
             .unwrap();
             let config = self.cfg.join(format!("{connection}-fd3.json"));
@@ -539,20 +332,6 @@ fn postgres_head(dir: &Path, config: &Path) -> Value {
 }
 
 /// Whether a container can run here. Without one the case skips with the reason, except on
-/// GitHub Actions, where it fails.
-fn container_runtime(case: &str) -> bool {
-    let Some(reason) = no_container_runtime() else {
-        return true;
-    };
-    assert_ne!(
-        std::env::var("GITHUB_ACTIONS").as_deref(),
-        Ok("true"),
-        "the PostgreSQL case must run on GitHub Actions: {reason}"
-    );
-    eprintln!("SKIP {case}: no container runtime ({reason})");
-    false
-}
-
 fn postgres_store(pg: &Postgres) -> String {
     format!(
         "{{backend: postgres, value: {{config: \"{}\"}}}}",
@@ -1606,7 +1385,8 @@ fn a_refused_postgres_seed_leaves_no_lineage_and_a_corrected_create_succeeds() {
     );
 }
 
-/// F5: a labelled container a killed run left behind is removed by the next run's sweep.
+/// F5: a labelled container that outlived its own end (a killed run's) is removed by the sweep of
+/// the next server start.
 #[test]
 fn a_stale_labelled_test_container_is_swept() {
     if !container_runtime("the sweep case") {

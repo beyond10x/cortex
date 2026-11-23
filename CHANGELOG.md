@@ -15,6 +15,9 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Changed
 
+- Development only, no change to the binary: the PostgreSQL tests share one PostgreSQL server per
+  test run, each in a database of its own, instead of starting and removing a container each, and
+  the test step of `task check` fails over 120 s by default (`TEST_BUDGET=enforce`).
 - A run that `max_documents_per_run` capped reports `stopped: document-cap` instead of
   `stopped: null`, and every `ran` report carries `documents_left`, the wanted documents the run
   neither applied nor marked seen (`0` when it left none; `SourceRan` carries both). Before, a
