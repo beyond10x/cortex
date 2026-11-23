@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 8fc1fa1334160fc5eedc948dcba9fb351db04fd7a002b80a9b8471a75a724dcc
-// contract digest 2b797601e89158bb5830c5917c9520ff3700b3ab235069ad63ab79f946ad66e6
+// model digest 8b9b4f6e8eaf84050426cd411df6300a66a22bf3e41e28b72af6a30f86085881
+// contract digest ef6dde58dfb41128a64e3a6b9ee509b540c83285e67a95dd21ec285c8a55a96c
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! JSON at this system's boundary: a reader, a writer, and the base64 codec `Bytes` needs.

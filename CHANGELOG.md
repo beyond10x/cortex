@@ -54,6 +54,19 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 ### Fixed
 
+- A `structured` record whose mapping changed is applied again at the next run, at once and
+  whatever `refresh_after_days`, its text changed or not. 0.7.2 answered `cortex update` with
+  `updated` and left every unchanged record on the old mapping, so a property added to the mapping
+  reached the store only for records that changed later. The state file remembers each record's
+  mapping (`fields_hash`); a record applied by 0.7.2 has none and is applied again once, with no
+  model call.
+- A web page whose title, description or publication date changed while its URL and body stayed
+  the same is a changed document, extracted again once `refresh_after_days` have passed, so its
+  `WebPage` node gets the new values. 0.7.2 counted it unchanged. A page applied by 0.7.2 takes
+  the fields of its next fetch as applied and is not extracted again for them.
+- `cortex run --fetch-only` names in the new `skipped` list each document a run would leave out
+  after it failed alone on 3 consecutive runs, and counts it neither `new` nor `changed`.
+  0.7.2 forecast it as model work that the run then skipped.
 - A structured source with `dropped: Supersede` retracts a record's values only when a whole
   listing no longer lists it. A Connectors operation asked about the run's window (`{since}` or
   another window placeholder in an input, or `stop_older_than_since`) supersedes the changed

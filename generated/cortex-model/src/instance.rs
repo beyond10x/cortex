@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 8fc1fa1334160fc5eedc948dcba9fb351db04fd7a002b80a9b8471a75a724dcc
-// contract digest 2b797601e89158bb5830c5917c9520ff3700b3ab235069ad63ab79f946ad66e6
+// model digest 8b9b4f6e8eaf84050426cd411df6300a66a22bf3e41e28b72af6a30f86085881
+// contract digest ef6dde58dfb41128a64e3a6b9ee509b540c83285e67a95dd21ec285c8a55a96c
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -1535,6 +1535,8 @@ pub struct SeenDocumentData {
     pub content_hash: Option<String>,
     /// `unlinked_hash` — `Optional<String>`.
     pub unlinked_hash: Option<String>,
+    /// `fields_hash` — `Optional<String>`.
+    pub fields_hash: Option<String>,
     /// `applied_at` — `Integer`.
     pub applied_at: i64,
 }
@@ -2698,7 +2700,7 @@ pub enum RunSourceOutcome {
     },
     /// `fetched` — when `(defined(fetch_only) and fetch_only == true)`.
     ///
-    /// A fetch-only run: the source was fetched over the window a run would ask about, its documents masked and scrubbed as a run's are and compared with its seen documents by content hash. `new` counts keys no seen document carries; `changed` those a run would extract now; `held` those whose change `refresh_after_days` holds back; `unchanged` the rest. No model was asked, and nothing was written: not the store, the seen documents, the source's status or `cortex.log`; no snapshot or stage was taken and no run counted.
+    /// A fetch-only run: the source was fetched over the window a run would ask about, its documents masked and scrubbed as a run's are and compared with its seen documents by content hash and stored fields. `new` counts keys no seen document carries; `changed` those a run would extract now; `held` those whose change `refresh_after_days` holds back; `skipped` names those a run would leave out after they failed alone on 3 consecutive runs, which are counted neither `new` nor `changed`; `unchanged` the rest. No model was asked, and nothing was written: not the store, the seen documents, the source's status or `cortex.log`; no snapshot or stage was taken and no run counted.
     Fetched {
         /// The `cortex.instance.SourceFetched` this outcome publishes.
         source_fetched: SourceFetched,
@@ -3075,6 +3077,8 @@ pub struct SourceFetched {
     pub unchanged: i64,
     /// `unread` — `List<String>`.
     pub unread: Vec<String>,
+    /// `skipped` — `List<String>`.
+    pub skipped: Vec<String>,
 }
 
 /// SourceRan — the event `cortex.instance.SourceRan`.
