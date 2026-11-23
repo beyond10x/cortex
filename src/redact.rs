@@ -2398,6 +2398,11 @@ mod tests {
         assert!(compiled(&full_policy(&rare, &[], None, &[]))
             .keep_store_types()
             .is_empty());
+        let empty = compiled(&m::RedactionPolicy {
+            keep_store_types: Some(Vec::new()),
+            ..full_policy(&rare, &[], None, &rare)
+        });
+        assert!(empty.keep_store_types().is_empty());
     }
 
     /// The ontology lines' words are never a rare name, in those lines or in a document, and the

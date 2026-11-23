@@ -191,22 +191,21 @@ fn a_person_of_an_unlisted_type_the_store_knows_stays_hidden() {
     assert!(applied.contains("- Quillfeather"), "{applied}");
 }
 
-/// Without the field, and with it empty, a run is as in 0.8.0: every name said once is hidden.
+/// Without the field a run is as in 0.8.0: every name said once is hidden. An empty list keeps
+/// nothing either (`redact::tests::keep_store_types_holds_only_where_rare_name_is_replaced_or_checked`).
 #[test]
 fn without_a_list_rare_name_hides_every_name_said_once_as_before() {
     let answer = extraction("[Name-1]", "[Name-2] [Name-3]", json!([]));
-    for (name, keep) in [("absent", ""), ("empty", "  keep_store_types: []\n")] {
-        let w = seeded(name, keep, &answer);
-        let (_, prompt) = second_run(&w, name);
+    let w = seeded("absent", "", &answer);
+    let (_, prompt) = second_run(&w, "absent");
+    assert!(
+        prompt.contains("[Name-1] renewed the contract; [Name-2] [Name-3] signed it."),
+        "{prompt}"
+    );
+    for hidden in ["Quillfeather", "Rowan", "Pell"] {
         assert!(
-            prompt.contains("[Name-1] renewed the contract; [Name-2] [Name-3] signed it."),
-            "{name}: {prompt}"
+            !prompt.contains(hidden),
+            "{hidden} reached the model: {prompt}"
         );
-        for hidden in ["Quillfeather", "Rowan", "Pell"] {
-            assert!(
-                !prompt.contains(hidden),
-                "{name}: {hidden} reached the model: {prompt}"
-            );
-        }
     }
 }
