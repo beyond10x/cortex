@@ -1725,7 +1725,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     if std::env::var_os(SUITE_ENV).is_none() {
         assert_eq!(
             scenarios.len(),
-            126,
+            130,
             "the suite's scenario count moved; update this floor"
         );
     }
