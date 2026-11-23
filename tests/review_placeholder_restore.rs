@@ -7,8 +7,9 @@
 //! - A model call that ends on `error_max_structured_output_retries` answers no `result` text.
 //!   The batch's `claude/error.txt` and the run's reason name the subtype, the number of turns and
 //!   the last validation message, masked.
-//! - A capitalised word that is a node name or alias in the store at the run's head is not a rare
-//!   name: it reaches the model as written, and a rare word beside it is still replaced.
+//!
+//! Finding 4 (`RareName` and the names the store holds) is `story:rare-name-keeps-store-types`, a
+//! draft: exempting every store name breaks the rule that a known person stays hidden.
 //!
 //! The model is a stand-in; no test calls a real model. Every name here is invented.
 
@@ -204,44 +205,4 @@ fn exhausted_structured_output_retries_leave_a_diagnosable_error_txt_and_reason(
         assert!(!text.contains(&token), "{text}");
         assert!(!text.contains("an earlier attempt"), "{text}");
     }
-}
-
-#[test]
-fn a_word_the_store_holds_as_a_node_name_is_not_a_rare_name() {
-    let w = world(
-        "known",
-        &[("first", "the deploy runbook for billing covers restarts.")],
-        "platform team",
-        "Quillfeather",
-    );
-    let (code, ran) = w.cortex(&["run", "known/notes"]);
-    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
-    assert_eq!(ran["detail"]["documents_applied"], 1, "{ran}");
-
-    write_records(
-        &w,
-        &[
-            ("first", "the deploy runbook for billing covers restarts."),
-            ("second", "ask Quillfeather and Marrowby before a failover."),
-        ],
-    );
-    std::fs::write(w.root.join("alias"), "Name-1").unwrap();
-    let (code, ran) = w.cortex(&["run", "known/notes"]);
-    assert_eq!((code, ran["outcome"].as_str()), (0, Some("ran")), "{ran}");
-    assert_eq!(ran["detail"]["redacted"]["RareName"], 1, "{ran}");
-
-    let prompts = prompts(&w);
-    assert_eq!(prompts.len(), 2, "{prompts:?}");
-    let second = &prompts[1];
-    assert!(
-        second.contains("ask Quillfeather and [Name-1] before"),
-        "{second}"
-    );
-    assert!(!second.contains("Marrowby"), "{second}");
-    let dirs = run_dirs(&w, "known");
-    let applied = std::fs::read_to_string(dirs[1].join("batch-0/extraction.yaml")).unwrap();
-    assert!(
-        applied.contains("Marrowby"),
-        "the rare word is restored: {applied}"
-    );
 }

@@ -80,12 +80,8 @@ stand; [Status](./status.mdx) lists what is planned.
   name or a credential another class hides is not counted, and neither are the known entity
   names. For a record of a `files` source read as records, only the record's own text counts,
   not its thread context, key or title, which repeat other records' text and the file's name. A
-  word of a node name or alias the store holds when the run starts is never taken: a customer
-  named once in a batch was hidden and the facts about it were lost. So a person the store
-  already knows is shown to the model by name, in the documents and in the known entities; list
-  a name in `known_names` to keep it hidden. A name the run itself added is not in the store at
-  its start, and a known entity name the batch's documents do not hold counts as seen 0 times,
-  so such a name is hidden in the prompt's known entities. Common sentence
+  known entity name the batch's documents do not hold counts as seen 0 times, so a
+  person the store already knows is hidden in the prompt's known entities too. Common sentence
   openers (`The`, `This`, `We` and the like) are never taken, and neither are the names of the
   store's ontology (node types, properties, value kinds, relations), so a person whose name is
   also a type name is not hidden by `RareName`. A rare product or place name, and

@@ -719,11 +719,10 @@ types:
   # `RareName` replaces a capitalised word (one capital and at least one lower-case letter) that
   # the batch's document texts hold at most `rare_limit` times (default 1). A word of the store's
   # ontology names the prompt shows (node types, properties, value kinds, relations) is never a
-  # rare name, anywhere in the batch; `known_names` and the rules still replace it. Neither is a
-  # word of a node name or alias the store holds at the run's start. A placeholder of the answer
-  # is restored, bracketed or not; one in a node type, property or relation position that stands
-  # for no value fails the batch naming it, one elsewhere is counted as `unrestored`. A word,
-  # hyphenated or
+  # rare name, anywhere in the batch; `known_names` and the rules still replace it. A placeholder
+  # of the answer is restored, bracketed or not; one in a node type, property or relation position
+  # that stands for no value fails the batch naming it, one elsewhere is counted as `unrestored`.
+  # A word, hyphenated or
   # not (`Jean-Luc`, `Co-Authored-By`), is replaced whole or not at all: no part of a word seen
   # more than `rare_limit` times is a rare name, and the `refuse_if_left` check reads words the
   # same way, so it finds nothing left of a word that was kept. A word glued directly to a

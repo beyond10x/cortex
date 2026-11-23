@@ -1299,9 +1299,8 @@ impl<'a> Batch<'a> {
     /// property and relation names, value kinds), as never a rare name in this batch: counted as
     /// seen more often than any `rare_limit`, it is kept whole wherever the batch holds it, by
     /// the replacement and by [`Batch::left`] alike. The model writes these names back as the
-    /// types of what it extracts, so a placeholder in their place makes it invent types. A run
-    /// keeps the node names and aliases its store holds at its start the same way: a name the
-    /// store already knows is no rare name. `known_names` and the rules still replace them.
+    /// types of what it extracts, so a placeholder in their place makes it invent types.
+    /// `known_names` and the rules still replace them.
     pub fn keep_names(&mut self, text: &str) {
         if !self.redactor.words {
             return;

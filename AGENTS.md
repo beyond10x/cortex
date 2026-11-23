@@ -160,13 +160,11 @@ this repository and published by the organisation's reusable workflow.
   property or relation position is restored also in another shape (`[name 3]`), or fails the
   batch naming it. `RareName` never takes the store's ontology names (`Batch::keep_names`): the
   model writes back the type names it is shown, and a replaced one made EKR refuse every entity
-  (`extraction-type-undeclared`). Nor does it take a word of a node name or alias the store holds
-  at the run's start (`known::Lookup::head_names`): hiding a customer named once lost its facts;
-  a name the model must not see goes in `known_names`. Limits: detection is by pattern (the classes `Url`, `Email`, `Phone`,
+  (`extraction-type-undeclared`). Limits: detection is by pattern (the classes `Url`, `Email`, `Phone`,
   `IpAddress`, `PaymentCard` and `RareName`, the `known_names` list, and the policy's regex
   `rules`), so four-part version numbers and long digit ids that look like an IP address or a card
   are hidden from the model too (and restored); a person's name is found only when listed in
-  `known_names` or rare in the batch (`rare_limit`) and not a name the store holds; the instance's own description and
+  `known_names` or rare in the batch (`rare_limit`); the instance's own description and
   instructions are sent as written; and a spec without a `redaction` policy sends text unchanged.
   Rarity counts only the batch's document texts outside what another class hides (for a record
   read from a file, its own text only, not its thread context, key or title); known entity

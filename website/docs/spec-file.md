@@ -995,10 +995,6 @@ batch is applied. In a value or an alias, a placeholder written without its brac
 as a bracketed one is; one that stands for no value of the batch stays as written and is counted
 as `unrestored`.
 
-`RareName` never takes a word of a node name or alias the store holds when the run starts: the
-store already holds that name, and hiding it from the model lost the facts about it. A name the
-model must not see is listed in `known_names`.
-
 Each batch directory under `runs/` keeps the prompt as sent (`prompt.txt`), the model's raw
 answer (`answer.json`) and each part EKR refused (`refusals.json`: the part, the outcome EKR named
 and its reason) beside the extraction document applied
