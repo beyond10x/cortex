@@ -991,7 +991,9 @@ extracts. `known_names` and `rules` still replace a type name they match. A plac
 writes where a node type, property or relation name goes is restored before the answer is
 applied, also when it dropped the brackets (`Name-3` for `[Name-3]`); one that stands for no value
 of the batch fails the batch, naming the placeholder and where it stood, and nothing of that
-batch is applied.
+batch is applied. In a value or an alias, a placeholder written without its brackets is restored
+as a bracketed one is; one that stands for no value of the batch stays as written and is counted
+as `unrestored`.
 
 Each batch directory under `runs/` keeps the prompt as sent (`prompt.txt`), the model's raw
 answer (`answer.json`) and each part EKR refused (`refusals.json`: the part, the outcome EKR named

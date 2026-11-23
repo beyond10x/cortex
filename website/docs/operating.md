@@ -546,6 +546,13 @@ sign-in or usage-limit message, is asked once more after 60 seconds; if that ans
 run goes on and no failure is counted, and a second error fails the run as above. An error answer
 with a cost above zero, or with no cost reported, is not asked again.
 
+An error answer that carries no text, such as `error_max_structured_output_retries` when the
+model's attempts at the structured answer all failed validation, is described by its subtype, its
+number of turns and the last message of its `errors` list: `claude answered an error
+(error_max_structured_output_retries), cost 0.8000 USD: error_max_structured_output_retries after
+6 turns: /facts/0: must have required property 'evidence'`, in the reason and in `error.txt`, masked
+and cut as above.
+
 An error answer saying the request is too long for the model's window, or that the answer was
 cut off at the output limit, is neither asked again after a wait nor a failure: the batch is split
 in two and each half asked (see [The batch size](./spec-file.md#the-batch-size)). A part of one
