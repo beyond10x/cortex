@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest 77b40f4f3441dcc19a4d5fbfc56d13afcd80b03b06fe2e8969b06d2c71511d85
-  contract digest 984a06ae5487642c68800955902529ad4815f478240ce717e522e1b65a5696d8
+  model digest 1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea
+  contract digest edb08f72285adea731056f77a39b2f4b42617ddf03746589b9ce338333a0e3ad
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-266 capabilities: **258 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+267 capabilities: **259 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -218,6 +218,7 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | error type | `cortex.ask.ModelFailed` |
 | error type | `cortex.ask.RateLimited` |
 | error type | `cortex.ask.ReaderFailed` |
+| error type | `cortex.ask.Refused` |
 | error type | `cortex.ask.ReviewExists` |
 | error type | `cortex.ask.ReviewNotFound` |
 | error type | `cortex.ask.ReviewNotOpen` |

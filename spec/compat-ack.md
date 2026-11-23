@@ -12,6 +12,27 @@ reset (AGENTS.md, "The specification comes first").
 
 | change | reason |
 |---|---|
+| `type/cortex.ask.AnswerOutcome/variant-added/refused` | Review finding 20: a model refusal was recorded as `answered` with an empty answer. A reader of the records meets the new outcome `refused`; `outcome_of` reads it and the review queue opens a `failed` item for it. |
+| `type/cortex.ask.AskDone/field-added/unsupported` | Review finding 21: a citation of an id the reader never returned was linked and listed in `nodes`. `done` now lists such references apart; a strict decoder of the event stream needs the field. |
+| `command/cortex.ask.Ask/outcome-added/refused` | Review finding 20: a Chat Completions refusal ends the answer with an `error` event whose reason is `refused`, no `done`. |
+| `command/cortex.ask.Ask/outcome-error-payload-changed/limit-reached` | Review finding 24: the error now carries the steps and token counts of the model calls made, so the record keeps them. |
+| `command/cortex.ask.Ask/outcome-error-payload-changed/model-failed` | Review finding 24: as `limit-reached`, for a model failure after a model call. |
+| `command/cortex.ask.Ask/outcome-error-payload-changed/reader-failed` | Review finding 24: as `limit-reached`, for a reader failure after a model call. |
+| `error/cortex.ask.LimitReached/field-added/cached_tokens` | Review finding 24: usage of the model calls made before the limit. |
+| `error/cortex.ask.LimitReached/field-added/context_tokens` | Review finding 24: usage of the model calls made before the limit. |
+| `error/cortex.ask.LimitReached/field-added/input_tokens` | Review finding 24: usage of the model calls made before the limit. |
+| `error/cortex.ask.LimitReached/field-added/output_tokens` | Review finding 24: usage of the model calls made before the limit. |
+| `error/cortex.ask.LimitReached/field-added/steps` | Review finding 24: the model calls made before the limit. |
+| `error/cortex.ask.ModelFailed/field-added/cached_tokens` | Review finding 24: usage of the model calls that answered before the failure. |
+| `error/cortex.ask.ModelFailed/field-added/context_tokens` | Review finding 24: usage of the model calls that answered before the failure. |
+| `error/cortex.ask.ModelFailed/field-added/input_tokens` | Review finding 24: usage of the model calls that answered before the failure. |
+| `error/cortex.ask.ModelFailed/field-added/output_tokens` | Review finding 24: usage of the model calls that answered before the failure. |
+| `error/cortex.ask.ModelFailed/field-added/steps` | Review finding 24: the model calls that answered before the failure. |
+| `error/cortex.ask.ReaderFailed/field-added/cached_tokens` | Review finding 24: usage of the model calls made before the reader failed. |
+| `error/cortex.ask.ReaderFailed/field-added/context_tokens` | Review finding 24: usage of the model calls made before the reader failed. |
+| `error/cortex.ask.ReaderFailed/field-added/input_tokens` | Review finding 24: usage of the model calls made before the reader failed. |
+| `error/cortex.ask.ReaderFailed/field-added/output_tokens` | Review finding 24: usage of the model calls made before the reader failed. |
+| `error/cortex.ask.ReaderFailed/field-added/steps` | Review finding 24: the model calls made before the reader failed. |
 | `entity/cortex.instance.SeenDocument/field-added/fields_hash` | An `Optional` field of the per-source state file, written by cortex and read only by it. A state file of v0.8.0 lacks it and reads as before: a web page takes the fields of its next fetch as applied, a structured record is applied again once (no model call). |
 | `command/cortex.instance.RunSource/outcome-response-payload-changed/fetched` | The `fetched` payload gains `skipped`, the line list a run already prints in its own `skipped`; every field of v0.8.0 keeps its name and type. A document named there is no longer counted `new` or `changed`, as the run sends it to no model (review finding 11). |
 | `event/cortex.instance.SourceFetched/field-added/skipped` | The same field on the event: `fetched --fetch-only` output is read by operators and scripts as JSON, and an added member leaves each field they read unchanged. The event is carried on the outcome and not published, so no stored history holds the old shape. |

@@ -1,7 +1,7 @@
 {
   "format": "ess-diff-acknowledgements/1",
   "before": "b77e573a24f45c33d239857ef5217a99252c69722f75361972dcf01ec51cdf99",
-  "after": "77b40f4f3441dcc19a4d5fbfc56d13afcd80b03b06fe2e8969b06d2c71511d85",
+  "after": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
   "acknowledged": [
     "entity/cortex.instance.SeenDocument/field-added/fields_hash",
     "command/cortex.instance.RunSource/outcome-response-payload-changed/fetched",
@@ -18,6 +18,27 @@
     "command/cortex.instance.UpdateInstance/outcome-added/busy",
     "command/cortex.instance.RunSource/outcome-response-payload-changed/ran",
     "event/cortex.instance.SourceRan/field-added/documents_left",
-    "event/cortex.instance.SourceRan/field-added/stopped"
+    "event/cortex.instance.SourceRan/field-added/stopped",
+    "type/cortex.ask.AnswerOutcome/variant-added/refused",
+    "type/cortex.ask.AskDone/field-added/unsupported",
+    "command/cortex.ask.Ask/outcome-added/refused",
+    "command/cortex.ask.Ask/outcome-error-payload-changed/limit-reached",
+    "command/cortex.ask.Ask/outcome-error-payload-changed/model-failed",
+    "command/cortex.ask.Ask/outcome-error-payload-changed/reader-failed",
+    "error/cortex.ask.LimitReached/field-added/cached_tokens",
+    "error/cortex.ask.LimitReached/field-added/context_tokens",
+    "error/cortex.ask.LimitReached/field-added/input_tokens",
+    "error/cortex.ask.LimitReached/field-added/output_tokens",
+    "error/cortex.ask.LimitReached/field-added/steps",
+    "error/cortex.ask.ModelFailed/field-added/cached_tokens",
+    "error/cortex.ask.ModelFailed/field-added/context_tokens",
+    "error/cortex.ask.ModelFailed/field-added/input_tokens",
+    "error/cortex.ask.ModelFailed/field-added/output_tokens",
+    "error/cortex.ask.ModelFailed/field-added/steps",
+    "error/cortex.ask.ReaderFailed/field-added/cached_tokens",
+    "error/cortex.ask.ReaderFailed/field-added/context_tokens",
+    "error/cortex.ask.ReaderFailed/field-added/input_tokens",
+    "error/cortex.ask.ReaderFailed/field-added/output_tokens",
+    "error/cortex.ask.ReaderFailed/field-added/steps"
   ]
 }

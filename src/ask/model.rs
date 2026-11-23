@@ -52,6 +52,10 @@ pub struct Reply {
     pub usage: Usage,
     /// Why the model stopped (`/choices/0/finish_reason`), when the gateway says.
     pub finish_reason: Option<String>,
+    /// The model's refusal (`/choices/0/message/refusal`, non-empty), as the Chat Completions
+    /// contract carries it and llm-chat reads it (`Item::AssistantRefusal`): the model declined,
+    /// and nothing else of the reply is an answer.
+    pub refusal: Option<String>,
 }
 
 impl Reply {
@@ -209,8 +213,15 @@ pub fn parse(text: &str) -> Result<Reply, String> {
                 .collect()
         })
         .unwrap_or_default();
+    // As llm-chat's codec: a refusal is text when present; an empty one is none.
+    let refusal = match message.get("refusal") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(text)) => Some(text.clone()).filter(|t| !t.is_empty()),
+        Some(_) => return Err("the gateway answered a refusal that is not text".into()),
+    };
     let usage = value.get("usage").cloned().unwrap_or(Value::Null);
     Ok(Reply {
+        refusal,
         content: message
             .get("content")
             .and_then(Value::as_str)

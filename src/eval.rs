@@ -225,11 +225,29 @@ pub fn score(case: &m::EvalCase, answer: &str, cited: &[String]) -> m::EvalResul
         passed: missing_facts.is_empty() && missing_nodes.is_empty(),
         missing_facts,
         missing_nodes,
+        outcome: None,
+    }
+}
+
+/// The result of `case` when the runner gave no answer, for `outcome` (`refused`, or the ask
+/// service's `step-limit`, `time-limit`, `cut-off`): `text` (the reason, or the refusal) as its
+/// answer, nothing cited, every expectation missed, never passed, whatever `text` holds.
+pub fn no_answer(case: &m::EvalCase, outcome: &str, text: &str) -> m::EvalResult {
+    m::EvalResult {
+        format: RESULT_FORMAT.into(),
+        id: case.id.clone(),
+        question: case.question.clone(),
+        answer: text.to_string(),
+        cited_nodes: vec![],
+        passed: false,
+        missing_facts: case.expect_facts.clone(),
+        missing_nodes: case.expect_nodes.clone(),
+        outcome: Some(outcome.to_string()),
     }
 }
 
 pub fn result_json(r: &m::EvalResult) -> Value {
-    json!({
+    let mut line = json!({
         "format": r.format,
         "id": r.id,
         "question": r.question,
@@ -238,7 +256,11 @@ pub fn result_json(r: &m::EvalResult) -> Value {
         "passed": r.passed,
         "missing_facts": r.missing_facts,
         "missing_nodes": r.missing_nodes,
-    })
+    });
+    if let Some(outcome) = &r.outcome {
+        line["outcome"] = json!(outcome);
+    }
+    line
 }
 
 /// The JSON Schema the `mcp` runner's answer is held to.
@@ -311,12 +333,168 @@ pub fn mcp_config(store: &Store) -> Result<Value, String> {
 enum Answers {
     /// The instance's model, with this MCP configuration.
     Mcp(Value),
+    /// The instance's running `cortex ask serve`.
+    Ask(AskTarget),
     /// The answers of an earlier run, by case id.
     Replay(BTreeMap<String, Recorded>),
 }
 
-/// A recorded case: its question, its answer and the nodes the answer cited.
-type Recorded = (String, String, Vec<String>);
+/// A recorded case: its question, its answer, the nodes the answer cited, and its outcome when it
+/// is a non-answer.
+#[derive(Clone)]
+struct Recorded {
+    question: String,
+    answer: String,
+    cited: Vec<String>,
+    outcome: Option<String>,
+}
+
+/// How a 0.7.2 `mcp` run wrote a question the redaction policy refused: its answer is the reason,
+/// and the line names no `outcome`.
+const REFUSED_PREFIX: &str = "refused: ";
+
+/// The identity the `ask` runner asks as.
+pub const ASK_IDENTITY: &str = "cortex-eval";
+
+/// How often the `ask` runner asks a question again after `rate-limit` or `busy`.
+const ASK_RETRIES: usize = 3;
+
+/// Where the `ask` runner asks: `POST /ask` of the instance's service.
+struct AskTarget {
+    url: String,
+    header: String,
+    /// The most one answer may take: the spec's `max_seconds`, and 30 s for the stream.
+    timeout: Duration,
+}
+
+/// The `POST /ask` URL of the address `listen` names, a wildcard host asked on loopback.
+pub fn ask_url(listen: &str) -> Result<String, String> {
+    let listen = listen.trim();
+    let (host, port) = listen
+        .rsplit_once(':')
+        .ok_or_else(|| format!("ask.listen: {listen:?} names no port"))?;
+    let port: u16 = port
+        .parse()
+        .map_err(|_| format!("ask.listen: {listen:?} names no port"))?;
+    if port == 0 {
+        return Err(format!(
+            "ask.listen: {listen:?} lets the system choose the port, so the running service \
+             cannot be found; name a port"
+        ));
+    }
+    let host = match host {
+        "" | "0.0.0.0" => "127.0.0.1",
+        "[::]" | "::" => "[::1]",
+        other => other,
+    };
+    Ok(format!("http://{host}:{port}/ask"))
+}
+
+/// What the instance's service answered one question with.
+enum Asked {
+    /// A `done` event: the answer, its cited nodes, its steps and token counts.
+    Done {
+        answer: String,
+        nodes: Vec<String>,
+        steps: i64,
+        input_tokens: i64,
+        output_tokens: i64,
+    },
+    /// An `error` event that is no answer to score: its reason and message.
+    NoAnswer { reason: String, message: String },
+}
+
+/// The last event of an SSE stream of `cortex.ask.AskEvent`s, as `(name, value)`.
+fn last_event(text: &str) -> Option<(String, Value)> {
+    text.split("\n\n")
+        .filter(|block| !block.trim().is_empty())
+        .filter_map(|block| {
+            let data: String = block
+                .lines()
+                .filter_map(|l| l.strip_prefix("data:"))
+                .map(|d| d.strip_prefix(' ').unwrap_or(d))
+                .collect();
+            let event: Value = serde_json::from_str(&data).ok()?;
+            Some((event["event"].as_str()?.to_string(), event["value"].clone()))
+        })
+        .last()
+}
+
+/// An `error` message without the request id the service appends to it.
+fn without_request(message: &str) -> &str {
+    match message.rfind(" (request ") {
+        Some(at) if message.ends_with(')') => &message[..at],
+        _ => message,
+    }
+}
+
+/// Asks `question` of the service at `target`, again after a `rate-limit` or `busy` refusal (at
+/// most [`ASK_RETRIES`] times, after its wait). A failure is the runner's: no service answered,
+/// or it answered an error that is no non-answer of the case.
+fn ask_service(target: &AskTarget, question: &str) -> Result<Asked, String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(target.timeout)
+        .build()
+        .map_err(|e| format!("cannot build the ask client: {e}"))?;
+    let mut attempt = 0;
+    loop {
+        let text = client
+            .post(&target.url)
+            .header(target.header.as_str(), ASK_IDENTITY)
+            .header("content-type", "application/json")
+            .body(json!({"question": question}).to_string())
+            .send()
+            .and_then(|r| r.text())
+            .map_err(|e| format!("no cortex ask serve answered at {}: {e}", target.url))?;
+        let Some((name, value)) = last_event(&text) else {
+            return Err(format!(
+                "the service at {} answered no cortex.ask-events/1 stream",
+                target.url
+            ));
+        };
+        let count = |key: &str| value[key].as_i64().unwrap_or(0);
+        if name == "done" {
+            return Ok(Asked::Done {
+                answer: value["answer"].as_str().unwrap_or_default().to_string(),
+                nodes: value["nodes"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect(),
+                steps: count("steps"),
+                input_tokens: count("input_tokens"),
+                output_tokens: count("output_tokens"),
+            });
+        }
+        let reason = value["reason"].as_str().unwrap_or_default().to_string();
+        let message = without_request(value["message"].as_str().unwrap_or_default()).to_string();
+        match reason.as_str() {
+            "refused" | "step-limit" | "time-limit" | "cut-off" => {
+                return Ok(Asked::NoAnswer { reason, message })
+            }
+            // The redaction policy refused the question, as the `mcp` runner records it.
+            "bad-request" if message.starts_with("the question was refused by policy") => {
+                return Ok(Asked::NoAnswer {
+                    reason: "refused".into(),
+                    message: format!("{REFUSED_PREFIX}{message}"),
+                })
+            }
+            "rate-limit" | "busy" if attempt < ASK_RETRIES => {
+                attempt += 1;
+                let wait = value["retry_after"].as_u64().unwrap_or(1).clamp(1, 60);
+                std::thread::sleep(Duration::from_secs(wait));
+            }
+            _ => {
+                return Err(format!(
+                    "the service at {} answered {reason}: {message}",
+                    target.url
+                ))
+            }
+        }
+    }
+}
 
 /// An eval run whose set and runner are read: [`prepare`] reads them under the home's lock,
 /// [`run`] needs none.
@@ -350,9 +528,35 @@ fn recorded(layout: &Layout, from: &str) -> Result<BTreeMap<String, Recorded>, S
             .map_err(|e| format!("line {} of the eval run {from} is not JSON: {e}", n + 1))?;
         let id = v.get("id").and_then(Value::as_str);
         let question = v.get("question").and_then(Value::as_str);
+        let outcome = match v.get("outcome") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(o)) => Some(o.clone()),
+            Some(_) => {
+                return Err(format!(
+                    "line {} of the eval run {from} has an `outcome` that is not a string",
+                    n + 1
+                ))
+            }
+        };
         match (id, question, answer_of(&v)) {
             (Some(id), Some(question), Some((answer, cited))) => {
-                answers.insert(id.to_string(), (question.to_string(), answer, cited));
+                // A line of 0.7.2 names no outcome: a refused case is its answer's prefix, on a
+                // line that failed and cites nothing.
+                let outcome = outcome.or_else(|| {
+                    (answer.starts_with(REFUSED_PREFIX)
+                        && cited.is_empty()
+                        && v.get("passed") == Some(&Value::Bool(false)))
+                    .then(|| "refused".to_string())
+                });
+                answers.insert(
+                    id.to_string(),
+                    Recorded {
+                        question: question.to_string(),
+                        answer,
+                        cited,
+                        outcome,
+                    },
+                );
             }
             _ => {
                 return Err(format!(
@@ -397,41 +601,50 @@ pub fn prepare(
         _ => {}
     }
     let spec = layout.load_spec().map_err(Failure::Runner)?;
-    let answers =
-        match runner {
-            m::EvalRunner::Mcp => {
-                let store = layout.store_handle(&spec);
-                Answers::Mcp(mcp_config(&store).map_err(Failure::Runner)?)
-            }
-            m::EvalRunner::Replay => {
-                let from = from.unwrap_or_default();
-                let answers = recorded(layout, from).map_err(Failure::Runner)?;
-                for c in &set.cases {
-                    match answers.get(&c.id) {
-                        None => {
-                            return Err(Failure::Runner(format!(
-                                "the eval run {from} recorded no answer for the case {:?}",
-                                c.id
-                            )))
-                        }
-                        Some((question, ..)) if *question != c.question => {
-                            return Err(Failure::Runner(format!(
-                                "the eval run {from} answered another question under the case \
-                                 {:?}: {question:?}",
-                                c.id
-                            )))
-                        }
-                        Some(_) => {}
+    let answers = match runner {
+        m::EvalRunner::Mcp => {
+            let store = layout.store_handle(&spec);
+            Answers::Mcp(mcp_config(&store).map_err(Failure::Runner)?)
+        }
+        m::EvalRunner::Replay => {
+            let from = from.unwrap_or_default();
+            let answers = recorded(layout, from).map_err(Failure::Runner)?;
+            for c in &set.cases {
+                match answers.get(&c.id) {
+                    None => {
+                        return Err(Failure::Runner(format!(
+                            "the eval run {from} recorded no answer for the case {:?}",
+                            c.id
+                        )))
                     }
+                    Some(r) if r.question != c.question => {
+                        return Err(Failure::Runner(format!(
+                            "the eval run {from} answered another question under the case \
+                                 {:?}: {:?}",
+                            c.id, r.question
+                        )))
+                    }
+                    Some(_) => {}
                 }
-                Answers::Replay(answers)
             }
-            m::EvalRunner::Ask => return Err(Failure::Runner(
-                "no cortex ask serve answered for this instance: this cortex has no ask service \
-                 to ask"
-                    .into(),
-            )),
-        };
+            Answers::Replay(answers)
+        }
+        m::EvalRunner::Ask => {
+            let ask = spec.ask.as_ref().ok_or_else(|| {
+                Failure::Runner(
+                    "ask: the spec has no `ask` section, so no cortex ask serve answers for \
+                         this instance"
+                        .into(),
+                )
+            })?;
+            let seconds = (ask.limits.max_seconds.max(1) as u64).min(24 * 3600);
+            Answers::Ask(AskTarget {
+                url: ask_url(&ask.listen).map_err(Failure::Runner)?,
+                header: ask.identity_header.clone(),
+                timeout: Duration::from_secs(seconds + 30),
+            })
+        }
+    };
     Ok(Prepared {
         spec,
         set,
@@ -508,9 +721,54 @@ pub fn run(
     for (n, case) in set.cases.iter().enumerate() {
         let (answer, cited) = match &answers {
             Answers::Replay(recorded) => {
-                let (_, answer, cited) = recorded[&case.id].clone();
-                (answer, cited)
+                let r = recorded[&case.id].clone();
+                // A recorded non-answer stays one, whatever its text holds.
+                if let Some(outcome) = &r.outcome {
+                    let result = no_answer(case, outcome, &r.answer);
+                    write_result(&results_path, &result)?;
+                    results.push(result);
+                    continue;
+                }
+                (r.answer, r.cited)
             }
+            Answers::Ask(target) => match ask_service(target, &case.question) {
+                Ok(Asked::Done {
+                    answer,
+                    nodes,
+                    steps,
+                    input_tokens,
+                    output_tokens,
+                }) => {
+                    model_calls += steps;
+                    let asked = crate::extract::Usage {
+                        input_tokens: Some(input_tokens),
+                        cache_creation_input_tokens: Some(0),
+                        cache_read_input_tokens: Some(0),
+                        output_tokens: Some(output_tokens),
+                    };
+                    usage = Some(match usage {
+                        None => asked,
+                        Some(u) => u.plus(asked),
+                    });
+                    // The service spends its own budget and reports no cost.
+                    cost_usd = None;
+                    (answer, nodes)
+                }
+                Ok(Asked::NoAnswer { reason, message }) => {
+                    cost_usd = None;
+                    let result = no_answer(case, &reason, &message);
+                    write_result(&results_path, &result)?;
+                    results.push(result);
+                    continue;
+                }
+                Err(why) => {
+                    return Err(Failure::Runner(format!(
+                        "case {:?}: {why}; {}",
+                        case.id,
+                        so_far(n, of, cost_usd)
+                    )))
+                }
+            },
             Answers::Mcp(config) => {
                 let remaining = match budget {
                     Some(budget) if budget - spent <= 0.0 => {
@@ -561,8 +819,8 @@ pub fn run(
                                 // The ask service refuses such a question the same way: the
                                 // case is recorded as failed, with the reason as its answer, and
                                 // no model was asked.
-                                let mut result = score(case, &format!("refused: {why}"), &[]);
-                                result.passed = false;
+                                let result =
+                                    no_answer(case, "refused", &format!("{REFUSED_PREFIX}{why}"));
                                 write_result(&results_path, &result)?;
                                 results.push(result);
                                 continue;
