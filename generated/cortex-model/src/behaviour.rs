@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 97b14b7ce2bdcf445f2d5c0f9f2e44f20f604b57e63cb5f974d764bc849469e5
-// contract digest c370815732baa111459aaae498970398cb0b8c851768027ab066f4747b5882ea
+// model digest 694b8f809382b7da187a2a4c810de8fc740f8f2257ec1eadda9d461bcd4bc9ac
+// contract digest 1d95c2bf490d3041d67e93e23ded8ec96d0e633000f121e9edaa3e7a31f1e926
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -119,12 +119,16 @@ pub enum ExternalCommand<'a> {
     CortexInstanceApproveSchemaProposals(&'a crate::instance::ApproveSchemaProposals),
     /// The executing `cortex.instance.CreateInstance` input.
     CortexInstanceCreateInstance(&'a crate::instance::CreateInstance),
+    /// The executing `cortex.instance.EnableSource` input.
+    CortexInstanceEnableSource(&'a crate::instance::EnableSource),
     /// The executing `cortex.instance.MeasureQuality` input.
     CortexInstanceMeasureQuality(&'a crate::instance::MeasureQuality),
     /// The executing `cortex.instance.ProposeSchemaChanges` input.
     CortexInstanceProposeSchemaChanges(&'a crate::instance::ProposeSchemaChanges),
     /// The executing `cortex.instance.RejectSchemaProposals` input.
     CortexInstanceRejectSchemaProposals(&'a crate::instance::RejectSchemaProposals),
+    /// The executing `cortex.instance.RemoveInstance` input.
+    CortexInstanceRemoveInstance(&'a crate::instance::RemoveInstance),
     /// The executing `cortex.instance.RestoreSnapshot` input.
     CortexInstanceRestoreSnapshot(&'a crate::instance::RestoreSnapshot),
     /// The executing `cortex.instance.RunEval` input.
@@ -145,9 +149,11 @@ impl ExternalCommand<'_> {
             Self::CortexInstanceApplySchemaProposals(_) => "cortex.instance.ApplySchemaProposals",
             Self::CortexInstanceApproveSchemaProposals(_) => "cortex.instance.ApproveSchemaProposals",
             Self::CortexInstanceCreateInstance(_) => "cortex.instance.CreateInstance",
+            Self::CortexInstanceEnableSource(_) => "cortex.instance.EnableSource",
             Self::CortexInstanceMeasureQuality(_) => "cortex.instance.MeasureQuality",
             Self::CortexInstanceProposeSchemaChanges(_) => "cortex.instance.ProposeSchemaChanges",
             Self::CortexInstanceRejectSchemaProposals(_) => "cortex.instance.RejectSchemaProposals",
+            Self::CortexInstanceRemoveInstance(_) => "cortex.instance.RemoveInstance",
             Self::CortexInstanceRestoreSnapshot(_) => "cortex.instance.RestoreSnapshot",
             Self::CortexInstanceRunEval(_) => "cortex.instance.RunEval",
             Self::CortexInstanceUpdateInstance(_) => "cortex.instance.UpdateInstance",
@@ -707,6 +713,10 @@ where
 {
     fn enable_source(&mut self, input: crate::instance::EnableSource) -> Result<crate::instance::EnableSourceOutcome, UnmetObligation> {
         let _ = &input;
+        // `busy`: an external branch, where the context takes it and its input is eligible.
+        if self.ports.try_external(ExternalCommand::CortexInstanceEnableSource(&input), "busy")? && decided(all(&[Some(Some(&input.no_wait).and_then(|value| value.as_ref()).is_some()), equal(Some(&input.no_wait).and_then(|value| value.as_ref()).map(|value| *value), Some(true))]), "cortex.instance.EnableSource")? {
+            return Ok(crate::instance::EnableSourceOutcome::Busy { error: crate::instance::InstanceBusy { reason: self.ports.try_generate_string()? } });
+        }
         // `enabled`: the default.
         let Some(held) = SourceStorage::get(&self.ports, &input.source_id) else {
             return Ok(crate::instance::EnableSourceOutcome::NoSuchSource { error: crate::instance::SourceNotFound { source_id: input.source_id.clone() } });
@@ -848,6 +858,10 @@ where
 {
     fn remove_instance(&mut self, input: crate::instance::RemoveInstance) -> Result<crate::instance::RemoveInstanceOutcome, UnmetObligation> {
         let _ = &input;
+        // `busy`: an external branch, where the context takes it and its input is eligible.
+        if self.ports.try_external(ExternalCommand::CortexInstanceRemoveInstance(&input), "busy")? && decided(all(&[Some(Some(&input.no_wait).and_then(|value| value.as_ref()).is_some()), equal(Some(&input.no_wait).and_then(|value| value.as_ref()).map(|value| *value), Some(true))]), "cortex.instance.RemoveInstance")? {
+            return Ok(crate::instance::RemoveInstanceOutcome::Busy { error: crate::instance::InstanceBusy { reason: self.ports.try_generate_string()? } });
+        }
         // `removed`: the default.
         let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
             return Ok(crate::instance::RemoveInstanceOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
@@ -948,6 +962,10 @@ where
         if decided(equal(Some(&held.state).map(|value| match value { crate::instance::InstanceState::Active => "Active", crate::instance::InstanceState::Removed => "Removed" }.to_owned()), Some("Removed".to_owned())), "cortex.instance.UpdateInstance")? {
             return Ok(crate::instance::UpdateInstanceOutcome::NotActive { error: crate::instance::InstanceNotActive { state: self.ports.try_generate_cortex_instance_instance_state()? } });
         }
+        // `busy`: an external branch, where the context takes it and its input is eligible.
+        if self.ports.try_external(ExternalCommand::CortexInstanceUpdateInstance(&input), "busy")? && decided(all(&[Some(Some(&input.no_wait).and_then(|value| value.as_ref()).is_some()), equal(Some(&input.no_wait).and_then(|value| value.as_ref()).map(|value| *value), Some(true))]), "cortex.instance.UpdateInstance")? {
+            return Ok(crate::instance::UpdateInstanceOutcome::Busy { error: crate::instance::InstanceBusy { reason: self.ports.try_generate_string()? } });
+        }
         // `rekey-refused`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceUpdateInstance(&input), "rekey-refused")? {
             return Ok(crate::instance::UpdateInstanceOutcome::RekeyRefused { error: crate::instance::RekeyRefused { name: input.name.clone(), source: self.ports.try_generate_string()?, field: self.ports.try_generate_string()? } });
@@ -1028,6 +1046,17 @@ fn undeclared(source: &'static str) -> UnmetObligation {
 /// A guard's truth, where it has one: Unknown selects no branch, so the model declares no outcome.
 fn decided(truth: Option<bool>, command: &'static str) -> Result<bool, UnmetObligation> {
     truth.ok_or_else(|| undeclared(command))
+}
+
+/// Three-valued conjunction: false wins, then Unknown.
+fn all(truths: &[Option<bool>]) -> Option<bool> {
+    if truths.contains(&Some(false)) {
+        Some(false)
+    } else if truths.contains(&None) {
+        None
+    } else {
+        Some(true)
+    }
 }
 
 /// Equality of two read values; an unread one is Unknown.
