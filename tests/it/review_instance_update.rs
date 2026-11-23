@@ -3,7 +3,6 @@
 //! and report every step that did not complete. Each test drives the binary with a stand-in
 //! `systemctl` that logs its arguments and refuses `disable` while the file `deny-disable` exists.
 
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 

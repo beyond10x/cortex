@@ -2,7 +2,6 @@
 //! cortex command holds the home's lock, and changes nothing; without the flag an update waits for
 //! the lock and then applies. `remove` and `source enable` take the same flag.
 
-
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};

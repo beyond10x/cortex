@@ -10,7 +10,6 @@
 //!
 //! The model is a stand-in and the records are synthetic; no test calls a real model.
 
-
 use std::path::PathBuf;
 
 use crate::common::{ekr, executable, World};

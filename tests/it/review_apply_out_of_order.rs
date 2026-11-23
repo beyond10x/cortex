@@ -9,7 +9,6 @@
 //!    (`extraction-type-conflict`) is refused alone, named in the run's `rejected` and not marked
 //!    seen; the rest of its batch applies.
 
-
 use std::path::PathBuf;
 use std::process::Command;
 

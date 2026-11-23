@@ -8,7 +8,6 @@
 //! 16,384-byte evidence payload holds, so the model is shown, and the store is given, no
 //! description text the evidence does not hold.
 
-
 use std::path::PathBuf;
 
 use crate::common::{answer, executable, World};

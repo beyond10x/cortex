@@ -8,7 +8,6 @@
 //! reviewer's reader did. No model is called and nothing leaves the machine. Finding 23 (the
 //! judge's prompt) is held by the unit test in `src/quality.rs`, where the prompt is built.
 
-
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};

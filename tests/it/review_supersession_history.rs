@@ -7,7 +7,6 @@
 //! than, and EKR refused it in the second round with `invalid-supersession`, which the history step
 //! of 0.8.0 did not see. Every fact now ends current or kept as history, with no refusal.
 
-
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::Command;
