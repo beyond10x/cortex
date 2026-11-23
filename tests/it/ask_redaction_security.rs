@@ -31,6 +31,7 @@ fn email_and_name() -> Redactor {
         known_names: Some(vec!["Zorblat".into()]),
         rare_limit: None,
         refuse_if_left: None,
+        keep_store_types: None,
     })
 }
 
@@ -207,6 +208,7 @@ fn a_value_of_a_withheld_result_is_never_restored() {
         known_names: None,
         rare_limit: None,
         refuse_if_left: Some(vec![m::RedactionClass::Email]),
+        keep_store_types: None,
     });
     let mut batch = r.batch();
     let (text, _, withheld) = shown(Some(&mut batch), PERSONAL, 10_000);

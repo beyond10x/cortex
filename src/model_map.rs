@@ -373,6 +373,7 @@ fn redaction(r: &s::CortexInstanceRedactionPolicy) -> Result<m::RedactionPolicy,
         },
         refuse_if_left: opt(&r.refuse_if_left)
             .map(|classes| classes.iter().map(|c| redaction_class(c)).collect()),
+        keep_store_types: opt(&r.keep_store_types),
     })
 }
 

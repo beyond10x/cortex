@@ -15,6 +15,7 @@ fn redactor() -> Redactor {
         known_names: None,
         rare_limit: None,
         refuse_if_left: None,
+        keep_store_types: None,
     };
     compile(Some(&policy))
         .expect("a valid policy")
