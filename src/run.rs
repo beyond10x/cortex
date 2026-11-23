@@ -1440,6 +1440,12 @@ fn process_in(
             report.stopped = Some(why);
             break;
         }
+        // A value of a single-valued property replaces the stored one, so a value a later batch
+        // or run reads leaves one current, not two ([`extract::mark_single_valued`]).
+        if held_ontology.is_none() {
+            held_ontology = Some(session.ontology().map_err(store_failure)?);
+        }
+        extract::mark_single_valued(&mut restored, held_ontology.as_ref().expect("read above"));
         let (mut doc, refused) = extract::merge(&restored, &batch);
         report.facts_refused += refused;
         let path = dir.join("extraction.yaml");

@@ -36,13 +36,36 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 - A web page is cited as a `HumanStatement` naming its URL, until EKR admits URL evidence.
 - Linux with systemd user units only, and one released target.
 
+### Added
+
+- `cortex run --no-wait`: while another cortex command holds the home's lock, the run answers
+  `busy` at once with exit status 9 and runs and records nothing, so an external scheduler can
+  skip a collection that is still busy. Without the flag a run waits for the lock, as before
+  (review of 0.7.2, finding 18).
+
 ### Fixed
 
+- The EKR pin an instance records is the engine that creates its store. `cortex create` and
+  `cortex adopt` ask the `ekr` binary for its version (`ekr --version`) and refuse one that
+  reports another version than the spec's `ekr.version`, whether `ekr.bin` names it or it sits in
+  the cache; `cortex setup` refuses a cached binary of another version instead of keeping it
+  (review of 0.7.2, finding 17).
 - A connection named by id is found on any page of `connectors connections list`: cortex follows
   `next_cursor` when `cortex create` checks the id and when it revalidates the connection before
   a read. Before, an id on the second page was reported missing, and two timer runs then disabled
   the source. A list that names a cursor a second time, or runs past 1000 pages, ends the read
   with a reason naming the cursor instead of a loop.
+- **One current value per single-valued property.** A `!Property` fact of a property declared
+  `cardinality: One` (by the store, or by the model's document for a new one) is marked
+  `replaces: true` by cortex before it is applied. EKR 0.0.34 adds an unmarked fact as one more
+  active value whatever the cardinality, so a merge request's state read from its tracker record
+  and again from a later chat message stayed current twice. Now the newest value stays current,
+  an older one is kept as its history (below), and a first value is stored
+  through `facts_reapplied` (`story:extraction-coverage`).
+- **The prompt asks for every document's own facts.** The extraction rules tell the model to go
+  through every document to its end, to extract a thread reply's own facts apart from the message
+  it answers and every item of a message that lists several, and to read `[context]` paragraphs
+  as context (`story:extraction-coverage`).
 - A document read after a newer one no longer loses its changed value: a fact marked
   `replaces: true` that is older than the current value, which EKR refuses
   (`invalid-supersession`), is stored as that value's history, ending where the current value
