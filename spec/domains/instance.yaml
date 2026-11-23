@@ -717,7 +717,11 @@ types:
       - {name: replacement, type: String}
 
   # `RareName` replaces a capitalised word (one capital and at least one lower-case letter) that
-  # the batch's document texts hold at most `rare_limit` times (default 1). A word, hyphenated or
+  # the batch's document texts hold at most `rare_limit` times (default 1). A word of the store's
+  # ontology names the prompt shows (node types, properties, value kinds, relations) is never a
+  # rare name, anywhere in the batch; `known_names` and the rules still replace it. A placeholder
+  # in a node type, property or relation position of the answer is restored, bracketed or not,
+  # or the batch fails naming it. A word, hyphenated or
   # not (`Jean-Luc`, `Co-Authored-By`), is replaced whole or not at all: no part of a word seen
   # more than `rare_limit` times is a rare name, and the `refuse_if_left` check reads words the
   # same way, so it finds nothing left of a word that was kept. A word glued directly to a
@@ -1745,7 +1749,9 @@ commands:
             view_port: {generated: true}
         summary: >-
           The store is seeded, the seed schema applied and the seed documents extracted into it.
-          The viewer runs on its port. The sources are added by AddSource, one per source in the spec.
+          The viewer runs on its port, unless the instance was created without units, which
+          starts no viewer and names no address. The sources are added by AddSource, one per
+          source in the spec.
 
   - name: cortex.instance.UpdateInstance
     naming:
