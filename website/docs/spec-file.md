@@ -289,7 +289,14 @@ and a `state` other than `revoked` (a `pending` one is revalidated as by id). Th
 source's own `adapter` (for `kind: web`, `tavily` when absent) or the store reference's `adapter`.
 None, or more than one, is refused: `cortex create` answers `connection-missing`, a run
 `fetch-failed`, each with a reason naming the adapter, the profile, the count and every matching
-id. cortex reads the first page of the list only, so a list with a further page is refused too.
+id. For a profile cortex reads the first page of the list only, so a list with a further page is
+refused too: name the connection by id then.
+
+An id is looked for on every page of `connectors connections list --adapter <adapter>`: cortex
+follows each page's `next_cursor` (`--cursor`) until a page lists the id or the list ends, both
+when `cortex create` checks it and whenever cortex revalidates it before a read, as each run does. An id on no
+page is missing (`connection-missing`). A list that names a cursor a second time, or runs past
+1000 pages, ends the read with a reason naming the cursor; a run then fails as `fetch-failed`.
 The frozen spec keeps the profile, never the id it resolved to, so an instance whose Connectors
 state is rebuilt with new connection ids keeps working, as in a container that runs
 `connectors connections connect` at every start ([Operating](./operating.md#connections-by-profile)).

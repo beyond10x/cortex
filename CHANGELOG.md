@@ -50,6 +50,11 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   reports another version than the spec's `ekr.version`, whether `ekr.bin` names it or it sits in
   the cache; `cortex setup` refuses a cached binary of another version instead of keeping it
   (review of 0.7.2, finding 17).
+- A connection named by id is found on any page of `connectors connections list`: cortex follows
+  `next_cursor` when `cortex create` checks the id and when it revalidates the connection before
+  a read. Before, an id on the second page was reported missing, and two timer runs then disabled
+  the source. A list that names a cursor a second time, or runs past 1000 pages, ends the read
+  with a reason naming the cursor instead of a loop.
 
 ## 0.7.2 — 2026-10-30
 
