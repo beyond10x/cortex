@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest bee510d287c1dfa93c637e46f7bd0e360af14949191c4fc99301cd3a041cd054
-// contract digest 3025ae49173d03e8d3a0fa1cc096cfd6ef6a5ce28bc88a93db6470bd39e13b42
+// model digest 3658d0f61adb41e624825fb5e0514acb871635dcdd64c9ff1a12a5906e551a81
+// contract digest 1023826750e2c71c1cf956c23d0bfc11689b75f00ca24f802952d46aa5db4360
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Answers — `cortex.ask`.

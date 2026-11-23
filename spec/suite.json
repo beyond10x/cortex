@@ -3,8 +3,8 @@
     "suite_version": "ess-conformance/34",
     "system": "cortex",
     "specification_version": "v1",
-    "spec_digest": "bee510d287c1dfa93c637e46f7bd0e360af14949191c4fc99301cd3a041cd054",
-    "contract_digest": "3025ae49173d03e8d3a0fa1cc096cfd6ef6a5ce28bc88a93db6470bd39e13b42",
+    "spec_digest": "3658d0f61adb41e624825fb5e0514acb871635dcdd64c9ff1a12a5906e551a81",
+    "contract_digest": "1023826750e2c71c1cf956c23d0bfc11689b75f00ca24f802952d46aa5db4360",
     "scenario_initial_state": "empty"
   },
   "scenarios": {
@@ -37122,6 +37122,9 @@
               "holds": "primitive",
               "kind": "timestamp"
             },
+            "skipped": {
+              "holds": "list"
+            },
             "source_id": {
               "holds": "primitive",
               "kind": "string"
@@ -51213,6 +51216,1242 @@
         {
           "kind": "view",
           "name": "cortex.instance.Instances"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance/authored/adopt-from-a-loaded-spec": {
+      "purpose": "An operator adopts a store under a cortex.instance/1 spec the loader accepts.",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.AdoptInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "What the support desk learned from its tickets."
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "0.0.34"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "claude-sonnet-5-5"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "support-desk"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "2ff1b8f4636e011835284dfa1480606c60c4af8965e03ba527623dd8c83ae843"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "ask": {
+                  "identity_header": "X-Identity",
+                  "limits": {
+                    "max_result_bytes": 65536.0,
+                    "max_seconds": 60.0,
+                    "max_steps": 8.0,
+                    "per_identity_per_minute": 6.0
+                  },
+                  "listen": "127.0.0.1:8740"
+                },
+                "description": "What the support desk learned from its tickets.",
+                "ekr": {
+                  "version": "0.0.34"
+                },
+                "format": "cortex.instance/1",
+                "model": {
+                  "batch_chars": 20000.0,
+                  "budget_tokens": 2000000.0,
+                  "daily_ceiling_tokens": 500000.0,
+                  "gateway": {
+                    "base_url": "http://127.0.0.1:4000",
+                    "max_context_tokens": 200000.0,
+                    "max_output_tokens": 8000.0,
+                    "token_env": "LLM_GATEWAY_TOKEN"
+                  },
+                  "model": "claude-sonnet-5-5",
+                  "timeout_s": 600.0
+                },
+                "name": "support-desk",
+                "redaction": {
+                  "classes": [
+                    "Email",
+                    "Phone"
+                  ],
+                  "known_names": [],
+                  "refuse_if_left": [
+                    "Email"
+                  ],
+                  "rules": []
+                },
+                "runs": {
+                  "keep_days": 30.0
+                },
+                "seed": {
+                  "documents": []
+                },
+                "serve": {},
+                "sources": [],
+                "store": {
+                  "backend": "postgres",
+                  "value": {
+                    "config": "support-desk.postgres.json"
+                  }
+                }
+              }
+            },
+            "store": {
+              "kind": "literal",
+              "value": "support-desk.postgres.json"
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "step": "expect_event",
+          "event": "cortex.instance.InstanceAdopted",
+          "payload": {
+            "name": "support-desk"
+          },
+          "shape": {
+            "name": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "revision": {
+              "holds": "primitive",
+              "kind": "integer"
+            },
+            "view_port": {
+              "holds": "primitive",
+              "kind": "integer"
+            }
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "domain",
+          "name": "cortex.instance"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ChangeDetection"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CompareLink"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectorsSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CrawlPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.DropPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.EkrPin"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FetchPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FileRecords"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.GateCheck"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ModelBackend"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ModelGateway"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ModelSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PageStyle"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.Paging"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PostgresStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PropertyMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFilter"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFormat"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionClass"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RelationMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SchemaValueKind"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchTopic"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SeedSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ServeSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SitesInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SnapshotPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceSettings"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreLookup"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredChild"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredConnectors"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredFiles"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.TimeRange"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebMode"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebSource"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.AdoptInstance"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.AdoptInstance",
+            "outcome": "adopted"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceAdopted"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance/authored/create-from-a-loaded-spec": {
+      "purpose": "An operator creates an instance from a cortex.instance/1 spec the loader accepts.",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.CreateInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "Release notes of the tools the team runs."
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "0.0.34"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "claude-haiku-4-5"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "release-notes"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "2ff1b8f4636e011835284dfa1480606c60c4af8965e03ba527623dd8c83ae843"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "Release notes of the tools the team runs.",
+                "ekr": {
+                  "version": "0.0.34"
+                },
+                "format": "cortex.instance/1",
+                "model": {
+                  "budget_tokens": 100000.0,
+                  "gateway": {
+                    "base_url": "https://gateway.example",
+                    "token_env": "GATEWAY_TOKEN"
+                  },
+                  "model": "claude-haiku-4-5",
+                  "timeout_s": 300.0
+                },
+                "name": "release-notes",
+                "seed": {
+                  "documents": []
+                },
+                "serve": {
+                  "view_port": 0.0
+                },
+                "snapshots": {
+                  "keep": 3.0
+                },
+                "sources": [
+                  {
+                    "name": "news",
+                    "policy": {
+                      "change": "ContentHash",
+                      "max_chars_per_document": 5000.0,
+                      "max_documents_per_run": 10.0,
+                      "refresh_after_days": 7.0
+                    },
+                    "schedule": "daily",
+                    "settings": {
+                      "kind": "web",
+                      "value": {
+                        "connection": "conn_news",
+                        "input": {
+                          "input": "search",
+                          "value": {
+                            "policy": {
+                              "exclude_domains": [],
+                              "include_domains": [],
+                              "max_results": 3.0,
+                              "topic": "news"
+                            },
+                            "queries": [
+                              "release notes"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "created"
+          }
+        },
+        {
+          "step": "expect_event",
+          "event": "cortex.instance.InstanceCreated",
+          "payload": {
+            "name": "release-notes"
+          },
+          "shape": {
+            "name": {
+              "holds": "primitive",
+              "kind": "string"
+            },
+            "view_port": {
+              "holds": "primitive",
+              "kind": "integer"
+            }
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "domain",
+          "name": "cortex.instance"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ChangeDetection"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CompareLink"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectorsSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CrawlPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.DropPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.EkrPin"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FetchPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FileRecords"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.GateCheck"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ModelBackend"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ModelGateway"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ModelSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PageStyle"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.Paging"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PostgresStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PropertyMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFilter"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFormat"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionClass"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RelationMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SchemaValueKind"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchTopic"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SeedSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ServeSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SitesInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SnapshotPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceSettings"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreLookup"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredChild"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredConnectors"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredFiles"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.TimeRange"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebMode"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebSource"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.CreateInstance"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "created"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceCreated"
+        },
+        {
+          "kind": "actor",
+          "name": "cortex.instance.Operator"
+        }
+      ]
+    },
+    "cortex.instance/authored/update-from-a-loaded-spec": {
+      "purpose": "An operator updates an instance with a cortex.instance/1 spec the loader accepts.",
+      "steps": [
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.CreateInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "Open-source vector databases."
+            },
+            "ekr_version": {
+              "kind": "literal",
+              "value": "0.0.34"
+            },
+            "model": {
+              "kind": "literal",
+              "value": "claude-haiku-4-5"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "vector-databases"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "2ff1b8f4636e011835284dfa1480606c60c4af8965e03ba527623dd8c83ae843"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "Open-source vector databases.",
+                "ekr": {
+                  "version": "0.0.34"
+                },
+                "format": "cortex.instance/1",
+                "model": {
+                  "budget_tokens": 50000.0,
+                  "gateway": {
+                    "base_url": "https://gateway.example",
+                    "token_env": "GATEWAY_TOKEN"
+                  },
+                  "model": "claude-haiku-4-5",
+                  "timeout_s": 120.0
+                },
+                "name": "vector-databases",
+                "seed": {
+                  "documents": []
+                },
+                "serve": {},
+                "sources": []
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "created"
+          }
+        },
+        {
+          "step": "execute_command",
+          "command": "cortex.instance.UpdateInstance",
+          "actor": "cortex.instance.Operator",
+          "input": {
+            "description": {
+              "kind": "literal",
+              "value": "Open-source vector databases and the companies behind them."
+            },
+            "model": {
+              "kind": "literal",
+              "value": "claude-sonnet-5-5"
+            },
+            "name": {
+              "kind": "literal",
+              "value": "vector-databases"
+            },
+            "seed_digest": {
+              "kind": "literal",
+              "value": "2ff1b8f4636e011835284dfa1480606c60c4af8965e03ba527623dd8c83ae843"
+            },
+            "spec": {
+              "kind": "literal",
+              "value": {
+                "description": "Open-source vector databases and the companies behind them.",
+                "ekr": {
+                  "version": "0.0.34"
+                },
+                "format": "cortex.instance/1",
+                "model": {
+                  "budget_tokens": 80000.0,
+                  "gateway": {
+                    "base_url": "https://gateway.example",
+                    "token_env": "GATEWAY_TOKEN"
+                  },
+                  "model": "claude-sonnet-5-5",
+                  "timeout_s": 300.0
+                },
+                "name": "vector-databases",
+                "seed": {
+                  "documents": []
+                },
+                "serve": {},
+                "sources": [
+                  {
+                    "name": "releases",
+                    "policy": {
+                      "change": "ContentHash",
+                      "max_chars_per_document": 4000.0,
+                      "max_documents_per_run": 5.0,
+                      "refresh_after_days": 1.0
+                    },
+                    "schedule": "weekly",
+                    "settings": {
+                      "kind": "web",
+                      "value": {
+                        "input": {
+                          "input": "sites",
+                          "value": {
+                            "mode": "Crawl",
+                            "policy": {
+                              "allow_external": false,
+                              "exclude_paths": [],
+                              "limit": 10.0,
+                              "max_breadth": 10.0,
+                              "max_depth": 1.0,
+                              "select_paths": []
+                            },
+                            "urls": [
+                              "https://example.org/releases"
+                            ]
+                          }
+                        },
+                        "profile": "tavily/2026-10"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "step": "expect_outcome",
+          "outcome": {
+            "command": "cortex.instance.UpdateInstance",
+            "outcome": "updated"
+          }
+        },
+        {
+          "step": "expect_event",
+          "event": "cortex.instance.InstanceUpdated",
+          "payload": {
+            "name": "vector-databases"
+          },
+          "shape": {
+            "name": {
+              "holds": "primitive",
+              "kind": "string"
+            }
+          }
+        }
+      ],
+      "source": [
+        {
+          "kind": "domain",
+          "name": "cortex.instance"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskLimits"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.AskSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.LinkTemplates"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.ask.PostgresRecords"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ChangeDetection"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ChildCall"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CompareLink"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectionRef"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ConnectorsSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.CrawlPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.DropPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.EkrPin"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FetchPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FileRecords"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FilesSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowAtLeast"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowEquals"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.FollowWithinDays"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.GateCheck"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceName"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.InstanceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ModelBackend"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ModelGateway"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ModelSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.MonitoringSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PageStyle"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.Paging"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PostgresStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.PropertyMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFilter"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordFormat"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RecordMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionClass"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RedactionRule"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RelationMapping"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunGate"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunHook"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.RunsPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SchemaValueKind"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SearchTopic"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SeedSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.ServeSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SitesInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SnapshotPolicy"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceSettings"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SourceSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.SqliteStore"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreLookup"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StoreSpec"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredChild"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredConnectors"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredFiles"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.StructuredSource"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.TimeRange"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebInput"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebMode"
+        },
+        {
+          "kind": "type",
+          "name": "cortex.instance.WebSource"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.CreateInstance"
+        },
+        {
+          "kind": "command",
+          "name": "cortex.instance.UpdateInstance"
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.CreateInstance",
+            "outcome": "created"
+          }
+        },
+        {
+          "kind": "outcome",
+          "name": {
+            "command": "cortex.instance.UpdateInstance",
+            "outcome": "updated"
+          }
+        },
+        {
+          "kind": "event",
+          "name": "cortex.instance.InstanceUpdated"
         },
         {
           "kind": "actor",

@@ -1,0 +1,77 @@
+# The command line reads `--spec` through its loader (`src/spec.rs`) for `create` and `update`
+# alike. Both documents here are ones the loader accepts; the second changes the description, the
+# model and the source, and keeps the seed, so its seed digest is the first one's.
+type: ess-scenario/5
+domain: cortex.instance
+scenario: update-from-a-loaded-spec
+summary: An operator updates an instance with a cortex.instance/1 spec the loader accepts.
+
+timeline:
+  - at: 2026-11-23T09:00:00Z
+    command: cortex.instance.CreateInstance
+    actor: cortex.instance.Operator
+    input:
+      name: vector-databases
+      description: Open-source vector databases.
+      model: claude-haiku-4-5
+      ekr_version: 0.0.34
+      seed_digest: 2ff1b8f4636e011835284dfa1480606c60c4af8965e03ba527623dd8c83ae843
+      spec:
+        format: cortex.instance/1
+        name: vector-databases
+        description: Open-source vector databases.
+        ekr: {version: 0.0.34}
+        seed: {documents: []}
+        model:
+          model: claude-haiku-4-5
+          gateway: {base_url: "https://gateway.example", token_env: GATEWAY_TOKEN}
+          budget_tokens: 50000
+          timeout_s: 120
+        sources: []
+        serve: {}
+    outcome: created
+
+  - at: 2026-11-23T10:00:00Z
+    command: cortex.instance.UpdateInstance
+    actor: cortex.instance.Operator
+    input:
+      name: vector-databases
+      description: Open-source vector databases and the companies behind them.
+      model: claude-sonnet-5-5
+      seed_digest: 2ff1b8f4636e011835284dfa1480606c60c4af8965e03ba527623dd8c83ae843
+      spec:
+        format: cortex.instance/1
+        name: vector-databases
+        description: Open-source vector databases and the companies behind them.
+        ekr: {version: 0.0.34}
+        seed: {documents: []}
+        model:
+          model: claude-sonnet-5-5
+          gateway: {base_url: "https://gateway.example", token_env: GATEWAY_TOKEN}
+          budget_tokens: 80000
+          timeout_s: 300
+        sources:
+          - name: releases
+            schedule: weekly
+            settings:
+              kind: web
+              value:
+                profile: tavily/2026-10
+                input:
+                  input: sites
+                  value:
+                    urls: ["https://example.org/releases"]
+                    mode: Crawl
+                    policy:
+                      max_depth: 1
+                      max_breadth: 10
+                      limit: 10
+                      select_paths: []
+                      exclude_paths: []
+                      allow_external: false
+            policy: {refresh_after_days: 1, change: ContentHash, max_documents_per_run: 5, max_chars_per_document: 4000}
+        serve: {}
+    outcome: updated
+    events:
+      - event: cortex.instance.InstanceUpdated
+        payload: {name: vector-databases}
