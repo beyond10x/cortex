@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea
-// contract digest edb08f72285adea731056f77a39b2f4b42617ddf03746589b9ce338333a0e3ad
+// model digest 41a4d0603e421396033dcf74b1a2fc72cd73fceaf8909f8d80a4a2129851459a
+// contract digest 85202f78ab1d79b5be2adff17615172a2f7da8764bd3b279ceba52060c99454d
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! The component ports of `cortex` v1: one module per component, each its accepted commands,
