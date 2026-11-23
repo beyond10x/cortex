@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea
-// contract digest edb08f72285adea731056f77a39b2f4b42617ddf03746589b9ce338333a0e3ad
+// model digest 41a4d0603e421396033dcf74b1a2fc72cd73fceaf8909f8d80a4a2129851459a
+// contract digest 85202f78ab1d79b5be2adff17615172a2f7da8764bd3b279ceba52060c99454d
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -616,6 +616,8 @@ pub enum QualityVerdictKind {
     No,
     /// `unclear`.
     Unclear,
+    /// `unjudged`.
+    Unjudged,
 }
 
 /// RecordFilter — `cortex.instance.RecordFilter`.
@@ -2345,7 +2347,7 @@ pub enum MeasureQualityOutcome {
     },
     /// `measured` — otherwise.
     ///
-    /// Every sampled fact was judged. `judged` counts them, `passed` those judged `yes` and `unclear` those the judge could not tell, which count as failed. `rate` is the pass rate, absent when the store holds no fact to draw; `lower` and `upper` are its Wilson interval at 95 %, 0 and 1 then. `cost_usd` is what the judge's model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. `revision` and `seed` draw the same sample again.
+    /// Every sampled fact was put to the judge. `judged` counts those it gave a verdict, `passed` those judged `yes` and `unclear` those the judge could not tell, which count as failed; `unjudged` counts those it gave no verdict in two calls, which count as neither. `rate` is `passed` of `judged`, absent when no fact was judged (the store holds no fact to draw, or every fact is `unjudged`); `lower` and `upper` are its Wilson interval at 95 %, 0 and 1 then. `cost_usd` is what the judge's model calls cost in USD, absent as soon as one answer carried no cost and never 0 for it. `revision` and `seed` draw the same sample again.
     Measured {
         /// The `cortex.instance.QualityMeasured` this outcome publishes.
         quality_measured: QualityMeasured,
@@ -2992,6 +2994,8 @@ pub struct QualityMeasured {
     pub passed: i64,
     /// `unclear` — `Integer`.
     pub unclear: i64,
+    /// `unjudged` — `Integer`.
+    pub unjudged: i64,
     /// `rate` — `Optional<Decimal>`.
     pub rate: Option<crate::primitives::Decimal>,
     /// `lower` — `Decimal`.

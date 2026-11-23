@@ -27,6 +27,15 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ### Fixed
 
+- **`cortex quality` no longer counts an unanswered fact as a failure.** A fact the judge's answer
+  gave no verdict was written `unclear` and counted as failed, so a judge that left many facts
+  unanswered made the rate far too low. Such a fact is now asked once more, after the last
+  batch, in a later judge call; still without a verdict it is `unjudged`: written so in
+  `verdicts.jsonl`, not sent to `ekr fact-quality`, and outside the rate. `judged`, the rate's
+  denominator, counts only the facts given a verdict, and the `measured` line and
+  `QualityMeasured` carry the new `unjudged`. Each judge call keeps its request (`prompt.txt`)
+  and the answer before any placeholder is restored (`answer.json`) in
+  `quality/<stamp>/batch-<n>/`, which stayed empty before (story `quality-missing-verdicts`).
 - **Redaction takes time linear in the matches.** Each match a redaction class found was checked
   against every match found before it, so a text of many matches, such as links in brackets
   back to back, took time quadratic in their number (4x the links, 14x the time). The check is a
