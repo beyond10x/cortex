@@ -2935,7 +2935,8 @@ fn run_source(
                 "facts_reapplied": report.facts_reapplied,
                 "facts_history": report.facts_history,
                 "masked": report.masked,
-                "stopped": report.stopped,
+                "stopped": source_ran.stopped,
+                "documents_left": source_ran.documents_left,
             });
             // The run's model calls and the tokens they reported, as its `SourceRan` carries them.
             for (key, value) in [

@@ -19,7 +19,9 @@
 //! for this spec), and, in the result, its `splits` (`story:batch-fits-model-window`), and, in
 //! the result, `facts_reapplied` (`story:replacement-applied-as-assertion`). `create --no-units`
 //! has since named no viewer address, as it starts no viewer (`view: null`,
-//! `story:runbook-probe-fixes`); the fixture's `create` carries that.
+//! `story:runbook-probe-fixes`); the fixture's `create` carries that. The result has since
+//! gained `documents_left` (`0` here: the run applies both wanted documents,
+//! `story:run-report-cap-and-refusals`).
 
 mod common;
 

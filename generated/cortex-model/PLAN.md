@@ -1,7 +1,7 @@
 <!--
   generated from cortex v1
-  model digest 3658d0f61adb41e624825fb5e0514acb871635dcdd64c9ff1a12a5906e551a81
-  contract digest 1023826750e2c71c1cf956c23d0bfc11689b75f00ca24f802952d46aa5db4360
+  model digest 694b8f809382b7da187a2a4c810de8fc740f8f2257ec1eadda9d461bcd4bc9ac
+  contract digest 1d95c2bf490d3041d67e93e23ded8ec96d0e633000f121e9edaa3e7a31f1e926
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1

@@ -328,6 +328,8 @@ fn event(e: PublishedEvent) -> (String, Value) {
                 "source_id": e.source_id.0,
                 "documents_new": e.documents_new,
                 "documents_applied": e.documents_applied,
+                "documents_left": e.documents_left,
+                "stopped": e.stopped,
                 "facts_reapplied": e.facts_reapplied,
                 "cost_usd": e.cost_usd.map(|c| c.0),
                 "cost_counted": e.cost_counted,

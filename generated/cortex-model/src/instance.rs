@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 3658d0f61adb41e624825fb5e0514acb871635dcdd64c9ff1a12a5906e551a81
-// contract digest 1023826750e2c71c1cf956c23d0bfc11689b75f00ca24f802952d46aa5db4360
+// model digest 694b8f809382b7da187a2a4c810de8fc740f8f2257ec1eadda9d461bcd4bc9ac
+// contract digest 1d95c2bf490d3041d67e93e23ded8ec96d0e633000f121e9edaa3e7a31f1e926
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -2781,7 +2781,7 @@ pub enum RunSourceOutcome {
     },
     /// `ran` — otherwise.
     ///
-    /// Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it. `cost_counted` is false behind a model gateway, where `cost_usd` is as reported and bounded nothing.
+    /// Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. A run that `max_documents_per_run` capped has `stopped` `document-cap` and counts in `documents_left` the wanted documents it left for the next run; a run that applied every wanted document has no `stopped` and `documents_left` 0. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it. `cost_counted` is false behind a model gateway, where `cost_usd` is as reported and bounded nothing.
     Ran {
         /// The `cortex.instance.SourceRan` this outcome publishes.
         source_ran: SourceRan,
@@ -3117,6 +3117,10 @@ pub struct SourceRan {
     pub documents_new: i64,
     /// `documents_applied` — `Integer`.
     pub documents_applied: i64,
+    /// `documents_left` — `Integer`.
+    pub documents_left: i64,
+    /// `stopped` — `Optional<String>`.
+    pub stopped: Option<String>,
     /// `facts_reapplied` — `Integer`.
     pub facts_reapplied: i64,
     /// `cost_usd` — `Optional<Decimal>`.

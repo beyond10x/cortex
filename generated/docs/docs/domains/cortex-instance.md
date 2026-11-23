@@ -1,7 +1,7 @@
 <!--
 generated from cortex v1
-model digest 3658d0f61adb41e624825fb5e0514acb871635dcdd64c9ff1a12a5906e551a81
-contract digest slice-sha256/2:3a139a25102878f0475de6b7051593605086b38a417171c5619de128dc6ca221
+model digest 694b8f809382b7da187a2a4c810de8fc740f8f2257ec1eadda9d461bcd4bc9ac
+contract digest slice-sha256/2:8e69514cf11b93180f72582debbd38f22c96cb701b8521350b60893a961ffde2
 do not edit: regenerate with `ess generate`
 -->
 
@@ -1280,7 +1280,7 @@ It has 15 outcomes.
 
 **`model-unavailable`** — The source's status records the outcome and its reason, and the scheduler sends no RecordFailure: the model, not the source, failed, so the failure is not counted and never disables the source, however often the model is down. The batches before it stay applied; the rest are extracted by a later run. Decided outside the input: The run's model cannot be reached: its process cannot be started, its connection is refused, the server behind the gateway has not loaded the model, or the gateway answers HTTP 502, 503, 504 or 529 (overloaded). No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.ModelUnavailable`, carrying `cause` and `reason`. It emits nothing. It sets `last_outcome` from `"model-unavailable"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
-**`ran`** — Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it. `cost_counted` is false behind a model gateway, where `cost_usd` is as reported and bounded nothing. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceRan`. It sets `runs` from `its previous value plus 1`, `consecutive_failures` from `"0"`, `last_outcome` from `"ran"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test reaches it by constructing an input that satisfies no other outcome's condition.
+**`ran`** — Every new or changed document within the policy's limits was extracted and applied, in batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no model was called. A run that `max_documents_per_run` capped has `stopped` `document-cap` and counts in `documents_left` the wanted documents it left for the next run; a run that applied every wanted document has no `stopped` and `documents_left` 0. `daily_ceiling_reached` is true when the run stopped before a batch because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its tokens reached `model.daily_ceiling_tokens`: the batches before it are applied, the rest are extracted by a run on a later day. A run stopped because an answer's tokens could not be counted does not set it. `cost_counted` is false behind a model gateway, where `cost_usd` is as reported and bounded nothing. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceRan`. It sets `runs` from `its previous value plus 1`, `consecutive_failures` from `"0"`, `last_outcome` from `"ran"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
 **`no-such-source`** — Nothing ran. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.SourceNotFound`, carrying `source_id`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
 
@@ -1590,6 +1590,8 @@ It carries:
 - `source_id` — `cortex.instance.SourceId`
 - `documents_new` — `Integer`
 - `documents_applied` — `Integer`
+- `documents_left` — `Integer`
+- `stopped` — `Optional<String>`, which may be absent
 - `facts_reapplied` — `Integer`
 - `cost_usd` — `Optional<Decimal>`, which may be absent
 - `cost_counted` — `Boolean`
@@ -2083,4 +2085,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `3658d0f61adb41e624825fb5e0514acb871635dcdd64c9ff1a12a5906e551a81` · contract digest `slice-sha256/2:3a139a25102878f0475de6b7051593605086b38a417171c5619de128dc6ca221`. Do not edit this file; change the specification and regenerate it with `ess generate`.
+Generated from cortex v1 · model digest `694b8f809382b7da187a2a4c810de8fc740f8f2257ec1eadda9d461bcd4bc9ac` · contract digest `slice-sha256/2:8e69514cf11b93180f72582debbd38f22c96cb701b8521350b60893a961ffde2`. Do not edit this file; change the specification and regenerate it with `ess generate`.
