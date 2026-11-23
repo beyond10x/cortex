@@ -1050,6 +1050,23 @@ impl<'a> Source<'a> {
         })
     }
 
+    /// How the record whose identity is `key` is mapped, as one hash
+    /// ([`crate::state::Seen::fields_hash`]): its scope's mapping, a child's `time` and relation to
+    /// its parent, the links whose changes it is, and whether it is a link's tag. A record whose
+    /// hash differs from the one it was applied with is applied again at once (finding 4 of the
+    /// 0.7.2 review).
+    pub fn mapping_hash(&self, key: &str) -> String {
+        let scope = self.scope(key);
+        crate::state::text_hash(&format!(
+            "{:?}\n{:?}\n{:?}\n{:?}\n{}",
+            scope.mapping,
+            scope.time,
+            scope.parent.as_ref().map(|(relation, _)| relation),
+            scope.links,
+            scope.named
+        ))
+    }
+
     /// The scope of the record whose identity is `key`.
     fn scope(&self, key: &str) -> Scope<'a> {
         match self.child_of(key) {

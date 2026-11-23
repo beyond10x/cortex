@@ -642,6 +642,7 @@ impl Ports {
                     held: c.held as i64,
                     unchanged: c.unchanged as i64,
                     unread: c.unread,
+                    skipped: c.skipped,
                 },
             },
         }

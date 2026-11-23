@@ -834,6 +834,7 @@ impl Scenario {
                             "held": f.held,
                             "unchanged": f.unchanged,
                             "unread": f.unread,
+                            "skipped": f.skipped,
                         }),
                     ));
                     ("fetched", None)

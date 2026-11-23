@@ -2956,6 +2956,7 @@ fn run_source(
                     "held": f.held,
                     "unchanged": f.unchanged,
                     "unread": f.unread,
+                    "skipped": f.skipped,
                 }),
             },
             None,

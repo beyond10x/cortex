@@ -36,6 +36,12 @@
       "items": {
         "type": "string"
       }
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [
@@ -47,14 +53,15 @@
     "changed",
     "held",
     "unchanged",
-    "unread"
+    "unread",
+    "skipped"
   ],
   "additionalProperties": false,
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "bbff72fdf900b1993ba797c3c116b8627873447cfe6db020eb0e539995aa8356",
-    "contract_digest": "slice-sha256/2:7e8567b5f588ae4149a000b34f5caa704608b4edd35b81f44075ca9fe94925aa",
+    "source_digest": "97b14b7ce2bdcf445f2d5c0f9f2e44f20f604b57e63cb5f974d764bc849469e5",
+    "contract_digest": "slice-sha256/2:6342efb28d6908ad2c90cf13e8fcd0ca765815a7c7339e16caefea5195eac725",
     "regenerate": "ess generate"
   },
   "$defs": {
