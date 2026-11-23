@@ -1,16 +1,12 @@
 {
   "format": "ess-diff-acknowledgements/1",
-  "before": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
+  "before": "b77e573a24f45c33d239857ef5217a99252c69722f75361972dcf01ec51cdf99",
   "after": "bee510d287c1dfa93c637e46f7bd0e360af14949191c4fc99301cd3a041cd054",
   "acknowledged": [
     "command/cortex.instance.EnableSource/input-added/no_wait",
     "command/cortex.instance.EnableSource/outcome-added/busy",
     "command/cortex.instance.RemoveInstance/input-added/no_wait",
     "command/cortex.instance.RemoveInstance/outcome-added/busy",
-    "command/cortex.instance.RunSource/input-added/no_wait",
-    "command/cortex.instance.RunSource/outcome-added/busy",
-    "command/cortex.instance.RunSource/input-added/path",
-    "command/cortex.instance.RunSource/outcome-added/path-refused",
     "command/cortex.instance.UpdateInstance/input-added/no_wait",
     "command/cortex.instance.UpdateInstance/outcome-added/busy"
   ]

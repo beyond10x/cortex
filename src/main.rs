@@ -2933,6 +2933,7 @@ fn run_source(
                 "facts_refused": report.facts_refused,
                 "parts_rejected": report.parts_rejected,
                 "facts_reapplied": report.facts_reapplied,
+                "facts_history": report.facts_history,
                 "masked": report.masked,
                 "stopped": report.stopped,
             });
