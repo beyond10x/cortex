@@ -5,6 +5,18 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+### Fixed
+
+- **Redaction takes time linear in the matches.** Each match a redaction class found was checked
+  against every match found before it, so a text of many matches, such as links in brackets
+  back to back, took time quadratic in their number (4x the links, 14x the time). The check is a
+  binary search now; what is replaced is unchanged.
+- **A commit or a version after `@` at the end of a text is no email address.** `Email` reads an
+  address a provider cut before its top-level domain at the very end of a text (`jane.doe@exam`).
+  It also read a document key such as `group/repo@3f2a9c1` there, and the model was shown
+  `[Email-1]` for it. What is left of a cut address's domain now holds no digit, so a commit id
+  or a version (`tool@1.4.2`) after `@` is kept.
+
 ## 0.8.0 — 2026-11-23
 
 ### Added
@@ -56,15 +68,6 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
 
 ### Fixed
 
-- **Redaction takes time linear in the matches.** Each match a redaction class found was checked
-  against every match found before it, so a text of many matches, such as links in brackets
-  back to back, took time quadratic in their number (4x the links, 14x the time). The check is a
-  binary search now; what is replaced is unchanged.
-- **A commit or a version after `@` at the end of a text is no email address.** `Email` reads an
-  address a provider cut before its top-level domain at the very end of a text (`jane.doe@exam`).
-  It also read a document key such as `group/repo@3f2a9c1` there, and the model was shown
-  `[Email-1]` for it. What is left of a cut address's domain now holds no digit, so a commit id
-  or a version (`tool@1.4.2`) after `@` is kept.
 - A structured source with `dropped: Supersede` retracts a record's values only when a whole
   listing no longer lists it. A Connectors operation asked about the run's window (`{since}` or
   another window placeholder in an input, or `stop_older_than_since`) supersedes the changed
