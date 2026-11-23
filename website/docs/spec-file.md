@@ -12,6 +12,10 @@ One YAML file in the `cortex.instance/1` format defines one instance. Its exact 
 Schema is [`instance-spec.schema.json`](https://beyond10x.github.io/cortex/schemas/instance-spec.schema.json),
 and `cortex schema` prints the same document. This page says what each section does.
 
+A field the JSON Schema types `integer` takes any number with no fractional part, as JSON Schema
+counts one: `timeout_s: 900`, `900.0` and `9e2` are one value. A fraction (`900.5`) is refused,
+naming the field.
+
 The repository's `examples/example.yaml` is a complete file with two web sources.
 `examples/agent-tooling.yaml` is another, with its own seed ontology
 (`examples/seed/agent-tooling.yaml`): a daily news search on three queries, a weekly crawl of the
