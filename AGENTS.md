@@ -15,7 +15,7 @@ and every secret belong to Connectors (`connectors` binary); extraction is a too
 | `spec/` | the ESS specification, the source of truth |
 | `generated/` | everything `ess` generates from `spec/`; never edited by hand |
 | `src/` | the `cortex-cli` crate: the `cortex` binary and its library |
-| `tests/` | `conformance.rs` (the suite of `spec/suite.json`) and `e2e.rs` (the binary end to end) |
+| `tests/` | the one integration-test binary: `main.rs` declares each file of `it/` as a module (`it/conformance.rs` runs the suite of `spec/suite.json`, `it/e2e.rs` the binary end to end); `common/` is the shared end-to-end world, `fixtures/` its data |
 | `crates/cortex-docs/` | generates and checks the derived files of the documentation site |
 | `website/` | the Docusaurus documentation site |
 | `examples/` | a complete spec file and its seed schema |
@@ -44,7 +44,8 @@ A change here that moves none of these is a question for the operator, not a tas
 | `task docs-generate` | regenerate the derived site files (`cortex-docs generate`) |
 | `task docs-check` | fail when a derived site file is missing, stale or edited by hand |
 | `task website` | build the site (`npm ci`, `npm run build` in `website/`), as CI does |
-| `task build`, `task test` | release build; every test of the workspace |
+| `task build` | release build |
+| `task test` | every test of the workspace with cargo-nextest, after `task test-build` builds the test binaries: a test over 60 s is killed and fails, and the step prints its wall time and its ten slowest tests; `task test TEST_BUDGET=enforce` also ends the run at 120 s and fails it |
 | `aep plan artifact validate` | validate the planning store |
 
 ## The specification comes first
@@ -58,7 +59,7 @@ the source of truth for every noun, command, outcome, error and event.
   --abbrev=0 --match 'v[0-9]*'`, so CI checks out with `fetch-depth: 0`) through
   `ess verify diff --fail-on breaking-or-unknown`, and fails on a breaking or unknown change
   that `spec/compat-ack.json` does not acknowledge. Review each such change, add its id to
-  `compat-ack.json` and its reason as a row of `spec/compat-ack.md` (`tests/compat_ack.rs` holds
+  `compat-ack.json` and its reason as a row of `spec/compat-ack.md` (`tests/it/compat_ack.rs` holds
   the two files to each other). The acknowledgements are bound to the spec digests of both sides,
   so every change to `spec/` also rewrites `after` in `compat-ack.json`; a stale file is refused,
   and the refusal names the digest it compared. Never acknowledge a change you have not reviewed
@@ -211,9 +212,45 @@ this repository and published by the organisation's reusable workflow.
 - `task check` is the gate (see [Commands](#commands)); `STATUS.md` records its last result.
 - Format with `cargo fmt -p cortex-cli -p cortex-docs`. `cargo fmt --all` also rewrites the
   generated crates, which are path dependencies, and `task drift` then fails.
-- `tests/conformance.rs` runs every scenario of `spec/suite.json` (137) in process; `tests/e2e.rs`
+- `tests/it/conformance.rs` runs every scenario of `spec/suite.json` (137) in process; `tests/it/e2e.rs`
   drives the binary end to end; the clap ⇔ spec test in `src/main.rs` holds the command line to
   the commands, inputs and views `spec/` puts on it.
+- **One integration-test binary.** Every integration test is a module of `tests/main.rs`, in
+  `tests/it/<name>.rs`. A new test file goes to `tests/it/`, gets a `mod <name>;` line in the
+  `mod it` block of `tests/main.rs` (in the order `cargo fmt` keeps), and reaches the shared
+  world with `use crate::common;` or `use crate::common::{World, ...};`, never `mod common;`.
+  `tests/it/layout.rs` fails on a `.rs` file beside `tests/main.rs` (it would be a binary of its
+  own) and on a file under `tests/it/` without its `mod` line (it would never run). Run one file
+  with `cargo nextest run --test main it::<name>::`. A path `tests/<name>.rs` in `spec/`, the
+  CHANGELOG or a comment written before this layout means `tests/it/<name>.rs`.
+- **Test budget.** `task test` runs `cargo nextest run` (cargo-nextest 0.9.143, the version CI
+  installs; `.config/nextest.toml` requires it): each test runs in its own process, a test over
+  60 s is killed and fails (`slow-timeout`), and the task prints the run's wall time and its ten
+  slowest tests from nextest's JUnit report (`target/nextest/<profile>/junit.xml` in the tree).
+  The 120 s step budget is a switch, `TEST_BUDGET` in `Taskfile.yml`: `enforce` runs the nextest
+  profile `budget` (`global-timeout = "120s"`) and fails the step over 120 s; `report`, the
+  default until the suite fits, prints an over-budget line and passes. Measured 2026-11-23: the
+  1,313 tests that run take 4,623 test-seconds (313 tests over 5 s hold 3,307 of them; each
+  starts real `ekr` processes, and the PostgreSQL tests start one container per test), so the
+  run needs about 585 s at 8 threads on a loaded workstation. Making them fit is a defect with a
+  story of its own; set the default to `enforce` once it lands. Building the test binaries is
+  `task test-build` and outside the 120 s. An expensive product (a synthesis, a build, a server)
+  is made once, never per test: under nextest a `OnceLock` is per test. Time a new test; one over
+  5 s is named with its time in the change's report.
+- Test builds carry no debug info: `.cargo/config.toml` sets `debug = false` for the `dev` and
+  `test` profiles (a cargo config file wins over the manifest and over a user-wide
+  `line-tables-only`). `readelf -S` on the test binary shows no `.debug_*` section. The same
+  file builds every dependency at `opt-level = 2` (cortex-cli itself stays at 0): the masking and
+  HTTP tests spend their time in regex and hyper. `task test` runs 8 tests at once
+  (`TEST_THREADS`), as most tests wait on child processes, timeouts and containers.
+- `rust-toolchain.toml` pins rustc (1.99.0, with rustfmt and clippy) for the local gate and every
+  workflow; each workflow installs it with `rustup toolchain install`. Change the pin there only.
+- **Planning-only pull requests skip the build.** `.github/workflows/check.yml` keeps its required
+  job `task check`, and runs `.github/scripts/scope.sh` over the paths the pull request changes:
+  when every path is `.engineering/**` or a `*.md` outside `website/`, `spec/`, `generated/`,
+  `src/`, `crates/`, `tests/` and `examples/`, it validates the planning store and skips the
+  toolchain, the build and `task check`. `tests/it/ci_scope.rs` holds both sides of that list;
+  change the two together.
 - Build into this tree's own `target/` (leave `CARGO_TARGET_DIR` unset), and end each tree with
   `worktree finish --discard-cache --archive <tree>`, so its build cache goes with it. Check
   `df -h /` first; do not start a build with less than 10 GB free. Before a test run counts as
