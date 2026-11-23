@@ -616,9 +616,16 @@ fn dispatch(app: &mut App, ctx: &Ctx, command: Command) -> ExitCode {
             Ok(rows) => {
                 // The version of `<home>/bin/cortex`, which every source unit of the home runs.
                 let binary_version = schedule::binary_version(&ctx.home.root);
+                let systemd = Systemd::from_env(&ctx.home.root);
                 for row in rows {
                     let layout = Layout::new(ctx.home.instance_dir(&row.name.0));
-                    let port = layout.load_meta().map(|m| m.view_port).ok();
+                    // An instance with no viewer unit of this home (`--no-units`, or removed)
+                    // has no address to name.
+                    let port = layout
+                        .load_meta()
+                        .map(|m| m.view_port)
+                        .ok()
+                        .filter(|_| systemd.has_view(&row.name.0));
                     println!(
                         "{}",
                         json!({
@@ -1227,6 +1234,9 @@ fn create(
                     install_sources(ctx, &systemd, &name, &spec, replace_binary, &mut detail)
                 });
                 units_detail(&systemd, installed, &mut detail);
+            } else {
+                // No viewer was started, so no address is named.
+                detail["view"] = Value::Null;
             }
             Done {
                 outcome: if partial { "partial" } else { "created" },
@@ -1562,6 +1572,9 @@ fn adopt(app: &mut App, ctx: &Ctx, a: &Adoption) -> ExitCode {
                     install_sources(ctx, &systemd, &name, &spec, replace_binary, &mut detail)
                 });
                 units_detail(&systemd, installed, &mut detail);
+            } else {
+                // No viewer was started, so no address is named.
+                detail["view"] = Value::Null;
             }
             Done {
                 outcome: "adopted",

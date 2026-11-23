@@ -1338,6 +1338,10 @@ fn process_in(
         }
         let dir = run_dir.join(format!("batch-{n}"));
         n += 1;
+        // The prompt as sent: under a redaction policy it holds placeholders, never the values
+        // they stand for, and the mapping is never written. Kept for a failed call too.
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join("prompt.txt"), &prompt);
         let asked = model.ask(&dir.join("claude"), &schema, &prompt, remaining);
         let (calls, usage) = match &asked {
             Ok(answer) => (answer.calls, answer.usage),
@@ -1487,14 +1491,45 @@ fn process_in(
             }
         };
         report.truncated += batch.iter().filter(|i| cut.contains(&i.doc.key)).count();
+        // The model's raw answer, before anything is restored: under a redaction policy it holds
+        // the placeholders it was shown, never the values they stand for.
+        let _ = std::fs::write(
+            dir.join("answer.json"),
+            serde_json::to_string_pretty(&answer.document).unwrap_or_default(),
+        );
         let mut restored = answer.document.clone();
-        // With a policy, the batch directory keeps only the restored `extraction.yaml`: the
-        // prompt and the raw answer carry placeholders, and beside it they would give the mapping.
+        // With a policy, the batch directory keeps no EKR report: it holds the restored values
+        // beside the prompt's placeholders.
         let pseudonymised = pseudonyms.is_some();
+        // A placeholder where a node type, property or relation name goes is restored in any
+        // shape the model wrote it; one that stands for no value of the batch fails the batch,
+        // as EKR would refuse every part naming the type it does not know.
+        let mut unnamed: Vec<String> = Vec::new();
         if let Some(p) = &pseudonyms {
+            extract::type_names(&mut restored, &mut |position, name| {
+                for left in p.restore_name(name) {
+                    let at = format!("{left} as a {position}");
+                    if !unnamed.contains(&at) {
+                        unnamed.push(at);
+                    }
+                }
+            });
             report.unrestored += p.restore(&mut restored);
         }
         drop(pseudonyms);
+        if !unnamed.is_empty() {
+            let why = format!(
+                "the model wrote a placeholder that stands for no value of the batch where a \
+                 type name goes: {}; batch {} is not applied",
+                unnamed.join(", "),
+                n - 1
+            );
+            if report.documents_applied == 0 {
+                return Err(Failure::Extract(why));
+            }
+            report.stopped = Some(why);
+            break;
+        }
         // A tag with no name cannot be written as YAML; the answer is refused as one that is not
         // a valid document is.
         if let Some(at) = extract::bare_tag(&restored) {
@@ -1522,13 +1557,6 @@ fn process_in(
         report.facts_refused += refused;
         let path = dir.join("extraction.yaml");
         let text = serde_yaml_ng::to_string(&doc).expect("YAML");
-        if !pseudonymised {
-            let _ = std::fs::write(dir.join("prompt.txt"), &prompt);
-            let _ = std::fs::write(
-                dir.join("model.json"),
-                serde_json::to_string_pretty(&answer.document).unwrap_or_default(),
-            );
-        }
         std::fs::write(&path, text).map_err(|e| Failure::Apply(e.to_string()))?;
         before.take()?;
         let applied = match store.apply(&path) {
@@ -2963,6 +2991,10 @@ fn pseudonymise(
     }
     for name in known_names(known) {
         p.reserve_name(name);
+    }
+    // The ontology's names are the types the model writes back; `RareName` never takes them.
+    for line in known.node_types.iter().chain(&known.edge_types) {
+        p.keep_names(line);
     }
     let shown = batch
         .iter()
