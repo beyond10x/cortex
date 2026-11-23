@@ -57,9 +57,11 @@ fn adv_the_deadline_holds_when_connectors_exits_and_a_descendant_keeps_its_outpu
         .trim()
         .parse()
         .unwrap();
+    // The descendant holds the pipe 15 s. A run that ended within 8 s did not wait for it; the
+    // deadline (1 s) leaves 7 s of room for the run's own end on a loaded machine.
     let waited_ms = ended - started;
     assert!(
-        waited_ms <= 3_000,
+        waited_ms < 8_000,
         "the run ended {waited_ms} ms after the connectors call started, with \
          CORTEX_CONNECTORS_TIMEOUT_S=1: the call was waited for until its descendant closed the \
          pipe (exit {code}, {ran})"

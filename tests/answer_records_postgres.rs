@@ -778,7 +778,7 @@ fn answer_records_live_in_a_postgres_schema_of_their_own_and_never_in_ekrs() {
         (0, text_reply("Example Labs [node:n-1].", (200, 20, 60))),
         (0, text_reply("Fast answer.", (5, 2, 0))),
         (0, broken_reply()),
-        (2500, text_reply("Slow answer.", (5, 2, 0))),
+        (3100, text_reply("Slow answer.", (5, 2, 0))),
         (0, text_reply("Another answer.", (5, 2, 0))),
     ]);
     let spec = world.spec(
@@ -786,7 +786,7 @@ fn answer_records_live_in_a_postgres_schema_of_their_own_and_never_in_ekrs() {
         &config,
         &pg,
         "cortex_ask",
-        "  slow_after_ms: 1500\n  retention_days: 1",
+        "  slow_after_ms: 3000\n  retention_days: 1",
     );
     let mut printed = String::new();
     let (first, voted, failed, slow, old) = {

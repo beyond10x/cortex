@@ -2332,86 +2332,119 @@ mod tests {
     /// `story:idle-supersede-source-cheap`: `ended` indexes the assertions that stay by record,
     /// subject and predicate, so each one ended finds its replacement without a scan of every
     /// assertion of the source, and when nothing is ended it reads no edge and builds no set of the
-    /// store's assertions. 20,000 records each with a superseded and a current value, beside
-    /// 20,000 assertions of other writers: a scan per ended assertion is 20,000 × 40,000 steps,
-    /// a minute in a debug build; indexed, it is well under the bound.
+    /// store's assertions. A store of `n` records each with a superseded and a current value,
+    /// beside `n` assertions of other writers, and the same store at 8x the records: indexed,
+    /// `ended` takes about 8x the time on the larger one (its maps add a log factor, about 11x);
+    /// a scan per ended assertion takes 64x (at 20,000 records, 20,000 × 40,000 steps, a minute
+    /// in a debug build). The bound, 8^1.5, sits 2.8x from linear and 2.8x from quadratic, and
+    /// the times compared are the least CPU time of two runs of both sizes taken in turns, so
+    /// load on the machine does not reach it.
     #[test]
     fn ended_over_a_large_store_indexes_what_stays_and_ends_nothing_without_reading_edges() {
         use crate::ekr::Operation;
+        use rustix::time::{clock_gettime, ClockId};
+        use std::time::Duration;
+        const SMALL: usize = 200;
+        const GROWTH: usize = 8;
+        const LINEAR_BOUND: f64 = 22.6;
         let m = mapping();
         let s = source(&m);
-        const RECORDS: usize = 20_000;
-        const FOREIGN: usize = 20_000;
-        let mut assertions = serde_json::Map::new();
-        let mut evidence = serde_json::Map::new();
-        let property = |id: &str, subject: &str, value: &str, ev: &str, from: i64| {
-            json!({"id": id, "subject": {"Node": subject}, "predicate": {"Property": "p-age"},
-                "object": {"Value": {"value_kind": "String", "value": value}},
-                "evidence": [ev], "lifecycle": "Active", "valid_time": {"from": from, "to": null}})
-        };
-        for n in 0..RECORDS {
-            let ev = format!("e-{n}");
-            evidence.insert(
-                ev.clone(),
-                json!({"source": {"HumanStatement": {"identity": format!("record:dir:people.list:P-{n}")}}}),
-            );
-            let subject = format!("n{n}");
-            let (old, new) = (format!("old-{n}"), format!("new-{n}"));
-            assertions.insert(old.clone(), property(&old, &subject, "36", &ev, 1));
-            assertions.insert(new.clone(), property(&new, &subject, "37", &ev, 2));
-        }
-        evidence.insert(
-            "w".into(),
-            json!({"source": {"HumanStatement": {"identity": "https://example.org/a"}}}),
-        );
-        for n in 0..FOREIGN {
-            let id = format!("f-{n}");
-            assertions.insert(id.clone(), property(&id, "web", "1", "w", 1));
-        }
-        let snapshot = json!({"graph": {"graph": {
-            "assertions": assertions, "edges": {}, "nodes": {}, "evidence": evidence}}});
         let ontology = json!({"node_types": [{"properties": [{"id": "p-age", "name": "age"}]}],
             "edge_types": []});
-        let docs: Vec<_> = (0..RECORDS)
-            .map(|n| {
-                let mut d = issued(
-                    &s,
-                    "x",
-                    json!({"id": format!("P-{n}"), "name": "N", "age": 37}),
-                )
-                .doc;
-                d.hash = None;
-                d
-            })
-            .collect();
-        let listed = s.listed(&docs);
+        // The store of `records` records and as many foreign assertions, the same store with
+        // nothing ended (each record's superseded value gone, an edge added), and the listing.
+        let store = |records: usize| {
+            let mut assertions = serde_json::Map::new();
+            let mut evidence = serde_json::Map::new();
+            let property = |id: &str, subject: &str, value: &str, ev: &str, from: i64| {
+                json!({"id": id, "subject": {"Node": subject}, "predicate": {"Property": "p-age"},
+                    "object": {"Value": {"value_kind": "String", "value": value}},
+                    "evidence": [ev], "lifecycle": "Active",
+                    "valid_time": {"from": from, "to": null}})
+            };
+            for n in 0..records {
+                let ev = format!("e-{n}");
+                evidence.insert(
+                    ev.clone(),
+                    json!({"source": {"HumanStatement":
+                        {"identity": format!("record:dir:people.list:P-{n}")}}}),
+                );
+                let subject = format!("n{n}");
+                let (old, new) = (format!("old-{n}"), format!("new-{n}"));
+                assertions.insert(old.clone(), property(&old, &subject, "36", &ev, 1));
+                assertions.insert(new.clone(), property(&new, &subject, "37", &ev, 2));
+            }
+            evidence.insert(
+                "w".into(),
+                json!({"source": {"HumanStatement": {"identity": "https://example.org/a"}}}),
+            );
+            for n in 0..records {
+                let id = format!("f-{n}");
+                assertions.insert(id.clone(), property(&id, "web", "1", "w", 1));
+            }
+            let snapshot = json!({"graph": {"graph": {
+                "assertions": assertions, "edges": {}, "nodes": {}, "evidence": evidence}}});
+            let mut idle = snapshot.clone();
+            idle["graph"]["graph"]["assertions"]
+                .as_object_mut()
+                .unwrap()
+                .retain(|id, _| !id.starts_with("old-"));
+            idle["graph"]["graph"]["edges"] = json!({"x": {"id": "x", "source": "n1",
+                "type_id": "t", "target": "n2"}});
+            let docs: Vec<_> = (0..records)
+                .map(|n| {
+                    let mut d = issued(
+                        &s,
+                        "x",
+                        json!({"id": format!("P-{n}"), "name": "N", "age": 37}),
+                    )
+                    .doc;
+                    d.hash = None;
+                    d
+                })
+                .collect();
+            (snapshot, idle, s.listed(&docs))
+        };
+        let small = store(SMALL);
+        let large = store(SMALL * GROWTH);
 
-        let started = std::time::Instant::now();
-        let ops = s.ended(&snapshot, &ontology, &listed, &BTreeSet::new(), &[]);
-        let took = started.elapsed();
-        assert_eq!(ops.len(), RECORDS);
+        let ops = s.ended(&large.0, &ontology, &large.2, &BTreeSet::new(), &[]);
+        assert_eq!(ops.len(), SMALL * GROWTH);
         assert!(ops.iter().all(|op| matches!(op,
             Operation::Supersede { assertion, by, effective_from: 2 }
                 if assertion.strip_prefix("old-") == by.strip_prefix("new-"))));
-        assert!(
-            took < std::time::Duration::from_secs(20),
-            "ended took {took:?} for {RECORDS} records"
-        );
-
         // Nothing ended: no operation, whatever the edges hold.
-        let mut idle = snapshot;
-        let a = idle["graph"]["graph"]["assertions"]
-            .as_object_mut()
-            .unwrap();
-        a.retain(|id, _| !id.starts_with("old-"));
-        idle["graph"]["graph"]["edges"] = json!({"x": {"id": "x", "source": "n1",
-            "type_id": "t", "target": "n2"}});
-        let started = std::time::Instant::now();
         assert_eq!(
-            s.ended(&idle, &ontology, &listed, &BTreeSet::new(), &[]),
+            s.ended(&large.1, &ontology, &large.2, &BTreeSet::new(), &[]),
             []
         );
-        assert!(started.elapsed() < std::time::Duration::from_secs(20));
+
+        for (what, at) in [("ended", 0), ("idle", 1)] {
+            // The CPU time of this thread: it stands still while the thread waits for a
+            // processor, so load on the machine does not lengthen what is measured.
+            let cpu_time = || {
+                let t = clock_gettime(ClockId::ThreadCPUTime);
+                Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
+            };
+            let time = |(snapshot, idle, listed): &(Value, Value, BTreeMap<String, Listed>)| {
+                let store = if at == 0 { snapshot } else { idle };
+                let t = cpu_time();
+                let _ = s.ended(store, &ontology, listed, &BTreeSet::new(), &[]);
+                cpu_time().saturating_sub(t)
+            };
+            let (mut t_small, mut t_large) = (Duration::MAX, Duration::MAX);
+            for _ in 0..2 {
+                t_small = t_small.min(time(&small));
+                t_large = t_large.min(time(&large));
+            }
+            let ratio = t_large.as_secs_f64() / t_small.as_secs_f64().max(1e-9);
+            eprintln!("{what}: {ratio:.1}x the CPU time ({t_small:?} -> {t_large:?})");
+            assert!(
+                ratio < LINEAR_BOUND,
+                "{what}: {GROWTH}x the records took {ratio:.1}x the CPU time \
+                 ({t_small:?} -> {t_large:?})"
+            );
+        }
     }
 
     /// A held prefix with no relation keeps every value of its records; with a relation, only the

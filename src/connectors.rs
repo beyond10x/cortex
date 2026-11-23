@@ -247,6 +247,38 @@ fn setting(name: &str, default: u64) -> u64 {
         .unwrap_or(default)
 }
 
+/// Runs `attempt_once` until it is not [`InvokeError::Unavailable`], at most `attempts` times (at
+/// least 1), pausing with `sleep` for `pause` before the second and doubling after it; `sleep`
+/// answers whether the run was asked to stop meanwhile ([`crate::terminate::sleep`]).
+fn retried<T>(
+    attempts: u64,
+    mut pause: Duration,
+    mut sleep: impl FnMut(Duration) -> bool,
+    mut attempt_once: impl FnMut() -> Result<T, InvokeError>,
+) -> Result<T, InvokeError> {
+    let attempts = attempts.max(1);
+    let mut attempt = 1;
+    loop {
+        match attempt_once() {
+            Err(InvokeError::Unavailable(m)) if attempt < attempts => {
+                if sleep(pause) {
+                    return Err(InvokeError::Terminated(format!(
+                        "it waited to try again after {m}"
+                    )));
+                }
+                pause = pause.saturating_mul(2);
+                attempt += 1;
+            }
+            Err(InvokeError::Unavailable(m)) => {
+                return Err(InvokeError::Unavailable(format!(
+                    "{m}, after {attempts} attempts"
+                )))
+            }
+            other => return other,
+        }
+    }
+}
+
 impl Connectors {
     pub fn new(bin: PathBuf) -> Self {
         Self {
@@ -404,30 +436,14 @@ impl Connectors {
     /// number of attempts. Shared by the revalidation and the profile resolution.
     fn attempts<T>(
         &self,
-        mut attempt_once: impl FnMut() -> Result<T, InvokeError>,
+        attempt_once: impl FnMut() -> Result<T, InvokeError>,
     ) -> Result<T, InvokeError> {
-        let attempts = setting("CORTEX_REVALIDATE_ATTEMPTS", 4).max(1);
-        let mut pause = Duration::from_millis(setting("CORTEX_REVALIDATE_PAUSE_MS", 5000));
-        let mut attempt = 1;
-        loop {
-            match attempt_once() {
-                Err(InvokeError::Unavailable(m)) if attempt < attempts => {
-                    if crate::terminate::sleep(pause) {
-                        return Err(InvokeError::Terminated(format!(
-                            "it waited to try again after {m}"
-                        )));
-                    }
-                    pause = pause.saturating_mul(2);
-                    attempt += 1;
-                }
-                Err(InvokeError::Unavailable(m)) => {
-                    return Err(InvokeError::Unavailable(format!(
-                        "{m}, after {attempts} attempts"
-                    )))
-                }
-                other => return other,
-            }
-        }
+        retried(
+            setting("CORTEX_REVALIDATE_ATTEMPTS", 4),
+            Duration::from_millis(setting("CORTEX_REVALIDATE_PAUSE_MS", 5000)),
+            crate::terminate::sleep,
+            attempt_once,
+        )
     }
 
     /// One attempt of [`Self::revalidate`].
@@ -681,6 +697,81 @@ mod tests {
     fn entry(adapter: &str, id: &str, profile: &str, state: &str) -> Value {
         json!({"adapter": adapter, "instance_id": "i", "connection": id, "profile": profile,
                "revision": "r1", "state": state})
+    }
+
+    /// The pauses `retried` asks for, and its answer, when attempt `n` (from 1) answers
+    /// `answer(n)`; a clock of its own, so no pause is slept.
+    fn pauses(
+        attempts: u64,
+        pause_ms: u64,
+        stop_at: Option<usize>,
+        answer: impl Fn(u64) -> Result<u64, InvokeError>,
+    ) -> (Vec<u64>, Result<u64, InvokeError>) {
+        let mut slept = Vec::new();
+        let mut n = 0;
+        let out = retried(
+            attempts,
+            Duration::from_millis(pause_ms),
+            |pause| {
+                slept.push(pause.as_millis() as u64);
+                Some(slept.len()) == stop_at
+            },
+            || {
+                n += 1;
+                answer(n)
+            },
+        );
+        (slept, out)
+    }
+
+    fn unavailable(n: u64) -> Result<u64, InvokeError> {
+        Err(InvokeError::Unavailable(format!("down {n}")))
+    }
+
+    /// The pauses are the setting, then twice it, then four times it: a mutant that doubles
+    /// before the first pause (800, 1600, 3200) is caught without a clock. The binary's cases
+    /// time the real pauses from below only.
+    #[test]
+    fn the_pauses_start_at_the_setting_and_double() {
+        let (slept, out) = pauses(4, 400, None, unavailable);
+        assert_eq!(slept, [400, 800, 1600]);
+        match out {
+            Err(InvokeError::Unavailable(m)) => assert_eq!(m, "down 4, after 4 attempts"),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_success_on_the_last_attempt_is_the_answer_and_a_refusal_is_not_retried() {
+        let (slept, out) = pauses(
+            4,
+            5000,
+            None,
+            |n| if n < 4 { unavailable(n) } else { Ok(n) },
+        );
+        assert_eq!(slept, [5000, 10_000, 20_000]);
+        assert!(matches!(out, Ok(4)), "{out:?}");
+        let (slept, out) = pauses(4, 5000, None, |_| Err(InvokeError::Lapsed("no".into())));
+        assert!(slept.is_empty());
+        assert!(matches!(out, Err(InvokeError::Lapsed(_))), "{out:?}");
+    }
+
+    #[test]
+    fn a_stop_during_a_pause_ends_the_attempts_and_zero_attempts_is_one() {
+        let (slept, out) = pauses(4, 100, Some(2), unavailable);
+        assert_eq!(slept, [100, 200]);
+        match out {
+            Err(InvokeError::Terminated(m)) => {
+                assert_eq!(m, "it waited to try again after down 2")
+            }
+            other => panic!("{other:?}"),
+        }
+        let (slept, out) = pauses(0, 100, None, unavailable);
+        assert!(slept.is_empty());
+        assert!(
+            matches!(&out, Err(InvokeError::Unavailable(m)) if m == "down 1, after 1 attempts"),
+            "{out:?}"
+        );
     }
 
     #[test]
