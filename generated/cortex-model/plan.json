@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
-    "contract_digest": "857182a81f324b2743cfc95ae1fab53d1e8a5a7f0c41dbd9fcda27ed70b7ed9d"
+    "source_digest": "8563cf8fb38412e249a98c64161d5e55432c326a82fb5301711bfd7546d34bca",
+    "contract_digest": "d8f5e38722e3da6174ee898b24720bab347ebfe6af6c44d7830edfcf84a9cace"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -1737,6 +1737,13 @@
     },
     {
       "kind": "error_type",
+      "source": "cortex.instance.SourceExists",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
       "source": "cortex.instance.SourceNotDisabled",
       "disposition": {
         "disposition": "generated"
@@ -1766,6 +1773,13 @@
     {
       "kind": "error_type",
       "source": "cortex.instance.StoreUnreadable",
+      "disposition": {
+        "disposition": "generated"
+      }
+    },
+    {
+      "kind": "error_type",
+      "source": "cortex.instance.UnitsNotStopped",
       "disposition": {
         "disposition": "generated"
       }

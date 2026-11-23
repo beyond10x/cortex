@@ -736,6 +736,13 @@ impl Scenario {
                 .unwrap()
             {
                 m::RemoveInstanceOutcome::Removed { .. } => ("removed", None),
+                m::RemoveInstanceOutcome::StopFailed { error } => (
+                    "stop-failed",
+                    Some((
+                        "UnitsNotStopped",
+                        json!({"name": error.name.0, "reason": error.reason}),
+                    )),
+                ),
                 m::RemoveInstanceOutcome::WrongState { error } => (
                     "wrong-state",
                     Some((
@@ -764,6 +771,21 @@ impl Scenario {
                 .unwrap()
             {
                 m::AddSourceOutcome::Added { .. } => ("added", None),
+                m::AddSourceOutcome::SourceExists { error } => (
+                    "source-exists",
+                    Some(("SourceExists", json!({"source_id": error.source_id.0}))),
+                ),
+                m::AddSourceOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+                m::AddSourceOutcome::NotActive { error } => (
+                    "not-active",
+                    Some((
+                        "InstanceNotActive",
+                        json!({"state": home::instance_state_name(error.state)}),
+                    )),
+                ),
             },
             "cortex.instance.RunSource" => match app
                 .run_source(m::RunSource {
@@ -1687,7 +1709,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     if std::env::var_os(SUITE_ENV).is_none() {
         assert_eq!(
             scenarios.len(),
-            124,
+            128,
             "the suite's scenario count moved; update this floor"
         );
     }

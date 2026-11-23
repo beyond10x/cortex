@@ -27,7 +27,7 @@ feature set after a real instance ran for 7 days with nobody at the keyboard.
   stage it abandons on failure; two failed runs in a row disable a source, and a daily ceiling
   holds model spend. A metric file, a failure hook and `cortex sources` show how each run ended.
   `cortex quality` judges a sample of facts; `cortex schema` proposes schema changes.
-- **Project.** Specified in ESS with 124 conformance scenarios; CI runs `task check` on every pull
+- **Project.** Specified in ESS with 128 conformance scenarios; CI runs `task check` on every pull
   request; each release carries an `x86_64-unknown-linux-gnu` binary checked against `SHA256SUMS`.
 
 Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
@@ -43,6 +43,24 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   a read. Before, an id on the second page was reported missing, and two timer runs then disabled
   the source. A list that names a cursor a second time, or runs past 1000 pages, ends the read
   with a reason naming the cursor instead of a loop.
+- `cortex update` takes a source the new spec drops out of the registry, and stops and deletes
+  its timer and service (`removed_sources`). Before, the source stayed `Enabled` and its timer
+  kept firing a run that failed and was counted. A timer that does not stop keeps its source and
+  unit files, `units.failed` names it, and the next update tries again.
+- `cortex update` gives a source the spec keeps its new `kind` and `schedule` in the registry, so
+  `cortex sources` lists the schedule its timer runs on; its runs, failures and state are kept.
+- `cortex update` with another `serve.view_port` moves the viewer: `meta.json` and `cortex list`
+  hold the new port, and the viewer unit is written on it and restarted. Before, the old port
+  stayed. A viewer unit an update rewrites for a changed connection is restarted too.
+- `cortex source add` for a source the registry holds answers `source-exists` (exit 1) and
+  changes nothing; before, it reset the source's counters and enabled a disabled source. A source
+  of an instance the home does not hold is refused (`no-such-instance`), and one of a removed
+  instance (`not-active`).
+- `cortex remove` answers `stop-failed` (exit 1) and names each failure when
+  `systemctl disable --now` fails for a timer or the viewer. It deletes no unit file and keeps the
+  instance active, so `cortex remove` can be run again. Before, it answered `removed`, deleted the
+  unit files and refused a second remove as `wrong-state`. A unit file that is not there is no
+  longer stopped, and `daemon-reload` runs only once a file was deleted.
 
 ## 0.7.2 — 2026-10-30
 

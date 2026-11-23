@@ -1,14 +1,14 @@
 <!--
   generated from cortex v1
-  model digest dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7
-  contract digest 857182a81f324b2743cfc95ae1fab53d1e8a5a7f0c41dbd9fcda27ed70b7ed9d
+  model digest 8563cf8fb38412e249a98c64161d5e55432c326a82fb5301711bfd7546d34bca
+  contract digest d8f5e38722e3da6174ee898b24720bab347ebfe6af6c44d7830edfcf84a9cace
   do not edit: regenerate with `ess synthesize --layout crate`
 -->
 # Synthesis plan — cortex v1
 
 Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regenerate with `ess synthesize --layout crate`.
 
-263 capabilities: **255 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
+265 capabilities: **257 generated**, **3 obligations**, **5 refused**. An obligation is yours to implement against its contract; a refusal is a fact about this synthesis scope, not about the specification.
 
 ## Generated
 
@@ -257,11 +257,13 @@ Scope: `component-skeletons`, laid out as `crate`, planned by `ess-synth`. Regen
 | error type | `cortex.instance.SeedTypesMissing` |
 | error type | `cortex.instance.SnapshotNotFound` |
 | error type | `cortex.instance.SourceDisabledError` |
+| error type | `cortex.instance.SourceExists` |
 | error type | `cortex.instance.SourceNotDisabled` |
 | error type | `cortex.instance.SourceNotFound` |
 | error type | `cortex.instance.StoreHeld` |
 | error type | `cortex.instance.StoreOutcomeUnknown` |
 | error type | `cortex.instance.StoreUnreadable` |
+| error type | `cortex.instance.UnitsNotStopped` |
 | view type | `cortex.ask.OpenReviews` |
 | view type | `cortex.instance.Instances` |
 | view query | `cortex.instance.Instances` |

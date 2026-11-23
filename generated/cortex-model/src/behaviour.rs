@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7
-// contract digest 857182a81f324b2743cfc95ae1fab53d1e8a5a7f0c41dbd9fcda27ed70b7ed9d
+// model digest 8563cf8fb38412e249a98c64161d5e55432c326a82fb5301711bfd7546d34bca
+// contract digest d8f5e38722e3da6174ee898b24720bab347ebfe6af6c44d7830edfcf84a9cace
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -125,6 +125,8 @@ pub enum ExternalCommand<'a> {
     CortexInstanceProposeSchemaChanges(&'a crate::instance::ProposeSchemaChanges),
     /// The executing `cortex.instance.RejectSchemaProposals` input.
     CortexInstanceRejectSchemaProposals(&'a crate::instance::RejectSchemaProposals),
+    /// The executing `cortex.instance.RemoveInstance` input.
+    CortexInstanceRemoveInstance(&'a crate::instance::RemoveInstance),
     /// The executing `cortex.instance.RestoreSnapshot` input.
     CortexInstanceRestoreSnapshot(&'a crate::instance::RestoreSnapshot),
     /// The executing `cortex.instance.RunEval` input.
@@ -148,6 +150,7 @@ impl ExternalCommand<'_> {
             Self::CortexInstanceMeasureQuality(_) => "cortex.instance.MeasureQuality",
             Self::CortexInstanceProposeSchemaChanges(_) => "cortex.instance.ProposeSchemaChanges",
             Self::CortexInstanceRejectSchemaProposals(_) => "cortex.instance.RejectSchemaProposals",
+            Self::CortexInstanceRemoveInstance(_) => "cortex.instance.RemoveInstance",
             Self::CortexInstanceRestoreSnapshot(_) => "cortex.instance.RestoreSnapshot",
             Self::CortexInstanceRunEval(_) => "cortex.instance.RunEval",
             Self::CortexInstanceUpdateInstance(_) => "cortex.instance.UpdateInstance",
@@ -516,10 +519,29 @@ where
 /// `cortex.instance.AddSource`, generated: every outcome is one the specification fully determines.
 impl<P> crate::instance::obligations::AddSourceBehavior for Generated<P>
 where
-    P: SourceStorage,
+    P: TryContext + InstanceStorage + SourceStorage,
 {
     fn add_source(&mut self, input: crate::instance::AddSource) -> Result<crate::instance::AddSourceOutcome, UnmetObligation> {
         let _ = &input;
+        // `source-exists`: an identity a record already carries, before any branch is taken.
+        if SourceStorage::get(&self.ports, &input.source_id).is_some() {
+            return Ok(crate::instance::AddSourceOutcome::SourceExists { error: crate::instance::SourceExists { source_id: input.source_id.clone() } });
+        }
+        // `when_related:` reads the `cortex.instance.Instance` row `input.instance_name` names, through its storage port; an absent
+        // reference reads no row and selects no related branch.
+        let reference = Some(&input.instance_name);
+        let related = reference.and_then(|identity| InstanceStorage::get(&self.ports, identity));
+        // `no-such-instance`: the reference names an identity no row carries.
+        if reference.is_some() && related.is_none() {
+            return Ok(crate::instance::AddSourceOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.instance_name.clone() } });
+        }
+        let _ = &related;
+        // `not-active`: selected by the present related row, in declaration order.
+        if let Some(related) = &related {
+        if decided(equal(Some(&related.state).map(|value| match value { crate::instance::InstanceState::Active => "Active", crate::instance::InstanceState::Removed => "Removed" }.to_owned()), Some("Removed".to_owned())), "cortex.instance.AddSource")? {
+            return Ok(crate::instance::AddSourceOutcome::NotActive { error: crate::instance::InstanceNotActive { state: self.ports.try_generate_cortex_instance_instance_state()? } });
+        }
+        }
         // `added`: the default.
         let identity: crate::instance::SourceId = input.source_id.clone();
         let data = crate::instance::SourceData {
@@ -848,6 +870,10 @@ where
 {
     fn remove_instance(&mut self, input: crate::instance::RemoveInstance) -> Result<crate::instance::RemoveInstanceOutcome, UnmetObligation> {
         let _ = &input;
+        // `stop-failed`: an external branch, where the context takes it.
+        if self.ports.try_external(ExternalCommand::CortexInstanceRemoveInstance(&input), "stop-failed")? {
+            return Ok(crate::instance::RemoveInstanceOutcome::StopFailed { error: crate::instance::UnitsNotStopped { name: input.name.clone(), reason: self.ports.try_generate_string()? } });
+        }
         // `removed`: the default.
         let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
             return Ok(crate::instance::RemoveInstanceOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });

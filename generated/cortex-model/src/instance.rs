@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7
-// contract digest 857182a81f324b2743cfc95ae1fab53d1e8a5a7f0c41dbd9fcda27ed70b7ed9d
+// model digest 8563cf8fb38412e249a98c64161d5e55432c326a82fb5301711bfd7546d34bca
+// contract digest d8f5e38722e3da6174ee898b24720bab347ebfe6af6c44d7830edfcf84a9cace
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -1973,6 +1973,27 @@ pub struct AddSource {
 /// outcomes exist to prevent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AddSourceOutcome {
+    /// `source-exists` — for an identity a record already carries.
+    ///
+    /// Nothing changed; the source keeps its schedule, counters and state.
+    SourceExists {
+        /// Why it was refused: `cortex.instance.SourceExists`.
+        error: SourceExists,
+    },
+    /// `no-such-instance` — when no `cortex.instance.Instance` carries the identity `input.instance_name` names.
+    ///
+    /// Nothing changed.
+    NoSuchInstance {
+        /// Why it was refused: `cortex.instance.InstanceNotFound`.
+        error: InstanceNotFound,
+    },
+    /// `not-active` — when the `cortex.instance.Instance` that `input.instance_name` names satisfies `state == Removed`.
+    ///
+    /// The instance is removed; nothing changed.
+    NotActive {
+        /// Why it was refused: `cortex.instance.InstanceNotActive`.
+        error: InstanceNotActive,
+    },
     /// `added` — otherwise.
     ///
     /// The source's timer is installed and enabled.
@@ -2523,6 +2544,13 @@ pub enum RemoveInstanceOutcome {
         /// The `cortex.instance.InstanceRemoved` this outcome publishes.
         instance_removed: InstanceRemoved,
     },
+    /// `stop-failed` — externally decided (`systemctl --user disable --now` failed for a timer or the viewer of the instance whose unit file the home wrote).
+    ///
+    /// Nothing was deleted: the instance stays active and its unit files stay, so a second remove tries again.
+    StopFailed {
+        /// Why it was refused: `cortex.instance.UnitsNotStopped`.
+        error: UnitsNotStopped,
+    },
     /// `wrong-state` — from a state no declared move starts in.
     ///
     /// The instance was already removed.
@@ -2804,7 +2832,7 @@ pub enum UpdateInstanceOutcome {
     },
     /// `updated` — otherwise.
     ///
-    /// The frozen spec is replaced; sources, model and serve settings take effect on the next run. The viewer unit holds the connection id resolved at the last create, adopt or update: it is rewritten when the store's connection changed, or when its profile now resolves to another id.
+    /// The frozen spec is replaced; model settings take effect on the next run. Sources the spec adds are added, sources it keeps take its kind and schedule and keep their counters and state, and sources it drops leave the registry with their timers stopped and deleted. A changed `serve.view_port` moves the viewer to it. The viewer unit holds the connection id resolved at the last create, adopt or update: it is rewritten when the store's connection or the port changed, or when its profile now resolves to another id.
     Updated {
         /// The `cortex.instance.InstanceUpdated` this outcome publishes.
         instance_updated: InstanceUpdated,
@@ -3412,6 +3440,15 @@ pub struct SourceDisabledError {
     pub source_id: SourceId,
 }
 
+/// The declared error `cortex.instance.SourceExists`.
+///
+/// The registry already holds a source with this id; its schedule, counters and state are as they were. `cortex update` changes a source of the spec.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceExists {
+    /// `source_id` — `cortex.instance.SourceId`.
+    pub source_id: SourceId,
+}
+
 /// The declared error `cortex.instance.SourceNotDisabled`.
 ///
 /// The source is already enabled, so nothing changed.
@@ -3453,6 +3490,17 @@ pub struct StoreOutcomeUnknown {
 /// The store named for adoption cannot be read, or EKR cannot open it under the instance's host document (another tenant or authority than the store was seeded under, or no seed).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreUnreadable {
+    /// `reason` — `String`.
+    pub reason: String,
+}
+
+/// The declared error `cortex.instance.UnitsNotStopped`.
+///
+/// `systemctl` did not stop a timer or the viewer the home wrote for the instance. The instance stays active and every unit file stays, so `cortex remove` can be run again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnitsNotStopped {
+    /// `name` — `cortex.instance.InstanceName`.
+    pub name: InstanceName,
     /// `reason` — `String`.
     pub reason: String,
 }

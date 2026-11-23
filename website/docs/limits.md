@@ -149,8 +149,6 @@ stand; [Status](./status.mdx) lists what is planned.
 
 - **The seed is fixed.** An instance's seed cannot change after creation; create a new instance
   instead.
-- **`cortex update` only adds sources.** A source dropped from the spec keeps its registry entry
-  and its timer.
 - **`cortex remove` keeps the data.** The instance directory and its store stay on disk, and the
   name stays taken in the registry.
 
