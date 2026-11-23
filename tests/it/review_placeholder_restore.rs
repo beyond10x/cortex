@@ -10,7 +10,7 @@
 //!
 //! Finding 4 (`RareName` and the names the store holds) is `story:rare-name-keeps-store-types`:
 //! exempting every store name breaks the rule that a known person stays hidden, so only the node
-//! types `redaction.keep_store_types` lists are exempt (`tests/review_rare_name_types.rs`).
+//! types `redaction.keep_store_types` lists are exempt (`tests/it/review_rare_name_types.rs`).
 //!
 //! The model is a stand-in; no test calls a real model. Every name here is invented.
 

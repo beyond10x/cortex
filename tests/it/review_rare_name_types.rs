@@ -11,11 +11,11 @@
 //!
 //! The model is a stand-in; no test calls a real model. Every name here is invented.
 
-mod common;
+use crate::common;
 
 use std::path::PathBuf;
 
-use common::{executable, World};
+use crate::common::{executable, World};
 use serde_json::json;
 
 /// A stand-in `claude` that copies each prompt to `prompt.log` and answers the extraction
