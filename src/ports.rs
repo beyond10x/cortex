@@ -369,6 +369,13 @@ fn source_ran(source_id: m::SourceId, report: &Report) -> m::SourceRan {
     }
 }
 
+/// `cortex run --path` refused: the source reads no directory.
+fn path_refused(source_id: m::SourceId, reason: String) -> m::RunSourceOutcome {
+    m::RunSourceOutcome::PathRefused {
+        error: m::PathRefused { source_id, reason },
+    }
+}
+
 /// The spec's name for why a model could not be reached.
 fn unavailable_cause(cause: crate::extract::Unavailable) -> m::ModelUnavailableCause {
     match cause {
@@ -497,6 +504,7 @@ impl Ports {
             Err(Failure::Terminated(reason)) => m::RunSourceOutcome::Terminated {
                 error: m::RunTerminated { reason },
             },
+            Err(Failure::PathRefused(reason)) => path_refused(source_id, reason),
             Err(Failure::ModelUnavailable(cause, reason)) => {
                 m::RunSourceOutcome::ModelUnavailable {
                     error: m::ModelUnavailable {
@@ -544,15 +552,47 @@ impl Ports {
             .get_or_insert_with(crate::instance::now_ms)
     }
 
+    /// The `path-refused` a run given `path` (`cortex run --path`) answers before it starts: the
+    /// context decided it, or the run names the instance's seed documents (`seed`). A source of
+    /// another kind than `files` is refused by the pipeline ([`Failure::PathRefused`]), which a
+    /// test's stand-in replaces.
+    fn refuses_path(
+        &mut self,
+        source_id: &m::SourceId,
+        path: Option<&str>,
+        seed: bool,
+    ) -> Option<m::RunSourceOutcome> {
+        let dir = path?;
+        let reason = if seed {
+            format!(
+                "--path {dir}: {} names the instance's seed documents, not a files source",
+                source_id.0
+            )
+        } else if self.decided("cortex.instance.RunSource", "path-refused") {
+            self.generate_string()
+        } else {
+            return None;
+        };
+        Some(path_refused(source_id.clone(), reason))
+    }
+
     /// `fetch_only`: fetches the source and counts what it fetched against its seen state, in
     /// either state the source is in, and records nothing on it. A failure of any kind answers
-    /// `fetch-only-failed`; `<instance>/seed` names no source and answers it too.
-    fn fetch_only(&mut self, source_id: m::SourceId) -> m::RunSourceOutcome {
+    /// `fetch-only-failed`; `<instance>/seed` names no source and answers it too. With `path`, a
+    /// `files` source is read from that directory; any other answers `path-refused`.
+    fn fetch_only(&mut self, source_id: m::SourceId, path: Option<String>) -> m::RunSourceOutcome {
         const RUN: &str = "cortex.instance.RunSource";
         let failed = |reason| m::RunSourceOutcome::FetchOnlyFailed {
             error: m::FetchFailed { reason },
         };
-        let Some(found) = SourceStorage::get(self, &source_id) else {
+        let found = SourceStorage::get(self, &source_id);
+        let seed = found.is_none() && self.seed_of(&source_id).is_some();
+        if found.is_some() || seed {
+            if let Some(refused) = self.refuses_path(&source_id, path.as_deref(), seed) {
+                return refused;
+            }
+        }
+        let Some(found) = found else {
             if self.seed_of(&source_id).is_some() {
                 return failed(format!(
                     "{} names the instance's seed documents, not a source: --fetch-only counts a \
@@ -570,9 +610,15 @@ impl Ports {
         let layout = Layout::new(self.home.instance_dir(&found.data.instance_name.0));
         let counted = match self.counter.as_mut() {
             Some(counter) => counter(&found.data),
-            None => run::count(&layout, &self.tools, &found.data),
+            None => run::count(
+                &layout,
+                &self.tools,
+                &found.data,
+                path.as_deref().map(std::path::Path::new),
+            ),
         };
         match counted {
+            Err(Failure::PathRefused(reason)) => path_refused(source_id, reason),
             Err(
                 Failure::Fetch(reason)
                 | Failure::Extract(reason)
@@ -619,10 +665,14 @@ impl RunSourceBehavior for Ports {
             });
         }
         if input.fetch_only == Some(true) {
-            return Ok(self.fetch_only(input.source_id));
+            return Ok(self.fetch_only(input.source_id, input.path));
         }
+        let path = input.path;
         let Some(found) = SourceStorage::get(self, &input.source_id) else {
             if let Some(instance) = self.seed_of(&input.source_id) {
+                if let Some(refused) = self.refuses_path(&input.source_id, path.as_deref(), true) {
+                    return Ok(refused);
+                }
                 return Ok(self.run_seed(&instance, input.source_id));
             }
             return Ok(m::RunSourceOutcome::NoSuchSource {
@@ -638,6 +688,9 @@ impl RunSourceBehavior for Ports {
                     source_id: input.source_id,
                 },
             });
+        }
+        if let Some(refused) = self.refuses_path(&input.source_id, path.as_deref(), false) {
+            return Ok(refused);
         }
         let forced = [
             ("fetch-failed", Failure::Fetch as fn(String) -> Failure),
@@ -666,7 +719,13 @@ impl RunSourceBehavior for Ports {
                 let layout = Layout::new(self.home.instance_dir(&found.data.instance_name.0));
                 match self.runner.as_mut() {
                     Some(runner) => runner(&found.data),
-                    None => run::run(&layout, &self.tools, &found.data, &mut partial),
+                    None => run::run(
+                        &layout,
+                        &self.tools,
+                        &found.data,
+                        path.as_deref().map(std::path::Path::new),
+                        &mut partial,
+                    ),
                 }
             }
         };
@@ -674,6 +733,10 @@ impl RunSourceBehavior for Ports {
             self.shared.borrow_mut().last_run = Some(partial);
         }
         let report = match result {
+            // A refusal of the input: nothing ran, and nothing is recorded on the source.
+            Err(Failure::PathRefused(reason)) => {
+                return Ok(path_refused(input.source_id, reason));
+            }
             Err(Failure::Fetch(reason)) => {
                 self.note(found, m::RunOutcome::FetchFailed, Some(reason.clone()));
                 return Ok(m::RunSourceOutcome::FetchFailed {

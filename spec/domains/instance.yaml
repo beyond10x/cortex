@@ -120,7 +120,9 @@ types:
   # How a paged operation names its next page. `NextLink` reads a URL, relative or absolute, at the
   # paging's `next` path; the percent-decoded value of its query parameter named by the last
   # segment of `param` is the next `param`. A missing, null or empty link ends the walk; a link
-  # without that parameter ends it and leaves the operation's pages unread.
+  # without that parameter ends it and leaves the operation's pages unread. In every style, an
+  # answer naming a page, token, key or cursor the walk already asked for is a paging cycle: the
+  # walk ends there and leaves the operation's pages unread, so the listing is never read as whole.
   - name: cortex.instance.PageStyle
     kind: enum
     variants: [PageNumber, Token, Keyset, NextLink]
@@ -339,6 +341,15 @@ types:
   # record matching no node, or nodes of its own type only, is written as with `OwnType`. ESS has
   # no construct for a read of the store's graph; `src/structured.rs` holds it and
   # `tests/known_entities_adversary.rs` tests it.
+  # UNMAPPED: a record EKR applies nothing of is refused like one a part of which EKR rejects:
+  # one whose entity, or a reference one of its facts names, `ekr apply-extraction` reports
+  # `ambiguous` (its aliases meet more than one store node of its type) is named with its key in
+  # the run's `rejected`, not counted in `documents_applied` and not marked seen. A refused record
+  # (rejected, ambiguous or refused by `store_lookup`) is tried again on every run, but after every
+  # other record the run wants, the one refused longest ago first, so under
+  # `max_documents_per_run` it does not hold back the others; a changed text is selected in its
+  # place as any changed record is. ESS has no per-element record effect; `src/structured.rs`,
+  # `src/state.rs` and `src/run.rs` hold it and `tests/review_structured_reconcile.rs` tests it.
   - name: cortex.instance.RecordMapping
     kind: struct
     fields:
@@ -453,6 +464,18 @@ types:
   # ended the source's dropped values without a failed commit reads nothing of the store: no
   # `ekr snapshot` and no `ekr stage begin`. ESS has no construct for a read of the store;
   # `src/run.rs` holds it and `tests/idle_supersede.rs` tests it.
+  # UNMAPPED: `Supersede` retracts a record's values only on evidence that the record is gone: a
+  # whole listing that no longer lists it. A listing is whole when its fetch left nothing unread
+  # (no `max_pages` reached, no paging cycle) and its source is not asked about a window: a
+  # `files` input, or a Connectors operation none of whose `inputs` names a window placeholder
+  # (`{since}`, `{until}`, `{since_epoch}`, `{until_epoch}`, `{since_minutes_ago}`) and whose
+  # walk takes no `stop_older_than_since`. A windowed listing ends the values of the records it
+  # lists (a changed value is superseded) and keeps every value of a record it does not list, nor
+  # its parent. A whole listing whose ends all committed retires the records it no longer lists,
+  # but those of a child call it did not read: their seen entries are dropped, so a retired record
+  # listed again, with any text, is new and is applied again. ESS has no construct for a read of
+  # the store; `src/sources.rs`, `src/structured.rs`, `src/state.rs` and `src/run.rs` hold it and
+  # `tests/review_structured_reconcile.rs` tests it.
   - name: cortex.instance.DropPolicy
     kind: enum
     variants: [Keep, Supersede]
@@ -1334,6 +1357,14 @@ errors:
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
 
+  - name: cortex.instance.PathRefused
+    summary: >-
+      A run was given a directory (`path`) for a source that is not a `files` source; only a
+      `files` source reads one. Nothing ran.
+    fields:
+      - {name: source_id, type: cortex.instance.SourceId}
+      - {name: reason, type: String}
+
   - name: cortex.instance.RestoreUnsupported
     summary: >-
       The instance's store is on the postgres backend: its snapshot is the operator's database
@@ -1849,6 +1880,7 @@ commands:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: fetch_only, type: Optional<Boolean>}
       - {name: no_wait, type: Optional<Boolean>}
+      - {name: path, type: Optional<String>}
     outcomes:
       # UNMAPPED: the exit status of each outcome, which an external scheduler reads instead of
       # the printed line: `ran` 0; `fetch-failed`, `extraction-failed`, `apply-refused` and
@@ -1996,6 +2028,30 @@ commands:
         summary: >-
           Nothing ran: the source was not read, nothing was counted, and the source's status,
           metrics and hook are untouched, so an external scheduler can skip this collection.
+      # UNMAPPED: with `path` (`cortex run --path <dir>`, with or without `--fetch-only`), a
+      # `files` source reads `<dir>`, resolved against the caller's working directory, in place
+      # of its spec's `paths`, for that run only; its `glob`, `records` and `lookup` are read as
+      # the spec says. A document's key is then the file's path relative to `<dir>`
+      # (`<relative path>#<id>` for a record) and its evidence identity `file:<key>`, so a record
+      # read from two run directories is one seen document, and an unchanged one is not extracted
+      # again. A `<dir>` that is missing or cannot be listed fails the fetch (`fetch-failed`, or
+      # `fetch-only-failed`) naming it. `<instance>/seed` with `path` answers `path-refused`, and
+      # so does a source of another kind: the refusal exits 1 and writes nothing, not the
+      # source's status, `metrics.prom` or the hook. ESS has no construct for a file path or for
+      # how a document key is made, and a subject-fact guard (`kind != Files`) cannot sit beside
+      # the `disabled` state guard in one command at `ess/22`, so the kind is read as an
+      # external branch; tests/review_run_path.rs holds it.
+      - name: path-refused
+        external: The source named is not a `files` source, or is the instance's seed documents
+        when: "defined(path)"
+        error: cortex.instance.PathRefused
+        payload:
+          cortex.instance.PathRefused:
+            source_id: input.source_id
+            reason: {generated: true}
+        summary: >-
+          The source is not a `files` source, so it has no directory to read. Nothing ran and
+          nothing was written.
 
       - name: fetch-only-failed
         external: Connectors or the filesystem fails to deliver the source's documents in a fetch-only run
