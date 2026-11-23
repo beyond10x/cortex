@@ -63,6 +63,8 @@ pub struct Ports {
     pub runner: Option<Runner>,
     /// `None` counts with the real pipeline (`run::count`).
     pub counter: Option<Counter>,
+    /// `None` extracts with the real pipeline (`run::keep`, `cortex run --extract-only`).
+    pub keeper: Option<Runner>,
 }
 
 impl InstanceStorage for Ports {
@@ -650,6 +652,105 @@ impl Ports {
     }
 }
 
+/// The outcome a run would have taken on `failure`, which `extract-only-failed` names.
+fn failure_outcome(failure: &Failure) -> &'static str {
+    match failure {
+        Failure::Fetch(_) => "fetch-failed",
+        Failure::Extract(_) => "extraction-failed",
+        Failure::Apply(_) => "apply-refused",
+        Failure::StoreOutcomeUnknown(_) => "store-outcome-unknown",
+        Failure::ConnectionUnavailable(_) => "connection-unavailable",
+        Failure::BatchTooLarge(_) => "batch-too-large",
+        Failure::Terminated(_) => "terminated",
+        Failure::ModelUnavailable(..) => "model-unavailable",
+        Failure::PathRefused(_) => "path-refused",
+    }
+}
+
+impl Ports {
+    /// `extract_only` (`cortex run --extract-only`): a disabled source answers `disabled` as a run
+    /// does; otherwise the source is fetched and extracted and its batches kept unapplied
+    /// ([`run::keep`]), and nothing is recorded on it. A failure of any kind before a batch was
+    /// kept answers `extract-only-failed`, naming the outcome a run would have taken;
+    /// `<instance>/seed` names no source and answers it too.
+    fn extract_only(
+        &mut self,
+        source_id: m::SourceId,
+        path: Option<String>,
+    ) -> m::RunSourceOutcome {
+        const RUN: &str = "cortex.instance.RunSource";
+        let failed = |outcome: &str, reason: String| m::RunSourceOutcome::ExtractOnlyFailed {
+            error: m::ExtractOnlyFailed {
+                outcome: outcome.to_string(),
+                reason,
+            },
+        };
+        let Some(found) = SourceStorage::get(self, &source_id) else {
+            if self.seed_of(&source_id).is_some() {
+                if let Some(refused) = self.refuses_path(&source_id, path.as_deref(), true) {
+                    return refused;
+                }
+                return failed(
+                    "extraction-failed",
+                    format!(
+                        "{} names the instance's seed documents, not a source: --extract-only \
+                         keeps a source's extraction",
+                        source_id.0
+                    ),
+                );
+            }
+            return m::RunSourceOutcome::NoSuchSource {
+                error: m::SourceNotFound { source_id },
+            };
+        };
+        if found.state == m::SourceState::Disabled {
+            self.note(found, m::RunOutcome::Disabled, None);
+            return m::RunSourceOutcome::Disabled {
+                run_skipped: m::RunSkipped { source_id },
+            };
+        }
+        if let Some(refused) = self.refuses_path(&source_id, path.as_deref(), false) {
+            return refused;
+        }
+        if self.decided(RUN, "extract-only-failed") {
+            return failed("extraction-failed", self.generate_string());
+        }
+        let layout = Layout::new(self.home.instance_dir(&found.data.instance_name.0));
+        let kept = match self.keeper.as_mut() {
+            Some(keeper) => keeper(&found.data),
+            None => run::keep(
+                &layout,
+                &self.tools,
+                &found.data,
+                path.as_deref().map(std::path::Path::new),
+            ),
+        };
+        match kept {
+            Err(Failure::PathRefused(reason)) => path_refused(source_id, reason),
+            Err(failure) => {
+                let outcome = failure_outcome(&failure);
+                failed(outcome, failure.reason().to_string())
+            }
+            Ok(report) => {
+                let extracted = m::SourceExtracted {
+                    source_id,
+                    run: report.kept.clone(),
+                    documents_new: report.documents_new,
+                    documents_kept: report.documents_kept,
+                    batches: report.batches_kept as i64,
+                    stopped: report.stopped.clone(),
+                    model_calls: report.model_calls,
+                    cost_usd: cost_decimal(report.cost_usd),
+                };
+                self.shared.borrow_mut().last_run = Some(report);
+                m::RunSourceOutcome::Extracted {
+                    source_extracted: extracted,
+                }
+            }
+        }
+    }
+}
+
 impl RunSourceBehavior for Ports {
     fn run_source(&mut self, input: m::RunSource) -> Result<m::RunSourceOutcome, UnmetObligation> {
         // As the generated behaviours do: the source is read first, its held state answers
@@ -670,6 +771,9 @@ impl RunSourceBehavior for Ports {
         }
         if input.fetch_only == Some(true) {
             return Ok(self.fetch_only(input.source_id, input.path));
+        }
+        if input.extract_only == Some(true) {
+            return Ok(self.extract_only(input.source_id, input.path));
         }
         let path = input.path;
         let Some(found) = SourceStorage::get(self, &input.source_id) else {

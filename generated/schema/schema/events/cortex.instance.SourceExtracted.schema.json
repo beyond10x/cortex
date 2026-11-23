@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SourceExtracted payload",
+  "x-ess-name": "cortex.instance.SourceExtracted",
+  "x-ess-kind": "event-payload",
+  "type": "object",
+  "properties": {
+    "source_id": {
+      "$ref": "#/$defs/cortex.instance.SourceId"
+    },
+    "run": {
+      "type": "string"
+    },
+    "documents_new": {
+      "type": "integer"
+    },
+    "documents_kept": {
+      "type": "integer"
+    },
+    "batches": {
+      "type": "integer"
+    },
+    "stopped": {
+      "type": "string"
+    },
+    "model_calls": {
+      "type": "integer"
+    },
+    "cost_usd": {
+      "type": "string",
+      "format": "decimal",
+      "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    }
+  },
+  "required": [
+    "source_id",
+    "documents_new",
+    "documents_kept",
+    "batches",
+    "model_calls"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "29fd0487afecf3d694b1251edb50e6cf44012cca74ef1d52f2fe654acdc8dc24",
+    "contract_digest": "slice-sha256/2:4062f9e880ca85361ac3a0b31482a11726178e50de585a23beeb23141083e8eb",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.SourceId": {
+      "title": "SourceId",
+      "x-ess-name": "cortex.instance.SourceId",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KeptExtractionNotFound payload",
+  "description": "The instance's `runs/` directory holds no kept extraction by this name: no `cortex run --extract-only` kept one there, or `runs.keep_days` pruned it. Nothing was applied.",
+  "x-ess-name": "cortex.instance.KeptExtractionNotFound",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "run": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "run"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "29fd0487afecf3d694b1251edb50e6cf44012cca74ef1d52f2fe654acdc8dc24",
+    "contract_digest": "slice-sha256/2:b01f40f9bdd498de446fa04c4a354dff8e55ff772e3f9c2a370c3558e1e69184",
+    "regenerate": "ess generate"
+  }
+}

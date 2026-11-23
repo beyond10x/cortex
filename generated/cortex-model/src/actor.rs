@@ -1,6 +1,6 @@
 // generated from cortex v1
-// model digest 1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea
-// contract digest edb08f72285adea731056f77a39b2f4b42617ddf03746589b9ce338333a0e3ad
+// model digest 29fd0487afecf3d694b1251edb50e6cf44012cca74ef1d52f2fe654acdc8dc24
+// contract digest 4e157f33a367119c58eb97267c16c34892de38fd47d43d110b8d09f1718b04a3
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Every actor the specification declares, and the commands each may invoke — as data.
@@ -67,6 +67,7 @@ pub fn may(actor: Actor) -> &'static [&'static str] {
             "cortex.instance.AddEvalCase",
             "cortex.instance.AddSource",
             "cortex.instance.AdoptInstance",
+            "cortex.instance.ApplyExtraction",
             "cortex.instance.ApplySchemaProposals",
             "cortex.instance.ApproveSchemaProposals",
             "cortex.instance.CreateInstance",

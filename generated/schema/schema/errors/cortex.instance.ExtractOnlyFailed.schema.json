@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExtractOnlyFailed payload",
+  "description": "An extract-only run failed before it kept a batch. `outcome` names the outcome a run would have taken (`fetch-failed`, `extraction-failed`, `model-unavailable`, `batch-too-large`, `connection-unavailable`, `terminated`, `path-refused`), `reason` says why. Nothing was kept or written.",
+  "x-ess-name": "cortex.instance.ExtractOnlyFailed",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "outcome": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "outcome",
+    "reason"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "29fd0487afecf3d694b1251edb50e6cf44012cca74ef1d52f2fe654acdc8dc24",
+    "contract_digest": "slice-sha256/2:c0925bc3105729b4b161a7f19ff055df83d31953dcce33ff671a2c01a1eb31d7",
+    "regenerate": "ess generate"
+  }
+}

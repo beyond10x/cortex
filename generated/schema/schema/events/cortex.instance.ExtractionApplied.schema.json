@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExtractionApplied payload",
+  "x-ess-name": "cortex.instance.ExtractionApplied",
+  "x-ess-kind": "event-payload",
+  "type": "object",
+  "properties": {
+    "name": {
+      "$ref": "#/$defs/cortex.instance.InstanceName"
+    },
+    "run": {
+      "type": "string"
+    },
+    "documents_applied": {
+      "type": "integer"
+    },
+    "documents_left": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "name",
+    "run",
+    "documents_applied",
+    "documents_left"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "29fd0487afecf3d694b1251edb50e6cf44012cca74ef1d52f2fe654acdc8dc24",
+    "contract_digest": "slice-sha256/2:bcc59c44e8a3eebd7b5dc07729587737c2119c58b0d59f2a8da4fc670f2caaba",
+    "regenerate": "ess generate"
+  },
+  "$defs": {
+    "cortex.instance.InstanceName": {
+      "title": "InstanceName",
+      "x-ess-name": "cortex.instance.InstanceName",
+      "x-ess-kind": "newtype",
+      "type": "string"
+    }
+  }
+}

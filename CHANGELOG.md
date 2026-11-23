@@ -12,6 +12,14 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   nothing (an update leaves the frozen spec as it was), so an orchestrator that changes an
   instance's spec while a run may be in flight gets an answer at once instead of waiting minutes.
   Without the flag they wait for the lock, as before (story `update-no-wait`).
+- `cortex run <instance>/<source> --extract-only` fetches and extracts as a run does and keeps
+  each batch's extraction unapplied in the run directory (`extracted`, naming the `run`), writing
+  nothing to the store, the seen state, the window or the source's status, so a caller can check
+  the extracted facts before they are written. `cortex apply <instance> <run>` applies a kept
+  extraction once, with a run's reconcile and refusal rules, snapshot or stage and gate, and
+  advances the seen state then. A second apply answers `already-applied`; an extraction whose
+  documents a run applied since answers `extraction-stale` and writes nothing (story
+  `extract-then-apply`).
 
 ### Changed
 

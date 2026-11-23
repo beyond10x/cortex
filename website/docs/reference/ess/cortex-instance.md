@@ -1009,6 +1009,33 @@ It has six outcomes.
 
 **`adopted`** — The store answers the head it had, `revision`; nothing was seeded, extracted or written to it. A SQLite store was copied into the instance directory, which grows the copy; a PostgreSQL store is used where it is. The sources are added by AddSource, one per source in the spec. The default branch, taken when no other outcome's condition matched. It creates a `cortex.instance.Instance`, which starts in `Active`. The new instance's identity is published as `name` on `cortex.instance.InstanceAdopted`. It emits `cortex.instance.InstanceAdopted`. It sets `description` from `input.description`, `model` from `input.model`, `ekr_version` from `input.ekr_version` and `seed_digest` from `input.seed_digest`. A test reaches it by constructing an input that satisfies no other outcome's condition.
 
+### `ApplyExtraction`
+
+`cortex.instance.ApplyExtraction`, shown to a person as "Apply a kept extraction" and called `apply` on the wire.
+
+It takes:
+
+- `name` — `cortex.instance.InstanceName`
+- `run` — `String`
+
+It has eight outcomes.
+
+**`no-such-run`** — Nothing was applied. Decided outside the input: The instance's `runs/` holds no kept extraction by this name. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.KeptExtractionNotFound`, carrying `run`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`already-applied`** — Nothing was applied a second time. Decided outside the input: The kept extraction was applied before, or an apply of it began. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ExtractionAlreadyApplied`, carrying `run`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`extraction-stale`** — Nothing was applied, and the kept extraction stays as it was. Decided outside the input: A document of the kept extraction is seen otherwise than when it was extracted, or the instance's spec no longer has its source. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ExtractionStale`, carrying `run` and `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`apply-refused`** — Nothing stays applied: the store and the seen documents are as before, a gated apply undone from its snapshot or stage as a gated run is. Decided outside the input: EKR refuses the first kept batch, or the run's gate refuses the apply. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.ApplyRefused`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`store-outcome-unknown`** — As for a run: the batch is not marked seen, so a later run extracts it again; a gated apply that kept a snapshot is undone from it, and a stage is settled by the next run. Decided outside the input: EKR answers that the publication outcome of a store write of the apply is unknown. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.StoreOutcomeUnknown`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`terminated`** — The apply stopped before its next batch; a gated apply is undone, an ungated one keeps the batches it applied, each marked seen. Decided outside the input: The apply is sent SIGTERM before it ends. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. No entity in this specification changes. It reports `cortex.instance.RunTerminated`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`applied`** — The kept batches were applied in order and their documents marked seen; a batch EKR refused after an earlier one applied stops the apply there, as it stops a run, and its documents are left for a later run. The source's window advanced as the run's would have. The default branch, taken when no other outcome's condition matched. It changes a `cortex.instance.Instance` without moving it along its lifecycle. The instance is the one named by the input field `name`. It emits `cortex.instance.ExtractionApplied`. A test reaches it by constructing an input that satisfies no other outcome's condition.
+
+**`no-such-instance`** — Nothing was applied. Taken when the identity the command names is one no record carries, before any other answer for it. No entity in this specification changes. It reports `cortex.instance.InstanceNotFound`, carrying `name`. It emits nothing. A test reaches it by sending an identity no record carries, arranging nothing.
+
 ### `ApplySchemaProposals`
 
 `cortex.instance.ApplySchemaProposals`, shown to a person as "Apply approved schema proposals" and called `apply` on the wire.
@@ -1259,8 +1286,9 @@ It takes:
 - `fetch_only` — `Optional<Boolean>`, which may be absent
 - `no_wait` — `Optional<Boolean>`, which may be absent
 - `path` — `Optional<String>`, which may be absent
+- `extract_only` — `Optional<Boolean>`, which may be absent
 
-It has 15 outcomes.
+It has 17 outcomes.
 
 **`disabled`** — The source is disabled: nothing ran and nothing was counted, and the source's status records the outcome. Taken when the existing subject is in Disabled and `(not (defined(fetch_only)) or fetch_only == false)` holds of the input. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.RunSkipped`. It sets `last_outcome` from `"disabled"`, `last_run_at` from `implementation-generated` and `last_reason` cleared. A test establishes the declared subject state and constructs input selecting this branch in that state.
 
@@ -1271,6 +1299,10 @@ It has 15 outcomes.
 **`fetch-only-failed`** — Nothing was written: not the source's status, its seen documents or its window, and no failure is counted. The command line prints it as `fetch-failed`. Eligible when (defined(fetch_only) and fetch_only == true); externally decided: Connectors or the filesystem fails to deliver the source's documents in a fetch-only run. No entity in this specification changes. It reports `cortex.instance.FetchFailed`, carrying `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
 
 **`fetched`** — A fetch-only run: the source was fetched over the window a run would ask about, its documents masked and scrubbed as a run's are and compared with its seen documents by content hash and stored fields. `new` counts keys no seen document carries; `changed` those a run would extract now; `held` those whose change `refresh_after_days` holds back; `skipped` names those a run would leave out after they failed alone on 3 consecutive runs, which are counted neither `new` nor `changed`; `unchanged` the rest. No model was asked, and nothing was written: not the store, the seen documents, the source's status or `cortex.log`; no snapshot or stage was taken and no run counted. Taken when `(defined(fetch_only) and fetch_only == true)` holds of the input. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceFetched`. A test reaches it by constructing an input that satisfies that condition.
+
+**`extract-only-failed`** — Nothing was kept and nothing was written: not the store, the seen documents, the window or the source's status, and no failure is counted. The model calls it made count in the day's spend. Eligible when (defined(extract_only) and extract_only == true); externally decided: The fetch or the model fails before an extract-only run kept a batch. No entity in this specification changes. It reports `cortex.instance.ExtractOnlyFailed`, carrying `outcome` and `reason`. It emits nothing. A test reaches it by injecting the declared fault, because no input can.
+
+**`extracted`** — An extract-only run: the new or changed documents a run would extract were extracted and kept in the run directory `run`, unapplied. The store, the seen documents, the window and the source's status are as they were, so a run before `cortex apply` still sees the documents as new. Taken when `(defined(extract_only) and extract_only == true)` holds of the input. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It emits `cortex.instance.SourceExtracted`. A test reaches it by constructing an input that satisfies that condition.
 
 **`fetch-failed`** — Nothing was applied; the source's status records the outcome and its reason, and the scheduler then sends RecordFailure. Decided outside the input: Connectors or the filesystem fails to deliver the source's documents; an invocation Connectors refuses with timeout at admission is retried once first. No predicate over the input reaches this branch, and saying `when: false` instead would have claimed it is unreachable, which is a different and false statement. It changes a `cortex.instance.Source` without moving it along its lifecycle. The instance is the one named by the input field `source_id`. It reports `cortex.instance.FetchFailed`, carrying `reason`. It emits nothing. It sets `last_outcome` from `"fetch-failed"`, `last_run_at` from `implementation-generated` and `last_reason` from `implementation-generated`. A test reaches it by injecting the declared fault, because no input can.
 
@@ -1358,6 +1390,21 @@ It carries:
 - `cost_usd` — `Optional<Decimal>`, which may be absent
 
 Emitted by `cortex.instance.RunEval` on its `evaluated` outcome.
+
+Nothing in this system reacts to it.
+
+### `ExtractionApplied`
+
+`cortex.instance.ExtractionApplied`.
+
+It carries:
+
+- `name` — `cortex.instance.InstanceName`
+- `run` — `String`
+- `documents_applied` — `Integer`
+- `documents_left` — `Integer`
+
+Emitted by `cortex.instance.ApplyExtraction` on its `applied` outcome.
 
 Nothing in this system reacts to it.
 
@@ -1568,6 +1615,25 @@ Emitted by `cortex.instance.EnableSource` on its `enabled` outcome.
 
 Nothing in this system reacts to it.
 
+### `SourceExtracted`
+
+`cortex.instance.SourceExtracted`.
+
+It carries:
+
+- `source_id` — `cortex.instance.SourceId`
+- `run` — `Optional<String>`, which may be absent
+- `documents_new` — `Integer`
+- `documents_kept` — `Integer`
+- `batches` — `Integer`
+- `stopped` — `Optional<String>`, which may be absent
+- `model_calls` — `Integer`
+- `cost_usd` — `Optional<Decimal>`, which may be absent
+
+Emitted by `cortex.instance.RunSource` on its `extracted` outcome.
+
+Nothing in this system reacts to it.
+
 ### `SourceFetched`
 
 `cortex.instance.SourceFetched`.
@@ -1627,6 +1693,8 @@ EKR refused the merged extraction document; nothing was applied.
 It carries:
 
 - `reason` — `String`
+
+Reported by `cortex.instance.ApplyExtraction` on its `apply-refused` outcome.
 
 Reported by `cortex.instance.RunSource` on its `apply-refused` outcome.
 
@@ -1733,6 +1801,27 @@ Reported by `cortex.instance.AddEvalCase` on its `set-invalid` outcome.
 
 Reported by `cortex.instance.RunEval` on its `set-invalid` outcome.
 
+### `ExtractOnlyFailed`
+
+An extract-only run failed before it kept a batch. `outcome` names the outcome a run would have taken (`fetch-failed`, `extraction-failed`, `model-unavailable`, `batch-too-large`, `connection-unavailable`, `terminated`, `path-refused`), `reason` says why. Nothing was kept or written.
+
+It carries:
+
+- `outcome` — `String`
+- `reason` — `String`
+
+Reported by `cortex.instance.RunSource` on its `extract-only-failed` outcome.
+
+### `ExtractionAlreadyApplied`
+
+`cortex apply` already applied this kept extraction, or began to: a kept extraction is applied once. Nothing was applied; a run extracts again what the first apply left.
+
+It carries:
+
+- `run` — `String`
+
+Reported by `cortex.instance.ApplyExtraction` on its `already-applied` outcome.
+
 ### `ExtractionFailed`
 
 The model call failed or returned no valid extraction document; nothing was applied.
@@ -1742,6 +1831,17 @@ It carries:
 - `reason` — `String`
 
 Reported by `cortex.instance.RunSource` on its `extraction-failed` outcome.
+
+### `ExtractionStale`
+
+The store moved past the kept extraction: a run applied, or a restore put back, a document it holds after it was extracted, so its seen state is not the one the extraction was made against; or the instance's spec no longer has its source. `reason` names the documents. Nothing was applied; run `cortex run --extract-only` again.
+
+It carries:
+
+- `run` — `String`
+- `reason` — `String`
+
+Reported by `cortex.instance.ApplyExtraction` on its `extraction-stale` outcome.
 
 ### `FetchFailed`
 
@@ -1797,6 +1897,8 @@ Reported by `cortex.instance.AddEvalCase` on its `no-such-instance` outcome.
 
 Reported by `cortex.instance.AddSource` on its `no-such-instance` outcome.
 
+Reported by `cortex.instance.ApplyExtraction` on its `no-such-instance` outcome.
+
 Reported by `cortex.instance.ApplySchemaProposals` on its `no-such-instance` outcome.
 
 Reported by `cortex.instance.ApproveSchemaProposals` on its `no-such-instance` outcome.
@@ -1824,6 +1926,16 @@ It carries:
 - `reason` — `String`
 
 Reported by `cortex.instance.MeasureQuality` on its `judge-failed` outcome.
+
+### `KeptExtractionNotFound`
+
+The instance's `runs/` directory holds no kept extraction by this name: no `cortex run --extract-only` kept one there, or `runs.keep_days` pruned it. Nothing was applied.
+
+It carries:
+
+- `run` — `String`
+
+Reported by `cortex.instance.ApplyExtraction` on its `no-such-run` outcome.
 
 ### `ModelUnavailable`
 
@@ -1898,6 +2010,8 @@ The run was sent SIGTERM (a Kubernetes Job's deadline, a `systemctl stop`) befor
 It carries:
 
 - `reason` — `String`
+
+Reported by `cortex.instance.ApplyExtraction` on its `terminated` outcome.
 
 Reported by `cortex.instance.RunSource` on its `terminated` outcome.
 
@@ -2072,6 +2186,8 @@ It carries:
 
 - `reason` — `String`
 
+Reported by `cortex.instance.ApplyExtraction` on its `store-outcome-unknown` outcome.
+
 Reported by `cortex.instance.ApplySchemaProposals` on its `store-outcome-unknown` outcome.
 
 Reported by `cortex.instance.ProposeSchemaChanges` on its `store-outcome-unknown` outcome.
@@ -2107,7 +2223,7 @@ An actor is who may ask this context for something. Every grant below points at 
 
 `cortex.instance.Operator`, shown to a person as "Operator".
 
-It may invoke [`AddEvalCase`](#addevalcase), [`AddSource`](#addsource), [`AdoptInstance`](#adoptinstance), [`ApplySchemaProposals`](#applyschemaproposals), [`ApproveSchemaProposals`](#approveschemaproposals), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`MeasureQuality`](#measurequality), [`ProposeSchemaChanges`](#proposeschemachanges), [`RejectSchemaProposals`](#rejectschemaproposals), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot), [`RunEval`](#runeval) and [`UpdateInstance`](#updateinstance).
+It may invoke [`AddEvalCase`](#addevalcase), [`AddSource`](#addsource), [`AdoptInstance`](#adoptinstance), [`ApplyExtraction`](#applyextraction), [`ApplySchemaProposals`](#applyschemaproposals), [`ApproveSchemaProposals`](#approveschemaproposals), [`CreateInstance`](#createinstance), [`EnableSource`](#enablesource), [`MeasureQuality`](#measurequality), [`ProposeSchemaChanges`](#proposeschemachanges), [`RejectSchemaProposals`](#rejectschemaproposals), [`RemoveInstance`](#removeinstance), [`RestoreSnapshot`](#restoresnapshot), [`RunEval`](#runeval) and [`UpdateInstance`](#updateinstance).
 
 ### `Scheduler`
 
@@ -2118,4 +2234,4 @@ It may invoke [`RecordFailure`](#recordfailure) and [`RunSource`](#runsource).
 
 ---
 
-Generated from cortex v1 · model digest `1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea` · contract digest `slice-sha256/2:184699a49824d3da5c820973447ddd28c274861526db7185bec124014f9dd0d5`. Do not edit this file; change the specification and regenerate it with `task generate`.
+Generated from cortex v1 · model digest `29fd0487afecf3d694b1251edb50e6cf44012cca74ef1d52f2fe654acdc8dc24` · contract digest `slice-sha256/2:f6f75b3618e453bdf8b5c518ea2ee3f53fbb3ece408e9f1295ec2d50fe868996`. Do not edit this file; change the specification and regenerate it with `task generate`.

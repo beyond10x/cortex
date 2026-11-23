@@ -4,8 +4,8 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "1af9723b1d51ab20acd7b60015f490064fd82c14f14632f5617eaa21a58affea",
-    "contract_digest": "slice-sha256/2:c8f64ca46864c534a7c2773575497e2c2c94cb10f601f71887f6face49acb365",
+    "source_digest": "29fd0487afecf3d694b1251edb50e6cf44012cca74ef1d52f2fe654acdc8dc24",
+    "contract_digest": "slice-sha256/2:c9788cfcfe25e96f7c2514ba9f5d5f59bb55bbfc1ccd71bd5b6245b92773fb35",
     "regenerate": "ess generate"
   },
   "$defs": {

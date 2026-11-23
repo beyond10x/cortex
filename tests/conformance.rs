@@ -67,7 +67,7 @@ enum Supplied {
 /// The create, adopt and update steps of `spec/suite.json` whose document is a synthesized
 /// witness the loader refuses ([`Supplied::Witness`]). Every other such step's document goes
 /// through the loader and must load. A ratchet: lower it when the suite carries fewer.
-const WITNESS_STEPS: usize = 100;
+const WITNESS_STEPS: usize = 104;
 
 /// Whether `document` is a synthesized witness: each text ESS's synthesis writes at `format`,
 /// `name`, `description` and `model.model` is that field's path (`spec.format`), with the
@@ -235,6 +235,15 @@ fn event(e: PublishedEvent) -> (String, Value) {
         PublishedEvent::SnapshotRestored(e) => (
             "SnapshotRestored",
             json!({"name": e.name.0, "snapshot": e.snapshot}),
+        ),
+        PublishedEvent::ExtractionApplied(e) => (
+            "ExtractionApplied",
+            json!({
+                "name": e.name.0,
+                "run": e.run,
+                "documents_applied": e.documents_applied,
+                "documents_left": e.documents_left,
+            }),
         ),
         PublishedEvent::QualityMeasured(e) => (
             "QualityMeasured",
@@ -642,6 +651,9 @@ impl Scenario {
         // that reaches the pipeline is the `ran` branch.
         let runner =
             Box::new(|_: &m::SourceData| -> Result<Report, Failure> { Ok(Report::default()) });
+        // An extract-only run that reaches the pipeline is the `extracted` branch: it keeps nothing.
+        let keeper =
+            Box::new(|_: &m::SourceData| -> Result<Report, Failure> { Ok(Report::default()) });
         // A fetch-only run that reaches the pipeline is the `fetched` branch: it counts nothing.
         let counter =
             Box::new(|_: &m::SourceData| -> Result<Counts, Failure> { Ok(Counts::default()) });
@@ -655,6 +667,7 @@ impl Scenario {
             shared: shared.clone(),
             runner: Some(runner),
             counter: Some(counter),
+            keeper: Some(keeper),
         }));
         // The answer service is a component of its own over the same shared state, its records
         // in a store in memory.
@@ -924,6 +937,7 @@ impl Scenario {
                         .get("path")
                         .and_then(Value::as_str)
                         .map(str::to_string),
+                    extract_only: input.get("extract_only").and_then(Value::as_bool),
                 })
                 .unwrap()
             {
@@ -986,6 +1000,34 @@ impl Scenario {
                         }),
                     ));
                     ("fetched", None)
+                }
+                m::RunSourceOutcome::ExtractOnlyFailed { error } => (
+                    "extract-only-failed",
+                    Some((
+                        "ExtractOnlyFailed",
+                        json!({"outcome": error.outcome, "reason": error.reason}),
+                    )),
+                ),
+                m::RunSourceOutcome::Extracted {
+                    source_extracted: e,
+                } => {
+                    // Carried on the outcome and not published, as `SourceFetched` is. An
+                    // `Optional` field left empty is absent, as a published event's is.
+                    let mut payload = json!({
+                        "source_id": e.source_id.0,
+                        "run": e.run,
+                        "documents_new": e.documents_new,
+                        "documents_kept": e.documents_kept,
+                        "batches": e.batches,
+                        "stopped": e.stopped,
+                        "model_calls": e.model_calls,
+                        "cost_usd": e.cost_usd.map(|c| c.0),
+                    });
+                    if let Some(fields) = payload.as_object_mut() {
+                        fields.retain(|_, v| !v.is_null());
+                    }
+                    unpublished.push(("cortex.instance.SourceExtracted".into(), payload));
+                    ("extracted", None)
                 }
                 m::RunSourceOutcome::Disabled { run_skipped } => {
                     // ESS 0.59.0 synthesis carries `RunSkipped` on the outcome but declares no
@@ -1075,6 +1117,46 @@ impl Scenario {
                     Some(("SnapshotNotFound", json!({"snapshot": error.snapshot}))),
                 ),
                 m::RestoreSnapshotOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+            },
+            "cortex.instance.ApplyExtraction" => match app
+                .apply_extraction(m::ApplyExtraction {
+                    name: m::InstanceName(s("name")),
+                    run: s("run"),
+                })
+                .unwrap()
+            {
+                m::ApplyExtractionOutcome::Applied { .. } => ("applied", None),
+                m::ApplyExtractionOutcome::NoSuchRun { error } => (
+                    "no-such-run",
+                    Some(("KeptExtractionNotFound", json!({"run": error.run}))),
+                ),
+                m::ApplyExtractionOutcome::AlreadyApplied { error } => (
+                    "already-applied",
+                    Some(("ExtractionAlreadyApplied", json!({"run": error.run}))),
+                ),
+                m::ApplyExtractionOutcome::ExtractionStale { error } => (
+                    "extraction-stale",
+                    Some((
+                        "ExtractionStale",
+                        json!({"run": error.run, "reason": error.reason}),
+                    )),
+                ),
+                m::ApplyExtractionOutcome::ApplyRefused { error } => (
+                    "apply-refused",
+                    Some(("ApplyRefused", json!({"reason": error.reason}))),
+                ),
+                m::ApplyExtractionOutcome::StoreOutcomeUnknown { error } => (
+                    "store-outcome-unknown",
+                    Some(("StoreOutcomeUnknown", json!({"reason": error.reason}))),
+                ),
+                m::ApplyExtractionOutcome::Terminated { error } => (
+                    "terminated",
+                    Some(("RunTerminated", json!({"reason": error.reason}))),
+                ),
+                m::ApplyExtractionOutcome::NoSuchInstance { error } => (
                     "no-such-instance",
                     Some(("InstanceNotFound", json!({"name": error.name.0}))),
                 ),
@@ -1905,7 +1987,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     if std::env::var_os(SUITE_ENV).is_none() {
         assert_eq!(
             scenarios.len(),
-            137,
+            148,
             "the suite's scenario count moved; update this floor"
         );
     }
@@ -1924,7 +2006,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
             .count();
         assert_eq!(
             (supplied, witnesses),
-            (104, WITNESS_STEPS),
+            (108, WITNESS_STEPS),
             "the steps supplying a spec, and the synthesized witnesses among them, moved: {} \
              loaded; update these counts",
             supplied - witnesses

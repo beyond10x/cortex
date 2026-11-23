@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExtractionAlreadyApplied payload",
+  "description": "`cortex apply` already applied this kept extraction, or began to: a kept extraction is applied once. Nothing was applied; a run extracts again what the first apply left.",
+  "x-ess-name": "cortex.instance.ExtractionAlreadyApplied",
+  "x-ess-kind": "error-payload",
+  "type": "object",
+  "properties": {
+    "run": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "run"
+  ],
+  "additionalProperties": false,
+  "x-ess-provenance": {
+    "system": "cortex",
+    "specification_version": "v1",
+    "source_digest": "29fd0487afecf3d694b1251edb50e6cf44012cca74ef1d52f2fe654acdc8dc24",
+    "contract_digest": "slice-sha256/2:23e4dec9eb7866d09c6b490c89d58da93085ea0778bd4aefc88c2f763eae9593",
+    "regenerate": "ess generate"
+  }
+}
