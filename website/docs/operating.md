@@ -138,6 +138,7 @@ A scheduler or a script reads which outcome a run had from its exit status alone
 | 0 | `ran` | the source ran; `documents_new` 0 means nothing had changed |
 | 1 | `fetch-failed`, `extraction-failed`, `apply-refused` | the run failed and applied nothing; with `--record-failure` the failure is counted |
 | 1 | `no-such-source` | the home holds no such source |
+| 1 | `path-refused` | `--path` named a directory for a source that is not a `files` source, or for `<instance>/seed`; nothing ran or was recorded, and `--record-failure` counts nothing |
 | 2 | none | an error before any outcome, on stderr as `cortex: <message>` (an unreadable registry, a home that cannot be locked) |
 | 3 | `disabled` | the source is disabled after two failed runs in a row; nothing ran. `cortex source enable` switches it back on |
 | 4 | `store-outcome-unknown` | EKR could not say whether a store write of the run took effect (`publication outcome is unknown` from a stage verb, `apply-extraction` or a transaction's commit); not a failure of the source, so `--record-failure` counts nothing, and the next run settles the stage or extracts the batch again, and a gated `sqlite` run that had kept its snapshot is undone from it (see [Undoing a run](#undoing-a-run)) |

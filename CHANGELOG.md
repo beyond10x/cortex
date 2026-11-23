@@ -5,6 +5,15 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+### Added
+
+- `cortex run <instance>/<source> --path <dir>`, also with `--fetch-only`, reads a `files` source
+  from `<dir>` instead of its spec's `paths`, for that run only. Each document is keyed by its
+  path relative to `<dir>` (`<relative path>#<id>`, evidence `file:<key>`), so a record read from
+  a new directory on each run is one document and is not extracted again while it is unchanged.
+  On a source of another kind, or on `<instance>/seed`, it answers the new outcome `path-refused`
+  (exit 1) and writes nothing; a missing `<dir>` fails the fetch, naming it.
+
 ### What 1.0 holds
 
 1.0 is the first release whose interface is stable. It adds no feature over 0.5.0; it is 0.5.0's
@@ -27,7 +36,7 @@ feature set after a real instance ran for 7 days with nobody at the keyboard.
   stage it abandons on failure; two failed runs in a row disable a source, and a daily ceiling
   holds model spend. A metric file, a failure hook and `cortex sources` show how each run ended.
   `cortex quality` judges a sample of facts; `cortex schema` proposes schema changes.
-- **Project.** Specified in ESS with 124 conformance scenarios; CI runs `task check` on every pull
+- **Project.** Specified in ESS with 126 conformance scenarios; CI runs `task check` on every pull
   request; each release carries an `x86_64-unknown-linux-gnu` binary checked against `SHA256SUMS`.
 
 Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
