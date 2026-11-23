@@ -82,7 +82,8 @@ fn a_url_the_provider_failed_is_unread_in_fetch_only_and_stops_the_run() {
     let lines = unread(&fetched);
     assert_eq!(lines.len(), 1, "{fetched}");
     assert!(
-        lines[0].contains("https://example.invalid/offline") && lines[0].contains("provider_refused"),
+        lines[0].contains("https://example.invalid/offline")
+            && lines[0].contains("provider_refused"),
         "{fetched}"
     );
 
@@ -241,7 +242,10 @@ echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"
     );
 
     let prompt = std::fs::read_to_string(batch.join("prompt.txt")).unwrap();
-    assert!(!prompt.contains(marker), "the model is shown no text outside the evidence");
+    assert!(
+        !prompt.contains(marker),
+        "the model is shown no text outside the evidence"
+    );
     let shown = prompt
         .lines()
         .find_map(|l| l.strip_prefix("Description: "))

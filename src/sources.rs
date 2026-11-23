@@ -1181,7 +1181,10 @@ fn web_unread(what: &str, answer: &Value, unread: &mut Vec<String>) {
     } else {
         causes.join(", ")
     };
-    note(unread, format!("{what}: the answer is incomplete ({causes})"));
+    note(
+        unread,
+        format!("{what}: the answer is incomplete ({causes})"),
+    );
 }
 
 /// The documents of a `web` source, and what its answers left unread ([`web_unread`]).
@@ -1219,11 +1222,7 @@ fn fetch_web(
                     let answer =
                         connectors.invoke(adapter, connection, "websearch.crawl", &input)?;
                     docs.extend(items(&answer, "pages").filter_map(website));
-                    web_unread(
-                        &format!("websearch.crawl from {url}"),
-                        &answer,
-                        &mut unread,
-                    );
+                    web_unread(&format!("websearch.crawl from {url}"), &answer, &mut unread);
                 }
             }
         },
