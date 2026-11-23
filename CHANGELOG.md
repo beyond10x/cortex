@@ -12,6 +12,12 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   nothing (an update leaves the frozen spec as it was), so an orchestrator that changes an
   instance's spec while a run may be in flight gets an answer at once instead of waiting minutes.
   Without the flag they wait for the lock, as before (story `update-no-wait`).
+- `redaction.keep_store_types`: node types whose names in the store `RareName` never takes. A
+  run reads the names and aliases of the store's nodes of those types once, before it applies
+  anything, and shows them to the model as written, so a customer named once in a batch keeps
+  its name and its facts. A node of an unlisted type, a `Person` among them, is hidden as before
+  when its name is rare. Without the field, or with it empty, a run is as before (story
+  `rare-name-keeps-store-types`).
 
 ### Changed
 

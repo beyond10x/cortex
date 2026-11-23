@@ -8,8 +8,9 @@
 //!   The batch's `claude/error.txt` and the run's reason name the subtype, the number of turns and
 //!   the last validation message, masked.
 //!
-//! Finding 4 (`RareName` and the names the store holds) is `story:rare-name-keeps-store-types`, a
-//! draft: exempting every store name breaks the rule that a known person stays hidden.
+//! Finding 4 (`RareName` and the names the store holds) is `story:rare-name-keeps-store-types`:
+//! exempting every store name breaks the rule that a known person stays hidden, so only the node
+//! types `redaction.keep_store_types` lists are exempt (`tests/it/review_rare_name_types.rs`).
 //!
 //! The model is a stand-in; no test calls a real model. Every name here is invented.
 

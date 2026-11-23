@@ -736,6 +736,11 @@ types:
   # `Schmidt-Müller`, `Müller` a known name) is read alone, as the check reads it beside that
   # span's placeholder, and replaced when it is rare. A text cut at `max_chars` inside a word kept
   # whole ends in a prefix of that word, which the check does not read as a rare name.
+  # `keep_store_types` names node types whose store names `RareName` never takes: a run reads the
+  # canonical names and aliases of the store's nodes of those types once, before it applies
+  # anything, and keeps their words as it keeps the ontology names, in the text and in the
+  # `refuse_if_left` check; `known_names` and the rules still replace them. A node of any other
+  # type keeps the rule above. Absent or empty, nothing changes.
   # UNMAPPED: how a text splits into words and how often a batch holds each is a rule on String
   # values the specification has no construct for; `src/redact.rs` holds it and its tests and
   # `tests/redaction_gate.rs` test it.
@@ -747,6 +752,7 @@ types:
       - {name: known_names, type: Optional<List<String>>}
       - {name: rare_limit, type: Optional<Integer>}
       - {name: refuse_if_left, type: Optional<List<cortex.instance.RedactionClass>>}
+      - {name: keep_store_types, type: Optional<List<String>>}
 
   # One check of the run gate (`cortex.instance.RunGate`): `measure` names a number of the run's
   # report (`documents_new`, `documents_applied`, `facts_refused`, `parts_rejected`, `masked`,

@@ -21,6 +21,7 @@ fn redactor(known: &[&str], rare_limit: Option<i64>, refuse: bool) -> Redactor {
         known_names: (!known.is_empty()).then(|| known.iter().map(|n| n.to_string()).collect()),
         rare_limit,
         refuse_if_left: refuse.then(|| vec![RARE]),
+        keep_store_types: None,
     };
     compile(Some(&policy))
         .expect("a valid policy")
@@ -123,6 +124,7 @@ fn the_gate_finds_a_name_beside_an_underscore_cjk_text_or_a_known_name() {
             known_names: (!known.is_empty()).then(|| known.iter().map(|n| n.to_string()).collect()),
             rare_limit: None,
             refuse_if_left: Some(vec![RARE]),
+            keep_store_types: None,
         };
         compile(Some(&policy))
             .expect("a valid policy")

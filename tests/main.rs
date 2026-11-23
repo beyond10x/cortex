@@ -92,6 +92,7 @@ mod it {
     mod review_instance_update;
     mod review_placeholder_restore;
     mod review_quality_verdicts;
+    mod review_rare_name_types;
     mod review_run_path;
     mod review_run_report_cap;
     mod review_runbook_probe;
