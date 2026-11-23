@@ -1625,6 +1625,8 @@ fn process_in(
         // Each part EKR refused, with the file applied: kept in the batch directory.
         let mut refusals: Vec<(String, extract::PartRefusal)> = Vec::new();
         let mut unstored: BTreeSet<String> = BTreeSet::new();
+        // The history documents of the rounds below ([`extract::history`]).
+        let mut later_history: Vec<extract::Round> = Vec::new();
         if let Some(reapply) = extract::reapply_rounds(&doc, &applied) {
             applied = reapply.rest;
             for (k, round) in reapply.rounds.iter().enumerate() {
@@ -1655,14 +1657,23 @@ fn process_in(
                                 serde_json::to_string_pretty(&second).unwrap_or_default(),
                             );
                         }
+                        let refused = crate::ekr::applied(&second).rejected;
+                        report.facts_reapplied += round.facts.saturating_sub(refused);
+                        // A replacement of this round older than the value it would replace
+                        // (`invalid-supersession`) is kept as history with the batch's own, below.
+                        let second = match extract::history(&round.doc, &second) {
+                            Some((older, rest)) => {
+                                later_history.push(older);
+                                rest
+                            }
+                            None => second,
+                        };
                         refusals.extend(
                             extract::part_refusals(&second)
                                 .into_iter()
                                 .map(|r| (format!("{name}.yaml"), r)),
                         );
-                        let still = crate::ekr::applied(&second).rejected;
-                        report.facts_reapplied += round.facts.saturating_sub(still);
-                        report.parts_rejected += still;
+                        report.parts_rejected += crate::ekr::applied(&second).rejected;
                         for (id, refusals) in extract::cited_by_rejected(&round.doc, &second) {
                             rejected_again.entry(id).or_default().extend(refusals);
                         }
@@ -1684,9 +1695,15 @@ fn process_in(
         // document was read after a newer one) becomes that value's history instead of being lost:
         // applied without `replaces`, then superseded by the value from that value's start
         // ([`extract::history`], [`extract::closings`]). A step that fails stops the run after this
-        // batch, as a failed round above does, and its documents are not marked seen.
+        // batch, as a failed round above does, and its documents are not marked seen. A
+        // replacement a round above applied again that EKR refused the same way is kept in the
+        // same apply.
+        let mut held = later_history;
         if let Some((older, rest)) = extract::history(&doc, &applied) {
             applied = rest;
+            held.insert(0, older);
+        }
+        if let Some(older) = extract::joined_history(&doc, held) {
             if stop_after.is_some() {
                 unstored.extend(older.cited.iter().cloned());
             } else {

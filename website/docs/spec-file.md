@@ -1073,7 +1073,7 @@ monitoring:
 
 | field | meaning |
 |---|---|
-| `view_port` | optional port for `ekr view` on 127.0.0.1, 0 to 65535; without it, `cortex create` takes the first free port from 18900 |
+| `view_port` | optional port for `ekr view` on 127.0.0.1, 0 to 65535; without it, `cortex create` takes the first free port from 18900, and `cortex update` keeps the instance's port. `cortex update` with another port moves the viewer to it |
 
 ## `store`
 

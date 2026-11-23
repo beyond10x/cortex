@@ -67,7 +67,7 @@ enum Supplied {
 /// The create, adopt and update steps of `spec/suite.json` whose document is a synthesized
 /// witness the loader refuses ([`Supplied::Witness`]). Every other such step's document goes
 /// through the loader and must load. A ratchet: lower it when the suite carries fewer.
-const WITNESS_STEPS: usize = 90;
+const WITNESS_STEPS: usize = 100;
 
 /// Whether `document` is a synthesized witness: each text ESS's synthesis writes at `format`,
 /// `name`, `description` and `model.model` is that field's path (`spec.format`), with the
@@ -859,6 +859,13 @@ impl Scenario {
                 .unwrap()
             {
                 m::RemoveInstanceOutcome::Removed { .. } => ("removed", None),
+                m::RemoveInstanceOutcome::StopFailed { error } => (
+                    "stop-failed",
+                    Some((
+                        "UnitsNotStopped",
+                        json!({"name": error.name.0, "reason": error.reason}),
+                    )),
+                ),
                 m::RemoveInstanceOutcome::Busy { error } => (
                     "busy",
                     Some(("InstanceBusy", json!({"reason": error.reason}))),
@@ -891,6 +898,21 @@ impl Scenario {
                 .unwrap()
             {
                 m::AddSourceOutcome::Added { .. } => ("added", None),
+                m::AddSourceOutcome::SourceExists { error } => (
+                    "source-exists",
+                    Some(("SourceExists", json!({"source_id": error.source_id.0}))),
+                ),
+                m::AddSourceOutcome::NoSuchInstance { error } => (
+                    "no-such-instance",
+                    Some(("InstanceNotFound", json!({"name": error.name.0}))),
+                ),
+                m::AddSourceOutcome::NotActive { error } => (
+                    "not-active",
+                    Some((
+                        "InstanceNotActive",
+                        json!({"state": home::instance_state_name(error.state)}),
+                    )),
+                ),
             },
             "cortex.instance.RunSource" => match app
                 .run_source(m::RunSource {
@@ -1838,7 +1860,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     if std::env::var_os(SUITE_ENV).is_none() {
         assert_eq!(
             scenarios.len(),
-            132,
+            136,
             "the suite's scenario count moved; update this floor"
         );
     }
@@ -1857,7 +1879,7 @@ fn every_scenario_of_the_synthesized_suite_holds() {
             .count();
         assert_eq!(
             (supplied, witnesses),
-            (94, WITNESS_STEPS),
+            (104, WITNESS_STEPS),
             "the steps supplying a spec, and the synthesized witnesses among them, moved: {} \
              loaded; update these counts",
             supplied - witnesses
