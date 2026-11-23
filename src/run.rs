@@ -1631,20 +1631,34 @@ fn process_in(
     let mut lookup = crate::known::Lookup::default();
     // The store's ontology, read again only after an apply, which can widen it.
     let mut held_ontology: Option<serde_json::Value> = None;
+    // `redaction.keep_store_types`: the names and aliases of the store's nodes of those types, read
+    // once from the store's head before the run applies anything, never a rare name in this run.
+    let store_names = match redactor.as_ref().map(Redactor::keep_store_types) {
+        Some(types) if !types.is_empty() => {
+            let ontology = &*held_ontology.insert(session.ontology().map_err(store_failure)?);
+            lookup
+                .names_of_types(&session, ontology, types)
+                .map_err(store_failure)?
+        }
+        _ => Vec::new(),
+    };
     // `refuse_if_left`: every batch is checked as the model would be shown it before the first
     // model call, so a refusal fails the run with nothing sent and nothing stored.
     // The known entities are checked too, each batch's store hits included.
     // Batch 0 as the check pseudonymised it, which the loop sends unless it splits it first.
     let mut first = None;
     if let Some(r) = redactor.as_ref().filter(|r| r.refuses()) {
-        let ontology = &*held_ontology.insert(session.ontology().map_err(store_failure)?);
+        if held_ontology.is_none() {
+            held_ontology = Some(session.ontology().map_err(store_failure)?);
+        }
+        let ontology = held_ontology.as_ref().expect("read above");
         for batch in &batches {
             let mut p = r.batch();
             let known = lookup
                 .for_batch(&session, ontology, batch, &entities)
                 .map_err(store_failure)?;
             let known = Known::from_ontology(ontology, known);
-            let (shown, known) = pseudonymise(&mut p, batch, &uncut, &known);
+            let (shown, known) = pseudonymise(&mut p, batch, &uncut, &known, &store_names);
             if let Some(why) = refused(&p, &shown, &known) {
                 return Err(Failure::Extract(why));
             }
@@ -1745,7 +1759,7 @@ fn process_in(
             }
             Some(r) => {
                 let mut p = r.batch();
-                let (shown, known) = pseudonymise(&mut p, &batch, &uncut, &known);
+                let (shown, known) = pseudonymise(&mut p, &batch, &uncut, &known, &store_names);
                 // Checked again: the known entity names grow with each batch applied.
                 if let Some(why) = refused(&p, &shown, &known) {
                     if !report.progressed() {
@@ -3729,11 +3743,13 @@ fn known_names(known: &Known) -> impl Iterator<Item = &String> {
 /// document key (the `Source:` line), title, description and text. The text is the kept part of
 /// the text before the cut (`uncut`), so a value the cut splits is replaced too. What the
 /// irreversible rules replaced before storage is counted in `p` here, as the document is sent.
+/// The words of `kept` (the store names of `redaction.keep_store_types`) are never a rare name.
 fn pseudonymise(
     p: &mut redact::Batch<'_>,
     batch: &[evidence::Issued],
     uncut: &HashMap<String, Vec<Uncut>>,
     known: &Known,
+    kept: &[String],
 ) -> (Vec<evidence::Issued>, Known) {
     let find = |doc: &sources::Document| -> Option<&Uncut> {
         uncut
@@ -3783,6 +3799,10 @@ fn pseudonymise(
     // The ontology's names are the types the model writes back; `RareName` never takes them.
     for line in known.node_types.iter().chain(&known.edge_types) {
         p.keep_names(line);
+    }
+    // So are the store's names of the node types `redaction.keep_store_types` lists.
+    for name in kept {
+        p.keep_names(name);
     }
     let shown = batch
         .iter()

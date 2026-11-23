@@ -22,6 +22,7 @@ fn policy(replace: bool, known: &[&str], refuse: bool) -> Redactor {
         known_names: (!known.is_empty()).then(|| known.iter().map(|n| n.to_string()).collect()),
         rare_limit: None,
         refuse_if_left: refuse.then(|| vec![RARE]),
+        keep_store_types: None,
     };
     compile(Some(&policy))
         .expect("a valid policy")

@@ -20,6 +20,12 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
   advances the seen state then. A second apply answers `already-applied`; an extraction whose
   documents a run applied since answers `extraction-stale` and writes nothing (story
   `extract-then-apply`).
+- `redaction.keep_store_types`: node types whose names in the store `RareName` never takes. A
+  run reads the names and aliases of the store's nodes of those types once, before it applies
+  anything, and shows them to the model as written, so a customer named once in a batch keeps
+  its name and its facts. A node of an unlisted type, a `Person` among them, is hidden as before
+  when its name is rare. Without the field, or with it empty, a run is as before (story
+  `rare-name-keeps-store-types`).
 
 ### Changed
 
