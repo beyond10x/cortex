@@ -906,7 +906,7 @@ applies. Shorten or unmap the value at the source to clear it. Change detection,
 |---|---|
 | `refresh_after_days` | a document whose text changed is extracted again only when it was last applied at least this many days ago; 0 to 36500. A record read from a file ([`kind: files`](#kind-files)) and a `structured` source's change whose text changed only in its links ([`kind: structured`](#kind-structured)) wait for nothing |
 | `change` | how a change is detected; `ContentHash` is the only value |
-| `max_documents_per_run` | the most documents one run extracts; above 0 |
+| `max_documents_per_run` | the most documents one run extracts; above 0. A run that leaves wanted documents beyond it reports `stopped: document-cap` and their number in `documents_left` ([`cortex run`](./commands.md)) |
 | `max_chars_per_document` | longer text is cut to this many characters; above 0. Text is also cut, at a character boundary, to what a 16,384-byte evidence payload holds after its header (EKR 0.0.32's bound), so about 5,400 characters of a three-byte script such as Chinese fit. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |
 
 ## `redaction`
@@ -941,13 +941,15 @@ applied, also when it dropped the brackets (`Name-3` for `[Name-3]`); one that s
 of the batch fails the batch, naming the placeholder and where it stood, and nothing of that
 batch is applied.
 
-Each batch directory under `runs/` keeps the prompt as sent (`prompt.txt`) and the model's raw
-answer (`answer.json`) beside the extraction document applied
-([Operating](./operating.md#where-things-live)). With a policy, both hold placeholders, not the
-values they stand for: the model was sent only placeholders, and its answer is kept as it came,
-before restoring. `extraction.yaml` holds the restored values, as the store does. The mapping
-from placeholder to value is never written. They are removed with the run directory after
-[`runs.keep_days`](#runs).
+Each batch directory under `runs/` keeps the prompt as sent (`prompt.txt`), the model's raw
+answer (`answer.json`) and each part EKR refused (`refusals.json`: the part, the outcome EKR named
+and its reason) beside the extraction document applied
+([Operating](./operating.md#where-things-live)). With a policy, all three hold placeholders, not
+the values they stand for: the model was sent only placeholders, its answer is kept as it came,
+before restoring, and EKR's refusals, which can name the restored values, are written with
+every value the policy finds replaced by a placeholder of the batch. `extraction.yaml` holds the
+restored values, as the store does. The mapping from placeholder to value is never written. They
+are removed with the run directory after [`runs.keep_days`](#runs).
 
 ## `snapshots`
 

@@ -2271,6 +2271,8 @@ commands:
             source_id: input.source_id
             documents_new: {generated: true}
             documents_applied: {generated: true}
+            documents_left: {generated: true}
+            stopped: {generated: true}
             facts_reapplied: {generated: true}
             cost_usd: {generated: true}
             cost_counted: {generated: true}
@@ -2287,7 +2289,9 @@ commands:
         summary: >-
           Every new or changed document within the policy's limits was extracted and applied, in
           batches, until the run's budget was spent. `documents_new` 0 means nothing changed and no
-          model was called. `daily_ceiling_reached` is true when the run stopped before a batch
+          model was called. A run that `max_documents_per_run` capped has `stopped`
+          `document-cap` and counts in `documents_left` the wanted documents it left for the next
+          run; a run that applied every wanted document has no `stopped` and `documents_left` 0. `daily_ceiling_reached` is true when the run stopped before a batch
           because the instance's spend of the UTC day reached `model.daily_ceiling_usd` or its
           tokens reached `model.daily_ceiling_tokens`: the
           batches before it are applied, the rest are extracted by a run on a later day. A run
@@ -3100,11 +3104,19 @@ events:
   # `facts_reapplied` counts the facts marked `replaces: true` that EKR rejected because nothing
   # active was there to replace, applied again as plain assertions and stored; they are not
   # among the parts EKR rejected.
+  # `stopped` says why the run ended before applying every document it wanted, absent when it
+  # did not. It is `document-cap` when the source's `max_documents_per_run` left wanted documents
+  # for the next run and nothing else stopped the run; otherwise the reason, as text.
+  # `documents_left` counts the documents the run wanted (new, or changed past the refresh
+  # window) and did not apply or mark seen, so the next run wants them again: `0` when the run
+  # applied every one of them.
   - name: cortex.instance.SourceRan
     fields:
       - {name: source_id, type: cortex.instance.SourceId}
       - {name: documents_new, type: Integer}
       - {name: documents_applied, type: Integer}
+      - {name: documents_left, type: Integer}
+      - {name: stopped, type: Optional<String>}
       - {name: facts_reapplied, type: Integer}
       - {name: cost_usd, type: Optional<Decimal>}
       - {name: cost_counted, type: Boolean}

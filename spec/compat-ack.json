@@ -1,6 +1,10 @@
 {
   "format": "ess-diff-acknowledgements/1",
   "before": "dbbb23bcc7d9cddc4da7d67a743695779d98f97d6418cd61a1a44e31e7cb79a7",
-  "after": "37a5c9c7902bf753546e91cac2e2cdfa93819d7b3efc21c30615b90c15f60700",
-  "acknowledged": []
+  "after": "dcaf5d869726e02028722cccc253df1c24885fd90c66f75e12d0c15f6e23de80",
+  "acknowledged": [
+    "command/cortex.instance.RunSource/outcome-response-payload-changed/ran",
+    "event/cortex.instance.SourceRan/field-added/documents_left",
+    "event/cortex.instance.SourceRan/field-added/stopped"
+  ]
 }

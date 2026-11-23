@@ -2800,7 +2800,8 @@ fn run_source(
                 "parts_rejected": report.parts_rejected,
                 "facts_reapplied": report.facts_reapplied,
                 "masked": report.masked,
-                "stopped": report.stopped,
+                "stopped": source_ran.stopped,
+                "documents_left": source_ran.documents_left,
             });
             // The run's model calls and the tokens they reported, as its `SourceRan` carries them.
             for (key, value) in [

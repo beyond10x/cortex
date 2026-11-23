@@ -1129,6 +1129,52 @@ pub fn merge(model: &Value, batch: &[Issued]) -> (Yaml, usize) {
     (Yaml::Mapping(doc), refused)
 }
 
+/// One refusal of a part of an extraction document, as a batch directory's `refusals.json` keeps
+/// it: the part EKR named (`facts[1]`), the outcome it named (a validator's issue code, or the
+/// code before `: ` of its `refusal`) and the reason it gave (the issue's message, or the rest of
+/// the `refusal`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PartRefusal {
+    pub part: String,
+    pub outcome: String,
+    pub reason: String,
+}
+
+/// Every refusal of the `rejected` parts of `report` (an `ekr.integrate.ExtractionReport`), in
+/// report order: one per validator issue of a part, or one for its `refusal`. A part with
+/// neither is `rejected` with no reason.
+pub fn part_refusals(report: &Value) -> Vec<PartRefusal> {
+    let mut out = Vec::new();
+    for part in report["rejected"].as_array().into_iter().flatten() {
+        let item = part["item"].as_str().unwrap_or_default().to_string();
+        let issues = part["issues"].as_array().map_or(&[][..], Vec::as_slice);
+        for issue in issues {
+            out.push(PartRefusal {
+                part: item.clone(),
+                outcome: issue["code"].as_str().unwrap_or("rejected").to_string(),
+                reason: issue["message"].as_str().unwrap_or_default().to_string(),
+            });
+        }
+        if !issues.is_empty() {
+            continue;
+        }
+        let (outcome, reason) = match &part["refusal"] {
+            Value::String(t) => match t.split_once(": ") {
+                Some((code, rest)) => (code.to_string(), rest.to_string()),
+                None => (t.clone(), String::new()),
+            },
+            Value::Null => ("rejected".to_string(), String::new()),
+            other => ("rejected".to_string(), other.to_string()),
+        };
+        out.push(PartRefusal {
+            part: item,
+            outcome,
+            reason,
+        });
+    }
+    out
+}
+
 /// EKR's refusal of one `rejected` part of an extraction report, as text: its `refusal`, or for a
 /// part validation rejected the codes of its `issues` (`invalid-supersession`). An issue's message
 /// can quote a value from the store, so only its code is kept.
@@ -1881,6 +1927,38 @@ mod tests {
         assert_eq!(v["entities"][0]["node_type"], "T5!");
         assert_eq!(v["entities"][0]["aliases"][0], "alias");
         assert_eq!(v["facts"][0]["!Property"]["value"]["value"], "v");
+    }
+
+    #[test]
+    fn each_refused_part_is_one_refusal_per_issue_or_its_refusal_split_at_the_code() {
+        let report = json!({"rejected": [
+            {"item": "facts[1]", "refusal": "extraction-value-mismatch: Runbook.owner: Integer"},
+            {"item": "facts[2]", "refusal": null, "issues": [
+                {"validator": "v", "code": "invalid-supersession", "message": "m1"},
+                {"validator": "v", "code": "other-code", "message": "m2"}]},
+            {"item": "entities[0]", "refusal": "transaction document limit"},
+            {"item": "facts[3]"},
+        ]});
+        let row = |part: &str, outcome: &str, reason: &str| PartRefusal {
+            part: part.into(),
+            outcome: outcome.into(),
+            reason: reason.into(),
+        };
+        assert_eq!(
+            part_refusals(&report),
+            [
+                row(
+                    "facts[1]",
+                    "extraction-value-mismatch",
+                    "Runbook.owner: Integer"
+                ),
+                row("facts[2]", "invalid-supersession", "m1"),
+                row("facts[2]", "other-code", "m2"),
+                row("entities[0]", "transaction document limit", ""),
+                row("facts[3]", "rejected", ""),
+            ]
+        );
+        assert!(part_refusals(&json!({"rejected": []})).is_empty());
     }
 
     #[test]

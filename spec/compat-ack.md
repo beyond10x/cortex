@@ -12,3 +12,6 @@ reset (AGENTS.md, "The specification comes first").
 
 | change | reason |
 |---|---|
+| `command/cortex.instance.RunSource/outcome-response-payload-changed/ran` | Story `run-report-cap-and-refusals`: the `ran` payload, `SourceRan`, carries `documents_left` and `stopped`, so a caller tells a run that `max_documents_per_run` capped from one that read every wanted document without a second `--fetch-only` call. cortex keeps no history of `SourceRan` events; `cortex run` prints both keys on every `ran` line, and `stopped` was there already. |
+| `event/cortex.instance.SourceRan/field-added/documents_left` | Same story: the wanted documents a run neither applied nor marked seen, `0` when it left none. No stored history of the event exists to read without it. |
+| `event/cortex.instance.SourceRan/field-added/stopped` | Same story: why the run ended before applying every wanted document, `document-cap` when the cap alone left documents; absent when it applied every one. Optional, and no stored history of the event exists. |

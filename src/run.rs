@@ -84,8 +84,12 @@ pub struct Report {
     pub redacted: Option<BTreeMap<String, usize>>,
     /// Placeholder-shaped strings in the model's answers that had no value to restore.
     pub unrestored: usize,
-    /// Why a run stopped before applying every new document, when it did.
+    /// Why a run stopped before applying every new document, when it did: [`DOCUMENT_CAP`] when
+    /// `max_documents_per_run` left wanted documents and nothing else stopped it.
     pub stopped: Option<String>,
+    /// The wanted documents the run neither applied nor marked seen, which the next run wants
+    /// again ([`SeenState::left`]).
+    pub documents_left: usize,
     /// Documents the model was shown cut at the policy's `max_chars_per_document`.
     pub truncated: usize,
     /// Parents left out without holding the window: their child call failed on
@@ -198,6 +202,7 @@ impl Default for Report {
             redacted: None,
             unrestored: 0,
             stopped: None,
+            documents_left: 0,
             truncated: 0,
             skipped: Vec::new(),
             backlog: Backlog::default(),
@@ -972,6 +977,7 @@ fn process_in(
         _ => false,
     };
     if selected.is_empty() && (listed.is_none() || unchanged()) {
+        left_for_next(report, &seen, policy.max_documents_per_run);
         unread(report, &fetched.unread, redactor.as_ref());
         let failures = fetched.child_failures.clone();
         finish(
@@ -1041,6 +1047,7 @@ fn process_in(
                 .then_some(compared)
                 .flatten();
         }
+        left_for_next(report, &seen, policy.max_documents_per_run);
         unread(report, &fetched.unread, redactor.as_ref());
         if undoable {
             held_to_gate(layout, spec, &session, label, report, None, before, started)?;
@@ -1439,6 +1446,10 @@ fn process_in(
             });
             report.unrestored += p.restore(&mut restored);
         }
+        // EKR's refusals name the restored values; the batch directory keeps them under the
+        // batch's placeholders. A copy of the mapping, so its counts are the prompt's alone; it
+        // ends with the batch, as the mapping does.
+        let mut refusal_mask = pseudonyms.clone();
         drop(pseudonyms);
         if !unnamed.is_empty() {
             let why = format!(
@@ -1504,6 +1515,8 @@ fn process_in(
         let mut applied = applied;
         let mut stop_after: Option<String> = None;
         let mut rejected_again: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        // Each part EKR refused, with the file applied: kept in the batch directory.
+        let mut refusals: Vec<(String, extract::PartRefusal)> = Vec::new();
         let mut unstored: BTreeSet<String> = BTreeSet::new();
         if let Some(reapply) = extract::reapply_rounds(&doc, &applied) {
             applied = reapply.rest;
@@ -1535,6 +1548,11 @@ fn process_in(
                                 serde_json::to_string_pretty(&second).unwrap_or_default(),
                             );
                         }
+                        refusals.extend(
+                            extract::part_refusals(&second)
+                                .into_iter()
+                                .map(|r| (format!("{name}.yaml"), r)),
+                        );
                         let still = crate::ekr::applied(&second).rejected;
                         report.facts_reapplied += round.facts.saturating_sub(still);
                         report.parts_rejected += still;
@@ -1555,6 +1573,13 @@ fn process_in(
                 }
             }
         }
+        let mut rows: Vec<_> = extract::part_refusals(&applied)
+            .into_iter()
+            .map(|r| ("extraction.yaml".to_string(), r))
+            .collect();
+        rows.append(&mut refusals);
+        write_refusals(&dir, &rows, refusal_mask.as_mut());
+        drop(refusal_mask);
         report.parts_rejected += crate::ekr::applied(&applied).rejected;
         // A document a rejected fact cites is seen all the same: EKR would reject the fact again
         // on the same text, and a retry would cost a model call and a slot of the run on every
@@ -1611,6 +1636,7 @@ fn process_in(
         }
         report.stopped = Some(why.clone());
     }
+    left_for_next(report, &seen, policy.max_documents_per_run);
     unread(report, &fetched.unread, redactor.as_ref());
     if undoable {
         held_to_gate(
@@ -2499,6 +2525,13 @@ fn apply_records(
             dir.join("report.json"),
             serde_json::to_string_pretty(&applied).unwrap_or_default(),
         );
+        // No model saw a record batch, so there are no placeholders: the refusals are kept as
+        // `report.json` beside them holds them.
+        let rows: Vec<_> = extract::part_refusals(&applied)
+            .into_iter()
+            .map(|r| ("extraction.yaml".to_string(), r))
+            .collect();
+        write_refusals(&dir, &rows, None);
         report.parts_rejected += crate::ekr::applied(&applied).rejected;
         let rejected = mapped.rejected(&applied);
         for issued in &batch {
@@ -2692,6 +2725,54 @@ fn refused(p: &redact::Batch<'_>, shown: &[evidence::Issued], known: &Known) -> 
     })
 }
 
+/// `stopped` of a run that `max_documents_per_run` capped and nothing else stopped.
+pub const DOCUMENT_CAP: &str = "document-cap";
+
+/// Counts the wanted documents the run leaves for the next ([`SeenState::left`]), and says
+/// [`DOCUMENT_CAP`] in `stopped` when the source's `max_documents_per_run` (`cap`) left some and
+/// nothing else stopped the run. Called before [`unread`], which adds what the fetch left.
+fn left_for_next(report: &mut Report, seen: &SeenState, cap: i64) {
+    report.documents_left = seen.left(&report.backlog);
+    let capped = i64::try_from(report.backlog.wanted.len()).unwrap_or(i64::MAX) > cap;
+    if capped && report.documents_left > 0 && report.stopped.is_none() {
+        report.stopped = Some(DOCUMENT_CAP.to_string());
+    }
+}
+
+/// Writes `refusals.json` into the batch directory `dir`: each part EKR refused (`rows`, the
+/// file applied and its [`extract::PartRefusal`]), as `document`, `part`, `outcome` and
+/// `reason`. Under a redaction policy every text goes through the batch's placeholders (`mask`),
+/// so the file names no value the prompt did not show. Nothing is written when EKR refused
+/// nothing.
+fn write_refusals(
+    dir: &std::path::Path,
+    rows: &[(String, extract::PartRefusal)],
+    mut mask: Option<&mut redact::Batch<'_>>,
+) {
+    if rows.is_empty() {
+        return;
+    }
+    let mut masked = |text: &str| match mask.as_deref_mut() {
+        Some(p) => p.replace(text),
+        None => text.to_string(),
+    };
+    let rows: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|(document, r)| {
+            json!({
+                "document": document,
+                "part": masked(&r.part),
+                "outcome": masked(&r.outcome),
+                "reason": masked(&r.reason),
+            })
+        })
+        .collect();
+    let _ = std::fs::write(
+        dir.join("refusals.json"),
+        serde_json::to_string_pretty(&rows).unwrap_or_default(),
+    );
+}
+
 /// Adds to why the run stopped what its fetch left unread.
 fn unread(report: &mut Report, unread: &[String], redactor: Option<&Redactor>) {
     if unread.is_empty() {
@@ -2766,6 +2847,10 @@ fn log_line(label: &str, report: &Report, started: i64) -> serde_json::Value {
         "stopped": report.stopped,
         "batch_chars": report.batch_chars,
     });
+    // Present only when the run left wanted documents: a run that left none logs as before.
+    if report.documents_left > 0 {
+        line["documents_left"] = json!(report.documents_left);
+    }
     // Present only when a replacement was applied again: other runs log as before.
     if report.facts_reapplied > 0 {
         line["facts_reapplied"] = json!(report.facts_reapplied);

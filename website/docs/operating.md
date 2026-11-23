@@ -31,7 +31,7 @@ run of the source writes it again, with its counts starting from zero.
 | `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
 | `instances/<name>/state/entities.json` | entity names from earlier runs, offered to the model so it reuses them |
 | `instances/<name>/failures/<source>.json` | documents whose extraction failed (`cortex.failures/1`): each key's text hash, its consecutive runs failed with the document alone (`runs`, `0` when none), the failed batches of several it was in (`batches`, absent when none) and the last reason; outside `state/`, so undoing a run keeps it (see [What one run does](#what-one-run-does)) |
-| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt as sent (`prompt.txt`), the model's raw answer (`answer.json`), the extraction document applied (`extraction.yaml`) and EKR's report (`report.json`), or claude's error text (`claude/error.txt`). Under a [`redaction`](./spec-file.md#redaction) policy `prompt.txt` and `answer.json` hold placeholders, not the values they stand for, `extraction.yaml` holds the restored values, and EKR's reports are not kept; the placeholder mapping is never written. Kept until a run removes it after the spec's [`runs.keep_days`](./spec-file.md#runs), and forever without one. `runs/` belongs to cortex: with `keep_days`, any directory in it named like a run directory (`<digits>-<lowercase letters, digits and dashes>`) is removed once that name is older than `keep_days`, whoever put it there |
+| `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt as sent (`prompt.txt`), the model's raw answer (`answer.json`), the extraction document applied (`extraction.yaml`), EKR's report (`report.json`) and each part EKR refused (`refusals.json`, only when it refused one: a list of `document`, the file applied, `part`, as EKR names it such as `facts[1]`, `outcome`, the code EKR named such as `extraction-value-mismatch`, and `reason`, its text), or claude's error text (`claude/error.txt`). Under a [`redaction`](./spec-file.md#redaction) policy `prompt.txt`, `answer.json` and `refusals.json` hold placeholders, not the values they stand for, `extraction.yaml` holds the restored values, and EKR's reports are not kept; the placeholder mapping is never written. Kept until a run removes it after the spec's [`runs.keep_days`](./spec-file.md#runs), and forever without one. `runs/` belongs to cortex: with `keep_days`, any directory in it named like a run directory (`<digits>-<lowercase letters, digits and dashes>`) is removed once that name is older than `keep_days`, whoever put it there |
 | `instances/<name>/snapshots/<time>-<source>.sqlite` | copies of a `sqlite` store, each taken before a run applied anything; the newest `snapshots.keep` (default 3) stay |
 | `instances/<name>/snapshots-state/<time>-<source>.json` | each snapshot's copy of `state/` |
 | `instances/<name>/stage.json` | while a run on a `postgres` store with a `gate` runs: its EKR stage, the head it began from, whether its publish began, and `state/` from before it (see [Undoing a run](#undoing-a-run)) |
@@ -180,9 +180,11 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
    and further, at a character boundary, to what its evidence holds: EKR 0.0.32 takes an
    evidence payload of at most 16,384 bytes, header included.
 3. **Keep** documents whose key was never applied, and documents whose text hash changed once
-   their last application is `refresh_after_days` old, at most `max_documents_per_run`. Two
-   changes do not wait for that window: a record read from a file, and a change of a `structured`
-   source whose text differs from the one last applied only in its links to tags.
+   their last application is `refresh_after_days` old, at most `max_documents_per_run`. A run
+   that leaves wanted documents beyond that cap reports `stopped: document-cap` and counts them
+   in `documents_left`; the next run wants them again. Two changes do not wait for that window: a
+   record read from a file, and a change of a `structured` source whose text differs from the one
+   last applied only in its links to tags.
 4. **Issue evidence.** cortex mints one evidence item per document; the model never does. The
    item is observed when the document says it was written: a web page's published time or a
    record's `time`, read as RFC 3339, as a date alone (00:00 UTC) or as epoch seconds with an

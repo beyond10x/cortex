@@ -56,6 +56,15 @@ Open limits in 1.0 ([Limits](https://beyond10x.github.io/cortex/docs/limits)):
   placeholders, not originals; the mapping is never written.
 - `cortex create --no-units` and `cortex adopt --no-units` print `view: null` instead of an address
   no viewer serves, and `cortex list` prints `view: null` for an instance with no viewer unit.
+- A run that `max_documents_per_run` capped reports `stopped: document-cap` instead of
+  `stopped: null`, and every `ran` report carries `documents_left`, the wanted documents the run
+  neither applied nor marked seen (`0` when it left none; `SourceRan` carries both). Before, a
+  capped run looked like one that read everything, and a caller counted what was left with a
+  second `--fetch-only` call.
+- A batch directory under `runs/` keeps each part EKR refused in `refusals.json`: the part, the
+  outcome EKR named and its reason. Under a `redaction` policy every value the policy finds in it
+  is replaced by a placeholder of the batch, as in `prompt.txt` and `answer.json`. Before, a
+  refusal's reason was in no file of the run directory under a policy.
 
 ## 0.7.2 — 2026-10-30
 
