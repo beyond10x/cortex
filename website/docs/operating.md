@@ -28,7 +28,7 @@ run of the source writes it again, with its counts starting from zero.
 | `instances/<name>/ask.sqlite` | with `cortex ask serve` on a `sqlite` store, its answer records, votes and review items (on a `postgres` store they live in the schema `ask.records` names instead) ([Ask service](./ask-service.md#answer-records-votes-and-review)); kept `ask.retention_days` (default 90) |
 | `instances/<name>/host.json` | the EKR host document the store is opened with |
 | `instances/<name>/meta.json` | the viewer's port and the directory the spec was created from |
-| `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash and time |
+| `instances/<name>/state/<source>.json` | what the source has already applied: each document's key, text hash, the hash of its stored fields (a web page's title, description and date, a structured record's mapping) and time |
 | `instances/<name>/state/entities.json` | entity names from earlier runs, offered to the model so it reuses them |
 | `instances/<name>/failures/<source>.json` | documents whose extraction failed (`cortex.failures/1`): each key's text hash, its consecutive runs failed with the document alone (`runs`, `0` when none), the failed batches of several it was in (`batches`, absent when none) and the last reason; outside `state/`, so undoing a run keeps it (see [What one run does](#what-one-run-does)) |
 | `instances/<name>/runs/<time>-<source>/batch-<n>/` | per model call: the prompt as sent (`prompt.txt`), the model's raw answer (`answer.json`), the extraction document applied (`extraction.yaml`) and EKR's report (`report.json`), or claude's error text (`claude/error.txt`). Under a [`redaction`](./spec-file.md#redaction) policy `prompt.txt` and `answer.json` hold placeholders, not the values they stand for, `extraction.yaml` holds the restored values, and EKR's reports are not kept; the placeholder mapping is never written. Kept until a run removes it after the spec's [`runs.keep_days`](./spec-file.md#runs), and forever without one. `runs/` belongs to cortex: with `keep_days`, any directory in it named like a run directory (`<digits>-<lowercase letters, digits and dashes>`) is removed once that name is older than `keep_days`, whoever put it there |
@@ -185,10 +185,19 @@ nothing. `cortex run --fetch-only`, which writes nothing, ends on the first.
 2. **Mask** credential-shaped text in each document, then cut it to `max_chars_per_document`,
    and further, at a character boundary, to what its evidence holds: EKR 0.0.32 takes an
    evidence payload of at most 16,384 bytes, header included.
-3. **Keep** documents whose key was never applied, and documents whose text hash changed once
-   their last application is `refresh_after_days` old, at most `max_documents_per_run`. Two
-   changes do not wait for that window: a record read from a file, and a change of a `structured`
-   source whose text differs from the one last applied only in its links to tags.
+3. **Keep** documents whose key was never applied, and documents that changed once their last
+   application is `refresh_after_days` old, at most `max_documents_per_run`. A document changed
+   when anything cortex stores from it would change: its text hash, and for a web page also its
+   title, description or publication date, which cortex writes onto its `WebPage` node. Three
+   changes do not wait for that window: a record read from a file, a change of a `structured`
+   source whose text differs from the one last applied only in its links to tags, and a
+   `structured` record whose mapping changed (a property, alias, relation, child `time` or link
+   added, removed or edited by `cortex update`): every such record is applied again, its text
+   changed or not.
+   A document applied before cortex remembered these fields (0.8.0 and earlier) counts as
+   follows on the first run that fetches it: a web page takes the title, description and date of
+   that fetch as applied, so it is not extracted again for them; a `structured` record is applied
+   again, since the mapping it was applied with is unknown and applying a record calls no model.
 4. **Issue evidence.** cortex mints one evidence item per document; the model never does. The
    item is observed when the document says it was written: a web page's published time or a
    record's `time`, read as RFC 3339, as a date alone (00:00 UTC) or as epoch seconds with an
@@ -345,18 +354,23 @@ documents the source no longer lists.
 
 `cortex run <instance>/<source> --fetch-only` runs steps 1 and 2 and the comparison of step 3,
 and stops there. It fetches over the window a run would ask about, masks and scrubs each document
-as a run does, and compares its content hash with the source's seen state:
+as a run does, and compares its content hash and stored fields with the source's seen state and
+its failure counts:
 
 ```json
 {"command":"run","outcome":"fetched","detail":{"source_id":"news/feed",
  "window":{"since":"2026-10-15T09:50:00Z","until":"2026-10-15T10:00:00Z"},
- "fetched":20,"new":3,"changed":1,"held":0,"unchanged":16,"unread":[]}}
+ "fetched":20,"new":3,"changed":1,"held":0,"unchanged":16,"unread":[],"skipped":[]}}
 ```
 
 `new` counts documents whose key was never applied, `changed` those a run would extract now,
-`held` those whose change waits for `refresh_after_days`, and `unchanged` the rest; `fetched` is
-their sum. `max_documents_per_run` does not cut the counts. `unread` lists, masked as a run's
-`stopped` is, why the fetch left records unread. Use it to check a new source, connection or
+`held` those whose change waits for `refresh_after_days`, and `unchanged` the rest. `skipped`
+names, with the line the run writes in its own `skipped`, each document the run would leave out
+because it failed alone on 3 consecutive runs with the text it has now (see
+[Failures](#failures)); such a document is counted neither `new` nor `changed`, as the run sends
+it to no model. `fetched` is the sum of the four counts and the documents in `skipped`.
+`max_documents_per_run` does not cut the counts. `unread` lists, masked as a run's `stopped` is,
+why the fetch left records unread. Use it to check a new source, connection or
 schedule, and to count the documents a run at your cadence would send to the model, before
 paying for extraction.
 

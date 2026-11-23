@@ -18,7 +18,7 @@ use crate::schedule::Systemd;
 use crate::snapshot::{self, BeforeApply, RestoreError};
 use crate::sources::{self, FetchError, Window};
 use crate::spend;
-use crate::state::{text_hash, Backlog, Failures, SeenState, Wanted};
+use crate::state::{text_hash, Backlog, Failures, SeenState};
 use crate::structured;
 
 pub struct Tools {
@@ -342,7 +342,7 @@ fn load_entities(layout: &Layout) -> BTreeMap<String, Vec<String>> {
 pub struct Counts {
     pub since_ms: i64,
     pub until_ms: i64,
-    /// `new` + `changed` + `held` + `unchanged`.
+    /// `new` + `changed` + `held` + `unchanged` + the documents in `skipped`.
     pub fetched: usize,
     /// Keys the seen state does not carry.
     pub new: usize,
@@ -353,6 +353,9 @@ pub struct Counts {
     pub unchanged: usize,
     /// Why the fetch left records unread, one line each, masked as a run's `stopped` is.
     pub unread: Vec<String>,
+    /// The `skipped` line of each document a run would leave out after it failed alone on
+    /// [`sources::DOCUMENT_FAILURE_LIMIT`] consecutive runs; counted in `fetched` and in no count.
+    pub skipped: Vec<String>,
 }
 
 /// What a source's run reads before it fetches: the instance's spec, the source's place in it,
@@ -920,6 +923,20 @@ fn process_in(
     let seen_path = layout.seen(label);
     let mut seen = SeenState::load(&seen_path).map_err(Failure::Fetch)?;
     seen.unlinked = unlinked;
+    // What cortex stores from each document beside its text: a Web page's title, description and
+    // date, a structured record's mapping. A change of them is a change of the document.
+    seen.fields = docs
+        .iter()
+        .filter_map(|d| {
+            let fields = match &structured {
+                Some(s) => Some(s.mapping_hash(&d.key)),
+                None => crate::state::page_fields(d),
+            };
+            fields.map(|f| (d.key.clone(), f))
+        })
+        .collect();
+    // A Web page applied before its fields were remembered takes them as fetched now.
+    seen.adopt_fields(&docs);
     // A document adopted by its key alone is seen with the text fetched now, and not extracted;
     // its hash is written with the rest of the run's state, so a run that is undone puts it back.
     report.hashed = seen.hash_unhashed(&docs);
@@ -935,10 +952,34 @@ fn process_in(
         .filter_map(|d| seen.documents.get(&d.key))
         .map(|s| s.applied_at - sources::OVERLAP_MS)
         .min();
-    // A fetch-only run stops here, with what this run would select counted.
+    // A document whose text failed with it alone in its request on
+    // `DOCUMENT_FAILURE_LIMIT` consecutive runs is left out until its text changes: named in
+    // `skipped` with its count and reason, and not wanted, so it holds no window. The counts live
+    // outside `state/`, so a run that is undone does not reset them.
+    let failures_path = crate::state::failures_path(&layout.dir, label);
+    let mut failures = Failures::load(&failures_path).map_err(Failure::Fetch)?;
+    let refresh = policy.refresh_after_days;
+    // The `skipped` line of a wanted document the failures leave out, `None` for any other.
+    let skipped_line = |failures: &Failures, d: &sources::Document| {
+        failures
+            .skips(d)
+            .filter(|_| seen.wants(d, started, refresh))
+            .map(|failed| {
+                masked_key(
+                    redactor.as_ref(),
+                    &skipped_after_failures(&d.key, failed.runs, &failed.reason),
+                )
+            })
+    };
+    // A fetch-only run stops here, with what this run would select counted: a document the run
+    // leaves out after its failures is named in `skipped`, not counted as model work (finding 11
+    // of the 0.7.2 review).
     if let Some(counts) = counts {
-        let refresh = policy.refresh_after_days;
         for d in &docs {
+            if let Some(line) = skipped_line(&failures, d) {
+                counts.skipped.push(line);
+                continue;
+            }
             let count = if !seen.documents.contains_key(&d.key) {
                 &mut counts.new
             } else if seen.wants(d, started, refresh) {
@@ -958,12 +999,6 @@ fn process_in(
             .collect();
         return Ok(std::mem::take(report));
     }
-    // A document whose text failed with it alone in its request on
-    // `DOCUMENT_FAILURE_LIMIT` consecutive runs is left out until its text changes: named in
-    // `skipped` with its count and reason, and not wanted, so it holds no window. The counts live
-    // outside `state/`, so a run that is undone does not reset them.
-    let failures_path = crate::state::failures_path(&layout.dir, label);
-    let mut failures = Failures::load(&failures_path).map_err(Failure::Fetch)?;
     // A run that read the source's whole listing (no window, nothing unread) drops the counts of
     // documents the source no longer lists.
     if window.is_none() && fetched.unread.is_empty() {
@@ -972,20 +1007,13 @@ fn process_in(
             failures.save(&failures_path).map_err(Failure::Apply)?;
         }
     }
-    let refresh = policy.refresh_after_days;
     let docs: Vec<_> = docs
         .into_iter()
         .filter(|d| {
-            let Some(failed) = failures
-                .skips(d)
-                .filter(|_| seen.wants(d, started, refresh))
-            else {
+            let Some(line) = skipped_line(&failures, d) else {
                 return true;
             };
-            report.skipped.push(masked_key(
-                redactor.as_ref(),
-                &skipped_after_failures(&d.key, failed.runs, &failed.reason),
-            ));
+            report.skipped.push(line);
             wanted = wanted.saturating_sub(1);
             false
         })
@@ -995,7 +1023,7 @@ fn process_in(
         wanted: docs
             .iter()
             .filter(|d| seen.wants(d, started, refresh))
-            .map(Wanted::of)
+            .map(|d| seen.wanted(d))
             .collect(),
         held_since,
     };
@@ -2789,9 +2817,7 @@ fn unsettled(
     listed
         .iter()
         .filter(|d| {
-            seen.documents
-                .get(&d.key)
-                .is_none_or(|s| s.hash.as_deref() != Some(&crate::state::doc_hash(d)))
+            !seen.applied_as_now(d)
                 || evidence::lead_bytes(d, &source.lead(d)) > evidence::PAYLOAD_MAX_BYTES
         })
         .map(|d| d.key.clone())

@@ -950,7 +950,7 @@ applies. Shorten or unmap the value at the source to clear it. Change detection,
 
 | field | meaning |
 |---|---|
-| `refresh_after_days` | a document whose text changed is extracted again only when it was last applied at least this many days ago; 0 to 36500. A record read from a file ([`kind: files`](#kind-files)) and a `structured` source's change whose text changed only in its links ([`kind: structured`](#kind-structured)) wait for nothing |
+| `refresh_after_days` | a document whose text changed, or a web page whose title, description or publication date changed, is extracted again only when it was last applied at least this many days ago; 0 to 36500. A record read from a file ([`kind: files`](#kind-files)), a `structured` source's change whose text changed only in its links, and a `structured` record whose mapping changed ([`kind: structured`](#kind-structured)) wait for nothing |
 | `change` | how a change is detected; `ContentHash` is the only value |
 | `max_documents_per_run` | the most documents one run extracts; above 0 |
 | `max_chars_per_document` | longer text is cut to this many characters; above 0. Text is also cut, at a character boundary, to what a 16,384-byte evidence payload holds after its header (EKR 0.0.32's bound), so about 5,400 characters of a three-byte script such as Chinese fit. A change is detected on the whole text, before the cut, and the run counts the cut documents it shows the model as `truncated` |
