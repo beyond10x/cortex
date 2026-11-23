@@ -1037,9 +1037,15 @@ fn process_in(
                 structured_source.map(|st| ended_listing(st, source, listed, &seen, &held));
             // Remembered once every end committed, so the next run with the same listing reads
             // nothing; forgotten when one did not.
-            seen.ended_listing = end_dropped(&records, listed, &seen, report, before)?
-                .then_some(compared)
-                .flatten();
+            let ended = end_dropped(&records, listed, &seen, report, before)?;
+            seen.ended_listing = ended.then_some(compared).flatten();
+            // A whole listing whose ends all committed retires the records it no longer lists:
+            // their values were retracted, so one that is listed again is applied again.
+            if ended && !listed.is_empty() && !source.windowed {
+                let keys: BTreeSet<&str> = listed.iter().map(|d| d.key.as_str()).collect();
+                let kept: Vec<&str> = held.iter().map(|h| h.prefix.as_str()).collect();
+                seen.retire_unlisted(&keys, &kept);
+            }
         }
         unread(report, &fetched.unread, redactor.as_ref());
         if undoable {
@@ -2368,7 +2374,11 @@ struct Records<'a> {
 /// fails the run when nothing was applied yet and stops it otherwise, as on the model path. A
 /// record with a part EKR rejected is counted in `parts_rejected`, named in `rejected` with EKR's
 /// refusal, and neither applied nor marked seen, so the run is not successful and the record is
-/// read and tried again. Each record's evidence leads with its mapped values
+/// read and tried again; so is a record whose entity, or a reference one of its facts names, EKR
+/// reports `ambiguous` (its aliases meet more than one store node of its type), which EKR applies
+/// nothing of though it rejects no part. A refused record is remembered
+/// ([`SeenState::refuse`]), so later runs try it after the other wanted records and it does not
+/// hold them back under `max_documents_per_run`. Each record's evidence leads with its mapped values
 /// ([`structured::Source::lead`]) before the cut at [`evidence::PAYLOAD_MAX_BYTES`]; a record whose
 /// mapped values alone are over that bound is not applied, but named in `skipped` and recorded as
 /// seen, as its next run would refuse it again. A record with a mapped value that does not convert
@@ -2444,6 +2454,7 @@ fn apply_records(
             report
                 .rejected
                 .push(Rejected::new(&issued.doc.key, &[why.to_string()]));
+            seen.refuse(&issued.doc, r.started);
         }
         if batch.is_empty() {
             continue;
@@ -2478,6 +2489,7 @@ fn apply_records(
                 report
                     .rejected
                     .push(Rejected::new(&issued.doc.key, refusals));
+                seen.refuse(&issued.doc, r.started);
                 continue;
             }
             report.documents_applied += 1;
