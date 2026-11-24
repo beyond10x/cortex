@@ -7,18 +7,20 @@ description: cortex ask serve answers questions over an instance's store as a st
 # Ask service
 
 `cortex ask serve --spec <instance spec>` answers questions over the store of the instance the spec
-names. It is a long-running process of its own: `POST /ask` answers `text/event-stream`, one event
-per step of a tool loop over the EKR MCP reader (`ekr mcp`, as [`cortex mcp-line`](./commands.md)
-starts it) against the instance's model gateway. It reads the store only through the reader and
-writes nothing to it. Each answer is streamed, and kept as a record in cortex's own file beside the
-store, where readers vote on it and a review queue collects the answers to look at
-([Answer records, votes and review](#answer-records-votes-and-review)). The specification is the domain
-[`cortex.ask`](./reference/ess/cortex-ask.md).
+defines. It is a long-running process of its own. `POST /ask` answers `text/event-stream`, one
+event per step of a tool loop. The loop runs over the EKR MCP reader against the instance's model
+gateway. The reader is `ekr mcp`, started as [`cortex mcp-line`](./commands.md) starts it. The
+service reads the store only through the reader and does not write to it.
+
+Each answer is streamed and kept as a record in cortex's own file beside the store. Askers vote on
+the records, and a review queue collects the answers to look at, as
+[Answer records, votes and review](#answer-records-votes-and-review) describes. The specification
+is the domain [`cortex.ask`](./reference/ess/cortex-ask.md).
 
 ## The `ask` section
 
-The service is configured by the optional `ask` section of the instance spec
-(`cortex.ask.AskSpec`), and its model is the spec's `model.gateway` and `model.model`:
+The optional `ask` section of the instance spec (`cortex.ask.AskSpec`) configures the service. Its
+model is the spec's `model.gateway` and `model.model`:
 
 ```yaml
 model:
@@ -60,12 +62,16 @@ ask:
 | `slow_after_ms` | optional: an answer that took longer opens a `slow` review item; without it none does |
 | `records` | required on a `postgres` store, refused on a `sqlite` one: the PostgreSQL schema of the answer records ([Records on a PostgreSQL store](#records-on-a-postgresql-store)) |
 
-`cortex ask serve` refuses to start (exit 2, naming the field) a spec with no `ask` section, no
-`model.gateway`, a limit, `retention_days`, `slow_after_ms` or `max_in_flight` of 0 or less, an `identity_header`
-that is no header name, or `ask.records` that does not fit the store (see
-[Records on a PostgreSQL store](#records-on-a-postgresql-store)). It then opens its records
-(exit 1 when it cannot) and purges the expired ones. Once bound it prints one line,
-`{"listening": "<address>"}`, and serves until it is stopped.
+`cortex ask serve` exits 2 without starting, with the field in its message, when the spec has:
+
+- no `ask` section, or no `model.gateway`
+- a limit, `retention_days`, `slow_after_ms` or `max_in_flight` of 0 or less
+- an `identity_header` that is no header name
+- `ask.records` that does not fit the store, listed under
+  [Records on a PostgreSQL store](#records-on-a-postgresql-store)
+
+It then opens its records and purges the expired ones. It exits 1 when it cannot open them. Once
+bound it prints one line, `{"listening": "<address>"}`, and serves until it is stopped.
 
 :::note[Identity]
 cortex verifies no token. The guard in front of the service verifies the asker and hands the
@@ -75,24 +81,26 @@ no model. Bind `listen` where only that guard reaches it.
 
 ## The model route
 
-The gateway is spoken to as an OpenAI-compatible endpoint: `POST <base_url>/v1/chat/completions`
-(`<base_url>/chat/completions` when `base_url` already ends in `/v1`), with the value of the
-variable `token_env` names as a bearer token, read when an answer starts. A missing or empty token
-fails the answer with `model-failed`; the service's log names the variable. The reader does not inherit that
-variable, nor any other `ANTHROPIC_*` or `CLAUDE_*` variable: it reads a store and gets no model
-credential. A `max_seconds` above ten years counts as ten years. A gateway answer above 4 MiB is
-not read past that and fails the answer with `model-failed`.
+The service calls the gateway as an OpenAI-compatible endpoint at
+`POST <base_url>/v1/chat/completions`. When `base_url` already ends in `/v1`, the path is
+`<base_url>/chat/completions`. The bearer token is the value of the variable in `token_env`, read
+when an answer starts. A missing or empty token fails the answer with `model-failed`, and the
+service's log gives the variable. The reader inherits neither that variable nor any other
+`ANTHROPIC_*` or `CLAUDE_*` variable, so it gets no model credential.
 
-Each answer starts its own reader and kills it when the answer ends; readers are not pooled, so
-no answer inherits a reader another answer left stuck or mid-call. At most `max_in_flight`
-readers run at once, and at most as many model calls: an answer holds its slot until its reader
-is stopped and its model call has ended, also when nobody reads it any more.
+A `max_seconds` above ten years counts as ten years. A gateway answer above 4 MiB is not read past
+that and fails the answer with `model-failed`.
+
+Each answer starts its own reader and kills it when the answer ends. Readers are not pooled, so no
+answer inherits a reader that another answer left stuck or mid-call. At most `max_in_flight`
+readers run at once, and at most as many model calls. An answer holds its slot until its reader is
+stopped and its model call has ended, also when no client reads it any more.
 
 ## The event contract
 
 The contract is `cortex.ask-events/1` (`cortex.ask.AskEvent`). Each SSE event's `event:` line is
-the event's name and its `data:` line the event as one JSON object, `{"event": <name>, "value":
-<fields>}`:
+the event's name, and its `data:` line is the event as one JSON object,
+`{"event": <name>, "value": <fields>}`:
 
 | event | fields | when |
 |---|---|---|
@@ -104,15 +112,18 @@ the event's name and its `data:` line the event as one JSON object, `{"event": <
 | `error` | `reason`, `message`, `retry_after` (with `rate-limit` only) | the last event of a request with no answer |
 
 `done.answer` is the answer with each citation marker, `[node:<id>]` or `[evidence:<id>]`, turned
-into a Markdown link from `link_templates` (left as written without a template); `nodes` and
-`evidence` are the cited ids, each once, in order. A citation counts only when the reader returned
-its id: the id occurs as a whole word in a tool result the model was shown in this answer. A
-marker naming any other id is an unsupported reference: it is written `[unsupported node:<id>]`
-(or `evidence`), never linked, left out of `nodes` and `evidence`, and listed once in
-`unsupported` as `node:<id>` or `evidence:<id>`. The token counts add up the gateway's `usage`
-over every model call (`prompt_tokens`, `completion_tokens`, `prompt_tokens_details.cached_tokens`;
-0 where not reported); `context_tokens` is the prompt tokens of the last call. `answer_id` is the
-answer's UUIDv7, the id its record and its votes carry.
+into a Markdown link from `link_templates`. Without a template the marker is left as written.
+`nodes` and `evidence` are the cited ids, each once, in order.
+
+A citation counts only when the reader returned its id: the id occurs as a whole word in a tool
+result the model was shown in this answer. A marker with any other id is an unsupported reference.
+It is written `[unsupported node:<id>]` (or `evidence`) and is not linked. It is left out of
+`nodes` and `evidence` and listed once in `unsupported` as `node:<id>` or `evidence:<id>`.
+
+The token counts add up the gateway's `usage` over every model call: `prompt_tokens`,
+`completion_tokens` and `prompt_tokens_details.cached_tokens`, 0 where not reported.
+`context_tokens` is the prompt tokens of the last call. `answer_id` is the answer's UUIDv7, the id
+its record and its votes carry.
 
 `error.reason` is one of:
 
@@ -130,21 +141,23 @@ answer's UUIDv7, the id its record and its votes carry.
 | `refused` | 200 | the model declined: its chat completion carried a non-empty `message.refusal` (the Chat Completions refusal). `message` is the refusal text; no `delta` is streamed and no tool call it asked for is made |
 
 The `error` event of an answer that started ends its `message` with `(request <answer_id>)`, the id
-of its record. The `message` of `model-failed` and `reader-failed` is a fixed text: what the
-gateway answered, the reader's program path and any other internal detail go only to the
-service's standard error, on a line naming that request id. Every line the service writes there
-is masked for credential shapes first, as a record is.
+of its record. The `message` of `model-failed` and `reader-failed` is a fixed text. What the
+gateway answered, the reader's program path and any other internal detail go only to the service's
+standard error, on a line that carries that request id. The service masks every line it writes
+there for credential shapes first, as it masks a record.
 
-A reader who closes the stream before its last event stops the answer at once: no model is
-asked again and the reader process is stopped. The answer is recorded as `client-closed`, with
-the token counts and steps of the model calls already made; it is no failure and opens no review
-item, `slow` included. A reader who leaves while the model is asked does not cut the call: it
-is waited for, up to `max_seconds`, so its tokens are counted, and none of its tool calls is
-made. Until it ends, the answer keeps its `max_in_flight` slot, so a client who disconnects
-cannot start more readers or model calls than `max_in_flight`.
+A client that closes the stream before its last event stops the answer at once. No model is asked
+again and the reader process is stopped. The answer is recorded as `client-closed`, with the token
+counts and steps of the model calls already made. It is no failure and opens no review item,
+`slow` included.
 
-A tool result is rewritten into compact text (each text that is JSON written without whitespace)
-and cut at a character boundary to `max_result_bytes`; its `tool` event says whether it was cut.
+A client that leaves while the model is asked does not cut the call. The service waits for the
+call, up to `max_seconds`, so its tokens are counted, and makes none of its tool calls. Until the
+call ends, the answer keeps its `max_in_flight` slot.
+
+A tool result is rewritten into compact text: each text that is JSON is written without
+whitespace. The result is then cut at a character boundary to `max_result_bytes`, and its `tool`
+event says whether it was cut.
 
 ## Redaction
 
@@ -152,33 +165,33 @@ With a [`redaction`](./spec-file.md#redaction) policy in the spec, the model rea
 redacted, as extraction shows it documents. One question is one redaction batch: one placeholder
 mapping, held in memory for that answer and written nowhere.
 
-- The question and each tool result are redacted before the model is given them, with the
-  policy's classes, `known_names`, `rules` and `rare_limit`: the same value is the same
-  placeholder (`[Email-1]`, `[Name-1]`) in every result of the answer, and a name replaced as rare
-  stays replaced when a later result repeats it. A result is redacted before it is cut to
-  `max_result_bytes`. Credentials and rules with a `replacement` are replaced irreversibly.
-- A result in which a class the policy's `refuse_if_left` names is still detected is not given to
-  the model: it gets a tool error saying the result was withheld by policy, naming the classes,
-  and the `tool` event says `withheld: true`. The answer goes on.
-- A question in which a `refuse_if_left` class is still detected, after it is redacted, is refused
-  before anything is sent and before it spends a question of the minute: the answer is a 400 with
-  an `error` event whose `reason` is `bad-request`, naming the classes and never what was found.
-  No model is asked.
+- The question and each tool result are redacted with the policy's classes, `known_names`, `rules`
+  and `rare_limit` before the model is given them. The same value is the same placeholder
+  (`[Email-1]`, `[Name-1]`) in every result of the answer. A name replaced as rare stays replaced
+  when a later result repeats it. A result is redacted before it is cut to `max_result_bytes`.
+  Credentials and rules with a `replacement` are replaced irreversibly.
+- A result in which a class from the policy's `refuse_if_left` is still detected is not given to
+  the model. The model gets a tool error that says the result was withheld by policy and lists the
+  classes, and the `tool` event says `withheld: true`. The answer goes on.
+- A question that still holds a `refuse_if_left` class after it is redacted is refused before
+  anything is sent and before it spends a question of the minute. The answer is a 400 with an
+  `error` event whose `reason` is `bad-request`. The event lists the classes and not what was
+  found.
 - Text in a tool result that already looks like a placeholder (`[Email-1]`) is shown to the model
-  as a fresh placeholder that restores to that text, so it is never restored to another value.
-  A withheld result adds none of its values to the answer's mapping.
+  as a fresh placeholder that restores to that text, so it is not restored to another value. A
+  withheld result adds none of its values to the answer's mapping.
 - The answer is restored before the client sees it: each placeholder that has a value is replaced
   by it, in every `delta` and in `done.answer`. A `delta` that ends inside a possible placeholder
   holds that tail back until the next `delta` or `done`, so no client sees half a placeholder. A
-  placeholder with no value (one the model changed or invented) stays as written and is counted in
-  `done.unrestored`.
+  placeholder with no value, because the model changed or invented it, stays as written and is
+  counted in `done.unrestored`.
 
-Without a policy, the question and the tool results reach the model unchanged, `withheld` is
-always false and `unrestored` 0. Detection is by pattern, with the limits that
-[Limits](./limits.md) states for extraction.
+Without a policy, the question and the tool results reach the model unchanged. `withheld` is then
+false and `unrestored` is 0. Detection is by pattern, with the limits that [Limits](./limits.md)
+states for extraction.
 
 A stream with one tool call and an answer, without a policy. The service sends each `data:` line
-as one line of JSON; here each is broken after a comma to fit the page:
+as one line of JSON. Here each is broken after a comma to fit the page:
 
 ```text
 event: status
@@ -200,30 +213,39 @@ data: {"event":"done","value":{"answer":"…",
 
 ## Answer records, votes and review
 
-Every answer the service gives, and every one that failed or hit a limit, is kept as a record
-(`cortex.ask.AnswerRecord`) before its last event is sent: the question, the identity, the answer or
-the reason there is none, the outcome (`answered`, `failed`, `limited`, `client-closed`,
-`cut-off`, `refused`), the `tool` events, the latency, the token counts and steps (of its `done`
-event; for every other outcome, of the model calls made before it ended, 0 when none was made)
-and the time. A `refused` record keeps the model's refusal text as its `answer`, with the reason
-`refused`. A request refused before it started
-(401, 429, 400) leaves no record. The records are cortex's own, never in the EKR store: on a `sqlite`
-store they live in `instances/<name>/ask.sqlite` in the instance directory, on a `postgres` store in
-a schema of their own ([below](#records-on-a-postgresql-store)). Either carries its schema version,
-migrated when the service starts; one written by a newer cortex is refused. The question, the
-answer, the `tool` events' arguments, a vote's comment and a close's
-reason and expected facts are kept with every credential shape masked (`[masked:<shape>]`),
-whatever the instance's
-`redaction` policy; the mask is irreversible.
+The service keeps each answer it gives, and each one that failed or hit a limit, as a record
+(`cortex.ask.AnswerRecord`) before its last event is sent. A record holds:
 
-The record routes need the identity header too (401 without it) and answer JSON; a refusal is
-`{"error": <reason>, "message": <text>}`. A body above 64 KiB is refused with 413
-`bad-request`. Before it answers any request, an unknown path or method included, the service
-reads its body to the end; a body above the route's limit, or one the answer does not use, is
-discarded as it is read, up to 16 MiB and for at most 10 seconds. A client still sending the
-body so reads the answer. A failure of the records answers 500 `store-failed` with a fixed message and a
-`request_id`; the detail (a database path, SQL text) goes only to the service's standard error,
-on a line naming that `request_id`.
+- the question and the identity
+- the answer, or the reason there is none
+- the outcome: `answered`, `failed`, `limited`, `client-closed`, `cut-off` or `refused`
+- the `tool` events, the latency and the time
+- the token counts and steps: those of its `done` event, or for every other outcome those of the
+  model calls made before it ended, 0 when none was made
+
+A `refused` record keeps the model's refusal text as its `answer`, with the reason `refused`. A
+request refused before it started (401, 429, 400) leaves no record.
+
+The records are cortex's own and are not in the EKR store. On a `sqlite` store they live in
+`instances/<name>/ask.sqlite` in the instance directory. On a `postgres` store they live in a
+schema of their own. Either carries its schema version and is migrated when the service starts. A version written by a newer
+cortex is refused.
+
+Whatever the instance's `redaction` policy, the service masks every credential shape
+(`[masked:<shape>]`) in the question, the answer, the `tool` events' arguments, a vote's comment,
+and a close's reason and expected facts. The mask is irreversible.
+
+The record routes also need the identity header (401 without it) and answer JSON. A refusal is
+`{"error": <reason>, "message": <text>}`. A body above 64 KiB is refused with 413 `bad-request`.
+
+Before it answers any request, an unknown path or method included, the service reads the request
+body to the end. A body above the route's limit, or one the answer does not use, is discarded as
+it is read, up to 16 MiB and for at most 10 seconds. So a client that is still sending the body
+reads the answer.
+
+A failure of the records answers 500 `store-failed` with a fixed message and a
+`request_id`. The detail, such as a database path or SQL text, goes only to the service's
+standard error, on a line that carries that `request_id`.
 
 | route | body | answers |
 |---|---|---|
@@ -231,8 +253,8 @@ on a line naming that `request_id`.
 | `GET /review` | none | `{"reviews": [...]}`: every open review item, oldest first, with `review_id`, `answer_id`, `cause` and `opened_at` |
 | `POST /review/{review_id}/close` | `{"reason": <text>, "expect_facts": [<text>, …], "expect_nodes": [<node id>, …]}` | the item as closed, with `expect_facts` and `expect_nodes`: what a right answer contains and cites, which `cortex eval case add --from-review` makes an eval case (both optional, empty when absent). 400 without a reason or with an expectation list that is not a list of strings that are not blank, 404 `no-such-review` for an unknown id, 409 `review-not-open` for an item closed already |
 
-An identity has one vote per answer: voting again changes it. An answer opens one review item per
-cause, and an item, once opened, stays as it was whatever happens after:
+An identity has one vote per answer, and voting again changes it. An answer opens one review item
+per cause. Once opened, an item stays as it is, whatever happens after:
 
 | cause | opened when |
 |---|---|
@@ -240,19 +262,19 @@ cause, and an item, once opened, stays as it was whatever happens after:
 | `failed` | the answer's outcome is `failed`, `limited`, `cut-off` or `refused` (a `client-closed` answer opens none) |
 | `slow` | the answer took longer than `slow_after_ms` |
 
-A vote or a close that meets a purge or another close keeps to these answers: a vote whose answer
-the purge takes answers 404 `no-such-answer` and leaves no vote or review item behind, and of two
-closes of one item at once one closes it and the other answers 409 `review-not-open`.
+A vote whose answer a purge deletes at the same time answers 404 `no-such-answer` and leaves no
+vote or review item behind. Of two closes of one item at once, one closes it and the other answers
+409 `review-not-open`.
 
-A record older than `retention_days` is deleted with its votes and review items, in one
-transaction, when the service starts (before the ready line) and every 24 hours after; any vote or
-review item whose record is gone goes with them. A `retention_days` too large to count keeps every
-record.
+A record older than `retention_days` is deleted with its votes and review items in one
+transaction. The purge runs when the service starts, before the ready line, and every 24 hours
+after. Any vote or review item whose record is gone is deleted with them. A `retention_days` too
+large to count keeps every record.
 
 ### Records on a PostgreSQL store
 
-An instance on a `postgres` store keeps its records in a PostgreSQL schema of their own, never in
-EKR's schema, and writes no `ask.sqlite`. Its spec must name that schema in `ask.records`:
+An instance on a `postgres` store keeps its records in a PostgreSQL schema of their own, not in
+EKR's schema, and writes no `ask.sqlite`. Its spec must give that schema in `ask.records`:
 
 ```yaml
 ask:
@@ -271,24 +293,26 @@ ask:
 | `ca_file` | optional: the PEM file the server's certificate is verified against; without it, the public web roots |
 | `connection` | the Connectors connection holding the records role's `{"password": …}` document, by `connection` id or by `profile` |
 
-The service never holds that password. When it starts, it launches its records process,
+The service does not hold that password. When it starts, it launches its records process,
 `cortex ask records --url <url> --schema <schema> [--ca-file <file>]`, with
-`connectors connections launch --adapter <adapter> --connection <id> --consumer cortex-records`,
-which hands that process the connection's document on descriptor 3. The records process connects,
-creates the schema when it is missing, migrates the tables `answers`, `votes`, `reviews` and
-`schema_version` in it to this cortex's schema version, and then runs the service's statements,
-one JSON line each way on its standard input and output. A schema at a newer version is refused
-(the service exits 1). Only the records process reads the password; the service, its output and
-the instance directory never see it.
+`connectors connections launch --adapter <adapter> --connection <id> --consumer cortex-records`.
+That command hands the process the connection's document on descriptor 3.
 
-Record calls are served one at a time in the order they arrive. A call waits at most 30 seconds
-for the calls before it, for a start of the records process and for the answer to its statement,
-and the records process runs each statement with a `statement_timeout` of 30 seconds. While the
-database stalls, a vote, `GET /review` or a close answers `store-failed` (500), and an answer
-whose record cannot be kept still ends, its record logged as not kept. A records process that did
-not answer in time is stopped and the next call starts another; a call that only waited behind
-others fails without stopping it, and a start that fails fails the calls that waited through it
-instead of each starting another.
+The records process connects and creates the schema when it is missing. It migrates the tables
+`answers`, `votes`, `reviews` and `schema_version` in it to this cortex's schema version. Then it
+runs the service's statements, one JSON line each way on its standard input and output. A schema
+at a newer version is refused, and the service exits 1. Only the records process reads the
+password. The service, its output and the instance directory do not see it.
+
+Record calls are served one at a time in the order they arrive. A call waits at most 30 seconds for
+the calls before it, for a start of the records process and for the answer to its statement. The
+records process runs each statement with a `statement_timeout` of 30 seconds.
+
+While the database stalls, a vote, `GET /review` or a close answers `store-failed` (500). An answer
+whose record cannot be kept still ends, and its record is logged as not kept. A records process
+that did not answer in time is stopped, and the next call starts another. A call that only waited
+behind others fails without stopping it. A start that fails fails the calls that waited through it,
+and they do not each start another.
 
 The operator, once per deployment:
 
@@ -299,16 +323,19 @@ The operator, once per deployment:
 3. Pins the `cortex` binary in the Connectors configuration as the consumer `cortex-records`. It
    needs no variable passed (`pass_env = []`).
 
-`cortex ask serve` refuses before anything binds (exit 2, naming the field, never its value) a
-`postgres` store without `ask.records`, a `sqlite` store with one, a schema that is the store's or
-no lowercase identifier, a URL that carries a password, names no role or is not a PostgreSQL URL,
-and a connection named by both id and profile.
+`cortex ask serve` exits 2 before anything binds when the records configuration has one of these
+faults. Its message gives the field and not its value.
+
+- a `postgres` store without `ask.records`, or a `sqlite` store with one
+- a schema that is the store's or no lowercase identifier
+- a URL that carries a password, has no role or is not a PostgreSQL URL
+- a connection given by both id and profile
 
 ## Figures
 
-cortex draws figures as SVG with its own code, from a typed figure
-([`cortex.ask.FigureSpec`](./reference/ess/cortex-ask.md)), never from markup a model wrote. A
-figure is one of three kinds:
+cortex draws figures as SVG with its own code, from a typed figure,
+[`cortex.ask.FigureSpec`](./reference/ess/cortex-ask.md). It does not draw from markup a model
+wrote. A figure is one of three kinds:
 
 | kind | holds | drawn as |
 |---|---|---|
@@ -320,10 +347,11 @@ The SVG uses only the elements `svg`, `g`, `rect`, `line`, `path`, `circle`, `te
 and only geometry, fill, stroke and text attributes, whose values are numbers, colours and
 keywords. It holds no script, no `foreignObject`, no `style`, no event-handler attribute and no
 `href`. Every title and label is the text of a `text` or `title` element, escaped (`<`, `>`, `&`,
-`"`, `'`), with each control character drawn as U+FFFD. The same figure always gives the same
-bytes.
+`"`, `'`), with each control character drawn as U+FFFD. The same figure gives the same bytes on
+every run.
 
-A figure over a cap is refused whole (`cortex.ask.FigureTooLarge`, naming the cap), never cut:
+A figure over a cap is not cut. It is refused whole with `cortex.ask.FigureTooLarge`, which gives
+the cap:
 
 | cap | at most |
 |---|---|
@@ -333,9 +361,9 @@ A figure over a cap is refused whole (`cortex.ask.FigureTooLarge`, naming the ca
 | `edges` | 300 graph edges |
 | `bytes` | 262,144 bytes of SVG |
 
-A figure holding a value it cannot be drawn from is refused too (`cortex.ask.FigureInvalid`,
-naming the value): a negative count, an instant that is not RFC 3339, a node id given twice, or an
-edge whose source or target is no node of the graph.
+A figure holding a value it cannot be drawn from is refused with `cortex.ask.FigureInvalid`, which
+gives the value. Such values are a negative count, an instant that is not RFC 3339, a node id given
+twice, or an edge whose source or target is no node of the graph.
 
 The renderer is not yet reachable from `POST /ask`: no endpoint or event draws a figure in this
 release.

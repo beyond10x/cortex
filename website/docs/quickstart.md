@@ -10,7 +10,8 @@ description: Install cortex from a release, connect a web search provider, creat
 
 - Linux on x86-64 with systemd user units. Timers and the viewer are systemd user units, and the
   released binary is built for `x86_64-unknown-linux-gnu`.
-- Rust and Cargo, so that `cortex setup` can install EKR (and to build cortex from source).
+- Rust and Cargo, so that `cortex setup` can install EKR. Building cortex from source needs them
+  too.
 - `ekr` at the version the spec file pins. `cortex setup` installs it.
 - [`connectors`](https://github.com/beyond10x/connectors), with a connection for every adapter
   your sources use.
@@ -37,7 +38,7 @@ cortex --version
 cortex setup
 ```
 
-`sha256sum` prints `cortex-<version>-x86_64-unknown-linux-gnu.tar.gz: OK`; any other answer means
+`sha256sum` prints `cortex-<version>-x86_64-unknown-linux-gnu.tar.gz: OK`. Any other answer means
 the download is not the released file, and it must not be installed. `cortex --version` prints
 `cortex <version>`. With the [GitHub CLI](https://cli.github.com/),
 `gh release download v$version --repo beyond10x/cortex` downloads both files in one step.
@@ -59,7 +60,7 @@ cortex setup
 ## 2. Connect a web search provider
 
 Web sources read websites through a Connectors adapter that implements
-`datasource.websearch/v1alpha1`; `tavily` is the default. Connect it once and note the connection
+`datasource.websearch/v1alpha1`. `tavily` is the default. Connect it once and note the connection
 id it lists:
 
 ```sh
@@ -82,7 +83,7 @@ EKR's own `ekr.extraction-document/1` format. [Spec file](./spec-file.md) explai
 cortex create --spec examples/example.yaml
 ```
 
-This checks that Connectors lists every connection the sources name, seeds the store, applies the
+`cortex create` checks that Connectors lists every connection the sources name, seeds the store, applies the
 seed schema, starts the viewer and installs one timer per source. It prints one JSON line with
 the instance directory, the viewer's address and the source ids.
 
