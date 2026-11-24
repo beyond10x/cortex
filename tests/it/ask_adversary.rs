@@ -705,7 +705,14 @@ fn a_closed_request_stops_the_loop_and_its_reader() {
         seen.extend_from_slice(&buf[..n]);
     }
     drop(stream);
-    std::thread::sleep(Duration::from_secs(6));
+    // The answer is recorded once its loop has ended; from then on the model is asked no more.
+    let (_, answers) = kept(&service, 1);
+    assert_eq!(
+        records::outcome_name(answers[0].outcome),
+        "client-closed",
+        "{:?}",
+        answers[0]
+    );
     let asked = gateway.asked();
     std::thread::sleep(Duration::from_secs(2));
     assert_eq!(

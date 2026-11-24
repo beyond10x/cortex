@@ -237,20 +237,33 @@ this repository and published by the organisation's reusable workflow.
   slowest tests from nextest's JUnit report (`target/nextest/<profile>/junit.xml` in the tree).
   The 120 s step budget is a switch, `TEST_BUDGET` in `Taskfile.yml`: `enforce` runs the nextest
   profile `budget` (`global-timeout = "120s"`) and fails the step over 120 s, and is the default;
-  `report` prints an over-budget line and passes. Building the test binaries is
-  `task test-build` and outside the 120 s. An expensive product (a synthesis, a build, a server)
+  `report` prints an over-budget line and passes. The step is held to 90 s: over that it prints a
+  `warning:` line, keeping 30 s of the budget free. Building the test binaries is
+  `task test-build` and outside the 120 s. `priority` in `.config/nextest.toml` starts the long
+  tests first, so none of them starts late and draws out the end of the run; a test that waits
+  seconds by design (a drain time, a lock wait, a default pause) belongs in that list. A test
+  waits on an event (a file, a record, a process gone), never a fixed sleep after the fact. An expensive product (a synthesis, a build, a server)
   is made once, never per test: under nextest a `OnceLock` is per test. The PostgreSQL tests share
   one server per run (`tests/common/pg.rs`): the first test that asks for a database starts it in a
   container under a lock in `<target>/tmp/cortex-test-postgres-v1/`, every later test finds it
   there and takes a database of its own whose role names end in the database's id; the server
-  ends itself after 15 minutes, and `task test` prints how many servers the step started. Time a
+  ends itself after 15 minutes, and `task test` prints how many servers the step started. No
+  PostgreSQL test waits on that start: `task test` pulls the image while the test binaries build
+  (`task test-postgres-image`), `it::postgres_server::the_shared_server_answers` is the first test
+  nextest starts and starts the server, and the PostgreSQL tests start after the long tests. Time a
   new test; one over 5 s is named with its time in the change's report.
 - Test builds carry no debug info: `.cargo/config.toml` sets `debug = false` for the `dev` and
   `test` profiles (a cargo config file wins over the manifest and over a user-wide
   `line-tables-only`). `readelf -S` on the test binary shows no `.debug_*` section. The same
   file builds every dependency at `opt-level = 2` (cortex-cli itself stays at 0): the masking and
-  HTTP tests spend their time in regex and hyper. `task test` runs 8 tests at once
-  (`TEST_THREADS`), as most tests wait on child processes, timeouts and containers.
+  HTTP tests spend their time in regex and hyper. `task test` runs 12 tests at once
+  (`TEST_THREADS`): on the forge's 4 CPUs the step is bound by CPU, about 9 in 10 of it busy at
+  8 threads, and 12 threads took 93 s where 8 took 98 s on one runner (16 took 92 s). Most of
+  that CPU is the kernel starting processes (`ekr`, `cortex`, the `/bin/sh` stand-ins and the
+  tools they run): a stand-in that runs one process fewer per call saves CPU in every test that
+  calls it. CI's `task check` step puts `TMPDIR`, where the test worlds and their SQLite stores
+  live, on a tmpfs, as `/tmp` is on most developer hosts: on the runner's disk the same step ran
+  91 s and 84 s against 74 s on tmpfs.
 - `rust-toolchain.toml` pins rustc (1.99.0, with rustfmt and clippy) for the local gate and every
   workflow; each workflow installs it with `rustup toolchain install`. Change the pin there only.
 - **Planning-only pull requests skip the build.** `.github/workflows/check.yml` keeps its required

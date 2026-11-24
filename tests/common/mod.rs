@@ -58,17 +58,30 @@ fi
 /// A child shell writes the file, never this process: a descriptor open for writing here would be
 /// copied into the child of every spawn another test thread makes meanwhile, and running the file
 /// fails with `Text file busy` until that child execs. Writing to a temporary name and renaming does
-/// not help; the renamed file is the same inode, still open for writing.
+/// not help; the renamed file is the same inode, still open for writing. Setting the mode opens no
+/// descriptor, so this process does that once the shell has ended, which spares a `chmod` process
+/// per stand-in (about 6,000 a run).
 pub fn executable(path: &Path, body: &str) {
-    let status = Command::new("/bin/sh")
+    executables(&[(path, body)]);
+}
+
+/// Writes several `/bin/sh` stand-ins as [`executable`] does, with one child shell for all of them.
+pub fn executables(stand_ins: &[(&Path, &str)]) {
+    use std::os::unix::fs::PermissionsExt;
+    let mut shell = Command::new("/bin/sh");
+    shell
         .arg("-c")
-        .arg(r#"printf '%s' "$2" > "$1" && chmod 755 "$1""#)
-        .arg("sh")
-        .arg(path)
-        .arg(format!("#!/bin/sh\n{body}"))
-        .status()
-        .unwrap();
-    assert!(status.success(), "cannot write {}", path.display());
+        .arg(r#"while [ "$#" -gt 1 ]; do printf '%s' "$2" > "$1" || exit 1; shift 2; done"#)
+        .arg("sh");
+    for (path, body) in stand_ins {
+        shell.arg(path).arg(format!("#!/bin/sh\n{body}"));
+    }
+    let status = shell.status().unwrap();
+    for (path, _) in stand_ins {
+        assert!(status.success(), "cannot write {}", path.display());
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+            .unwrap_or_else(|e| panic!("cannot make {} executable: {e}", path.display()));
+    }
 }
 
 /// The connector and instance a stand-in's `connections list` entry names beside its adapter, as
@@ -116,10 +129,8 @@ impl World {
         // and its standard input to inputs.log, and answers answer.json, or fails when the file
         // `fail` exists. Any other command line, `operations …` included, is refused with exit 2:
         // 0.60.0 removed the `operations` invoke, and cortex calls no other `operations` command.
-        executable(
-            &bin.join("connectors"),
-            &format!(
-                r#"R="{root}"
+        let connectors = format!(
+            r#"R="{root}"
 case "$*" in
   *"connections list"*) if [ -e "$R/revalidated" ]; then S=ready; else S=pending; fi; C=conn_test; if [ -e "$R/connection" ]; then C=$(cat "$R/connection"); fi; printf '{{"ok":true,"result":{{"connections":[{{"adapter":"tavily",{listed},"connection":"%s","state":"%s","revision":"rev1"}}]}}}}' "$C" "$S" ;;
   *"connections revalidate"*)
@@ -135,20 +146,18 @@ case "$*" in
   *) echo '{{"ok":false}}'; exit 2 ;;
 esac
 "#,
-                root = root.display(),
-                listed = LISTED,
-            ),
+            root = root.display(),
+            listed = LISTED,
         );
-        // claude: records its arguments and whether ANTHROPIC_API_KEY reached it, then answers
-        // one fact per evidence id it was given and one fact citing a forged id. Its answer carries
-        // `total_cost_usd` 0.01, or no cost at all when the file `no-cost` exists.
-        executable(
-            &bin.join("claude"),
-            &format!(
-                r#"R="{root}"
+        // claude: records its arguments and whether ANTHROPIC_API_KEY reached it (1 or 0, set even
+        // when empty), then answers one fact per evidence id it was given and one fact citing a
+        // forged id. Its answer carries `total_cost_usd` 0.01, or no cost at all when the file
+        // `no-cost` exists.
+        let claude = format!(
+            r#"R="{root}"
 echo call >> "$R/claude-calls.log"
 printf "%s\n" "$*" | tr "\n" " " >> "$R/claude-args.log"; echo >> "$R/claude-args.log"
-env | grep -c '^ANTHROPIC_API_KEY=' >> "$R/claude-env.log"
+if [ -n "${{ANTHROPIC_API_KEY+set}}" ]; then echo 1; else echo 0; fi >> "$R/claude-env.log"
 ids=$(grep -oE 'evidence id [0-9a-f-]{{36}}' | cut -d' ' -f3)
 facts=""
 for id in $ids; do
@@ -161,13 +170,14 @@ cat <<EOF
 {{"type":"result","subtype":"success","is_error":false,$COST"structured_output":{{"format":"ekr.extraction-document/1","ontology":{{"node_types":[{{"name":"Organization","parents":[],"abstract_type":false,"properties":[{{"name":"website","value":{{"value_kind":"String"}},"cardinality":"One","required":false}}]}},{{"name":"Product","parents":[],"abstract_type":false,"properties":[]}}],"edge_types":[{{"name":"DEVELOPS","source_types":["Organization"],"target_types":["Product"],"cardinality":"Many","properties":[]}}]}},"entities":[{{"node_type":"Organization","aliases":["Example Labs"]}},{{"node_type":"Product","aliases":["Widget engine"]}}],"facts":[$facts]}}}}
 EOF
 "#,
-                root = root.display()
-            ),
+            root = root.display()
         );
-        executable(
-            &bin.join("systemctl"),
-            &format!("echo \"$*\" >> \"{}/systemctl.log\"\n", root.display()),
-        );
+        let systemctl = format!("echo \"$*\" >> \"{}/systemctl.log\"\n", root.display());
+        executables(&[
+            (bin.join("connectors").as_path(), connectors.as_str()),
+            (bin.join("claude").as_path(), claude.as_str()),
+            (bin.join("systemctl").as_path(), systemctl.as_str()),
+        ]);
         Self {
             home: root.join("home"),
             units: root.join("units"),
