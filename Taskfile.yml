@@ -4,7 +4,7 @@ vars:
   CARGO: 'env CARGO_BUILD_JOBS=4 RUST_TEST_THREADS=4 nice -n 19 cargo'
   ESS: ess
   TEST_BUDGET: enforce
-  TEST_THREADS: '8'
+  TEST_THREADS: '12'
   TEST_POSTGRES_IMAGE: postgres:17
 
 tasks:

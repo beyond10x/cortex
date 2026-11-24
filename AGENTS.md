@@ -256,8 +256,14 @@ this repository and published by the organisation's reusable workflow.
   `test` profiles (a cargo config file wins over the manifest and over a user-wide
   `line-tables-only`). `readelf -S` on the test binary shows no `.debug_*` section. The same
   file builds every dependency at `opt-level = 2` (cortex-cli itself stays at 0): the masking and
-  HTTP tests spend their time in regex and hyper. `task test` runs 8 tests at once
-  (`TEST_THREADS`), as most tests wait on child processes, timeouts and containers.
+  HTTP tests spend their time in regex and hyper. `task test` runs 12 tests at once
+  (`TEST_THREADS`): on the forge's 4 CPUs the step is bound by CPU, about 9 in 10 of it busy at
+  8 threads, and 12 threads took 93 s where 8 took 98 s on one runner (16 took 92 s). Most of
+  that CPU is the kernel starting processes (`ekr`, `cortex`, the `/bin/sh` stand-ins and the
+  tools they run): a stand-in that runs one process fewer per call saves CPU in every test that
+  calls it. CI's `task check` step puts `TMPDIR`, where the test worlds and their SQLite stores
+  live, on a tmpfs, as `/tmp` is on most developer hosts: on the runner's disk the same step ran
+  91 s and 84 s against 74 s on tmpfs.
 - `rust-toolchain.toml` pins rustc (1.99.0, with rustfmt and clippy) for the local gate and every
   workflow; each workflow installs it with `rustup toolchain install`. Change the pin there only.
 - **Planning-only pull requests skip the build.** `.github/workflows/check.yml` keeps its required
