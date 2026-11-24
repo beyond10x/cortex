@@ -43,8 +43,8 @@ serve              ekr view in a browser, ekr mcp to agents
 | every integration and every credential | [Connectors](https://github.com/beyond10x/connectors) (`connectors` binary) |
 | reading the text and answering in EKR's extraction format | the model, through `claude -p` with no tools |
 
-cortex holds no secrets. A source names a Connectors connection id, and cortex only invokes
-operations through `connectors`; the credential stays in Connectors.
+cortex holds no secrets: a source names a Connectors connection id, and cortex only invokes
+operations through `connectors`. The credential stays in Connectors.
 
 ## Where to go next
 
