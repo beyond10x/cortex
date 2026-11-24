@@ -21,7 +21,34 @@
       "type": "string"
     },
     "spec": {
-      "$ref": "#/$defs/cortex.instance.InstanceSpec"
+      "$ref": "#/$defs/cortex.instance.InstanceSpec",
+      "examples": [
+        {
+          "description": "What the support desk learned from its tickets.",
+          "ekr": {
+            "version": "0.0.43"
+          },
+          "format": "cortex.instance/1",
+          "model": {
+            "budget_tokens": 2000000.0,
+            "gateway": {
+              "base_url": "http://127.0.0.1:4000",
+              "token_env": "LLM_GATEWAY_TOKEN"
+            },
+            "model": "claude-sonnet-5-5",
+            "timeout_s": 600.0
+          },
+          "name": "support-desk",
+          "runs": {
+            "keep_days": 30.0
+          },
+          "seed": {
+            "documents": []
+          },
+          "serve": {},
+          "sources": []
+        }
+      ]
     },
     "store": {
       "type": "string"
@@ -40,8 +67,7 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "4d696c5e1aca27b4d9e6d3faaf3bc2b55b9215801b5aee7ac47b47e28bc8e13f",
-    "contract_digest": "slice-sha256/2:81f67af492c4d59dc47d6c234079c5e43d1cde50ddc19e857ab5631924ff94d1",
+    "contract_digest": "slice-sha256/2:ae2725841ab226b0f38df9105f8f113310d5f400bd6579eab8a79893a9f7581f",
     "regenerate": "ess generate"
   },
   "$defs": {

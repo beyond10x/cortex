@@ -1,6 +1,5 @@
 // generated from cortex v1
-// model digest 4d696c5e1aca27b4d9e6d3faaf3bc2b55b9215801b5aee7ac47b47e28bc8e13f
-// contract digest 1788d15a326626c332896ec48b946f55a5bb886a430361d0c2ba2a8525140ea8
+// contract digest aa8302707f999261b329609a5079eba393745a1abb3866d456fde582929b45ae
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Instances — `cortex.instance`.
@@ -18,7 +17,7 @@ pub enum ChangeDetection {
 
 /// ChildCall — `cortex.instance.ChildCall`.
 ///
-/// Every value satisfies `paging.stop_older_than_since != true` — declared here, enforced by whatever behaviour constructs one.
+/// Every value satisfies `paging.stop_older_than_since != true` — checked by [`ChildCall::broken_constraint`]; the generated decoder refuses a value that breaks it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChildCall {
     /// `operation` — `String`.
@@ -35,9 +34,24 @@ pub struct ChildCall {
     pub follow: Option<FollowRule>,
 }
 
+impl ChildCall {
+    /// The first invariant `cortex.instance.ChildCall` declares that this value breaks, as what a decoder expected
+    /// instead, or `None` when it breaks none.
+    ///
+    /// An invariant is broken only when it is false of this value, as the conformance
+    /// interpreter reads it. A member's own constraints are its own type's to check.
+    pub fn broken_constraint(&self) -> Option<&'static str> {
+        use crate::primitives::invariant as iv;
+        if iv::broken(iv::compare(self.paging.as_ref().map(|v| &v.stop_older_than_since).and_then(|v| v.as_ref()).map(|v| iv::Fact::Bool(*v)), iv::Op::Ne, Some(iv::Fact::Bool(true)), false, true)) {
+            return Some("a value satisfying `paging.stop_older_than_since != true`");
+        }
+        None
+    }
+}
+
 /// CompareLink — `cortex.instance.CompareLink`.
 ///
-/// Every value satisfies `paging.stop_older_than_since != true` — declared here, enforced by whatever behaviour constructs one.
+/// Every value satisfies `paging.stop_older_than_since != true` — checked by [`CompareLink::broken_constraint`]; the generated decoder refuses a value that breaks it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompareLink {
     /// `operation` — `String`.
@@ -60,9 +74,24 @@ pub struct CompareLink {
     pub relation: String,
 }
 
+impl CompareLink {
+    /// The first invariant `cortex.instance.CompareLink` declares that this value breaks, as what a decoder expected
+    /// instead, or `None` when it breaks none.
+    ///
+    /// An invariant is broken only when it is false of this value, as the conformance
+    /// interpreter reads it. A member's own constraints are its own type's to check.
+    pub fn broken_constraint(&self) -> Option<&'static str> {
+        use crate::primitives::invariant as iv;
+        if iv::broken(iv::compare(self.paging.as_ref().map(|v| &v.stop_older_than_since).and_then(|v| v.as_ref()).map(|v| iv::Fact::Bool(*v)), iv::Op::Ne, Some(iv::Fact::Bool(true)), false, true)) {
+            return Some("a value satisfying `paging.stop_older_than_since != true`");
+        }
+        None
+    }
+}
+
 /// ConnectionRef — `cortex.instance.ConnectionRef`.
 ///
-/// Every value satisfies `(defined(connection) or defined(profile))` — declared here, enforced by whatever behaviour constructs one.
+/// Every value satisfies `(defined(connection) or defined(profile))` — checked by [`ConnectionRef::broken_constraint`]; the generated decoder refuses a value that breaks it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConnectionRef {
     /// `adapter` — `String`.
@@ -73,10 +102,25 @@ pub struct ConnectionRef {
     pub profile: Option<String>,
 }
 
+impl ConnectionRef {
+    /// The first invariant `cortex.instance.ConnectionRef` declares that this value breaks, as what a decoder expected
+    /// instead, or `None` when it breaks none.
+    ///
+    /// An invariant is broken only when it is false of this value, as the conformance
+    /// interpreter reads it. A member's own constraints are its own type's to check.
+    pub fn broken_constraint(&self) -> Option<&'static str> {
+        use crate::primitives::invariant as iv;
+        if iv::broken(iv::any([Some(self.connection.as_ref().is_some()), Some(self.profile.as_ref().is_some())])) {
+            return Some("a value satisfying `(defined(connection) or defined(profile))`");
+        }
+        None
+    }
+}
+
 /// ConnectorsSource — `cortex.instance.ConnectorsSource`.
 ///
-/// Every value satisfies `(paging.stop_older_than_since != true or defined(time))` — declared here, enforced by whatever behaviour constructs one.
-/// Every value satisfies `(defined(connection) or defined(profile))` — declared here, enforced by whatever behaviour constructs one.
+/// Every value satisfies `(paging.stop_older_than_since != true or defined(time))` — checked by [`ConnectorsSource::broken_constraint`]; the generated decoder refuses a value that breaks it.
+/// Every value satisfies `(defined(connection) or defined(profile))` — checked by [`ConnectorsSource::broken_constraint`]; the generated decoder refuses a value that breaks it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConnectorsSource {
     /// `adapter` — `String`.
@@ -103,6 +147,24 @@ pub struct ConnectorsSource {
     pub paging: Option<Paging>,
     /// `child` — `Optional<cortex.instance.ChildCall>`.
     pub child: Option<ChildCall>,
+}
+
+impl ConnectorsSource {
+    /// The first invariant `cortex.instance.ConnectorsSource` declares that this value breaks, as what a decoder expected
+    /// instead, or `None` when it breaks none.
+    ///
+    /// An invariant is broken only when it is false of this value, as the conformance
+    /// interpreter reads it. A member's own constraints are its own type's to check.
+    pub fn broken_constraint(&self) -> Option<&'static str> {
+        use crate::primitives::invariant as iv;
+        if iv::broken(iv::any([iv::compare(self.paging.as_ref().map(|v| &v.stop_older_than_since).and_then(|v| v.as_ref()).map(|v| iv::Fact::Bool(*v)), iv::Op::Ne, Some(iv::Fact::Bool(true)), false, true), Some(self.time.as_ref().is_some())])) {
+            return Some("a value satisfying `(paging.stop_older_than_since != true or defined(time))`");
+        }
+        if iv::broken(iv::any([Some(self.connection.as_ref().is_some()), Some(self.profile.as_ref().is_some())])) {
+            return Some("a value satisfying `(defined(connection) or defined(profile))`");
+        }
+        None
+    }
 }
 
 /// CrawlPolicy — `cortex.instance.CrawlPolicy`.
@@ -291,13 +353,28 @@ pub struct FilesSource {
 
 /// FollowAtLeast — `cortex.instance.FollowAtLeast`.
 ///
-/// Every value satisfies `number > 0` — declared here, enforced by whatever behaviour constructs one.
+/// Every value satisfies `number > 0` — checked by [`FollowAtLeast::broken_constraint`]; the generated decoder refuses a value that breaks it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FollowAtLeast {
     /// `field` — `String`.
     pub field: String,
     /// `number` — `Integer`.
     pub number: i64,
+}
+
+impl FollowAtLeast {
+    /// The first invariant `cortex.instance.FollowAtLeast` declares that this value breaks, as what a decoder expected
+    /// instead, or `None` when it breaks none.
+    ///
+    /// An invariant is broken only when it is false of this value, as the conformance
+    /// interpreter reads it. A member's own constraints are its own type's to check.
+    pub fn broken_constraint(&self) -> Option<&'static str> {
+        use crate::primitives::invariant as iv;
+        if iv::broken(iv::compare(Some(iv::Fact::integer(self.number)), iv::Op::Gt, iv::Fact::number("0"), false, true)) {
+            return Some("a value satisfying `number > 0`");
+        }
+        None
+    }
 }
 
 /// FollowEquals — `cortex.instance.FollowEquals`.
@@ -322,13 +399,28 @@ pub enum FollowRule {
 
 /// FollowWithinDays — `cortex.instance.FollowWithinDays`.
 ///
-/// Every value satisfies `days > 0` — declared here, enforced by whatever behaviour constructs one.
+/// Every value satisfies `days > 0` — checked by [`FollowWithinDays::broken_constraint`]; the generated decoder refuses a value that breaks it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FollowWithinDays {
     /// `field` — `String`.
     pub field: String,
     /// `days` — `Integer`.
     pub days: i64,
+}
+
+impl FollowWithinDays {
+    /// The first invariant `cortex.instance.FollowWithinDays` declares that this value breaks, as what a decoder expected
+    /// instead, or `None` when it breaks none.
+    ///
+    /// An invariant is broken only when it is false of this value, as the conformance
+    /// interpreter reads it. A member's own constraints are its own type's to check.
+    pub fn broken_constraint(&self) -> Option<&'static str> {
+        use crate::primitives::invariant as iv;
+        if iv::broken(iv::compare(Some(iv::Fact::integer(self.days)), iv::Op::Gt, iv::Fact::number("0"), false, true)) {
+            return Some("a value satisfying `days > 0`");
+        }
+        None
+    }
 }
 
 /// GateCheck — `cortex.instance.GateCheck`.
@@ -1051,7 +1143,7 @@ pub enum StoreSpec {
 
 /// StructuredChild — `cortex.instance.StructuredChild`.
 ///
-/// Every value satisfies `paging.stop_older_than_since != true` — declared here, enforced by whatever behaviour constructs one.
+/// Every value satisfies `paging.stop_older_than_since != true` — checked by [`StructuredChild::broken_constraint`]; the generated decoder refuses a value that breaks it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructuredChild {
     /// `operation` — `String`.
@@ -1072,10 +1164,25 @@ pub struct StructuredChild {
     pub follow: Option<FollowRule>,
 }
 
+impl StructuredChild {
+    /// The first invariant `cortex.instance.StructuredChild` declares that this value breaks, as what a decoder expected
+    /// instead, or `None` when it breaks none.
+    ///
+    /// An invariant is broken only when it is false of this value, as the conformance
+    /// interpreter reads it. A member's own constraints are its own type's to check.
+    pub fn broken_constraint(&self) -> Option<&'static str> {
+        use crate::primitives::invariant as iv;
+        if iv::broken(iv::compare(self.paging.as_ref().map(|v| &v.stop_older_than_since).and_then(|v| v.as_ref()).map(|v| iv::Fact::Bool(*v)), iv::Op::Ne, Some(iv::Fact::Bool(true)), false, true)) {
+            return Some("a value satisfying `paging.stop_older_than_since != true`");
+        }
+        None
+    }
+}
+
 /// StructuredConnectors — `cortex.instance.StructuredConnectors`.
 ///
-/// Every value satisfies `paging.stop_older_than_since != true` — declared here, enforced by whatever behaviour constructs one.
-/// Every value satisfies `(defined(connection) or defined(profile))` — declared here, enforced by whatever behaviour constructs one.
+/// Every value satisfies `paging.stop_older_than_since != true` — checked by [`StructuredConnectors::broken_constraint`]; the generated decoder refuses a value that breaks it.
+/// Every value satisfies `(defined(connection) or defined(profile))` — checked by [`StructuredConnectors::broken_constraint`]; the generated decoder refuses a value that breaks it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructuredConnectors {
     /// `adapter` — `String`.
@@ -1094,6 +1201,24 @@ pub struct StructuredConnectors {
     pub children: Option<Vec<StructuredChild>>,
     /// `links` — `Optional<List<cortex.instance.CompareLink>>`.
     pub links: Option<Vec<CompareLink>>,
+}
+
+impl StructuredConnectors {
+    /// The first invariant `cortex.instance.StructuredConnectors` declares that this value breaks, as what a decoder expected
+    /// instead, or `None` when it breaks none.
+    ///
+    /// An invariant is broken only when it is false of this value, as the conformance
+    /// interpreter reads it. A member's own constraints are its own type's to check.
+    pub fn broken_constraint(&self) -> Option<&'static str> {
+        use crate::primitives::invariant as iv;
+        if iv::broken(iv::compare(self.paging.as_ref().map(|v| &v.stop_older_than_since).and_then(|v| v.as_ref()).map(|v| iv::Fact::Bool(*v)), iv::Op::Ne, Some(iv::Fact::Bool(true)), false, true)) {
+            return Some("a value satisfying `paging.stop_older_than_since != true`");
+        }
+        if iv::broken(iv::any([Some(self.connection.as_ref().is_some()), Some(self.profile.as_ref().is_some())])) {
+            return Some("a value satisfying `(defined(connection) or defined(profile))`");
+        }
+        None
+    }
 }
 
 /// StructuredFiles — `cortex.instance.StructuredFiles`.
@@ -1185,7 +1310,7 @@ pub enum WebMode {
 
 /// WebSource — `cortex.instance.WebSource`.
 ///
-/// Every value satisfies `(defined(connection) or defined(profile))` — declared here, enforced by whatever behaviour constructs one.
+/// Every value satisfies `(defined(connection) or defined(profile))` — checked by [`WebSource::broken_constraint`]; the generated decoder refuses a value that breaks it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WebSource {
     /// `adapter` — `Optional<String>`.
@@ -1196,6 +1321,21 @@ pub struct WebSource {
     pub profile: Option<String>,
     /// `input` — `cortex.instance.WebInput`.
     pub input: WebInput,
+}
+
+impl WebSource {
+    /// The first invariant `cortex.instance.WebSource` declares that this value breaks, as what a decoder expected
+    /// instead, or `None` when it breaks none.
+    ///
+    /// An invariant is broken only when it is false of this value, as the conformance
+    /// interpreter reads it. A member's own constraints are its own type's to check.
+    pub fn broken_constraint(&self) -> Option<&'static str> {
+        use crate::primitives::invariant as iv;
+        if iv::broken(iv::any([Some(self.connection.as_ref().is_some()), Some(self.profile.as_ref().is_some())])) {
+            return Some("a value satisfying `(defined(connection) or defined(profile))`");
+        }
+        None
+    }
 }
 
 /// What EvalRun — `cortex.instance.EvalRun` — holds, apart from where it is in its lifecycle.

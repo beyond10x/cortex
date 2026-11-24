@@ -15,10 +15,37 @@
       "type": "string"
     },
     "spec": {
-      "$ref": "#/$defs/cortex.instance.InstanceSpec"
+      "$ref": "#/$defs/cortex.instance.InstanceSpec",
+      "examples": [
+        {
+          "description": "Open-source vector databases and the companies behind them.",
+          "ekr": {
+            "version": "0.0.43"
+          },
+          "format": "cortex.instance/1",
+          "model": {
+            "budget_tokens": 80000.0,
+            "gateway": {
+              "base_url": "https://gateway.example",
+              "token_env": "GATEWAY_TOKEN"
+            },
+            "model": "claude-sonnet-5-5",
+            "timeout_s": 300.0
+          },
+          "name": "vector-databases",
+          "seed": {
+            "documents": []
+          },
+          "serve": {},
+          "sources": []
+        }
+      ]
     },
     "seed_digest": {
-      "type": "string"
+      "type": "string",
+      "examples": [
+        "2ff1b8f4636e011835284dfa1480606c60c4af8965e03ba527623dd8c83ae843"
+      ]
     },
     "no_wait": {
       "type": "boolean"
@@ -35,8 +62,7 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "4d696c5e1aca27b4d9e6d3faaf3bc2b55b9215801b5aee7ac47b47e28bc8e13f",
-    "contract_digest": "slice-sha256/2:223b042101d1a7bfb73a4b51948fad3fedab588de7d2294c7073016fee512cd2",
+    "contract_digest": "slice-sha256/2:c0bc958e87610419cc8cf78db53ffd8438d57f476e6873ce60cb7ec0ced412f1",
     "regenerate": "ess generate"
   },
   "$defs": {

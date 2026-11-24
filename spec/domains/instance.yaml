@@ -1668,7 +1668,24 @@ commands:
       - {name: model, type: String}
       - {name: ekr_version, type: String}
       - {name: seed_digest, type: String}
-      - {name: spec, type: cortex.instance.InstanceSpec}
+      # The example is a document the command line's loader accepts, so every synthesized step
+      # supplies one (`tests/it/conformance.rs` reads it through the loader).
+      - name: spec
+        type: cortex.instance.InstanceSpec
+        example:
+          format: cortex.instance/1
+          name: support-desk
+          description: What the support desk learned from its tickets.
+          ekr: {version: 0.0.43}
+          seed: {documents: []}
+          model:
+            model: claude-sonnet-5-5
+            gateway: {base_url: "http://127.0.0.1:4000", token_env: LLM_GATEWAY_TOKEN}
+            budget_tokens: 2000000
+            timeout_s: 600
+          sources: []
+          serve: {}
+          runs: {keep_days: 30}
       - {name: store, type: String}
     outcomes:
       - name: name-taken
@@ -1745,7 +1762,24 @@ commands:
       - {name: model, type: String}
       - {name: ekr_version, type: String}
       - {name: seed_digest, type: String}
-      - {name: spec, type: cortex.instance.InstanceSpec}
+      # The example is a document the command line's loader accepts, so every synthesized step
+      # supplies one (`tests/it/conformance.rs` reads it through the loader).
+      - name: spec
+        type: cortex.instance.InstanceSpec
+        example:
+          format: cortex.instance/1
+          name: release-notes
+          description: Release notes of the tools the team runs.
+          ekr: {version: 0.0.43}
+          seed: {documents: []}
+          model:
+            model: claude-haiku-4-5
+            gateway: {base_url: "https://gateway.example", token_env: GATEWAY_TOKEN}
+            budget_tokens: 100000
+            timeout_s: 300
+          sources: []
+          serve: {view_port: 0}
+          snapshots: {keep: 3}
     outcomes:
       - name: name-taken
         existing_instance: true
@@ -1823,8 +1857,27 @@ commands:
       - {name: name, type: cortex.instance.InstanceName}
       - {name: description, type: String}
       - {name: model, type: String}
-      - {name: spec, type: cortex.instance.InstanceSpec}
-      - {name: seed_digest, type: String}
+      # The example is a document the command line's loader accepts, so every synthesized step
+      # supplies one (`tests/it/conformance.rs` reads it through the loader).
+      - name: spec
+        type: cortex.instance.InstanceSpec
+        example:
+          format: cortex.instance/1
+          name: vector-databases
+          description: Open-source vector databases and the companies behind them.
+          ekr: {version: 0.0.43}
+          seed: {documents: []}
+          model:
+            model: claude-sonnet-5-5
+            gateway: {base_url: "https://gateway.example", token_env: GATEWAY_TOKEN}
+            budget_tokens: 80000
+            timeout_s: 300
+          sources: []
+          serve: {}
+      # The digest of the example spec's seed, `{documents: []}`, as the command line computes it.
+      - name: seed_digest
+        type: String
+        example: 2ff1b8f4636e011835284dfa1480606c60c4af8965e03ba527623dd8c83ae843
       - {name: no_wait, type: Optional<Boolean>}
     outcomes:
       # UNMAPPED: the exit status of each outcome: `updated` 0; `seed-change-refused`,

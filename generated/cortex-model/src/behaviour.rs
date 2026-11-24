@@ -1,6 +1,5 @@
 // generated from cortex v1
-// model digest 4d696c5e1aca27b4d9e6d3faaf3bc2b55b9215801b5aee7ac47b47e28bc8e13f
-// contract digest 1788d15a326626c332896ec48b946f55a5bb886a430361d0c2ba2a8525140ea8
+// contract digest aa8302707f999261b329609a5079eba393745a1abb3866d456fde582929b45ae
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! What the specification fully determines, generated: the behaviour of every command the plan
@@ -46,6 +45,10 @@ pub trait ReviewItemStorage {
 
     /// Removes the instance with this identity.
     fn delete(&mut self, identity: &crate::ask::ReviewId);
+
+    /// Every stored instance, in the order the store keeps them: the order a generated query
+    /// answers an unordered view in.
+    fn list(&self) -> Vec<crate::ask::ReviewItemSnapshot>;
 }
 
 /// Where `cortex.ask.Vote` is stored — a port the implementor provides.
@@ -382,6 +385,10 @@ where
 {
     fn close_review(&mut self, input: crate::ask::CloseReview) -> Result<crate::ask::CloseReviewOutcome, UnmetObligation> {
         let _ = &input;
+        // The addressed row's existence, at step 2 of the one precedence rule.
+        if ReviewItemStorage::get(&self.ports, &input.review_id).is_none() {
+            return Ok(crate::ask::CloseReviewOutcome::NoSuchReview { error: crate::ask::ReviewNotFound { review_id: input.review_id.clone() } });
+        }
         // `bad-request`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexAskCloseReview(&input), "bad-request")? {
             return Ok(crate::ask::CloseReviewOutcome::BadRequest { error: crate::ask::BadRequest { message: self.ports.try_generate_string()? } });
@@ -494,6 +501,10 @@ where
 {
     fn add_eval_case(&mut self, input: crate::instance::AddEvalCase) -> Result<crate::instance::AddEvalCaseOutcome, UnmetObligation> {
         let _ = &input;
+        // The addressed row's existence, at step 2 of the one precedence rule.
+        if InstanceStorage::get(&self.ports, &input.name).is_none() {
+            return Ok(crate::instance::AddEvalCaseOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        }
         // `set-invalid`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceAddEvalCase(&input), "set-invalid")? {
             return Ok(crate::instance::AddEvalCaseOutcome::SetInvalid { error: crate::instance::EvalSetInvalid { reason: self.ports.try_generate_string()? } });
@@ -541,12 +552,16 @@ where
         // reference reads no row and selects no related branch.
         let reference = Some(&input.instance_name);
         let related = reference.and_then(|identity| InstanceStorage::get(&self.ports, identity));
+        let _ = &related;
+        // The addressed row's existence and held state, for the branch the request selects
+        // before any present related row's refusal.
+        {
+        }
         // `no-such-instance`: the reference names an identity no row carries.
         if reference.is_some() && related.is_none() {
             return Ok(crate::instance::AddSourceOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.instance_name.clone() } });
         }
-        let _ = &related;
-        // `not-active`: selected by the present related row, in declaration order.
+        // `not-active`: a present related row's refusal, before every accepting branch.
         if let Some(related) = &related {
         if decided(equal(Some(&related.state).map(|value| match value { crate::instance::InstanceState::Active => "Active", crate::instance::InstanceState::Removed => "Removed" }.to_owned()), Some("Removed".to_owned())), "cortex.instance.AddSource")? {
             return Ok(crate::instance::AddSourceOutcome::NotActive { error: crate::instance::InstanceNotActive { state: self.ports.try_generate_cortex_instance_instance_state()? } });
@@ -625,6 +640,10 @@ where
 {
     fn apply_extraction(&mut self, input: crate::instance::ApplyExtraction) -> Result<crate::instance::ApplyExtractionOutcome, UnmetObligation> {
         let _ = &input;
+        // The addressed row's existence, at step 2 of the one precedence rule.
+        if InstanceStorage::get(&self.ports, &input.name).is_none() {
+            return Ok(crate::instance::ApplyExtractionOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        }
         // `no-such-run`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceApplyExtraction(&input), "no-such-run")? {
             return Ok(crate::instance::ApplyExtractionOutcome::NoSuchRun { error: crate::instance::KeptExtractionNotFound { run: input.run.clone() } });
@@ -668,6 +687,10 @@ where
 {
     fn apply_schema_proposals(&mut self, input: crate::instance::ApplySchemaProposals) -> Result<crate::instance::ApplySchemaProposalsOutcome, UnmetObligation> {
         let _ = &input;
+        // The addressed row's existence, at step 2 of the one precedence rule.
+        if InstanceStorage::get(&self.ports, &input.name).is_none() {
+            return Ok(crate::instance::ApplySchemaProposalsOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        }
         // `no-such-run`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceApplySchemaProposals(&input), "no-such-run")? {
             return Ok(crate::instance::ApplySchemaProposalsOutcome::NoSuchRun { error: crate::instance::SchemaRunNotFound { stamp: input.stamp.clone(), reason: self.ports.try_generate_string()? } });
@@ -707,6 +730,10 @@ where
 {
     fn approve_schema_proposals(&mut self, input: crate::instance::ApproveSchemaProposals) -> Result<crate::instance::ApproveSchemaProposalsOutcome, UnmetObligation> {
         let _ = &input;
+        // The addressed row's existence, at step 2 of the one precedence rule.
+        if InstanceStorage::get(&self.ports, &input.name).is_none() {
+            return Ok(crate::instance::ApproveSchemaProposalsOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        }
         // `no-such-run`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceApproveSchemaProposals(&input), "no-such-run")? {
             return Ok(crate::instance::ApproveSchemaProposalsOutcome::NoSuchRun { error: crate::instance::SchemaRunNotFound { stamp: input.stamp.clone(), reason: self.ports.try_generate_string()? } });
@@ -782,6 +809,10 @@ where
 {
     fn enable_source(&mut self, input: crate::instance::EnableSource) -> Result<crate::instance::EnableSourceOutcome, UnmetObligation> {
         let _ = &input;
+        // The addressed row's existence, at step 2 of the one precedence rule.
+        if SourceStorage::get(&self.ports, &input.source_id).is_none() {
+            return Ok(crate::instance::EnableSourceOutcome::NoSuchSource { error: crate::instance::SourceNotFound { source_id: input.source_id.clone() } });
+        }
         // `busy`: an external branch, where the context takes it and its input is eligible.
         if self.ports.try_external(ExternalCommand::CortexInstanceEnableSource(&input), "busy")? && decided(all(&[Some(Some(&input.no_wait).and_then(|value| value.as_ref()).is_some()), equal(Some(&input.no_wait).and_then(|value| value.as_ref()).map(|value| *value), Some(true))]), "cortex.instance.EnableSource")? {
             return Ok(crate::instance::EnableSourceOutcome::Busy { error: crate::instance::InstanceBusy { reason: self.ports.try_generate_string()? } });
@@ -814,6 +845,10 @@ where
 {
     fn measure_quality(&mut self, input: crate::instance::MeasureQuality) -> Result<crate::instance::MeasureQualityOutcome, UnmetObligation> {
         let _ = &input;
+        // The addressed row's existence, at step 2 of the one precedence rule.
+        if InstanceStorage::get(&self.ports, &input.name).is_none() {
+            return Ok(crate::instance::MeasureQualityOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        }
         // `sample-failed`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceMeasureQuality(&input), "sample-failed")? {
             return Ok(crate::instance::MeasureQualityOutcome::SampleFailed { error: crate::instance::SampleFailed { reason: self.ports.try_generate_string()? } });
@@ -841,6 +876,10 @@ where
 {
     fn propose_schema_changes(&mut self, input: crate::instance::ProposeSchemaChanges) -> Result<crate::instance::ProposeSchemaChangesOutcome, UnmetObligation> {
         let _ = &input;
+        // The addressed row's existence, at step 2 of the one precedence rule.
+        if InstanceStorage::get(&self.ports, &input.name).is_none() {
+            return Ok(crate::instance::ProposeSchemaChangesOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        }
         // `sample-failed`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceProposeSchemaChanges(&input), "sample-failed")? {
             return Ok(crate::instance::ProposeSchemaChangesOutcome::SampleFailed { error: crate::instance::SampleFailed { reason: self.ports.try_generate_string()? } });
@@ -900,6 +939,10 @@ where
 {
     fn reject_schema_proposals(&mut self, input: crate::instance::RejectSchemaProposals) -> Result<crate::instance::RejectSchemaProposalsOutcome, UnmetObligation> {
         let _ = &input;
+        // The addressed row's existence, at step 2 of the one precedence rule.
+        if InstanceStorage::get(&self.ports, &input.name).is_none() {
+            return Ok(crate::instance::RejectSchemaProposalsOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        }
         // `no-such-run`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceRejectSchemaProposals(&input), "no-such-run")? {
             return Ok(crate::instance::RejectSchemaProposalsOutcome::NoSuchRun { error: crate::instance::SchemaRunNotFound { stamp: input.stamp.clone(), reason: self.ports.try_generate_string()? } });
@@ -927,6 +970,10 @@ where
 {
     fn remove_instance(&mut self, input: crate::instance::RemoveInstance) -> Result<crate::instance::RemoveInstanceOutcome, UnmetObligation> {
         let _ = &input;
+        // The addressed row's existence, at step 2 of the one precedence rule.
+        if InstanceStorage::get(&self.ports, &input.name).is_none() {
+            return Ok(crate::instance::RemoveInstanceOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        }
         // `busy`: an external branch, where the context takes it and its input is eligible.
         if self.ports.try_external(ExternalCommand::CortexInstanceRemoveInstance(&input), "busy")? && decided(all(&[Some(Some(&input.no_wait).and_then(|value| value.as_ref()).is_some()), equal(Some(&input.no_wait).and_then(|value| value.as_ref()).map(|value| *value), Some(true))]), "cortex.instance.RemoveInstance")? {
             return Ok(crate::instance::RemoveInstanceOutcome::Busy { error: crate::instance::InstanceBusy { reason: self.ports.try_generate_string()? } });
@@ -958,6 +1005,10 @@ where
 {
     fn restore_snapshot(&mut self, input: crate::instance::RestoreSnapshot) -> Result<crate::instance::RestoreSnapshotOutcome, UnmetObligation> {
         let _ = &input;
+        // The addressed row's existence, at step 2 of the one precedence rule.
+        if InstanceStorage::get(&self.ports, &input.name).is_none() {
+            return Ok(crate::instance::RestoreSnapshotOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        }
         // `backend-unsupported`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceRestoreSnapshot(&input), "backend-unsupported")? {
             return Ok(crate::instance::RestoreSnapshotOutcome::BackendUnsupported { error: crate::instance::RestoreUnsupported { name: input.name.clone() } });
@@ -989,6 +1040,10 @@ where
 {
     fn run_eval(&mut self, input: crate::instance::RunEval) -> Result<crate::instance::RunEvalOutcome, UnmetObligation> {
         let _ = &input;
+        // The addressed row's existence, at step 2 of the one precedence rule.
+        if InstanceStorage::get(&self.ports, &input.name).is_none() {
+            return Ok(crate::instance::RunEvalOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        }
         // `set-invalid`: an external branch, where the context takes it.
         if self.ports.try_external(ExternalCommand::CortexInstanceRunEval(&input), "set-invalid")? {
             return Ok(crate::instance::RunEvalOutcome::SetInvalid { error: crate::instance::EvalSetInvalid { reason: self.ports.try_generate_string()? } });
@@ -1022,6 +1077,10 @@ where
 {
     fn update_instance(&mut self, input: crate::instance::UpdateInstance) -> Result<crate::instance::UpdateInstanceOutcome, UnmetObligation> {
         let _ = &input;
+        // The addressed row's existence, at step 2 of the one precedence rule.
+        if InstanceStorage::get(&self.ports, &input.name).is_none() {
+            return Ok(crate::instance::UpdateInstanceOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
+        }
         // The addressed row, read before the branches that select by it.
         let Some(held) = InstanceStorage::get(&self.ports, &input.name) else {
             return Ok(crate::instance::UpdateInstanceOutcome::NoSuchInstance { error: crate::instance::InstanceNotFound { name: input.name.clone() } });
@@ -1057,9 +1116,26 @@ where
     }
 }
 
-impl<P: crate::ask::obligations::OpenReviewsQuery> crate::ask::obligations::OpenReviewsQuery for Generated<P> {
+/// `cortex.ask.OpenReviews`, generated: every row is one the specification fully determines from the stored `cortex.ask.ReviewItem`s.
+impl<P> crate::ask::obligations::OpenReviewsQuery for Generated<P>
+where
+    P: ReviewItemStorage,
+{
     fn open_reviews(&self) -> Result<Vec<crate::ask::OpenReviews>, UnmetObligation> {
-        crate::ask::obligations::OpenReviewsQuery::open_reviews(&self.ports)
+        let mut admitted = ReviewItemStorage::list(&self.ports);
+        // `filter:` shows a row where it holds; false or unknown hides it.
+        admitted.retain(|held| equal(Some(&held.state).map(|value| match value { crate::ask::ReviewItemState::Closed => "Closed", crate::ask::ReviewItemState::Open => "Open" }.to_owned()), Some("Open".to_owned())) == Some(true));
+        // `order_by:`, stably: rows equal on every key keep the port's order.
+        admitted.sort_by(|left, right| match (Some(&left.data.opened_at).map(|value| value.0.clone()), Some(&right.data.opened_at).map(|value| value.0.clone())) { (Some(left), Some(right)) => instant_order(&left, &right), (left, right) => left.is_some().cmp(&right.is_some()) });
+        Ok(admitted
+            .into_iter()
+            .map(|held| crate::ask::OpenReviews {
+                review_id: held.data.review_id,
+                answer_id: held.data.answer_id,
+                cause: held.data.cause,
+                opened_at: held.data.opened_at,
+            })
+            .collect())
     }
 }
 
@@ -1135,4 +1211,88 @@ fn all(truths: &[Option<bool>]) -> Option<bool> {
 /// Equality of two read values; an unread one is Unknown.
 fn equal<T: PartialEq>(left: Option<T>, right: Option<T>) -> Option<bool> {
     Some(left? == right?)
+}
+
+/// The instant an RFC 3339 `date-time` names, as seconds from the epoch and nanoseconds.
+fn instant(text: &str) -> Option<(i64, u32)> {
+    let bytes = text.as_bytes();
+    let digits = |from: usize, to: usize| -> Option<u32> {
+        let slice = bytes.get(from..to)?;
+        if slice.is_empty() || !slice.iter().all(u8::is_ascii_digit) {
+            return None;
+        }
+        slice
+            .iter()
+            .try_fold(0u32, |total, digit| Some(total * 10 + u32::from(digit - b'0')))
+    };
+    let at = |index: usize, expected: &[u8]| bytes.get(index).is_some_and(|b| expected.contains(b));
+    if !(at(4, b"-") && at(7, b"-") && at(10, b"Tt") && at(13, b":") && at(16, b":")) {
+        return None;
+    }
+    let (year, month, day) = (i64::from(digits(0, 4)?), digits(5, 7)?, digits(8, 10)?);
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let length = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return None,
+    };
+    if day < 1 || day > length {
+        return None;
+    }
+    let (hour, minute, second) = (digits(11, 13)?, digits(14, 16)?, digits(17, 19)?);
+    if hour > 23 || minute > 59 || second > 59 {
+        return None;
+    }
+    let mut position = 19;
+    let mut nanos = 0u32;
+    if at(position, b".") {
+        let start = position + 1;
+        let mut end = start;
+        while bytes.get(end).is_some_and(u8::is_ascii_digit) {
+            end += 1;
+        }
+        let width = end - start;
+        if width == 0 || width > 9 {
+            return None;
+        }
+        nanos = digits(start, end)? * 10u32.pow(u32::try_from(9 - width).ok()?);
+        position = end;
+    }
+    let offset = match bytes.get(position..)? {
+        b"Z" | b"z" => 0i64,
+        [sign @ (b'+' | b'-'), _, _, b':', _, _] => {
+            let (hours, minutes) = (digits(position + 1, position + 3)?, digits(position + 4, position + 6)?);
+            if hours > 23 || minutes > 59 {
+                return None;
+            }
+            let magnitude = i64::from(hours * 3600 + minutes * 60);
+            if *sign == b'-' {
+                -magnitude
+            } else {
+                magnitude
+            }
+        }
+        _ => return None,
+    };
+    let shifted = year - i64::from(month <= 2);
+    let era = if shifted >= 0 { shifted } else { shifted - 399 } / 400;
+    let year_of_era = shifted - era * 400;
+    let month = i64::from(month);
+    let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + i64::from(day) - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    let days = era * 146_097 + day_of_era - 719_468;
+    Some((
+        days * 86_400 + i64::from(hour * 3600 + minute * 60 + second) - offset,
+        nanos,
+    ))
+}
+
+/// Two RFC 3339 renderings by the instant each names; text that names none by its bytes.
+fn instant_order(left: &str, right: &str) -> core::cmp::Ordering {
+    match (instant(left), instant(right)) {
+        (Some(left), Some(right)) => left.cmp(&right),
+        _ => left.as_bytes().cmp(right.as_bytes()),
+    }
 }

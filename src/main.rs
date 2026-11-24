@@ -3795,6 +3795,10 @@ mod tests {
     /// Commands whose command line is one word below their wire name, which the specification's
     /// one level of command groups cannot name: `eval case add`.
     const NESTED: &[(&str, &str)] = &[("cortex.instance.AddEvalCase", "add")];
+    /// Commands whose command line is their group's own word, `schema <name>`: ESS 0.93.0 refuses
+    /// a group named like a first-level command, so the specification lists the command in the
+    /// group of its decisions (`UNMAPPED:` in `spec/components.yaml`).
+    const GROUP_WORD: &[&str] = &["cortex.instance.ProposeSchemaChanges"];
     /// Flags that steer the implementation and are no command input.
     const STEERING: &[&str] = &[
         "spec",
@@ -3845,9 +3849,18 @@ mod tests {
     fn check(command: &clap::Command, qualified: &str, model: &Value) {
         let decl = find(model, qualified);
         let wire = decl["naming"]["wire"].as_str().expect("a wire name");
-        let mut sub = command
-            .find_subcommand(wire)
-            .unwrap_or_else(|| panic!("no `{wire}` subcommand for {qualified}"));
+        let mut sub = if GROUP_WORD.contains(&qualified) {
+            assert_eq!(
+                command.get_name(),
+                wire,
+                "{qualified} is not its group's own word"
+            );
+            command
+        } else {
+            command
+                .find_subcommand(wire)
+                .unwrap_or_else(|| panic!("no `{wire}` subcommand for {qualified}"))
+        };
         // A command one word below its wire (`UNMAPPED:` in `spec/`): the inputs are that word's.
         if let Some((_, word)) = NESTED.iter().find(|(n, _)| *n == qualified) {
             sub = sub
