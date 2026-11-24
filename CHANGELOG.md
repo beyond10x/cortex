@@ -5,6 +5,8 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+## 0.9.1 — 2026-11-24
+
 ### Fixed
 
 - A structured mapping may name one relation with several target types (`LINKS_TO` to `Page`
