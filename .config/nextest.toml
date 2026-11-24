@@ -12,6 +12,22 @@ final-status-level = "fail"
 [profile.default.junit]
 path = "junit.xml"
 
+[[profile.default.overrides]]
+filter = 'test(=it::postgres_server::the_shared_server_answers)'
+priority = 100
+
+[[profile.default.overrides]]
+filter = '''
+test(/^it::(w30b_ask_adversary|runout_adversary|ask_adversary|w30a_tail_adversary|w30a_tail_adversary_pass2|w30a_security|askio_adv_w30a|askio_adv_w30a_pass2|connections_revalidate_retry_adv|answer_records_deadline|poison_document|gateway_dollar_limits|gateway_dollar_limits_adv|stand_ins|snapshots|connectors_walks|store_outcome_unknown_adv|answer_records)::/)
+| test(=run::tests::an_undo_whose_store_restore_is_refused_still_rewinds_state)
+| test(=snapshot::tests::a_held_write_lock_is_waited_for_then_refused_and_nothing_is_snapshotted)
+'''
+priority = 50
+
+[[profile.default.overrides]]
+filter = 'test(/^it::answer_records_postgres::/) | test(/^it::store_backend::.*postgres/)'
+priority = 40
+
 [profile.budget]
 global-timeout = "120s"
 

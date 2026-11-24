@@ -394,12 +394,13 @@ fn a_second_sigterm_exits_143_at_once_and_records_nothing() {
     let w = World::new();
     create(&w, &spec(&w, "", "monitoring: {metrics: true}\n"));
     let claude = w.bin.join("claude-stubborn");
-    // Ignores SIGTERM (and so does its `sleep`); bounded at 8 s by itself.
+    // Ignores SIGTERM (and so does the `sleep` it becomes, under its own PID); bounded at 8 s by
+    // itself.
     executable(
         &claude,
         &format!(
-            "trap '' TERM\ntouch \"{}/started\"\nsleep 8\n",
-            w.root.display()
+            "trap '' TERM\necho $$ > \"{root}/claude.pid\"\ntouch \"{root}/started\"\nexec sleep 8\n",
+            root = w.root.display()
         ),
     );
     let child = start(&w, &claude, &w.bin.join("connectors"), "10");
@@ -419,8 +420,26 @@ fn a_second_sigterm_exits_143_at_once_and_records_nothing() {
         0.0,
         "a second SIGTERM records nothing"
     );
-    // Let the stand-in's own bound run out before the world is removed.
-    std::thread::sleep(Duration::from_secs(8));
+    // End the stand-in, which ignores SIGTERM, before the world is removed.
+    let pid = std::fs::read_to_string(w.root.join("claude.pid")).unwrap();
+    let pid = pid.trim();
+    let _ = Command::new("kill").args(["-KILL", pid]).status();
+    let until = Instant::now() + Duration::from_secs(10);
+    while running(pid) {
+        assert!(
+            Instant::now() < until,
+            "the stand-in {pid} outlived SIGKILL"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+/// Whether process `pid` still runs: it exists and is not a zombie.
+fn running(pid: &str) -> bool {
+    std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|stat| {
+        stat.rsplit_once(')')
+            .is_some_and(|(_, rest)| !rest.trim_start().starts_with('Z'))
+    })
 }
 
 // ---------------------------------------------------------------------------------------------

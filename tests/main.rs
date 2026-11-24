@@ -74,6 +74,7 @@ mod it {
     mod partial_counts_adversary;
     mod poison_document;
     mod postgres_run_undo_adv;
+    mod postgres_server;
     mod quality;
     mod record_lookups_adversary;
     mod redact_mask_adv_w30a;

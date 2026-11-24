@@ -5,6 +5,7 @@ vars:
   ESS: ess
   TEST_BUDGET: enforce
   TEST_THREADS: '8'
+  TEST_POSTGRES_IMAGE: postgres:17
 
 tasks:
   generate:
@@ -62,9 +63,17 @@ tasks:
     cmds:
       - '{{.CARGO}} nextest run --locked --workspace --no-run'
 
+  test-postgres-image:
+    desc: Pull the PostgreSQL test server's image while the test binaries build, when a container runtime runs and the image is not there yet
+    cmds:
+      - |
+        if docker info >/dev/null 2>&1 && ! docker image inspect {{.TEST_POSTGRES_IMAGE}} >/dev/null 2>&1; then
+          docker pull -q {{.TEST_POSTGRES_IMAGE}}
+        fi
+
   test:
-    desc: Run every test with cargo-nextest; a test over 60 s fails; the step prints its wall time and ten slowest tests, counts the PostgreSQL test servers it started, and with TEST_BUDGET=enforce (the default) fails over 120 s
-    deps: [test-build]
+    desc: Run every test with cargo-nextest; a test over 60 s fails; the step prints its wall time and ten slowest tests, counts the PostgreSQL test servers it started, warns over 90 s, and with TEST_BUDGET=enforce (the default) fails over 120 s
+    deps: [test-build, test-postgres-image]
     cmds:
       - |
         set -u
@@ -91,6 +100,9 @@ tasks:
         fi
         echo "PostgreSQL test servers started: $(( $(cat "$pgstarts" 2>/dev/null | wc -l) - pgbefore ))"
         echo "test step: $elapsed s of a 120 s budget"
+        if [ "$elapsed" -gt 90 ]; then
+          echo "warning: the test step ran $elapsed s, over the 90 s it is held to; 30 s of the 120 s budget are kept free"
+        fi
         [ "$status" -eq 0 ] || exit "$status"
         if [ "$elapsed" -gt 120 ]; then
           echo "the test step ran $elapsed s, over its 120 s budget (TEST_BUDGET={{.TEST_BUDGET}})" >&2
