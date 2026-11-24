@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-23T16:25:39Z",
+  "actor": "human:timo",
+  "artifact": "story:review-web-fetch",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check (GitHub Actions) on PR #106, head 4e7b44789, SUCCESS; merged to main as 413d063dd",
+    "reference": "https://github.com/beyond10x/cortex/pull/106"
+  }
+}

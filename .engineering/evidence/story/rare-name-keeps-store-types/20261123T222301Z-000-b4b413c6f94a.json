@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-23T22:23:01Z",
+  "actor": "human:timo",
+  "artifact": "story:rare-name-keeps-store-types",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check (GitHub Actions) on PR #114, head 30751bf53, SUCCESS; merged to main as f2f14f100",
+    "reference": "https://github.com/beyond10x/cortex/pull/114"
+  }
+}

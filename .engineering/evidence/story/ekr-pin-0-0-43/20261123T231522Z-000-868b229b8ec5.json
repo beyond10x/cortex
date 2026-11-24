@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-23T23:15:22Z",
+  "actor": "human:timo",
+  "artifact": "story:ekr-pin-0-0-43",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check (GitHub Actions) on PR #116, head 325985ee7, SUCCESS; merged to main as 75cf140ca",
+    "reference": "https://github.com/beyond10x/cortex/pull/116"
+  }
+}

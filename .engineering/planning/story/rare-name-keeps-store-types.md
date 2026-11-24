@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:rare-name-keeps-store-types
 kind: story
-status: active
+status: implemented
 title: RareName keeps the store names of chosen node types
 summary: An optional redaction field names the node types whose store names RareName never takes, so a customer named once keeps its facts and a known person stays hidden (runbook 0.8.0 finding 4)
 relations:
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T20:06:38Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T20:06:39Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-24T00:20:57Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

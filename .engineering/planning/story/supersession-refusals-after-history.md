@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:supersession-refusals-after-history
 kind: story
-status: active
+status: implemented
 title: Older facts apply as history instead of invalid-supersession
 summary: 'Documents with facts older than the stored values are applied as history; the remaining invalid-supersession refusal path after #101 is found and closed (runbook 0.8.0 finding 2)'
 relations:
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T16:55:33Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T16:55:33Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-24T00:21:11Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

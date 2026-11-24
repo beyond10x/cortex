@@ -2,16 +2,17 @@
 format: aep.planning-md/3
 id: story:review-schema-conformance
 kind: story
-status: active
+status: implemented
 title: cortex accepts what its schema accepts and conformance uses the real loader
 summary: Findings 25 and 26 of the 0.7.2 review
 relations:
 - decomposes: epic:standalone-1-0
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T01:54:01Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T01:54:01Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-24T00:21:06Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

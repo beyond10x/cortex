@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:extract-then-apply
 kind: story
-status: active
+status: implemented
 title: Extract now, apply later
 summary: run --extract-only keeps the extraction without writing; cortex apply writes a kept extraction once
 relations:
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T10:28:55Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T10:28:55Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-24T00:20:47Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 
