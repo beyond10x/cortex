@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:ess-pin-0-98
 kind: story
-status: active
+status: implemented
 title: Pin ESS 0.98.0
 summary: Cortex specifies and checks with ESS 0.98.0; conformance runs real scenario documents
 relations:
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T23:16:50Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T23:16:51Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-24T00:20:46Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

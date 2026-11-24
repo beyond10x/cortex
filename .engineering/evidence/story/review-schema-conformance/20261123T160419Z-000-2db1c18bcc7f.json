@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-23T16:04:19Z",
+  "actor": "human:timo",
+  "artifact": "story:review-schema-conformance",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check (GitHub Actions) on PR #102, head 76eb3c122, SUCCESS; merged to main as a224924a5",
+    "reference": "https://github.com/beyond10x/cortex/pull/102"
+  }
+}

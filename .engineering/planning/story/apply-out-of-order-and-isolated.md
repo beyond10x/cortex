@@ -2,16 +2,17 @@
 format: aep.planning-md/3
 id: story:apply-out-of-order-and-isolated
 kind: story
-status: active
+status: implemented
 title: An older record becomes history and one refused record costs only itself
 summary: Defects 1 and 2 of the runbook refresh replay
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T08:14:54Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T08:14:55Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-24T00:20:38Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

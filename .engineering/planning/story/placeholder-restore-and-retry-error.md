@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:placeholder-restore-and-retry-error
 kind: story
-status: active
+status: implemented
 title: Restore bare placeholders, explain retry failures, keep known names
 summary: Bare Name-N placeholders are restored in values and aliases, a batch ending on exhausted structured-output retries leaves a diagnosable error.txt, and RareName does not mask a name the store knows (runbook 0.8.0 findings 1, 3, 4)
 relations:
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T16:52:48Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T16:52:48Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-24T00:20:53Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

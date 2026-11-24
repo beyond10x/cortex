@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-24T00:15:58Z",
+  "actor": "human:timo",
+  "artifact": "story:ess-pin-0-98",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check (GitHub Actions) on PR #117, head 64b0d2c09, SUCCESS; merged to main as f6fe07010",
+    "reference": "https://github.com/beyond10x/cortex/pull/117"
+  }
+}

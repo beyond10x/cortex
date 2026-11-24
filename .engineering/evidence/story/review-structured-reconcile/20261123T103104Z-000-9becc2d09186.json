@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-23T10:31:04Z",
+  "actor": "human:timo",
+  "artifact": "story:review-structured-reconcile",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check (GitHub Actions) on PR #92, head 313051255, SUCCESS; merged to main as b04d9c4ee",
+    "reference": "https://github.com/beyond10x/cortex/pull/92"
+  }
+}

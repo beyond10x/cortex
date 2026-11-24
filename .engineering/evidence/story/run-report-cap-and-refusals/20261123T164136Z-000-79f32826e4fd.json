@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-23T16:41:36Z",
+  "actor": "human:timo",
+  "artifact": "story:run-report-cap-and-refusals",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check (GitHub Actions) on PR #108, head 5e039e0b3, SUCCESS; merged to main as 5acd44559",
+    "reference": "https://github.com/beyond10x/cortex/pull/108"
+  }
+}

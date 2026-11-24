@@ -2,16 +2,17 @@
 format: aep.planning-md/3
 id: story:run-path-override
 kind: story
-status: active
+status: implemented
 title: A files source reads a per-run directory with stable keys
 summary: cortex run --path for the runbook refresh
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T03:32:07Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T03:32:07Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-24T00:21:08Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 
