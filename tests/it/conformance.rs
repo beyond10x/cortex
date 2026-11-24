@@ -47,139 +47,59 @@ struct Scenario {
     snapshots: BTreeMap<String, Value>,
     /// Where the spec documents the steps supply are written for the loader to read.
     specs: tempfile::TempDir,
-    /// The steps whose document was a [`Supplied::Witness`].
-    witnesses: usize,
+    /// Whether a step's other inputs must be the values the command line reads from the document
+    /// it supplies: true for an authored scenario, whose document and inputs are written together.
+    /// A synthesized step sends the `example:` document of `spec/` beside inputs synthesis chose
+    /// on its own, so only the loader's verdict on the document is held there.
+    authored: bool,
+    /// The steps whose spec document the loader read.
+    loaded: usize,
+    /// The steps whose other inputs were held to what the command line reads from the document.
+    held: usize,
 }
 
-/// What `create`, `adopt` or `update` reads from the spec document a step supplies, through the
-/// command line's own loader (`cortex_cli::spec::load_given`), as `cortex create --spec` reads it.
-enum Supplied {
-    /// The loader accepted the document: the behaviour is given the spec it loaded.
-    Loaded(Box<m::InstanceSpec>),
-    /// A synthesized witness of `InstanceSpec`: ESS 0.77.0 fills every text of a synthesized value
-    /// with its path (`format: spec.format`, `spec.format-1`, ...) and cannot be given a document
-    /// for a struct input (`example:` on one needs `ess/33`, ESS 0.78.0), so the loader refuses
-    /// it at `format`, after every number of it was read. The behaviour is given
-    /// [`unloadable_witness_spec`]; [`WITNESS_STEPS`] counts these steps.
-    Witness,
-}
-
-/// The create, adopt and update steps of `spec/suite.json` whose document is a synthesized
-/// witness the loader refuses ([`Supplied::Witness`]). Every other such step's document goes
-/// through the loader and must load. A ratchet: lower it when the suite carries fewer.
-const WITNESS_STEPS: usize = 104;
-
-/// Whether `document` is a synthesized witness: each text ESS's synthesis writes at `format`,
-/// `name`, `description` and `model.model` is that field's path (`spec.format`), with the
-/// instance's `-<n>` suffix past the first.
-fn synthesized(document: &Value) -> bool {
-    let path_text = |path: &str, value: &Value| {
-        value.as_str().is_some_and(|text| {
-            text == path
-                || text
-                    .strip_prefix(path)
-                    .and_then(|rest| rest.strip_prefix('-'))
-                    .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
-        })
-    };
-    path_text("spec.format", &document["format"])
-        && path_text("spec.name", &document["name"])
-        && path_text("spec.description", &document["description"])
-        && path_text("spec.model.model", &document["model"]["model"])
-}
-
-/// Writes the document a step supplies to a file and reads it with the command line's loader.
-/// A document the loader refuses fails the step, unless it is a synthesized witness refused at
-/// its `format`; for a loaded one, the step's other inputs must be the values the command line
-/// reads from that document (`src/main.rs`): its name, description, model, EKR version and the
-/// digest of its seed.
+/// Writes the document a step supplies to a file and reads it with the command line's own loader
+/// (`cortex_cli::spec::load_given`), as `cortex create --spec` reads it. A document the loader
+/// refuses fails the step; there is no stand-in spec. With `authored`, the step's other inputs
+/// must be the values the command line reads from that document (`src/main.rs`): its name,
+/// description, model, EKR version and the digest of its seed.
 fn supplied(
     dir: &std::path::Path,
     command: &str,
     document: &Value,
     input: &serde_json::Map<String, Value>,
-) -> Supplied {
+    authored: bool,
+) -> m::InstanceSpec {
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let path = dir.join(format!("spec-{n}.yaml"));
     std::fs::write(&path, serde_json::to_string_pretty(document).unwrap()).unwrap();
-    let loaded = match cortex_cli::spec::load_given(&path) {
-        Ok(loaded) => loaded,
-        Err(refusal) => {
-            assert!(
-                synthesized(document),
-                "{command}: the loader refuses the supplied spec: {refusal}"
-            );
-            let format = document["format"].as_str().unwrap_or_default();
-            let at_format = format!("format is {format:?}, not \"cortex.instance/1\"");
-            assert!(
-                refusal.ends_with(&at_format),
-                "{command}: the synthesized witness is refused before its format: {refusal}"
-            );
-            return Supplied::Witness;
-        }
-    };
+    let loaded = cortex_cli::spec::load_given(&path).unwrap_or_else(|refusal| {
+        panic!("{command}: the loader refuses the supplied spec: {refusal}")
+    });
     let spec = loaded.model;
-    let mut read = vec![
-        ("name", spec.name.0.clone()),
-        ("description", spec.description.clone()),
-        ("model", spec.model.model.clone()),
-        (
-            "seed_digest",
-            cortex_cli::home::seed_digest(&loaded.dir, &spec),
-        ),
-    ];
-    if command != "cortex.instance.UpdateInstance" {
-        read.push(("ekr_version", spec.ekr.version.clone()));
+    if authored {
+        let mut read = vec![
+            ("name", spec.name.0.clone()),
+            ("description", spec.description.clone()),
+            ("model", spec.model.model.clone()),
+            (
+                "seed_digest",
+                cortex_cli::home::seed_digest(&loaded.dir, &spec),
+            ),
+        ];
+        if command != "cortex.instance.UpdateInstance" {
+            read.push(("ekr_version", spec.ekr.version.clone()));
+        }
+        for (field, value) in read {
+            assert_eq!(
+                input.get(field).map(text),
+                Some(value),
+                "{command}: input {field} is not what the command line reads from the spec"
+            );
+        }
     }
-    for (field, value) in read {
-        assert_eq!(
-            input.get(field).map(text),
-            Some(value),
-            "{command}: input {field} is not what the command line reads from the spec"
-        );
-    }
-    Supplied::Loaded(Box::new(spec))
-}
-
-/// The spec a [`Supplied::Witness`] step's behaviour is given in place of the document the loader
-/// refused. No outcome of `CreateInstance`, `AdoptInstance` or `UpdateInstance` reads it.
-fn unloadable_witness_spec() -> m::InstanceSpec {
-    m::InstanceSpec {
-        format: "cortex.instance/1".into(),
-        name: m::InstanceName("placeholder".into()),
-        description: String::new(),
-        ekr: m::EkrPin {
-            version: "0.0.32".into(),
-            bin: None,
-        },
-        seed: m::SeedSpec {
-            schema: None,
-            ekr_seed: None,
-            documents: vec![],
-        },
-        model: m::ModelSpec {
-            model: "m".into(),
-            backend: None,
-            budget_usd: Some(cortex_model::primitives::Decimal("1".into())),
-            daily_ceiling_usd: None,
-            budget_tokens: None,
-            daily_ceiling_tokens: None,
-            gateway: None,
-            timeout_s: 1,
-            instructions: None,
-            batch_chars: None,
-        },
-        sources: vec![],
-        serve: m::ServeSpec { view_port: None },
-        store: None,
-        redaction: None,
-        snapshots: None,
-        runs: None,
-        gate: None,
-        monitoring: None,
-        ask: None,
-    }
+    spec
 }
 
 fn text(v: &Value) -> String {
@@ -691,7 +611,9 @@ impl Scenario {
                 .prefix("cortex-conformance-spec")
                 .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
                 .unwrap(),
-            witnesses: 0,
+            authored: false,
+            loaded: 0,
+            held: 0,
         }
     }
 
@@ -751,13 +673,12 @@ impl Scenario {
         // The spec document `create`, `adopt` and `update` supply, read as the command line reads
         // it: through its loader.
         let mut spec = || match input.get("spec") {
-            Some(document) => match supplied(self.specs.path(), command, document, &input) {
-                Supplied::Loaded(spec) => *spec,
-                Supplied::Witness => {
-                    self.witnesses += 1;
-                    unloadable_witness_spec()
-                }
-            },
+            Some(document) => {
+                let spec = supplied(self.specs.path(), command, document, &input, self.authored);
+                self.loaded += 1;
+                self.held += usize::from(self.authored);
+                spec
+            }
             None => panic!("{command}: the step supplies no spec"),
         };
         let app = &mut self.app;
@@ -1960,15 +1881,17 @@ fn every_scenario_of_the_synthesized_suite_holds() {
     let scenarios = suite["scenarios"].as_object().expect("scenarios");
     let mut failed = Vec::new();
     let (mut passed_ids, mut failed_ids) = (Vec::new(), Vec::new());
-    let mut witnesses = 0;
+    let (mut loaded, mut held) = (0, 0);
     for (name, scenario) in scenarios {
         let steps = scenario["steps"].as_array().expect("steps").clone();
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut s = Scenario::new();
+            s.authored = name.contains("/authored/");
             for step in &steps {
                 s.step(step);
             }
-            witnesses += s.witnesses;
+            loaded += s.loaded;
+            held += s.held;
         }));
         if let Err(e) = result {
             let msg = e
@@ -2005,12 +1928,18 @@ fn every_scenario_of_the_synthesized_suite_holds() {
             .flat_map(|s| s["steps"].as_array().unwrap())
             .filter(|step| step["step"] == "execute_command" && step["input"].get("spec").is_some())
             .count();
+        // Every step that supplies a spec document had it read by the loader: no step's behaviour
+        // is given a stand-in spec.
         assert_eq!(
-            (supplied, witnesses),
-            (108, WITNESS_STEPS),
-            "the steps supplying a spec, and the synthesized witnesses among them, moved: {} \
-             loaded; update these counts",
-            supplied - witnesses
+            supplied - loaded,
+            0,
+            "steps whose spec the loader did not read"
+        );
+        assert_eq!(
+            (supplied, held),
+            (149, 4),
+            "the steps supplying a spec, and the authored ones among them whose inputs are held to \
+             the document, moved; update these counts"
         );
     }
 }
@@ -2035,6 +1964,7 @@ fn a_spec_document_the_loader_refuses_fails_its_step() {
         edit(&mut steps[0]["input"]["spec"]["value"]);
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut s = Scenario::new();
+            s.authored = true;
             for step in &steps {
                 s.step(step);
             }
@@ -2052,7 +1982,7 @@ fn a_spec_document_the_loader_refuses_fails_its_step() {
         "the document as the suite writes it loads"
     );
     type Edit<'a> = (&'a str, &'a dyn Fn(&mut Value));
-    let refused: [Edit; 4] = [
+    let refused: [Edit; 5] = [
         ("format", &|d: &mut Value| {
             d["format"] = json!("cortex.instance/2")
         }),
@@ -2063,6 +1993,11 @@ fn a_spec_document_the_loader_refuses_fails_its_step() {
         ("no budget", &|d: &mut Value| {
             d["model"].as_object_mut().unwrap().remove("budget_tokens");
         }),
+        // The spec file writes a `Decimal` as text (the published schema's pattern); a suite
+        // writes a `Decimal` value as a JSON number, which the loader refuses.
+        ("decimal as a number", &|d: &mut Value| {
+            d["model"]["budget_usd"] = json!(5.0)
+        }),
     ];
     for (case, edit) in refused {
         let message = run(edit).unwrap_or_else(|| panic!("{case}: the scenario passed"));
@@ -2071,14 +2006,36 @@ fn a_spec_document_the_loader_refuses_fails_its_step() {
             "{case}: {message}"
         );
     }
-    // A document is a synthesized witness only when every text synthesis writes is its path, not
-    // when its format alone is.
-    let witness = run(&|d: &mut Value| d["format"] = json!("spec.format"));
+    assert_eq!(
+        run(&|d: &mut Value| d["model"]["budget_usd"] = json!("5.00")),
+        None,
+        "a decimal written as text loads"
+    );
+    // A synthesized step's document goes through the loader too: the scenario fails when it is
+    // one the loader refuses, such as the text a synthesized value without an example holds.
+    let mut steps = suite["scenarios"]["cortex.instance.CreateInstance/outcome/created"]["steps"]
+        .as_array()
+        .expect("the synthesized create scenario")
+        .clone();
+    let create = steps
+        .iter_mut()
+        .find(|s| s["command"] == "cortex.instance.CreateInstance")
+        .expect("a create step");
+    create["input"]["spec"]["value"]["format"] = json!("spec.format");
+    let refused = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut s = Scenario::new();
+        for step in &steps {
+            s.step(step);
+        }
+    }))
+    .expect_err("the synthesized scenario passed with a refused document");
+    let message = refused
+        .downcast_ref::<String>()
+        .cloned()
+        .unwrap_or_default();
     assert!(
-        witness
-            .as_deref()
-            .is_some_and(|m| m.contains("the loader refuses the supplied spec")),
-        "{witness:?}"
+        message.contains("the loader refuses the supplied spec"),
+        "{message}"
     );
 }
 

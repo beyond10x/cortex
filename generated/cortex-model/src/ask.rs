@@ -1,6 +1,5 @@
 // generated from cortex v1
-// model digest 4d696c5e1aca27b4d9e6d3faaf3bc2b55b9215801b5aee7ac47b47e28bc8e13f
-// contract digest 1788d15a326626c332896ec48b946f55a5bb886a430361d0c2ba2a8525140ea8
+// contract digest aa8302707f999261b329609a5079eba393745a1abb3866d456fde582929b45ae
 // do not edit: regenerate with `ess synthesize --layout crate`
 
 //! Answers — `cortex.ask`.
@@ -1445,8 +1444,8 @@ pub struct Unidentified {
 /// Open reviews — one row of the view `cortex.ask.OpenReviews`.
 ///
 /// Projects `cortex.ask.ReviewItem` at `read_your_writes` consistency, containing instances where `state == Open`.
-/// Serving it is an implementation obligation — see the plan — because how a projection is kept
-/// current is a storage decision the specification does not take.
+/// The specification fully determines every row, so its query is generated over the storage port —
+/// see the plan.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenReviews {
     /// `review_id` — `cortex.ask.ReviewId`.
@@ -1463,7 +1462,6 @@ pub struct OpenReviews {
 ///
 /// One trait per obligation in the synthesis plan, each carrying the plan's own contract, and one
 /// per generated behaviour, which [`Generated`](crate::behaviour::Generated) implements.
-/// [`Unimplemented`](obligations::Unimplemented) satisfies every owed trait by refusing in the type system.
 pub mod obligations {
     /// The behaviour `cortex.ask.Ask` — generated.
     ///
@@ -1531,28 +1529,15 @@ pub mod obligations {
         fn record_answer(&mut self, input: super::RecordAnswer) -> Result<super::RecordAnswerOutcome, crate::obligation::UnmetObligation>;
     }
 
-    /// The query `cortex.ask.OpenReviews` — an implementation obligation.
+    /// The query `cortex.ask.OpenReviews` — generated.
     ///
-    /// Why it is not generated: kept an obligation by an order over the `Timestamp` field `opened_at`, which the suite ranks by its instant and a generated query does not.
-    ///
-    /// Contract: a query answering `cortex.ask.OpenReviews` with rows projected from `cortex.ask.ReviewItem` at `read_your_writes` consistency, containing instances where `state == Open`.
+    /// The specification fully determines it: [`crate::behaviour::Generated`] implements it
+    /// over the storage port. Implement it yourself to replace that query.
     pub trait OpenReviewsQuery {
         /// Serves `cortex.ask.OpenReviews` rows at the view's declared consistency.
         ///
-        /// `Err` is the typed refusal of an obligation nothing has satisfied; a satisfying
-        /// implementation never returns it.
+        /// `Err` is the typed refusal of a row whose declared type cannot hold its value.
         fn open_reviews(&self) -> Result<Vec<super::OpenReviews>, crate::obligation::UnmetObligation>;
     }
 
-    /// Every obligation of this bounded context, refused in the type system.
-    ///
-    /// Each method returns the typed refusal naming what is owed — never a panic, never a guessed
-    /// value — so a workspace built on this stub compiles and reports its own gaps.
-    pub struct Unimplemented;
-
-    impl OpenReviewsQuery for Unimplemented {
-        fn open_reviews(&self) -> Result<Vec<super::OpenReviews>, crate::obligation::UnmetObligation> {
-            Err(crate::obligation::UnmetObligation { capability: "view query", source: "cortex.ask.OpenReviews" })
-        }
-    }
 }

@@ -56,7 +56,6 @@ components:
         - cortex.instance.RestoreSnapshot
         - cortex.instance.ApplyExtraction
         - cortex.instance.MeasureQuality
-        - cortex.instance.ProposeSchemaChanges
       groups:
         - name: source
           summary: One data source of an instance
@@ -65,8 +64,12 @@ components:
             - cortex.instance.RecordFailure
             - cortex.instance.EnableSource
         - name: schema
-          summary: The decisions on a review run of schema proposals, and their apply
+          summary: Schema proposals of an instance, the decisions on a review run, and their apply
+          # UNMAPPED: `cortex schema <name>` is `cortex.instance.ProposeSchemaChanges` itself, not a
+          # word below the group: ESS 0.93.0 refuses a group named like a first-level command, so the
+          # command sits in its group, and the clap test of `src/main.rs` holds `schema` to its inputs.
           commands:
+            - cortex.instance.ProposeSchemaChanges
             - cortex.instance.ApproveSchemaProposals
             - cortex.instance.RejectSchemaProposals
             - cortex.instance.ApplySchemaProposals

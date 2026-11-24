@@ -50,8 +50,9 @@ A change here that moves none of these is a question for the operator, not a tas
 
 ## The specification comes first
 
-`spec/` is an ESS specification (`ess/22`, pinned to ESS 0.77.0 in `spec/ess-inputs.yaml`). It is
-the source of truth for every noun, command, outcome, error and event.
+`spec/` is an ESS specification (`ess/33`, pinned to ESS 0.98.0 in `spec/ess-inputs.yaml` and
+`.github/workflows/check.yml`). It is the source of truth for every noun, command, outcome, error
+and event.
 
 - Change `spec/`, then run `task generate`. Never edit anything under `generated/` or
   `spec/suite.json` by hand; `task drift` fails when they differ from what `spec/` generates.
@@ -64,6 +65,10 @@ the source of truth for every noun, command, outcome, error and event.
   so every change to `spec/` also rewrites `after` in `compat-ack.json`; a stale file is refused,
   and the refusal names the digest it compared. Never acknowledge a change you have not reviewed
   to make the gate pass.
+- When the pinned `ess` refuses `spec/` at the release tag (ESS 0.93.0 refuses the command tree of
+  v0.8.0: a group named like a first-level command), `spec/compat-base-<tag>.patch` brings that
+  side to the form the pinned `ess` reads, and `task compat` applies it before the comparison. It
+  changes the form only, never a contract, so the delta is the one a reader of the tag meets.
 - Exit statuses of `task compat`: `ess verify diff` exits 0 when the gate passes, 4 on an
   unacknowledged change (each named on a `fails --fail-on` line) and 1 when it refuses the
   acknowledgements file (stale digests, an id the delta does not hold, an id twice). `task compat`
@@ -75,8 +80,8 @@ the source of truth for every noun, command, outcome, error and event.
   change to `main` sets `before` and `after` in `spec/compat-ack.json` to `.before.spec_digest`
   and `.after.spec_digest` of `ess verify diff --from <spec at the tag> --to spec --format json`,
   empties `acknowledged`, and
-  empties the table of `spec/compat-ack.md`. Until then `task compat` refuses the old file (ess
-  exit 1, `task` exit 201).
+  empties the table of `spec/compat-ack.md`, and deletes `spec/compat-base-<old tag>.patch`.
+  Until then `task compat` refuses the old file (ess exit 1, `task` exit 201).
 - `generated/cortex-model` (`ess generate synthesize --target rust --layout crate`) holds the
   model types and the command behaviours. Two behaviours are obligations the code implements:
   `RunSource` and `RecordFailure` (`generated/cortex-model/PLAN.md`).
@@ -207,15 +212,16 @@ this repository and published by the organisation's reusable workflow.
 | `ekr session` serves `ontology`, `snapshot`, `schema`, `head`, `mint`, `propose`, `validate`, `commit` and `quality`, one request per line, and refuses `apply-extraction` and the `ekr stage` verbs (`session-verb-refused`) | EKR 0.0.43 `docs/cli.md`, `ekr session` | a run holds one session for its reads and runs `ekr apply-extraction` as a process of its own (`src/ekr.rs` `Session::apply`) |
 | Claude's `--json-schema` refuses a schema that names draft 2020-12 in `$schema` | `claude` 2.1.289 | the `$schema` key is removed before the call |
 | A schema transaction cites no evidence: EKR holds `transaction.evidence` to the evidence its assertions cite, and a schema change travels alone, so a non-empty set is `evidence-set-mismatch` | EKR 0.0.31 `docs/cli.md` ("Evolve the schema"); measured on 2026-10-06 | `cortex schema` records each change's facts and evidence in `schema/<stamp>/proposals.jsonl` beside its transaction |
-| `ess generate --kind docs` titles the domain page with the domain's display name (`Instances`), which equals a view's name, and Docusaurus then moves that view's anchor | ESS 0.59.0 through 0.77.0 (`generated/docs/docs/domains/cortex-instance.md` heads `# Instances` and holds the view heading `Instances`), `spec/domains/instance.yaml` `naming.display` | `cortex-docs` drops the page's level-one heading; the front-matter title heads the page |
+| `ess generate --kind docs` titles the domain page with the domain's display name (`Instances`), which equals a view's name, and Docusaurus then moves that view's anchor | ESS 0.59.0 through 0.98.0 (`generated/docs/docs/domains/cortex-instance.md` heads `# Instances` and holds the view heading `Instances`), `spec/domains/instance.yaml` `naming.display` | `cortex-docs` drops the page's level-one heading; the front-matter title heads the page |
 
 ## Build and verify
 
 - `task check` is the gate (see [Commands](#commands)); `STATUS.md` records its last result.
 - Format with `cargo fmt -p cortex-cli -p cortex-docs`. `cargo fmt --all` also rewrites the
   generated crates, which are path dependencies, and `task drift` then fails.
-- `tests/it/conformance.rs` runs every scenario of `spec/suite.json` (148) in process; `tests/it/e2e.rs`
-  drives the binary end to end; the clap ⇔ spec test in `src/main.rs` holds the command line to
+- `tests/it/conformance.rs` runs every scenario of `spec/suite.json` (148) in process and reads
+  each spec document a create, adopt or update step supplies through the command line's loader
+  (a refused one fails its scenario); `tests/it/e2e.rs` drives the binary end to end; the clap ⇔ spec test in `src/main.rs` holds the command line to
   the commands, inputs and views `spec/` puts on it.
 - **One integration-test binary.** Every integration test is a module of `tests/main.rs`, in
   `tests/it/<name>.rs`. A new test file goes to `tests/it/`, gets a `mod <name>;` line in the

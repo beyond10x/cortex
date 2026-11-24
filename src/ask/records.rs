@@ -1130,9 +1130,10 @@ impl Keeper {
         }
     }
 
-    /// The open review items (`cortex.ask.OpenReviews`), oldest first.
+    /// The open review items (`cortex.ask.OpenReviews`), oldest first, read with the store's own
+    /// query of the open items rather than the generated one, which reads every item.
     pub fn open_reviews(&self) -> Result<Vec<ma::OpenReviews>, String> {
-        self.run(|_| {}, |app| app.open_reviews())
+        self.run(|_| {}, |app| OpenReviewsQuery::open_reviews(&app.ports))
     }
 
     /// Closes a review item with `reason` (`cortex.ask.CloseReview`): the outcome, and the item as

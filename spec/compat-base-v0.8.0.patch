@@ -1,0 +1,18 @@
+--- a/spec/components.yaml
++++ b/spec/components.yaml
+@@ -53,7 +53,6 @@
+         - cortex.instance.RunSource
+         - cortex.instance.RestoreSnapshot
+         - cortex.instance.MeasureQuality
+-        - cortex.instance.ProposeSchemaChanges
+       groups:
+         - name: source
+           summary: One data source of an instance
+@@ -64,6 +63,7 @@
+         - name: schema
+           summary: The decisions on a review run of schema proposals, and their apply
+           commands:
++            - cortex.instance.ProposeSchemaChanges
+             - cortex.instance.ApproveSchemaProposals
+             - cortex.instance.RejectSchemaProposals
+             - cortex.instance.ApplySchemaProposals

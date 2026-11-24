@@ -2,8 +2,8 @@
   "provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "4d696c5e1aca27b4d9e6d3faaf3bc2b55b9215801b5aee7ac47b47e28bc8e13f",
-    "contract_digest": "1788d15a326626c332896ec48b946f55a5bb886a430361d0c2ba2a8525140ea8"
+    "source_digest": "320e979ea7c8fa443144e7a8a38b0cfa638f566d584002a64b3248dd83b21240",
+    "contract_digest": "aa8302707f999261b329609a5079eba393745a1abb3866d456fde582929b45ae"
   },
   "scope": {
     "profile": "component-skeletons",
@@ -1865,12 +1865,7 @@
       "kind": "view_query",
       "source": "cortex.ask.OpenReviews",
       "disposition": {
-        "disposition": "obligation",
-        "reason": {
-          "class": "undetermined",
-          "construct": "an order over the `Timestamp` field `opened_at`, which the suite ranks by its instant and a generated query does not"
-        },
-        "contract": "a query answering `cortex.ask.OpenReviews` with rows projected from `cortex.ask.ReviewItem` at `read_your_writes` consistency, containing instances where `state == Open`"
+        "disposition": "generated"
       }
     },
     {

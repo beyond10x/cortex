@@ -21,7 +21,36 @@
       "type": "string"
     },
     "spec": {
-      "$ref": "#/$defs/cortex.instance.InstanceSpec"
+      "$ref": "#/$defs/cortex.instance.InstanceSpec",
+      "examples": [
+        {
+          "description": "Release notes of the tools the team runs.",
+          "ekr": {
+            "version": "0.0.43"
+          },
+          "format": "cortex.instance/1",
+          "model": {
+            "budget_tokens": 100000.0,
+            "gateway": {
+              "base_url": "https://gateway.example",
+              "token_env": "GATEWAY_TOKEN"
+            },
+            "model": "claude-haiku-4-5",
+            "timeout_s": 300.0
+          },
+          "name": "release-notes",
+          "seed": {
+            "documents": []
+          },
+          "serve": {
+            "view_port": 0.0
+          },
+          "snapshots": {
+            "keep": 3.0
+          },
+          "sources": []
+        }
+      ]
     }
   },
   "required": [
@@ -36,8 +65,7 @@
   "x-ess-provenance": {
     "system": "cortex",
     "specification_version": "v1",
-    "source_digest": "4d696c5e1aca27b4d9e6d3faaf3bc2b55b9215801b5aee7ac47b47e28bc8e13f",
-    "contract_digest": "slice-sha256/2:bb9d244505c18b014f65e5214aa5ca4a39108be8bbdf56ac179ee69ab497aaba",
+    "contract_digest": "slice-sha256/2:cc84c8dc91bec06fffc412e9d74708160428cd916455046c90b73ce461be5491",
     "regenerate": "ess generate"
   },
   "$defs": {

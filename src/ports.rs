@@ -288,10 +288,22 @@ impl ReviewItemStorage for AskPorts {
         let written = self.records.delete_review(identity);
         self.write(written);
     }
+    /// Every review item, open and closed: the items of each kept answer, answers oldest first.
+    /// The generated `OpenReviews` query reads this; the answer service answers that view with
+    /// the store's own query instead (the `OpenReviewsQuery` of this type, below).
+    fn list(&self) -> Vec<ma::ReviewItemSnapshot> {
+        let answers = self.read(self.records.answers());
+        answers
+            .iter()
+            .flat_map(|answer| self.read(self.records.reviews(&answer.answer_id.0)))
+            .collect()
+    }
 }
 
 impl OpenReviewsQuery for AskPorts {
     /// Every open item, oldest first; a failed read answers none and is the command's fault.
+    /// From ESS 0.98.0 the generated behaviour answers the view itself over [`ReviewItemStorage`],
+    /// reading every item; `Keeper::open_reviews` calls this one, which reads the open ones.
     fn open_reviews(&self) -> Result<Vec<ma::OpenReviews>, UnmetObligation> {
         Ok(self.read(self.records.open_reviews()))
     }
