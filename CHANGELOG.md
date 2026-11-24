@@ -5,6 +5,8 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+## 0.9.0 — 2026-11-24
+
 ### Added
 
 - `cortex update`, `cortex remove` and `cortex source enable` take `--no-wait` too: while another
