@@ -1729,7 +1729,12 @@ impl<'a> Source<'a> {
         declare(&mut node_types, &mapping.node_type, &properties(mapping));
         for r in &mapping.relations {
             declare(&mut node_types, &r.target_type, &[]);
-            edge_types.push(edge_type(&r.relation, &mapping.node_type, &r.target_type));
+            join(
+                &mut edge_types,
+                &r.relation,
+                &mapping.node_type,
+                &r.target_type,
+            );
         }
         for (_, child) in &self.children {
             let c = &child.mapping;

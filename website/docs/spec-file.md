@@ -689,7 +689,7 @@ and `$` alone is the answer itself.
 | `name` | path to the entity's name |
 | `aliases` | paths to further names; each holds a value or a list of values. A mapped alias resolves across records and sources (below) |
 | `properties` | `property`, `path` and an optional `value_kind`: the value at the path is asserted for the property, in the property's value kind (below) |
-| `relations` | `relation`, `target_type` and `target_name`: a relation from the record's entity to the entity of `target_type` named by the value at the `target_name` path, one per value when it holds a list |
+| `relations` | `relation`, `target_type` and `target_name`: a relation from the record's entity to the entity of `target_type` named by the value at the `target_name` path, one per value when it holds a list. One `relation` may be listed several times with different `target_type`s: it is one edge type to all of them |
 | `alias_templates` | optional: fixed-format aliases, each a text with `{path}` placeholders filled from the record (below) |
 | `store_lookup` | optional: `OwnType` (the default) lets a record meet store nodes of its `node_type` only; `AnyType` writes it onto a store node of another type its name or an alias names (below) |
 
@@ -898,7 +898,9 @@ Any other target of the mapping's own node type is identified by the target text
 identity as an id. So it reaches a record of an earlier run by its id, or a node by a mapped
 alias. A target of another node type is identified by the target text. The mapping's node type,
 its properties, the target types and the relations are added to the store's ontology where it does
-not hold them yet.
+not hold them yet. A relation name listed with several target types is declared as one edge type
+whose target types are all of them, so a `LINKS_TO` to `Page` and a `LINKS_TO` to `File` are one
+relation in the graph.
 
 **Children.** A `from: connectors` input may list `children`: operations called once for each
 record the source read, whose records become nodes of their own, each linked to its parent's node.

@@ -134,6 +134,7 @@ mod it {
     mod structured_compare;
     mod structured_compare_adv;
     mod structured_files;
+    mod structured_relation_many_targets;
     mod structured_value_kinds;
     mod structured_value_kinds_adv;
     mod supersession;
