@@ -65,10 +65,11 @@ and event.
   so every change to `spec/` also rewrites `after` in `compat-ack.json`; a stale file is refused,
   and the refusal names the digest it compared. Never acknowledge a change you have not reviewed
   to make the gate pass.
-- When the pinned `ess` refuses `spec/` at the release tag (ESS 0.93.0 refuses the command tree of
+- When the pinned `ess` refuses `spec/` at the release tag (ESS 0.93.0 refused the command tree of
   v0.8.0: a group named like a first-level command), `spec/compat-base-<tag>.patch` brings that
   side to the form the pinned `ess` reads, and `task compat` applies it before the comparison. It
-  changes the form only, never a contract, so the delta is the one a reader of the tag meets.
+  changes the form only, never a contract, so the delta is the one a reader of the tag meets. No
+  such file exists while the pinned `ess` reads the tag's `spec/` as it is.
 - Exit statuses of `task compat`: `ess verify diff` exits 0 when the gate passes, 4 on an
   unacknowledged change (each named on a `fails --fail-on` line) and 1 when it refuses the
   acknowledgements file (stale digests, an id the delta does not hold, an id twice). `task compat`
