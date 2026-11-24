@@ -7,7 +7,7 @@ description: Five problems one cortex instance solves, with the sources, the que
 # Use cases
 
 Each use case below is one cortex instance: a [spec file](./spec-file.md) naming the sources, a
-seed schema and a model budget. The seed types and edge types are suggestions; write the ones
+seed schema and a model budget. The seed types and edge types are suggestions. Write the ones
 your questions need. Every instance is served to agents through `ekr mcp`, with the line
 `cortex mcp-line <name>` prints, and every answer cites the document it came from.
 
@@ -21,13 +21,13 @@ The Codex model backend does not extract. See [Limits](./limits.md).
 ## 1. Dependency and vendor watch for an engineering team
 
 **Problem.** A team depends on dozens of libraries, managed services and APIs. Releases,
-deprecations, security advisories and pricing changes land on changelogs, advisories and news;
-nobody reads all of them, and the one that matters is found after it breaks something.
+deprecations, security advisories and pricing changes land on changelogs, advisories and news.
+Nobody reads all of them, and the one that matters is found after it breaks something.
 
 **Instance.** A [`web`](./spec-file.md#kind-web) source with `input: search`, one query per
 dependency, `policy.topic: news` and `policy.time_range: week`, plus a weekly `web` source with
 `input: sites` and `mode: Crawl` over each vendor's changelog page. Seed: `Product`, `Release`,
-`Vulnerability`, `Organization`; `AFFECTS`, `RELEASES`, `DEPRECATES`, `REPLACES`.
+`Vulnerability`, `Organization`, and the edges `AFFECTS`, `RELEASES`, `DEPRECATES`, `REPLACES`.
 
 **Question.** "Did anything we depend on ship a breaking change or a security fix this week?"
 
@@ -43,7 +43,7 @@ ask the same questions and work the answer out again each time.
 issues), Jira (issues) and Confluence (pages changed since the last run, through `{since}` in the
 inputs). Records whose fields already say who owns what can go through a
 [`structured`](./spec-file.md#kind-structured) source instead, which maps them to nodes and
-relations with no model call. Seed: `Service`, `Team`, `Person`, `Decision`, `Incident`; `OWNS`,
+relations with no model call. Seed: `Service`, `Team`, `Person`, `Decision`, `Incident`, and the edges `OWNS`,
 `DECIDED`, `CAUSED`, `CHANGED`.
 
 **Question.** "Who owns the billing service, and what was the last decision about its retry
@@ -62,23 +62,23 @@ history, and the account owner does not see the open tickets.
 Zendesk (tickets, users, organizations). A [`redaction`](./spec-file.md#redaction) policy keeps
 email addresses, phone numbers and the names it lists out of what the model is shown, and
 `refuse_if_left` fails a run that would still show one. Seed: `Account`, `Contact`, `Product`,
-`Ticket`, `Deal`; `USES`, `REPORTED`, `OWNS_ACCOUNT`, `BLOCKS_DEAL`.
+`Ticket`, `Deal`, and the edges `USES`, `REPORTED`, `OWNS_ACCOUNT`, `BLOCKS_DEAL`.
 
 **Question.** "Which open tickets does this account have, and is any of them tied to a deal in
 progress?"
 
 **Ready:** HubSpot and Zendesk are providers of the Connectors catalog. Redaction finds personal
-data by pattern, so check what it misses on your own records first (see [Limits](./limits.md#data)).
+data by pattern, so check what it misses on your own records first. See [Limits](./limits.md#data).
 
 ## 4. Standards and regulation tracking
 
 **Problem.** A product must follow a moving specification: a protocol, an API version policy, a
-regulation. Changes are published as new revisions of long documents, and the question is always
+regulation. Changes are published as new revisions of long documents, and the question is
 what changed since the version the product implements, and whether it matters.
 
 **Instance.** A weekly `web` source with `input: sites` and `mode: Crawl` over the specification
 site, plus a `web` search for announcements. Seed: `Specification`, `Revision`, `Requirement`,
-`Organization`; `SUPERSEDES`, `REQUIRES`, `PUBLISHED`. The repository's
+`Organization`, and the edges `SUPERSEDES`, `REQUIRES`, `PUBLISHED`. The repository's
 `examples/agent-tooling.yaml` is an instance of this kind for the Model Context Protocol
 specification.
 

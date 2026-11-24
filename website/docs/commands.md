@@ -7,21 +7,30 @@ description: Every cortex command, its arguments and what it prints.
 # Commands
 
 Every command that changes something prints one JSON line,
-`{"command": …, "outcome": …, "detail": …}`, and exits 0 for a successful outcome and 1 for a
-refused one. An error before any outcome (an unreadable spec file, a home that cannot be locked)
-goes to stderr as `cortex: <message>` with exit status 2. `cortex run` has seven of its own:
-3 for a disabled source, 4 when the store outcome is unknown (`store-outcome-unknown`), 5 when
-Connectors stayed unavailable before anything was fetched (`connection-unavailable`), 6 when a
-batch did not fit the model's window (`batch-too-large`), 7 when the model could not be reached
-(`model-unavailable`), 8 when the run was sent SIGTERM (`terminated`) and 9 when `--no-wait`
-found the home's lock held (`busy`); see [Exit statuses of `cortex run`](./operating.md#exit-statuses-of-cortex-run).
-`cortex schema` and `cortex schema apply` exit 4 for `store-outcome-unknown` as well.
-`cortex update`, `cortex remove` and `cortex source enable` take `--no-wait` as well: while another
-cortex command holds the home's lock they answer `busy` at once with exit status 9 and change
-nothing; without it they wait for the lock.
-`cortex list` and `cortex sources` print one JSON line per row.
+`{"command": …, "outcome": …, "detail": …}`. It exits 0 for a successful outcome and 1 for a
+refused one. An error before any outcome goes to stderr as `cortex: <message>` with exit status 2,
+for example an unreadable spec file or a home that cannot be locked. `cortex list` and
+`cortex sources` print one JSON line per row.
 
-The outcomes are the ones the specification declares; the
+`cortex run` has seven exit statuses of its own, described under
+[Exit statuses of `cortex run`](./operating.md#exit-statuses-of-cortex-run):
+
+| status | outcome | when |
+|---|---|---|
+| 3 | `disabled` | the source is disabled |
+| 4 | `store-outcome-unknown` | the store outcome is unknown |
+| 5 | `connection-unavailable` | Connectors stayed unavailable before anything was fetched |
+| 6 | `batch-too-large` | a batch did not fit the model's window |
+| 7 | `model-unavailable` | the model could not be reached |
+| 8 | `terminated` | the run was sent SIGTERM |
+| 9 | `busy` | `--no-wait` found the home's lock held |
+
+`cortex schema` and `cortex schema apply` exit 4 for `store-outcome-unknown` as well.
+`cortex update`, `cortex remove` and `cortex source enable` take `--no-wait` as well. While another
+cortex command holds the home's lock, they answer `busy` at once with exit status 9 and change
+nothing. Without it they wait for the lock.
+
+The outcomes are the ones the specification declares. The
 [generated reference](./reference/ess/cortex-instance.md#commands) lists each command's outcomes,
 errors and events.
 
@@ -35,9 +44,9 @@ errors and events.
 | `--codex <bin>` | `CORTEX_CODEX` | `codex` |
 
 :::note[The Codex backend does not extract]
-`--codex` names the binary for a spec whose `model.backend` is `Codex`. In this release that
-backend calls no model: every run of such an instance fails as `extraction-failed`, with a reason
-saying the Codex backend does not extract yet, and `codex` is never started; `cortex quality` and
+`--codex` selects the binary for a spec whose `model.backend` is `Codex`. In this release that
+backend calls no model. Every run of such an instance fails as `extraction-failed`, with a reason
+saying the Codex backend does not extract yet, and `codex` is never started. `cortex quality` and
 `cortex schema` fail the same way (`judge-failed`, `propose-failed`). Use `Claude`, the default.
 :::
 
@@ -61,25 +70,31 @@ saying the Codex backend does not extract yet, and `codex` is never started; `co
 | `cortex mcp-line <name>` | print the `claude mcp add` line that serves the instance's store through `ekr mcp` | |
 | `cortex ask serve --spec <file>` | answer questions over the store of the instance the spec names: `POST /ask` on the spec's `ask.listen` streams the events of `cortex.ask-events/1`, from a tool loop over `ekr mcp` against `model.gateway`, until stopped (see [Ask service](./ask-service.md)). A spec it cannot serve exits 2, naming the field. Each outcome but `answered` and `client-closed` ends the stream with an `error` event whose `reason` is the outcome's name, except `rate-limited` (reason `rate-limit`) and `limit-reached` (reason `step-limit` or `time-limit`); a body the service refuses before asking is reason `bad-request` (see [the reasons](./ask-service.md#the-event-contract)) | `answered` (`done` event), `unidentified`, `rate-limited`, `busy`, `limit-reached`, `model-failed`, `reader-failed`, `cut-off` (`error` event), `client-closed` (the reader left; no event is read) |
 
-`cortex update` refuses a spec whose `name` is not `<name>`. `create`, `adopt` and `update` name each unit they took over from a home that no longer holds the instance in `units.taken_over` (see [Operating](./operating.md#systemd-units)). Every command refuses a home whose path holds a line break.
+`cortex update` refuses a spec whose `name` is not `<name>`. `create`, `adopt` and `update` list
+in `units.taken_over` each unit they took over from a home that no longer holds the instance, as
+[Operating](./operating.md#systemd-units) describes. Every command refuses a home whose path holds
+a line break.
 
 ### Measuring fact quality
 
 `cortex quality <name> --sample <n>` draws `n` (1 to 1000) of the store's active facts with
-`ekr sample`, each with the evidence it cites, seeded with the measurement's start in Unix
-milliseconds. Each batch of 20 goes to the instance's model with no tools and a judge's own system
-prompt, called as a run's extraction is, and shown as the spec's `redaction` policy shows a run's
-documents. The model answers `yes`, `no` or `unclear`, with a reason, for each fact. A fact the
-answer gives no verdict is asked once more after the last batch, in a later call with the other
-such facts (again in batches of 20); a fact that answer gives no verdict either is `unjudged`.
-`ekr fact-quality` turns the verdicts of the judged facts into a pass rate with its Wilson interval
-at 95 %; `yes` counts as passed, `no` and `unclear` as failed, and an `unjudged` fact as neither.
-The measurement spends at most the spec's `model.budget_usd`, and no more than its
+`ekr sample`, each with the evidence it cites. The sample is seeded with the measurement's start in
+Unix milliseconds. Each batch of 20 goes to the instance's model with no tools and a judge's own
+system prompt. The model is called as a run's extraction is, and shown the facts as the spec's
+`redaction` policy shows a run's documents.
+
+The model answers `yes`, `no` or `unclear`, with a reason, for each fact. A fact the answer gives
+no verdict is asked once more after the last batch, in a later call with the other such facts,
+again in batches of 20. A fact that answer gives no verdict either is `unjudged`.
+
+`ekr fact-quality` turns the verdicts of the judged facts into a pass rate with its
+Wilson interval at 95 %. `yes` counts as passed, `no` and `unclear` as failed, and an `unjudged`
+fact as neither. The measurement spends at most the spec's `model.budget_usd`, and no more than its
 `model.daily_ceiling_usd` leaves of the UTC day (see
 [the spec file](./spec-file.md#the-daily-ceiling)).
 
-It writes these files under `quality/<UTC stamp>/` in the instance directory (the stamp is
-`YYYYMMDDTHHMMSSZ`):
+It writes these files under `quality/<UTC stamp>/` in the instance directory. The stamp is
+`YYYYMMDDTHHMMSSZ`.
 
 | file | holds |
 |---|---|
@@ -88,15 +103,17 @@ It writes these files under `quality/<UTC stamp>/` in the instance directory (th
 | `batch-<n>/prompt.txt` | the request of judge call `n` (from 0) as sent; under a `redaction` policy it holds placeholders. Written before the call, so a failed call keeps it |
 | `batch-<n>/answer.json` | the model's answer to call `n` before any placeholder is restored |
 
-A `measured` line's detail carries `stamp`, `revision` and `seed` (which draw the same sample
-again), `judged` (the facts given a verdict: the rate's denominator), `passed`, `unclear`,
-`unjudged`, `rate` (`passed` of `judged`; null when no fact was judged: the store holds no fact,
-or every fact is `unjudged`), `lower`, `upper`, `cost_usd` (as a run reports it: null when an
-answer carried no cost) and `dir`.
-`sample-failed` (EKR refused the size or could not read the store) asks no model and writes
-nothing. `judge-failed` (a model call failed or found the budget or the daily ceiling spent, or `refuse_if_left`
-refused what the judge would be shown) writes no `fact-quality.json`; `verdicts.jsonl` keeps the
-verdicts of the batches judged before, and a failed model call's reason states the cost so far.
+A `measured` line's detail carries `stamp`, `revision` and `seed`, which draw the same sample
+again. It also carries `judged`, `passed`, `unclear`, `unjudged`, `rate`, `lower`, `upper`,
+`cost_usd` and `dir`. `judged` is the facts given a verdict: the rate's denominator. `rate` is
+`passed` of `judged`. It is null when no fact was judged: the store holds no fact, or every fact is
+`unjudged`. `cost_usd` is as a run reports it: null when an answer carried no cost.
+
+`sample-failed` asks no model and writes nothing: EKR refused the size or could not read the
+store. `judge-failed` writes no `fact-quality.json`. It means a model call failed or found the
+budget or the daily ceiling spent, or `refuse_if_left` refused what the judge would be shown.
+`verdicts.jsonl` keeps the verdicts of the batches judged before, and a failed model call's reason
+states the cost so far.
 
 ### Running an eval set
 
@@ -112,14 +129,14 @@ set's order, and scores each answer deterministically. The set is a JSON object 
 ]}
 ```
 
-A case is held to the published `cortex.instance.EvalCase` schema: `expect_facts` and
-`expect_nodes` are both required lists of strings, no other key is admitted, `source` and
-`review_id` are strings, and no expected fact or node is empty or white space only. A case the schema refuses makes the
-set `set-invalid`.
+A case is checked against the published `cortex.instance.EvalCase` schema. `expect_facts` and
+`expect_nodes` are both required lists of strings, and no other key is admitted. `source` and
+`review_id` are strings. No expected fact or node is empty or white space only. A case the schema
+refuses makes the set `set-invalid`.
 
-An answer passes when it contains every `expect_facts` string (letter case and runs of white
-space ignored) and cites every `expect_nodes` id exactly. An optional `source` says where a case
-came from and is not scored.
+An answer passes when it contains every `expect_facts` string and cites every `expect_nodes` id
+exactly. The string match ignores letter case and runs of white space. An optional `source` says
+where a case came from and is not scored.
 
 | runner | answers with |
 |---|---|
@@ -129,15 +146,18 @@ came from and is not scored.
 
 :::note[Redaction under the `mcp` runner]
 With a `redaction` policy in the spec, the `mcp` runner's model reads the store through a
-redacting MCP server in the `cortex` process instead of `ekr mcp` directly: MCP over HTTP on
-`127.0.0.1`, under a random path and behind a random bearer header, for one case. The `--mcp-config`
-that names it is a file only its owner reads, removed after the case: no secret is on the command
-line. The server stops when the case ends, whatever connections are open. Each case is one redaction batch: its question and
-every tool result are redacted as the [ask service](./ask-service.md#redaction) redacts them, a
-result in which a `refuse_if_left` class is still detected reaches the model as a tool error saying
-it was withheld by policy, a question that still holds such a class is recorded as a failed case
-with the refusal as its answer and the `outcome` `refused`, and no model is asked, and the answer is restored before it is scored and written. Without a
-policy the model reads `ekr mcp` as before.
+redacting MCP server in the `cortex` process instead of `ekr mcp`. The server speaks MCP over HTTP
+on `127.0.0.1`, under a random path and behind a random bearer header, for one case. Its
+`--mcp-config` file is readable only by its owner and removed after the case, so no secret is on
+the command line. The server stops when the case ends, whatever connections are open.
+
+A case is one redaction batch. Its question and every tool result are redacted as the
+[ask service](./ask-service.md#redaction) redacts them. A result in which a `refuse_if_left` class
+is still detected reaches the model as a tool error saying it was withheld by policy.
+
+A question that still holds such a class is recorded as a failed case with the refusal as its
+answer and the `outcome` `refused`, and no model is asked. The answer is restored before it is
+scored and written. Without a policy the model reads `ekr mcp` as before.
 :::
 
 It writes two files under `eval/<UTC stamp>/` in the instance directory:
@@ -147,26 +167,30 @@ It writes two files under `eval/<UTC stamp>/` in the instance directory:
 | `results.jsonl` | one `cortex.eval-result/1` object per case, in the set's order: `id`, `question`, `answer`, `cited_nodes`, `passed`, `missing_facts` (the expected fact strings the answer does not contain) and `missing_nodes` (the expected node ids it does not cite), and `outcome` for a case the runner gave no answer for: `refused` (the redaction policy refused the question, or the model declined) or the ask service's `step-limit`, `time-limit` or `cut-off`. Such a case's `answer` is the reason or the refusal text; it cites nothing, misses every expectation and never passes. A line holds no time or cost |
 | `summary.json` | written last, by a temporary file renamed into place, so it exists only when every result is on disk. `cortex.eval-run/1`: `stamp`, `instance_name`, `runner`, `cases`, `passed`, `facts_expected`, `facts_found`, `nodes_expected`, `nodes_found`, `model_calls`, `input_tokens`, `output_tokens`, `cost_usd`, and `from` for a replay |
 
-An `evaluated` line's detail carries the counts of `summary.json`, `name` and `dir`;
+An `evaluated` line's detail carries the counts of `summary.json`, `name` and `dir`.
 `input_tokens`, `output_tokens` and `cost_usd` are null as soon as one answer carried no count or
-cost, and 0 for `replay`. `set-invalid` (the set cannot be read or is not a `cortex.eval-case/1`
-set, or `--from` is missing for `replay` or given for another runner) asks no model and writes
-nothing. `runner-failed` (a model call failed or found the budget or the daily ceiling spent, no
-ask service answered, the replayed run recorded no answer, or another question, for a case, or it wrote no `summary.json`) writes no
-`summary.json`; `results.jsonl` keeps the results of the cases answered before, and the reason
-states the cost so far.
+cost, and 0 for `replay`. `set-invalid` asks no model and writes nothing. It means the set cannot
+be read or is not a `cortex.eval-case/1` set, or `--from` is missing for `replay` or given for
+another runner.
+
+`runner-failed` writes no `summary.json`. It means a model call failed or found the budget or the
+daily ceiling spent, or no ask service answered. It also means the replayed run recorded no answer,
+or another question, for a case, or it wrote no `summary.json`. `results.jsonl` keeps the results of
+the cases answered before, and the reason states the cost so far.
 
 ### Adding a case from a review
 
 `cortex eval case add <name> --set <file> --from-review <review id>` turns a closed review item of
 the instance's answer service ([Answer records, votes and review](./ask-service.md#answer-records-votes-and-review))
-into one case appended to the set file. The case's `id` and `review_id` are the review id
-(`<answer id>:<cause>`), its `question` is the question of the item's answer record, and its
-`expect_facts` and `expect_nodes` are those the reviewer sent when closing the item (empty when
-they sent none). A set file that does not exist yet is created holding the one case; an existing
-one is rewritten whole, through a temporary file renamed into place; a set path that is a symbolic
-link is written at its target. It opens the answer records read-only: it creates no `ask.sqlite` (an
-instance that served no question answers `no-such-review`) and migrates none, and writes nothing to
+into one case appended to the set file. The case's `id` and `review_id` are the review id,
+`<answer id>:<cause>`. Its `question` is the question of the item's answer record. Its
+`expect_facts` and `expect_nodes` are those the reviewer sent when closing the item, empty when
+they sent none.
+
+A set file that does not exist yet is created holding the one case. An existing one is rewritten
+whole, through a temporary file renamed into place. A set path that is a symbolic link is written
+at its target. The command opens the answer records read-only. It creates no `ask.sqlite`, so an
+instance that served no question answers `no-such-review`. It migrates none and writes nothing to
 them or to the store.
 
 | outcome | when | the set file |
@@ -182,14 +206,16 @@ them or to the store.
 ### Proposing schema changes
 
 `cortex schema <name> [--sample <n>]` draws `n` (1 to 1000, default 40) of the store's active facts
-with `ekr sample`, each with the evidence it cites, and reads the ontology in force with `ekr
-ontology`. Each batch of 20 goes to the instance's model with no tools and its own system prompt,
-shown as `cortex quality` shows it to the judge (the spec's `redaction` policy applied), beside the
-ontology's type and property names. The model answers a list of proposals, each one change with a
-reason, the ids of the facts it rests on and the labels (`E1`, `E2`, …) of the evidence it rests
-on. A proposal citing a fact or a label its batch does not hold, citing no fact, or not in that form, is dropped.
-The round spends at most the spec's `model.budget_usd`, and no more than its `model.daily_ceiling_usd`
-leaves of the UTC day.
+with `ekr sample`, each with the evidence it cites. It reads the ontology in force with
+`ekr ontology`. Each batch of 20 goes to the instance's model with no tools and its own system
+prompt, beside the ontology's type and property names. The batch is shown as `cortex quality` shows
+it to the judge, with the spec's `redaction` policy applied.
+
+The model answers a list of proposals. Each is one change with a reason, the ids of the facts it
+rests on and the labels (`E1`, `E2`, …) of the evidence it rests on. A proposal is dropped when it
+cites a fact or a label its batch does not hold, cites no fact, or is not in that form. The round
+spends at most the spec's `model.budget_usd`, and no more than its `model.daily_ceiling_usd` leaves
+of the UTC day.
 
 The changes the model may propose are a closed list:
 
@@ -201,12 +227,14 @@ The changes the model may propose are a closed list:
 | `remove_node_type`, `remove_edge_type`, `remove_property`, `merge_types`, `split_type` | records it for review: EKR removes, merges and splits nothing |
 
 Without `--dry-run`, cortex takes the home's lock again and decides each proposal in order against
-the ontology at the head: each one cortex can write is its own schema transaction and its own
-schema version, so `ekr ontology --at <revision>`, with the `revision` the detail reports, still
-answers the schema before. It writes `schema/<UTC stamp>/proposals.jsonl` in the instance
-directory, one `cortex.schema-proposal/1` object per proposal not dropped: `change`, `reason`,
-`facts` (EKR assertion ids), `evidence` (the EKR evidence ids the proposal and its facts cite) and
-`status`:
+the ontology at the head. Each one cortex can write is its own schema transaction and its own
+schema version. `ekr ontology --at <revision>`, with the `revision` the detail reports, still
+answers the schema before.
+
+cortex writes `schema/<UTC stamp>/proposals.jsonl` in the instance
+directory, one `cortex.schema-proposal/1` object per proposal not dropped. Each object holds
+`change`, `reason`, `facts`, `evidence` and `status`. `facts` are EKR assertion ids, and
+`evidence` the EKR evidence ids the proposal and its facts cite. `status` is one of:
 
 | status | means |
 |---|---|
@@ -221,30 +249,35 @@ directory, one `cortex.schema-proposal/1` object per proposal not dropped: `chan
 
 Of the model's answer, only each proposal's `reason` has the `redaction` policy's placeholders
 put back. A masked value never becomes a type or property name, which every later round would
-show the model as it is; such a proposal is kept as the model wrote it.
+show the model as it is. Such a proposal is kept as the model wrote it.
 
-EKR holds a transaction's evidence to its assertions, so a schema transaction cites none; the line
-in `proposals.jsonl` is where an applied change's evidence is recorded. Each transaction cortex
-wrote stays beside it as `schema-<nnnn>.yaml`, numbered by the proposal's line from `0000`.
+EKR requires a transaction's evidence to be the evidence its assertions cite, so a schema
+transaction cites none. The line in `proposals.jsonl` is where an applied change's evidence is
+recorded. Each transaction cortex wrote stays beside it as `schema-<nnnn>.yaml`, numbered by the
+proposal's line from `0000`.
 
-An `applied` or `proposed` line's detail carries `stamp`, `revision` (the head the sample was drawn
-at), `proposed`, `applied`, `refused`, `recorded_only`, `invalid`, `dropped`, `cost_usd` (as a run
-reports it) and `dir`. `sample-failed` asks no model and writes nothing. `propose-failed` (a model
-call failed or found the budget or the daily ceiling spent, `refuse_if_left` refused what the model would be shown, or
-EKR could not read the ontology) applies nothing and writes no `proposals.jsonl`; its reason states
-the cost so far. When a line of `proposals.jsonl` cannot be written after earlier proposals were
-applied, `propose-failed` leaves those applied and the lines before it written, and its reason
-counts both. When EKR cannot say whether a proposal's schema transaction took effect (`ekr commit`
-answers `publication-outcome-unknown` with exit 3), the round stops there as
-`store-outcome-unknown`, exit 4: no later proposal is asked of EKR, the proposals before it stay
-recorded, and the reason names the proposal; `ekr ontology` answers whether its change took effect.
+An `applied` or `proposed` line's detail carries `stamp`, `revision`, `proposed`, `applied`,
+`refused`, `recorded_only`, `invalid`, `dropped`, `cost_usd` and `dir`. `revision` is the head the
+sample was drawn at, and `cost_usd` is as a run reports it. `sample-failed` asks no model and
+writes nothing.
+
+`propose-failed` applies nothing and writes no `proposals.jsonl`, and its reason states the cost
+so far. It means a model call failed or found the budget or the daily ceiling spent,
+`refuse_if_left` refused what the model would be shown, or EKR could not read the ontology. When a
+line of `proposals.jsonl` cannot be written after earlier proposals were applied, `propose-failed`
+leaves those applied and the lines before it written. Its reason counts both.
+
+EKR may not be able to say whether a proposal's schema transaction took effect: `ekr commit`
+answers `publication-outcome-unknown` with exit 3. The round then stops there as
+`store-outcome-unknown`, exit 4. No later proposal is asked of EKR, the proposals before it stay
+recorded, and the reason gives the proposal. `ekr ontology` answers whether its change took effect.
 
 ### Reviewing schema changes
 
-`cortex schema <name> --review` asks the model as above and applies nothing: it does not take the
-lock again, and every proposal not dropped is recorded `pending`, except one whose name holds a
+`cortex schema <name> --review` asks the model as above and applies nothing. It does not take the
+lock again. Every proposal not dropped is recorded `pending`, except one whose name holds a
 placeholder of the `redaction` policy, which is `invalid` as in any round. Its `reviewed` detail
-names the run's `stamp` and counts the proposals `pending`. A person then decides each one:
+carries the run's `stamp` and counts the proposals `pending`. A person then decides each one:
 
 ```sh
 cortex schema approve acme 20261017T101500Z --only 1 --by ops
@@ -253,40 +286,45 @@ cortex schema reject acme 20261017T101500Z --only 2 \
 cortex schema apply acme 20261017T101500Z
 ```
 
-`approve` and `reject` rewrite the decision of each proposal `--only` names, by its line in
-`proposals.jsonl` counted from 1 (every pending one without `--only`), with `--by` as its
-`decided_by` and, for `reject`, the reason as its `decision_reason`. Every proposal named must be
-`pending`: a decided proposal is not decided again, and `not-pending` decides nothing. Their detail
-counts the proposals `decided` and those still `pending`. Neither asks a model or touches the
-store.
+`approve` and `reject` rewrite the decision of each proposal `--only` selects, by its line in
+`proposals.jsonl` counted from 1. Without `--only` they decide every pending one. `--by` becomes
+its `decided_by` and, for `reject`, the reason its `decision_reason`. Every proposal selected must
+be `pending`: a decided proposal is not decided again, and `not-pending` decides nothing. Their
+detail counts the proposals `decided` and those still `pending`. Neither asks a model or touches
+the store.
 
 `apply` plans each `approved` proposal against the ontology at the head, as a round without
-`--review` does, so one whose type was added meanwhile is `invalid` and nothing is applied for it.
+`--review` does. One whose type was added meanwhile is `invalid`, and nothing is applied for it.
 Each other one is asked of EKR as a schema transaction of its own: the change as recorded, byte for
-byte, with no model call. Proposals still `pending` stay so. The apply is held as a gated source
-run is:
+byte, with no model call. Proposals still `pending` stay so. The apply follows the rules of a gated
+source run:
 
 - On a `postgres` store the transactions run in an EKR stage (`ekr stage begin`). The stage is
   published at the head it began from only when EKR answered every transaction and the spec's
   `gate` passed, and abandoned otherwise: `gate-failed` and `apply-failed` leave the store's head
   where it was and every approved proposal `approved`. A publish whose outcome EKR cannot tell is
-  `store-outcome-unknown`, exit 4; the stage stays in `stage.json` and the next run of a source
+  `store-outcome-unknown`, exit 4. The stage stays in `stage.json` and the next run of a source
   settles it.
+
 - On a `sqlite` store the store is copied first and kept as the snapshot `<ms>-schema-<stamp>` once
   a transaction commits, which the detail names (`snapshot`) and [`cortex restore`](#instances) puts
   back. A gate that fails restores it.
-- Once the changes are published, they stay. When EKR then cannot read the store's head, or
-  `proposals.jsonl` cannot be rewritten, the outcome is `apply-failed`, and its reason says the
-  changes are in the store and names the revision: the head the stage was published at
-  (`postgres`) or the last one committed (`sqlite`). When no proposal was applied, it says no
-  change was committed instead. With only the head unread, every decision is
-  written; with `proposals.jsonl` unwritten, it still lists the proposals `approved`.
 
-The gate's checks on a number of `ekr quality` are read after the changes; checks on the run
+- Once the changes are published, they stay. When EKR then cannot read the store's head, or
+  `proposals.jsonl` cannot be rewritten, the outcome is `apply-failed`. Its reason says the
+  changes are in the store and gives the revision: the head the stage was published at
+  (`postgres`) or the last one committed (`sqlite`). When no proposal was applied, it says no
+  change was committed instead.
+
+  With only the head unread, every decision is written. With `proposals.jsonl` unwritten, it
+  still lists the proposals `approved`.
+
+The gate's checks on a number of `ekr quality` are read after the changes. Checks on the run
 report's measures (`documents_new`, `facts_refused`, `cost_usd`, …) belong to a source run and are
 not read. `applied` counts the approved proposals by what was decided (`applied`, `refused`,
-`recorded_only`, `invalid`) and gives the store's head after as `revision`; a proposal applied says
-its `revision` and `schema_version` on its line. A run with no approved proposal is `not-approved`.
+`recorded_only`, `invalid`) and gives the store's head after as `revision`. A proposal applied
+gives its `revision` and `schema_version` on its line. A run with no approved proposal is
+`not-approved`.
 
 ## Sources
 
@@ -304,24 +342,44 @@ A source id is `<instance>/<source>`.
 | `cortex source add --instance-name <name> --source-id <id> --name <name> --kind <Web\|Connectors\|Files\|Structured> --schedule <calendar>` | register a source in the registry; `create` and `update` do this for the spec's sources. A source id the registry holds is refused and keeps its schedule, counters and state (`source-exists`; `cortex update` changes a source); so is an instance the home does not hold (`no-such-instance`) or holds removed (`not-active`). Each refusal exits 1 | `added`, `source-exists`, `no-such-instance`, `not-active` |
 | `cortex sources` | sources: id, kind, state, schedule, runs, consecutive failures, and the last run's outcome, time and reason (`last_outcome`, `last_run_at`, `last_reason`; see [Operating](./operating.md#seeing-a-failure)) | |
 
-A `ran` line's detail carries `documents_new`, `documents_applied`, `cost_usd`, `facts_refused`
-(facts the model cited unissued evidence for), `parts_rejected` (parts EKR rejected), `facts_reapplied` (facts marked `replaces: true`, by the model or by cortex for a property that holds one value, that had no current value to replace, applied again as plain assertions and stored; not counted in `parts_rejected`), `facts_history` (facts marked `replaces: true` older than the current value, stored as its history and ended where it begins; not counted in `parts_rejected`), `rejected` (each document a rejected part belongs to, with EKR's refusal, or the codes of the issues validation raised, each document refused alone because its facts name a type the batch redeclared against the store (`extraction-type-conflict: <type>`; not marked seen), and each `structured` record refused because its name or aliases match store nodes of more than one type under `store_lookup: AnyType`; present only when there is one), `too_large` (each document left out because it alone did not fit the model's window, by key; it is marked seen and not asked again until its text changes; present only when there is one), `unconverted` (each record of a `structured` source left out because a mapped value does not convert to its property's value kind, with the record's key, the property and the kind; present only when there is one), `masked`
-(credential shapes replaced), `stopped` (why the run ended before applying every document it wanted: `document-cap` when the source's `max_documents_per_run` left wanted documents for the next run and nothing else stopped it, otherwise the reason as text; `null` when it applied every one) and `documents_left` (the wanted documents the run neither applied nor marked seen, which the next run wants again; `0` when it left none). A capped run is `ran` with `stopped: document-cap` and its count in `documents_left`; no `--fetch-only` call is needed to see what is left. `cost_usd` is
-`"0.0000"` when no model was asked, the sum of the answers' costs, a failed or cut-off call's included, when every answer carried one,
-and `null` when any answer carried none; a missing cost is never written as `0`. When the spec
-has a `redaction` policy it also carries `redacted` (values replaced by placeholders in the
-prompts sent, per class or rule) and `unrestored` (placeholders in the model's answers that had no
-value to put back). A run the instance's daily ceiling stopped also carries
-`daily_ceiling_reached: true`, and its `stopped` names the ceiling (see
-[the spec file](./spec-file.md#the-daily-ceiling)).
+A `ran` line's detail carries `documents_new`, `documents_applied` and `cost_usd`, and these
+fields:
 
-The detail also carries `model_calls`, the model calls the run made (a call asked again after an
-error answer that cost zero counts twice, and a failed call counts), and the tokens they reported:
-`input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, `output_tokens`, and
-`fixed_input_tokens` and `documents_input_tokens`, an estimate of how the input splits between the
-fixed part of each request and its documents (see
-[Operating](./operating.md#what-a-run-spends)). A run with no model call reports `model_calls: 0`
-and every token count `0`; a count is `null` when any answer did not report it, never `0`. The
+| field | holds |
+|---|---|
+| `facts_refused` | facts the model cited unissued evidence for |
+| `parts_rejected` | parts EKR rejected |
+| `facts_reapplied` | facts marked `replaces: true`, by the model or by cortex for a property that holds one value, that had no current value to replace. They are applied again as plain assertions and stored. Not counted in `parts_rejected` |
+| `facts_history` | facts marked `replaces: true` older than the current value, stored as its history and ended where it begins. Not counted in `parts_rejected` |
+| `rejected` | each document a rejected part belongs to, with EKR's refusal or the codes of the issues validation raised. Each document refused alone because its facts name a type the batch redeclared against the store (`extraction-type-conflict: <type>`), not marked seen. Each `structured` record refused because its name or aliases match store nodes of more than one type under `store_lookup: AnyType`. Present only when there is one |
+| `too_large` | each document left out because it alone did not fit the model's window, by key. It is marked seen and not asked again until its text changes. Present only when there is one |
+| `unconverted` | each record of a `structured` source left out because a mapped value does not convert to its property's value kind, with the record's key, the property and the kind. Present only when there is one |
+| `masked` | credential shapes replaced |
+| `stopped` | why the run ended before applying every document it wanted. `document-cap` when the source's `max_documents_per_run` left wanted documents for the next run and nothing else stopped it, otherwise the reason as text. `null` when it applied every one |
+| `documents_left` | the wanted documents the run neither applied nor marked seen, which the next run wants again. `0` when it left none |
+
+A capped run is `ran` with `stopped: document-cap` and its count in `documents_left`. No
+`--fetch-only` call is needed to see what is left.
+
+`cost_usd` is `"0.0000"` when no model was asked. It is the sum of the answers' costs, a failed or
+cut-off call's included, when every answer carried one. It is `null` when any answer carried none.
+A missing cost is never written as `0`.
+
+When the spec has a `redaction` policy, the detail also carries `redacted` and `unrestored`.
+`redacted` is the values replaced by placeholders in the prompts sent, per class or rule.
+`unrestored` is the placeholders in the model's answers that had no value to put back. A run the
+instance's daily ceiling stopped also carries `daily_ceiling_reached: true`, and its `stopped`
+gives the ceiling (see [the spec file](./spec-file.md#the-daily-ceiling)).
+
+The detail also carries `model_calls`, the model calls the run made. A call asked again after an
+error answer that cost zero counts twice, and a failed call counts. It carries the tokens they
+reported: `input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` and
+`output_tokens`. `fixed_input_tokens` and `documents_input_tokens` estimate how the input splits
+between the fixed part of each request and its documents (see
+[Operating](./operating.md#what-a-run-spends)).
+
+A run with no model call reports `model_calls: 0`
+and every token count `0`. A count is `null` when any answer did not report it, never `0`. The
 run's `cortex.log` line carries the same fields.
 
 A `fetched` line's detail carries `source_id`, `window` (`since` and `until`, RFC 3339), and the

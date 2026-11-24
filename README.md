@@ -21,24 +21,24 @@ What an instance does besides:
   and the patterns it lists with placeholders in what the model is shown, and puts the values back
   before anything is stored. Credential shapes are masked on every run and never stored.
 - **Snapshots and undo.** Before a run applies anything to a SQLite store, cortex snapshots the
-  store and the source state; `cortex restore` puts both back. A run that fails the spec's `gate`
+  store and the source state. `cortex restore` puts both back. A run that fails the spec's `gate`
   checks is undone from its snapshot.
 - **Adoption.** `cortex adopt` makes an existing EKR store an instance, with its whole history,
   without reseeding it.
 - **Quality and schema.** `cortex quality` has the model judge a sample of facts against their
-  evidence; `cortex schema` has it propose ontology changes, and applies those EKR accepts.
+  evidence. `cortex schema` has the model propose ontology changes, and applies those EKR accepts.
 
-cortex holds no secrets. A source names a Connectors connection; you set and manage the
+cortex holds no secrets. A source names a Connectors connection. You set and manage the
 credential in Connectors. A PostgreSQL store's password can come from a Connectors connection too.
 
-**Documentation: <https://beyond10x.github.io/cortex/>** — the spec file section by section,
+**Documentation:** <https://beyond10x.github.io/cortex/> covers the spec file section by section,
 every command, operating notes, limits and the generated specification reference.
 
 ## Requirements
 
 - Linux on x86-64 with systemd user units
 - Rust and Cargo, for `cortex setup`
-- `ekr` at the version the spec pins (`cortex setup` installs it with `cargo install`)
+- `ekr` at the version the spec pins. `cortex setup` installs it with `cargo install`.
 - `connectors`, with a connection for every adapter your sources use
 - `claude`, signed in
 
@@ -118,12 +118,12 @@ runs the specification checks, formatting, clippy, every test and the documentat
 It needs the [Task runner](https://taskfile.dev/), the `ess` CLI and an `ekr` binary for the
 end-to-end tests. `task website` builds the documentation site under `website/`.
 
-The specification of cortex itself is `spec/` (ESS); `generated/docs/` is its rendered form.
+The specification of cortex itself is `spec/` (ESS). `generated/docs/` is its rendered form.
 
 ## Contributing
 
-Commands, gates, conventions and the rules this repository holds are in [AGENTS.md](AGENTS.md);
-where the project stands against its targets is in [STATUS.md](STATUS.md).
+Commands, gates, conventions and the rules this repository holds are in [AGENTS.md](AGENTS.md).
+Where the project stands against its targets is in [STATUS.md](STATUS.md).
 
 ## License
 
