@@ -58,17 +58,22 @@ fi
 /// A child shell writes the file, never this process: a descriptor open for writing here would be
 /// copied into the child of every spawn another test thread makes meanwhile, and running the file
 /// fails with `Text file busy` until that child execs. Writing to a temporary name and renaming does
-/// not help; the renamed file is the same inode, still open for writing.
+/// not help; the renamed file is the same inode, still open for writing. Setting the mode opens no
+/// descriptor, so this process does that once the shell has ended, which spares a `chmod` process
+/// per stand-in (about 6,000 a run).
 pub fn executable(path: &Path, body: &str) {
     let status = Command::new("/bin/sh")
         .arg("-c")
-        .arg(r#"printf '%s' "$2" > "$1" && chmod 755 "$1""#)
+        .arg(r#"printf '%s' "$2" > "$1""#)
         .arg("sh")
         .arg(path)
         .arg(format!("#!/bin/sh\n{body}"))
         .status()
         .unwrap();
     assert!(status.success(), "cannot write {}", path.display());
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+        .unwrap_or_else(|e| panic!("cannot make {} executable: {e}", path.display()));
 }
 
 /// The connector and instance a stand-in's `connections list` entry names beside its adapter, as

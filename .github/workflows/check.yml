@@ -124,6 +124,9 @@ jobs:
         run: |
           export CORTEX_TEST_EKR="$HOME/.ekr/$EKR_VERSION/bin/ekr"
           "$CORTEX_TEST_EKR" --version
+          mkdir -p "$RUNNER_TEMP/tests-tmp"
+          sudo mount -t tmpfs -o size=6g,mode=1777 tmpfs "$RUNNER_TEMP/tests-tmp"
+          export TMPDIR="$RUNNER_TEMP/tests-tmp"
           task check
 
       - name: Keep the test report
