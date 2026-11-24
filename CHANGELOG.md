@@ -5,6 +5,14 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 
 ## Unreleased
 
+### Fixed
+
+- A structured mapping may name one relation with several target types (`LINKS_TO` to `Page`
+  and to `File`): the batch declares one edge type of that name whose target types are all of
+  them, and commits. Before, the top mapping declared one edge type per relation entry, and EKR
+  refused the batch with `extraction-name-duplicate`; child mappings already joined them (story
+  `structured-relation-many-targets`).
+
 ## 0.9.0 — 2026-11-24
 
 ### Added
