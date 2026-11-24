@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:structured-lookup-across-types
 kind: story
-status: active
+status: implemented
 title: A structured record resolves to a store node of another type by its name or alias
 summary: structured mapping may match store nodes of any type before it creates one
 relations:
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-10-18T00:28:44Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-10-18T00:28:44Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-24T00:20:52Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:postgres-tests-one-container
 kind: story
-status: active
+status: implemented
 title: PostgreSQL tests share one server
 summary: The test step ends within 120 s and the budget is enforced
 relations:
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T21:16:52Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T21:16:52Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-24T00:20:55Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

@@ -2,16 +2,17 @@
 format: aep.planning-md/3
 id: story:review-ekr-pin-and-busy
 kind: story
-status: active
+status: implemented
 title: The EKR pin is the created store's engine, and a busy collection can be skipped
 summary: Findings 17 and 18 of the 0.7.2 review
 relations:
 - decomposes: epic:periodic-collection-reconcile
 - serves: vision:self-updating-instances
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T01:54:00Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T01:54:00Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-24T00:21:04Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 ## Outcome
 

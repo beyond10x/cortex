@@ -38,6 +38,9 @@ tag `v<version>`. The process is in [AGENTS.md](AGENTS.md#cutting-a-release).
 - A fetched web page's evidence is `!Url <its URL>`, which EKR 0.0.43 admits, instead of a
   `!HumanStatement` whose identity is the URL. Pages applied before keep their statement; both
   count as evidence of the page when a store is adopted.
+- Development only, no change to the binary: CI validates the planning store with aep 0.80.2 (was
+  0.75.0), and the store reads its lifecycles from the aep 0.80.2 release commit (was 0.68.0's);
+  the store stays `aep.project/5` (story `aep-pin-0-80`).
 - Development only, no change to the binary: the PostgreSQL tests share one PostgreSQL server per
   test run, each in a database of its own, instead of starting and removing a container each, and
   the test step of `task check` fails over 120 s by default (`TEST_BUDGET=enforce`).

@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-23T20:43:12Z",
+  "actor": "human:timo",
+  "artifact": "story:quality-missing-verdicts",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check (GitHub Actions) on PR #112, head 25b984dd6, SUCCESS; merged to main as daa3ab647",
+    "reference": "https://github.com/beyond10x/cortex/pull/112"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-23T10:29:31Z",
+  "actor": "human:timo",
+  "artifact": "story:run-path-override",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task check (GitHub Actions) on PR #98, head ecb616ee2, SUCCESS; merged to main as cc9534727",
+    "reference": "https://github.com/beyond10x/cortex/pull/98"
+  }
+}
